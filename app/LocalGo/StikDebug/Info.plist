@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>LocalGo</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>在使用 App 時顯示目前位置、讓地圖回到你的位置，並可作為搖桿移動的起點。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_remoted._tcp</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<false/>
+</dict>
+</plist>

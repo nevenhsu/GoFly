@@ -1,0 +1,127 @@
+{
+  "updated_at": "2026-10-15T15:09:25.006860+08:00",
+  "workspace": "/Users/neven/Documents/projects/ianygo",
+  "articles": [
+    "https://x.com/ResearchWang/status/2109812002076143824",
+    "https://x.com/0xCodila/status/2109623431763292649"
+  ],
+  "workflow": [
+    "investigate",
+    "write behavioral specification",
+    "implement independently",
+    "verify"
+  ],
+  "components": {
+    "node": {
+      "version": "v24.18.0",
+      "status": "existing and compatible"
+    },
+    "python": {
+      "version": "Python 3.14.6",
+      "status": "existing"
+    },
+    "rea": {
+      "version": "6.4.0",
+      "status": "installed; Codex registration and MCP handshake verified",
+      "source": "https://github.com/morluto/rea",
+      "note": "Preserved existing npm min-release-age=1 policy; 6.5.0 was not yet eligible."
+    },
+    "ghidra": {
+      "version": "12.1.4",
+      "status": "installed; native arm64 decompilation verified",
+      "path": "/opt/homebrew/opt/ghidra/libexec"
+    },
+    "jdk": {
+      "version": "21.0.12.1",
+      "status": "installed",
+      "path": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+    },
+    "reverse_skill": {
+      "revision": "cab634bd855fc287f6e420c1f36fd1a6b9245960",
+      "status": "shared symlink skill available to Codex and Claude; local tool index and routing verified",
+      "path": "/Users/neven/Documents/projects/ianygo/tools/reverse-skill",
+      "source": "https://github.com/zhaoxuya520/reverse-skill",
+      "shared_skill": "/Users/neven/.agents/skills/reverse-skill-router",
+      "client_skill_roots": {
+        "codex": "/Users/neven/.codex/skills",
+        "claude": "/Users/neven/.claude/skills"
+      },
+      "sharing": "Both client skill roots already symlink to /Users/neven/.agents/skills; the router symlink targets the full original skills directory."
+    },
+    "docker": {
+      "version": "29.1.3",
+      "compose_version": "5.0.1",
+      "status": "existing Docker Desktop started; daemon verified"
+    },
+    "chrome": {
+      "status": "existing",
+      "path": "/Applications/Google Chrome.app"
+    },
+    "pentagi": {
+      "revision": "843dfeb4bfc809c09d1bc5022e567c602d8fc9dd",
+      "status": "source and official arm64 container images installed; compose validated; service stopped pending model configuration",
+      "path": "/Users/neven/Documents/projects/ianygo/tools/pentagi",
+      "source": "https://github.com/vxcontrol/pentagi",
+      "pending": [
+        "model and embedding provider configuration",
+        "target and testing scope selection"
+      ],
+      "credentials": "generated locally; .env permission 0600; values excluded from this record",
+      "images": [
+        {
+          "tags": [
+            "vxcontrol/pentagi:latest"
+          ],
+          "digests": [
+            "vxcontrol/pentagi@sha256:0d58d71a6ac4128ec5c4e594952a516f08a3cb44c28f51feb68b09569e4d54f8"
+          ],
+          "architecture": "arm64"
+        },
+        {
+          "tags": [
+            "vxcontrol/pgvector:latest"
+          ],
+          "digests": [
+            "vxcontrol/pgvector@sha256:09afd689127bdb42319a133b2ef7cd4318b7ebda58412644975d6eacd2367fb0"
+          ],
+          "architecture": "arm64"
+        },
+        {
+          "tags": [
+            "quay.io/prometheuscommunity/postgres-exporter:v0.16.0"
+          ],
+          "digests": [
+            "quay.io/prometheuscommunity/postgres-exporter@sha256:6999a7657e2f2fb0ca6ebf417213eebf6dc7d21b30708c622f6fcb11183a2bb0"
+          ],
+          "architecture": "arm64"
+        },
+        {
+          "tags": [
+            "vxcontrol/scraper:latest"
+          ],
+          "digests": [
+            "vxcontrol/scraper@sha256:4a3b0f179ab29003313167877ee2f6ab74c89f3fcb1ce108e648ca1ffadc51b7"
+          ],
+          "architecture": "arm64"
+        }
+      ]
+    }
+  },
+  "verification": {
+    "rea_doctor": "passed for Codex, Ghidra and installed skill",
+    "mcp": "passed; 170 tools and 6 prompts; initialize and request flow passed",
+    "javascript": "exportNotes, node:fs and writeFileSync found in static evidence",
+    "native": "_research_score decompiled to param_1 * 3 + 7",
+    "router": "macOS / Mach-O route selected",
+    "pentagi_compose": "config --quiet passed",
+    "shell": "ShellCheck and bash syntax passed",
+    "pentagi_images": "all four images downloaded; native arm64 architecture verified",
+    "codex_config_preservation": "all unrelated parsed TOML matches pre-install backup",
+    "shared_skill": "Codex and Claude SKILL.md resolve to the same file; scripts and sibling package references verified"
+  },
+  "restart_required": "Restart Codex to load the newly registered REA MCP server.",
+  "terminal_environment": "source scripts/env.sh",
+  "verify_command": "bash scripts/verify-env.sh",
+  "research_target": null,
+  "target_specific_tools": "Select after requirements discussion; Android, firmware and commercial analyzers are not baseline requirements."
+}

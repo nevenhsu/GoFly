@@ -1,0 +1,30 @@
+tools/
+work/
+local/
+.env
+.DS_Store
+
+# Local build environments and generated files
+.build/
+.swiftpm/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+DerivedData/
+xcuserdata/
+*.app/
+*.dSYM/
+
+# Device credentials and local signing material
+.env.*
+!.env.example
+*.mobileprovision
+*.p12
+*.pfx
+*.pem
+*.key
+*.rp
+*.ipa
+*pairing*.plist
+*pairing*.json
