@@ -1,0 +1,8 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Connection icon / USB">
+<path id="Vector" d="M12 22V17M12 17V14M12 17L7 12V8M12 14V3M12 14L17 9V6M15 6L12 3L9 6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="black"/>
+<path id="Vector_2" d="M9 6C9 7.10457 8.10457 8 7 8C5.89543 8 5 7.10457 5 6C5 4.89543 5.89543 4 7 4C8.10457 4 9 4.89543 9 6Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="black"/>
+<path id="Vector_3" d="M15 2H19V6H15V2Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="black"/>
+<path id="Vector_4" d="M12 22.5C12.8284 22.5 13.5 21.8284 13.5 21C13.5 20.1716 12.8284 19.5 12 19.5C11.1716 19.5 10.5 20.1716 10.5 21C10.5 21.8284 11.1716 22.5 12 22.5Z" fill="black" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="black"/>
+</g>
+</svg>

@@ -1,0 +1,273 @@
+import SwiftUI
+import GoFlyMacCore
+
+extension MacRootView {
+    @ViewBuilder var pageContent: some View {
+        switch model.page {
+        case .environment:
+            StatusCard {
+                if let environment = model.environment {
+                    ForEach(environment.checks) { check in
+                        HStack(alignment: .top, spacing: 12) {
+                            if check.passed { DesignAsset("EnvironmentPassed", width: 24) }
+                            else { Text("○").font(GoFlyStyle.font(22)).foregroundStyle(GoFlyStyle.muted) }
+                            StatusRow(title: check.title, detail: check.detail)
+                        }
+                        if check.id != environment.checks.last?.id { Rule() }
+                    }
+                } else {
+                    StatusRow(title: "正在檢查 Xcode 與必要元件", detail: "不會自動安裝元件或接受系統條款。")
+                }
+            }
+        case .devices: devicePicker
+        case .device:
+            StatusCard {
+                StatusRow(title: model.installStatus, detail: versionDetail)
+                Rule()
+                StatusRow(title: "裝置連接", detail: connectionDetail)
+                Rule()
+                StatusRow(title: "簽名狀態", detail: signatureDetail)
+                Rule()
+                StatusRow(title: "LocalDevVPN", detail: vpnDetail)
+            }
+        case .install:
+            StatusCard {
+                StatusRow(title: "目標裝置", detail: connectionDetail)
+                Rule()
+                if model.inspection?.developerMode != true {
+                    StatusRow(title: "開發者模式", detail: developerDetail)
+                    Rule()
+                }
+                StatusRow(title: "簽名身分", detail: model.isPreview ? "Personal Team · 已選取（預覽）" : model.environment?.teamID.map { "Xcode Personal Team · \($0)；尚未用於簽署" } ?? "尚未選取。可至 Xcode → Settings → Apple Accounts 查看。")
+                Rule()
+                StatusRow(title: "有效期限", detail: "安裝後須依實際核發的描述檔確認。本版不會申請描述檔或簽署 App。")
+                if !model.isPreview {
+                    Rule()
+                    StatusRow(title: "目前僅提供介面與檢查", detail: "正式 iOS flow 仍在討論。安裝、簽名與配對寫入尚未開放。")
+                }
+            }
+        case .signing:
+            StatusCard {
+                StatusRow(title: "目前簽名", detail: signatureDetail)
+                Rule()
+                StatusRow(title: "重新簽名", detail: "沿用相容的簽名身分，更新 App 的簽署有效性。現有資料與設定應保留。")
+                Rule()
+                StatusRow(title: "簽名身分不符？", detail: "重新安裝前先選擇保留資料；只有安裝與選取資料匯入都完成，才顯示整體完成。")
+                if !model.isPreview {
+                    Rule()
+                    StatusRow(title: "本版不執行簽名或重裝", detail: "沒有取得已安裝 App 的描述檔時，不推測到期日或宣告簽名相容。")
+                }
+            }
+        case .repair:
+            StatusCard {
+                StatusRow(title: model.selected?.displayName ?? "尚未選擇 iPhone", detail: connectionDetail)
+                Rule()
+                StatusRow(title: "開發者模式", detail: developerDetail)
+                Rule()
+                Button { model.navigate(.channel) } label: {
+                    StatusRow(title: "手機 App 仍無法啟動或連線？  ›", detail: "查看 LocalDevVPN 與手機端服務檢查步驟。")
+                }.buttonStyle(.plain)
+                Rule()
+                StatusRow(title: "裝置配對", detail: model.isPreview ? "裝置身分已核對（預覽）" : "這次只用既有信任進行唯讀核對，不建立、重建或交付配對資料。")
+            }
+        case .channel:
+            StatusCard {
+                StatusRow(title: "1  在 iPhone 開啟 LocalDevVPN", detail: "按 Connect，確認 App 顯示連線狀態。Mac 無法據此確認手機本機通道可用。")
+                Rule()
+                StatusRow(title: "2  返回手機 App", detail: "在手機重新檢查本機通道與裝置服務；成功後再手動繼續。")
+                Rule()
+                StatusRow(title: "3  仍然失敗？", detail: "確認信任、開發者模式與裝置配對。手機內的設定流程尚在討論，本次不修改。")
+            }
+        case .vpn:
+            StatusCard {
+                StatusRow(title: "1  開啟 iPhone 的 App Store", detail: "搜尋 LocalDevVPN，確認正式 App 與開發者資訊後安裝。")
+                Rule()
+                StatusRow(title: "2  完成安裝", detail: "若需要 Apple 帳號或商店確認，請在 iPhone 操作。")
+                Rule()
+                StatusRow(title: "3  回 Mac 確認", detail: model.isPreview ? "已偵測到 LocalDevVPN（預覽）；此按鈕只前進到下一個預覽畫面。" : vpnDetail)
+            }
+        case .handoff:
+            StatusCard {
+                StatusRow(title: model.isPreview ? "Mac 已完成（預覽）" : "Mac 交接條件待確認",
+                          detail: model.isPreview ? "安裝與本次配對資料匯入完成（示意）。本次沒有寫入手機。" : "必須驗證 App 安裝與本次配對匯入回報；唯讀檢查不會產生安裝成功結果。")
+                Rule()
+                StatusRow(title: "在 iPhone 繼續", detail: "正式手機流程仍在討論，本版先保留交接介面；沒有實作新的 iOS 畫面。")
+                Rule()
+                StatusRow(title: "簽名到期日", detail: signatureDetail)
+            }
+        case .reinstall:
+            StatusCard {
+                StatusRow(title: "選擇重新安裝後要保留的資料", detail: "只備份勾選項目；重新安裝後自動匯入。這裡僅預覽資料選擇，不讀取或移除手機資料。")
+                Toggle(isOn: $model.preserveFavorites) {
+                    StatusRow(title: "最愛地點與標籤", detail: "儲存的地點、自訂名稱與標籤")
+                }.toggleStyle(.checkbox)
+                Toggle(isOn: $model.preserveRoutes) {
+                    StatusRow(title: "路線", detail: "儲存的路線、途經點與路線選項")
+                }.toggleStyle(.checkbox)
+                Toggle(isOn: $model.preserveSettings) {
+                    StatusRow(title: "設定", detail: "速度與操作偏好；移動任務不會自動恢復")
+                }.toggleStyle(.checkbox)
+                Rule()
+                Text("未勾選資料將不保留。所有項目取消時，代表全新安裝的預覽情境。")
+                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+            }
+        case .backups:
+            StatusCard {
+                StatusRow(title: model.isPreview ? "我的 iPhone · 最愛、路線、設定（預覽）" : "沒有讀取手機備份",
+                          detail: model.isPreview ? "已成功匯入 · 七天後可刪除（示意）" : "本版不建立備份、不讀取既有備份，也不刪除任何備份。")
+                Rule()
+                StatusRow(title: "尚未完成匯入", detail: model.isPreview ? "測試 iPhone · 上次未完成（預覽）\n保留備份，重新確認原裝置後再由使用者繼續。" : "正式資料格式、原裝置綁定與手機回報協定，待 iOS flow 確認後再接入。")
+            }
+        case .home: EmptyView()
+        }
+    }
+
+    private var devicePicker: some View {
+        StatusCard {
+            HStack {
+                Text("可連接的裝置").font(GoFlyStyle.font(16, bold: true))
+                Spacer()
+                Text("\(model.visibleDevices.count) 部裝置").font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                Button("搜尋裝置") { model.refreshDevices() }.disabled(model.busy)
+            }
+            if model.visibleDevices.isEmpty {
+                VStack(spacing: 14) {
+                    DesignAsset("Device", width: 32, height: 44)
+                    Text(model.busy ? "正在搜尋可連接裝置…" : "尚未偵測到 iPhone").font(GoFlyStyle.font(18, bold: true))
+                    Text(model.firstInstall ? "請用 USB 連接並解鎖 iPhone，再按搜尋裝置。" : "請用 USB 連接，或確認裝置已透過既有配對出現在同一網路。")
+                        .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted).multilineTextAlignment(.center)
+                }.frame(maxWidth: .infinity).padding(.vertical, 48)
+            } else {
+                ForEach(model.visibleDevices) { device in
+                    Button { model.select(device.id) } label: {
+                        HStack(spacing: 16) {
+                            DesignAsset("Device", width: 32, height: 44)
+                            VStack(alignment: .leading, spacing: 9) {
+                                Text(device.displayName).font(GoFlyStyle.font(18, bold: true))
+                                Text("可偵測 · 信任與安裝狀態待檢查").font(GoFlyStyle.font(13)).foregroundStyle(Color(white: 0.4))
+                                Text(device.osVersion.map { "iOS \($0)" } ?? "裝置識別：…\(device.id.suffix(6))")
+                                    .font(GoFlyStyle.font(12)).foregroundStyle(Color(white: 0.5))
+                            }
+                            Spacer()
+                            HStack(spacing: 8) {
+                                if device.transport == .usb { DesignAsset("USB", width: 24) }
+                                Text(device.connectionName).font(GoFlyStyle.font(14, bold: true))
+                            }.padding(.horizontal, 16).frame(height: 44)
+                                .overlay(Capsule().strokeBorder(GoFlyStyle.line))
+                        }.padding(16).frame(minHeight: 130)
+                            .background(model.selectedID == device.id ? Color(white: 0.96) : .white, in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(model.selectedID == device.id ? .black : GoFlyStyle.line, lineWidth: model.selectedID == device.id ? 2 : 1))
+                            .contentShape(RoundedRectangle(cornerRadius: 16))
+                    }.buttonStyle(.plain).disabled(model.busy)
+                        .accessibilityLabel("\(device.displayName)，\(device.connectionName)")
+                        .accessibilityAddTraits(model.selectedID == device.id ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    @ViewBuilder var pageActions: some View {
+        if model.failure != nil {
+            PillButton(title: "返回裝置清單", enabled: model.environment?.ready == true) { model.openDevices(firstInstall: model.firstInstall) }
+            Spacer(minLength: 0)
+            PillButton(title: "重新檢查", primary: true) { retry() }
+        } else {
+            switch model.page {
+            case .environment:
+                Spacer()
+                PillButton(title: "開啟 Xcode") { NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Xcode.app")) }
+                PillButton(title: "重新檢測", primary: true) { model.checkEnvironment() }
+            case .devices:
+                PillButton(title: "USB 連接指引") { showUSBGuide() }
+                Spacer(minLength: 0)
+                PillButton(title: "檢查裝置", primary: true, enabled: model.mayInspect) { model.inspectSelected() }
+                    .accessibilityIdentifier("inspect-device")
+            case .device:
+                PillButton(title: "備份管理") { model.navigate(.backups) }
+                Spacer(minLength: 0)
+                PillButton(title: "重新檢查狀態", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
+            case .install:
+                Spacer()
+                PillButton(title: "返回裝置清單") { model.openDevices(firstInstall: true) }
+                PillButton(title: model.isPreview ? "預覽簽名與安裝" : "本版不安裝 App", primary: true,
+                           enabled: model.isPreview && model.inspection?.developerMode == true) { model.previewAdvance() }
+            case .vpn:
+                Spacer()
+                PillButton(title: "返回裝置狀態") { model.navigate(.device) }
+                PillButton(title: model.isPreview ? "預覽安裝完成" : "重新檢查安裝狀態", primary: true,
+                           enabled: model.isPreview || model.selected != nil) {
+                    if model.isPreview { model.previewAdvance() } else { model.inspectSelected() }
+                }
+            case .handoff:
+                Spacer()
+                PillButton(title: "前往裝置管理", primary: true) { model.openDevices(firstInstall: false) }
+            case .signing:
+                PillButton(title: "保留資料與重裝") { model.navigate(.reinstall) }
+                Spacer(minLength: 0)
+                PillButton(title: model.isPreview ? "預覽重新簽名" : "本版不執行簽名", primary: true,
+                           enabled: model.isPreview) { model.previewAdvance() }
+            case .repair:
+                PillButton(title: model.isPreview ? "預覽修復裝置配對" : "本版不寫入配對", enabled: model.isPreview) { model.previewAdvance() }
+                Spacer(minLength: 0)
+                PillButton(title: "重新檢查連接", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
+            case .channel:
+                Spacer()
+                PillButton(title: "返回連接與修復", primary: true) { model.navigate(.repair) }
+            case .reinstall:
+                PillButton(title: "返回簽名管理") { model.navigate(.signing) }
+                Spacer(minLength: 0)
+                PillButton(title: model.isPreview ? "預覽備份與重新安裝" : "本版不重裝 App", primary: true,
+                           enabled: model.isPreview) { model.previewAdvance() }
+            case .backups:
+                PillButton(title: "返回裝置狀態") { model.navigate(.device) }
+                Spacer(minLength: 0)
+                PillButton(title: "預覽待匯入資料", primary: true, enabled: model.isPreview) { model.previewAdvance() }
+            case .home: EmptyView()
+            }
+        }
+    }
+
+    private var connectionDetail: String {
+        guard let device = model.inspection?.device ?? model.selected else { return "尚未選擇並檢查裝置。" }
+        let version = device.osVersion.map { " · iOS \($0)" } ?? ""
+        return "\(device.displayName) · \(device.connectionName)\(version)\n\(model.inspection == nil ? "裝置狀態待確認" : "本次身分核對完成")"
+    }
+    private var versionDetail: String {
+        model.inspection?.appVersion.map { "目前版本 \($0)" } ?? "沒有取得可核對的 App 版本資訊。"
+    }
+    private var signatureDetail: String {
+        guard let inspection = model.inspection, let expiry = inspection.expiresAt else {
+            return "待確認。尚未取得已安裝 App 的簽名身分與實際到期日。"
+        }
+        let date = ISO8601DateFormatter().date(from: expiry)
+        let style = Date.FormatStyle(date: .numeric, time: .shortened).locale(Locale(identifier: "zh_TW"))
+        let display = date?.formatted(style) ?? expiry
+        return "到期：\(display)\(date.map { $0 < Date() ? " · 已過期" : "" } ?? "")\n\(inspection.teamID ?? "簽名身分待確認")"
+    }
+    private var developerDetail: String {
+        switch model.inspection?.developerMode {
+        case true: "已開啟。此狀態不代表手機內定位服務已準備完成。"
+        case false: "尚未開啟。請至 iPhone 設定 → 隱私權與安全性 → 開發者模式完成設定。"
+        default: "待確認。解鎖並信任此 Mac 後，再檢查裝置。"
+        }
+    }
+    private var vpnDetail: String {
+        switch model.inspection?.vpnInstalled {
+        case true: "已偵測到 App。是否已 Connect 須在手機確認。"
+        case false: "未偵測到 App。後續可在 iPhone App Store 安裝。"
+        default: "安裝狀態待確認。本次沒有自動安裝或啟動 LocalDevVPN。"
+        }
+    }
+    private func retry() {
+        if model.environment == nil { model.checkEnvironment() }
+        else if model.selected != nil { model.inspectSelected() }
+        else { model.refreshDevices() }
+    }
+    private func showUSBGuide() {
+        let alert = NSAlert()
+        alert.messageText = "用 USB 連接 iPhone"
+        alert.informativeText = "1. 使用可傳輸資料的 USB 線連接 Mac 與 iPhone。\n2. 解鎖手機，若已出現信任提示，請自行確認。\n3. 回到這裡按「搜尋裝置」。\n\n本版只讀取既有連接，不自動建立配對或寫入手機。"
+        alert.addButton(withTitle: "知道了")
+        alert.runModal()
+    }
+}
