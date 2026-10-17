@@ -18,6 +18,9 @@ public final class RouteExecutionController: ObservableObject {
     @Published public private(set) var progress: RouteProgress?
     @Published public private(set) var error: RouteExecutionFailure?
     @Published public private(set) var completion: RouteCompletion?
+    @Published public private(set) var roundTripEnabled = false
+    @Published public private(set) var usesPositionAxis = false
+    @Published public private(set) var heading: RouteHeading = .forward
     private let planner: any RoutePlanning
     private let commands: any RouteCommanding
     private let search: any PlaceSearching
@@ -40,6 +43,28 @@ public final class RouteExecutionController: ObservableObject {
     public var canStart: Bool { canEdit && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canPause: Bool { phase == .running }
+    public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
+    public var canToggleHeading: Bool {
+        guard roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
+        return heading == .forward ? progress.committedDistanceMeters > 0 : progress.committedDistanceMeters < intent.route.totalDistanceMeters
+    }
+    public var currentTargetCoordinate: GeoCoordinate? {
+        guard let intent else { return nil }
+        return heading == .forward ? intent.route.end : intent.route.start
+    }
+    @discardableResult public func setRoundTripEnabled(_ enabled: Bool) -> Bool {
+        guard canSetRoundTrip else { return false }
+        roundTripEnabled = enabled
+        if enabled, phase == .running || phase == .paused { usesPositionAxis = true }
+        return true
+    }
+    @discardableResult public func toggleHeading() -> Bool {
+        guard canToggleHeading, let intent,
+              commands.reviseRouteControl(executionID: intent.id, lease: intent.lease) != nil else { return false }
+        heading = heading == .forward ? .reverse : .forward
+        publishProgress(distance: progress?.committedDistanceMeters ?? 0, intent: intent)
+        return true
+    }
     public var canResume: Bool { phase == .paused }
     public var canCancel: Bool {
         [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
@@ -143,6 +168,7 @@ public final class RouteExecutionController: ObservableObject {
         let admission = commands.routeAdmissionRevision
         phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil; plannedRoute = nil
         accumulatedElapsed = .zero; activeStartedAt = nil
+        heading = .forward; usesPositionAxis = roundTripEnabled
         let planner = planner
         task = Task { [weak self] in
             do {
@@ -165,7 +191,7 @@ public final class RouteExecutionController: ObservableObject {
                     self.phase = .running; self.activeStartedAt = self.clock.now
                     self.publishProgress(distance: 0, intent: intent)
                     await self.run(intent, token: token)
-                case .cancelled: self.returnToEditing()
+                case .cancelled, .controlCancelled: self.returnToEditing()
                 case .notSent(let failure): self.phase = .interrupted; self.error = .device(failure)
                 case .unconfirmed(let failure): self.phase = .unknown; self.error = .device(failure)
                 }
@@ -246,26 +272,31 @@ public final class RouteExecutionController: ObservableObject {
         while revision == token, phase == .running {
             do { try await clock.sleep(for: Self.cadence) } catch { return }
             guard revision == token, phase == .running, !Task.isCancelled else { return }
-            let distance = min(intent.route.totalDistanceMeters,
-                (progress?.committedDistanceMeters ?? 0) + intent.speed.metersPerSecond * 0.5)
+            guard let controlRevision = commands.routeControlRevision(executionID: intent.id, lease: intent.lease) else { return }
+            let direction = heading == .forward ? 1.0 : -1.0
+            let distance = min(intent.route.totalDistanceMeters, max(0,
+                (progress?.committedDistanceMeters ?? 0) + direction * intent.speed.metersPerSecond * 0.5))
             guard let coordinate = intent.route.coordinate(at: distance) else { phase = .interrupted; error = .invalidPath; return }
             let outcome = await commands.sendRoutePoint(executionID: intent.id, lease: intent.lease,
-                sequence: sequence, coordinate: coordinate)
+                sequence: sequence, expectedControlRevision: controlRevision, coordinate: coordinate)
             guard revision == token, self.intent?.id == intent.id, phase == .running || phase == .pausing else { return }
             switch outcome {
             case .acknowledged:
                 sequence &+= 1; nextSequence[intent.id] = sequence
+                let atEndpoint = distance == 0 || distance == intent.route.totalDistanceMeters
+                if atEndpoint, roundTripEnabled { heading = distance == 0 ? .forward : .reverse }
                 publishProgress(distance: distance, intent: intent)
-                if distance >= intent.route.totalDistanceMeters {
+                if atEndpoint, !roundTripEnabled {
                     freezeElapsed()
                     self.intent = nil; phase = .editing
-                    completion = RouteCompletion(executionID: intent.id, coordinate: intent.route.end)
+                    completion = RouteCompletion(executionID: intent.id, coordinate: coordinate)
                     commands.endRoute(executionID: intent.id, lease: intent.lease)
                     nextSequence.removeValue(forKey: intent.id)
                     return
                 }
                 if phase == .pausing { return }
             case .cancelled: return
+            case .controlCancelled: continue
             case .notSent(let failure):
                 if phase == .pausing { return }
                 freezeElapsed(); phase = .interrupted; error = .device(failure); return
@@ -277,7 +308,7 @@ public final class RouteExecutionController: ObservableObject {
     private func publishProgress(distance: Double, intent: RouteExecutionIntent) {
         let elapsed = accumulatedElapsed + (activeStartedAt.map { max(.zero, clock.now - $0) } ?? .zero)
         progress = RouteProgress(committedDistanceMeters: distance, totalDistanceMeters: intent.route.totalDistanceMeters,
-            activeElapsed: elapsed, estimatedRemaining: .seconds((intent.route.totalDistanceMeters - distance) / intent.speed.metersPerSecond))
+            activeElapsed: elapsed, estimatedRemaining: .seconds((heading == .forward ? intent.route.totalDistanceMeters - distance : distance) / intent.speed.metersPerSecond))
     }
     private func freezeElapsed() {
         if let activeStartedAt { accumulatedElapsed += max(.zero, clock.now - activeStartedAt) }

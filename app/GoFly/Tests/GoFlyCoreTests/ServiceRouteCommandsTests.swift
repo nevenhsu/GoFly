@@ -16,7 +16,7 @@ struct ServiceRouteCommandsTests {
         else {
             await device.finish(.acknowledged)
             #expect(await begin.value == .acknowledged)
-            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, coordinate: intent.route.end) }
+            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0, coordinate: intent.route.end) }
             await wait { await device.waiting }
         }
         if claimedACK { #expect(await device.claim()) }
@@ -47,7 +47,7 @@ struct ServiceRouteCommandsTests {
         else {
             await device.finish(.acknowledged)
             #expect(await begin.value == .acknowledged)
-            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, coordinate: intent.route.end) }
+            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0, coordinate: intent.route.end) }
             await wait { await device.waiting }
         }
         service.endRoute(executionID: intent.id, lease: intent.lease)
@@ -75,7 +75,7 @@ struct ServiceRouteCommandsTests {
         else {
             await device.finish(.acknowledged)
             #expect(await begin.value == .acknowledged)
-            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, coordinate: intent.route.end) }
+            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0, coordinate: intent.route.end) }
             await wait { await device.waiting }
         }
         #expect(await device.claim())
@@ -116,7 +116,7 @@ struct ServiceRouteCommandsTests {
         else {
             await device.finish(.acknowledged)
             #expect(await begin.value == .acknowledged)
-            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, coordinate: intent.route.end) }
+            tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0, coordinate: intent.route.end) }
             await wait { await device.waiting }
         }
         #expect(await device.claim())
@@ -219,7 +219,7 @@ struct ServiceRouteCommandsTests {
         let oldNext = GeoCoordinate(latitude: 25.00001, longitude: 121)!
         let tick = Task {
             submitted = true
-            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 1, coordinate: oldNext)
+            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 1, expectedControlRevision: controller.routeControlRevision(executionID: old.id, lease: old.lease) ?? 0, coordinate: oldNext)
         }
         await wait { submitted }
         await device.finish(.notSent(.pairingRequired))
@@ -234,7 +234,7 @@ struct ServiceRouteCommandsTests {
         var queued = false
         let obsolete = Task {
             queued = true
-            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 2,
+            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 2, expectedControlRevision: controller.routeControlRevision(executionID: old.id, lease: old.lease) ?? 0,
                 coordinate: GeoCoordinate(latitude: 25.00002, longitude: 121)!)
         }
         await wait { queued }
@@ -255,7 +255,7 @@ struct ServiceRouteCommandsTests {
         await wait { await device.waiting }; await device.finish(.acknowledged)
         #expect(await begin.value == .acknowledged)
         let coordinate = GeoCoordinate(latitude: 25.00001, longitude: 121)!
-        let tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, coordinate: coordinate) }
+        let tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0, coordinate: coordinate) }
         await wait { await device.waiting }
         #expect(!service.nativeBusy)
         if afterClaim { #expect(await device.claim()) }
@@ -302,7 +302,7 @@ struct ServiceRouteCommandsTests {
         await wait { watchdog.requests.count == 1 }
         await device.finish(.acknowledged)
         #expect(await begin.value == .acknowledged)
-        let tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1,
+        let tick = Task { await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1, expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0,
             coordinate: GeoCoordinate(latitude: 25.00001, longitude: 121)!) }
         await wait { await device.waiting }
         await wait { watchdog.requests.count == 2 }

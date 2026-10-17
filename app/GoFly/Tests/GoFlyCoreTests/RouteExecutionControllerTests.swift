@@ -473,7 +473,10 @@ private struct RouteTestSearch: PlaceSearching {
     private let events = PassthroughSubject<RouteCommandEvent, Never>()
     var routeEvents: AnyPublisher<RouteCommandEvent, Never> { events.eraseToAnyPublisher() }
     func beginRoute(_ intent: RouteExecutionIntent, expectedAdmissionRevision: UInt64) async -> RouteCommandOutcome { .acknowledged }
-    func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, coordinate: GeoCoordinate) async -> RouteCommandOutcome { .acknowledged }
+    var controlRevision: UInt64 = 0
+    func routeControlRevision(executionID: UUID, lease: MovementTaskLease) -> UInt64? { controlRevision }
+    func reviseRouteControl(executionID: UUID, lease: MovementTaskLease) -> UInt64? { controlRevision &+= 1; return controlRevision }
+    func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedControlRevision: UInt64, coordinate: GeoCoordinate) async -> RouteCommandOutcome { .acknowledged }
     func pauseRoute(executionID: UUID, lease: MovementTaskLease) -> Bool { true }
     func resumeRoute(executionID: UUID, lease: MovementTaskLease) -> Bool { true }
     func endRoute(executionID: UUID, lease: MovementTaskLease) {}

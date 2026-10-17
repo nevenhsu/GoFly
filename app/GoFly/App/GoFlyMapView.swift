@@ -376,7 +376,13 @@ struct GoFlyMapView: View {
     }
 
     private var displayStatusKey: String {
-        if mode == .route, !route.canEdit { return "route.phase.\(route.phase.rawValue)" }
+        if mode == .route, !route.canEdit {
+            if route.usesPositionAxis, [.running, .pausing, .paused].contains(route.phase) {
+                let prefix = route.roundTripEnabled ? "route.status.roundTrip" : "route.status"
+                return "\(prefix).\(route.phase.rawValue).\(route.heading.rawValue)"
+            }
+            return "route.phase.\(route.phase.rawValue)"
+        }
         switch service.pointState {
         case .sending: return "teleport.moving"
         case .unconfirmed: return "teleport.unconfirmed"

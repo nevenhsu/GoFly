@@ -50,6 +50,7 @@ public final class ServiceController: ObservableObject, RouteCommanding {
         var interrupted = false
         var pendingCalls = 0
         var lastSequence: UInt64 = 0
+        var controlRevision: UInt64 = 0
         var begin: CheckedContinuation<RouteCommandOutcome, Never>?
         var idle: [CheckedContinuation<RouteIdleSettlement, Never>] = []
         var tick: RouteTick?
@@ -62,6 +63,7 @@ public final class ServiceController: ObservableObject, RouteCommanding {
         let coordinate: GeoCoordinate
         let sequence: UInt64
         var timedOut = false
+        var controlCancelled = false
         var skipped = false
         var didInvalidateProof = false
         var watchdog: Task<Void, Never>?
@@ -548,11 +550,30 @@ extension ServiceController {
             beginPreparation(.route(intent))
         }
     }
-    public func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
+    public func routeControlRevision(executionID: UUID, lease: MovementTaskLease) -> UInt64? {
+        eligibleRouteControlOwner(executionID: executionID, lease: lease)?.controlRevision
+    }
+    public func reviseRouteControl(executionID: UUID, lease: MovementTaskLease) -> UInt64? {
+        guard let owner = eligibleRouteControlOwner(executionID: executionID, lease: lease) else { return nil }
+        owner.controlRevision &+= 1
+        if let tick = owner.tick, tick.gate.invalidateIfAvailable() {
+            tick.controlCancelled = true
+            tick.watchdog?.cancel()
+        }
+        return owner.controlRevision
+    }
+    private func eligibleRouteControlOwner(executionID: UUID, lease: MovementTaskLease) -> RouteOwner? {
+        guard let owner = routeOwners[executionID], owner.intent.lease == lease, owner.begun,
+              !owner.ended, !owner.unknown, movementAuthority.snapshot.lease == lease,
+              movementAuthority.snapshot.health == .confirmedHealthy, !routeUnconfirmed else { return nil }
+        return owner
+    }
+    public func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedControlRevision: UInt64,
                                coordinate: GeoCoordinate) async -> RouteCommandOutcome {
         guard let owner = routeOwners[executionID], owner.intent.lease == lease, owner.begun,
               !owner.ended, !owner.unknown, owner.tick == nil, sequence == owner.lastSequence + 1,
               movementAuthority.permitsDispatch(for: lease), !routeUnconfirmed else { return .cancelled }
+        guard owner.controlRevision == expectedControlRevision else { return .controlCancelled }
         let gate = PointDispatchGate(authority: movementAuthority, lease: lease) { [weak self] in
             Task { @MainActor in self?.routeTickDidDispatch(executionID: executionID, sequence: sequence) }
         }
@@ -564,10 +585,11 @@ extension ServiceController {
                     tick.skipped = true
                     return .point(.notSent(.operationCancelled))
                 }
+                if tick.controlCancelled { return .point(.notSent(.operationCancelled)) }
                 tick.watchdog = Task { [weak self] in
-                    guard let self else { return }
+                    guard let self, !tick.controlCancelled else { return }
                     do { try await self.watchdogSleep(self.operationTimeout) } catch { return }
-                    guard self.routeTickIsCurrent(owner, tick), !owner.ended,
+                    guard self.routeTickIsCurrent(owner, tick), !owner.ended, !tick.controlCancelled,
                           self.movementAuthority.snapshot.lease == lease else { return }
                     if !tick.gate.hasDispatched, self.movementAuthority.snapshot.runState != .running { return }
                     tick.timedOut = true; tick.gate.invalidate()
@@ -711,7 +733,9 @@ extension ServiceController {
             publishSimulation(tick.coordinate)
             return .acknowledged
         case .notSent(let failure) where !tick.gate.hasDispatched:
-            if movementAuthority.snapshot.runState != .running || tick.gate.state == .invalidated { return .cancelled }
+            if movementAuthority.snapshot.runState != .running { return .cancelled }
+            if tick.controlCancelled { return .controlCancelled }
+            if tick.gate.state == .invalidated { return .cancelled }
             markRouteInterrupted(owner, failure: failure)
             return .notSent(failure)
         case .notSent(let failure), .unconfirmed(let failure):

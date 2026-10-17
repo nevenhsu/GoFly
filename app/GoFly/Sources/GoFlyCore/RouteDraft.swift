@@ -83,6 +83,7 @@ public struct RouteDraft: Equatable, Sendable {
 public enum RouteExecutionPhase: String, Equatable, Sendable {
     case editing, planning, preparing, running, pausing, paused, cancelling, interrupted, unknown
 }
+public enum RouteHeading: String, Equatable, Sendable { case forward, reverse }
 public enum RouteExecutionFailure: Error, Equatable, Sendable {
     case missingStart, missingDestination, currentLocationUnavailable, planningFailed, invalidPath
     case device(DeviceServiceFailure)

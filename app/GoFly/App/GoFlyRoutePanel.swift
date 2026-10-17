@@ -128,15 +128,51 @@ struct GoFlyRoutePanel: View {
         if let progress = controller.progress {
             VStack(alignment: .leading, spacing: 10) {
                 ProgressView(value: progress.fraction, total: 1)
-                    .accessibilityLabel(goFlyString("route.progress"))
+                    .accessibilityLabel(goFlyString(controller.usesPositionAxis ? "route.position" : "route.progress"))
                     .accessibilityIdentifier("route.progress")
-                Text(progress.fraction, format: .percent.precision(.fractionLength(0)))
-                    .font(.subheadline.monospacedDigit())
+                if controller.usesPositionAxis {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(goFlyString("route.axis.origin"))
+                        Spacer(minLength: 8)
+                        Text(goFlyString("route.axis.destination"))
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .accessibilityIdentifier("route.position.endpoints")
+                    Text(String.localizedStringWithFormat(goFlyString("route.positionValue"),
+                         progress.fraction.formatted(.percent.precision(.fractionLength(0)))))
+                        .font(.subheadline.monospacedDigit())
+                        .accessibilityIdentifier("route.position.value")
+                } else {
+                    Text(progress.fraction, format: .percent.precision(.fractionLength(0)))
+                        .font(.subheadline.monospacedDigit())
+                }
             }
         }
         if let error = controller.error { failure(error) }
         switch controller.phase {
         case .running, .paused:
+            HStack(alignment: .center, spacing: 12) {
+                roundTripControl
+                if controller.roundTripEnabled {
+                    Button { _ = controller.toggleHeading() } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: controller.heading == .forward ? "arrow.right" : "arrow.left")
+                                .font(.system(size: 22))
+                            Text(goFlyString("route.direction.\(controller.heading.rawValue)"))
+                                .font(.body)
+                        }
+                        .frame(minWidth: 126, minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(controller.canToggleHeading ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                    .disabled(!controller.canToggleHeading)
+                    .accessibilityHint(goFlyString("route.direction.toggleHint"))
+                    .accessibilityIdentifier("route.direction")
+                }
+            }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
                     cancelButton
@@ -160,6 +196,10 @@ struct GoFlyRoutePanel: View {
         case .preparing, .cancelling, .editing:
             EmptyView()
         }
+    }
+
+    private var roundTripControl: some View {
+        GoFlyRoundTripControl(controller: controller)
     }
 
     private var cancelButton: some View {
@@ -204,11 +244,13 @@ struct GoFlyRoutePanel: View {
 private struct GoFlyRouteDetailsView: View {
     @ObservedObject var controller: RouteExecutionController
     var onDismiss: () -> Void
+    @State private var visibleScrollFrame: CGRect = .zero
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    GoFlyRoundTripControl(controller: controller)
                     Text(goFlyString("route.speed")).font(.headline)
                     Text(String.localizedStringWithFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
                         .font(.title2.monospacedDigit())
@@ -233,18 +275,60 @@ private struct GoFlyRouteDetailsView: View {
                 }
                 .padding(24)
             }
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+            .accessibilityIdentifier("route.details.content")
             .background(GoFlyStyle.surface)
+            .overlay(alignment: .topLeading) {
+                #if DEBUG && targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+                    Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
+                                visibleScrollFrame.width, visibleScrollFrame.height))
+                        .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("route.details.viewportMetrics")
+                }
+                #endif
+            }
             .navigationTitle(goFlyString("route.details"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(goFlyString("common.back"), action: onDismiss)
-                        .frame(minWidth: 44, minHeight: 44)
+                    Button(action: onDismiss) {
+                        Text(goFlyString("common.back"))
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                        .buttonStyle(.plain)
                         .accessibilityIdentifier("route.details.back")
                 }
             }
         }
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
+    }
+}
+
+private struct GoFlyRoundTripControl: View {
+    @ObservedObject var controller: RouteExecutionController
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { controller.roundTripEnabled },
+            set: { _ = controller.setRoundTripEnabled($0) }
+        )) {
+            Label(goFlyString("route.roundTrip"),
+                  systemImage: controller.roundTripEnabled ? "checkmark.square.fill" : "square")
+                .font(.body)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.plain)
+        .foregroundStyle(controller.canSetRoundTrip ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+        .disabled(!controller.canSetRoundTrip)
+        .accessibilityValue(controller.roundTripEnabled ? "1" : "0")
+        .accessibilityHint(goFlyString("route.roundTripHint"))
+        .accessibilityIdentifier("route.roundTrip")
     }
 }

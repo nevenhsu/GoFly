@@ -137,3 +137,12 @@ Advisor 已核准有效節點0…27（最多25途經點）、穩定身分與依�
 
 
 07 的專用 clear 意圖綁定 Candidate reset 完成後的確切編輯 revision；後續輸入／選取／map tap／reset 永久作廢，回到空 query 不復活。Current 勾選 true 經 stagePickerCurrent(id:) 檢查資格並取消舊查詢／反查，保留候選、query 與驗證鎖但推進 revision；false 不作廢新 clear，Confirm 仍傳本地 useCurrent 並複驗資格。這防止舊 metadata 清掉新勾選，或 Current on/off 後誤刪節點。
+
+
+## 來回走動（票08）
+
+Advisor核准以同一不可變路徑、速度及lease執行；heading與來回選項是執行期控制。ACK才更新原起點0…終點total的位置軸；端點ACK後依當下選項折返或結束。首次啟用後鎖存位置軸，取消勾選保持方向到下一端點；新執行才重設forward／一般單次。暫停改向或取消勾選維持暫停，取消保留草稿／選項及最後確認位置。
+
+Service以同execution／lease的同步control revision讀取及遞增，讓await callee-entry前計算的舊方向也無法建立派送；只在原子作廢available gate成功時標controlCancelled並抑制其watchdog。已claim命令等待實際結果，真實ACK後從該位置沿最新方向下一cadence；timeout先鎖存則沿用隔離，任意unconfirmed／claimednotSent／無claim卻ACK不能降為安全取消。未claim安全撤回不推進序號／位置，不清除、不換lease。既有FIFO／native最後gate／Stop generation不變。
+
+App同列checkbox與單一無框icon-left改向控件，關閉收起改向但topbar保留實際方向／目標至結束。初始選項放細項，運作／暫停不提供編輯入口。正式實作已通過完整Swift150／UI25與unsigned build10，兩軸無剩餘finding。模擬器只驗真實編輯／規劃與可達介面，active往返與實際接收App效果仍待手機集中驗收。

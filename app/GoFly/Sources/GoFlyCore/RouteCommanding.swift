@@ -6,6 +6,7 @@ public enum RouteCommandOutcome: Equatable, Sendable {
     case notSent(DeviceServiceFailure)
     case unconfirmed(DeviceServiceFailure)
     case cancelled
+    case controlCancelled
 }
 
 public enum RouteIdleSettlement: Equatable, Sendable {
@@ -27,7 +28,9 @@ public protocol RouteCommanding: AnyObject {
     var currentRouteOrigin: GeoCoordinate? { get }
     var routeAdmissionRevision: UInt64 { get }
     func beginRoute(_ intent: RouteExecutionIntent, expectedAdmissionRevision: UInt64) async -> RouteCommandOutcome
-    func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, coordinate: GeoCoordinate) async -> RouteCommandOutcome
+    func routeControlRevision(executionID: UUID, lease: MovementTaskLease) -> UInt64?
+    func reviseRouteControl(executionID: UUID, lease: MovementTaskLease) -> UInt64?
+    func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedControlRevision: UInt64, coordinate: GeoCoordinate) async -> RouteCommandOutcome
     func pauseRoute(executionID: UUID, lease: MovementTaskLease) -> Bool
     func resumeRoute(executionID: UUID, lease: MovementTaskLease) -> Bool
     func endRoute(executionID: UUID, lease: MovementTaskLease)
