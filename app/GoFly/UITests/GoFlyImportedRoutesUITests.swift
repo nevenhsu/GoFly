@@ -236,7 +236,7 @@ final class GoFlyImportedRoutesUITests: XCTestCase {
     }
     private func makeApp(variant: String? = nil, language: String = "en") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
                                "-gofly-ui-imports-store", UUID().uuidString, "-gofly-ui-map-metrics",
                                "-AppleLanguages", "(\(language))", "-AppleLocale", language == "en" ? "en_US" : "zh_TW"]
         if let variant { app.launchArguments += ["-gofly-ui-gpx-file", variant] }

@@ -61,9 +61,13 @@ final class NativeDeviceSession: DeviceSession {
                 // Native library's NotFound (20) is the sole absent-image case.
                 // Transport/protocol failures cannot trigger a blind mount.
                 let code = error.pointee.code
+                let subcode = error.pointee.sub_code
+                let absent = NativeErrorMapping.isNotMounted(code: code, subcode: subcode)
+                let failure = NativeErrorMapping.failure(code: code, subcode: subcode,
+                    fallback: .devicePreparationRequired)
                 idevice_error_free(error)
-                if code == 20 { return false }
-                throw code == 109 ? DeviceServiceFailure.operationTimedOut : .devicePreparationRequired
+                if absent { return false }
+                throw failure
             }
             return signature != nil && count > 0
         }

@@ -133,7 +133,7 @@ final class GoFlyJoystickUITests: XCTestCase {
     }
     private func makeApp(language: String = "en") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
                                "-gofly-ui-favorites-store", UUID().uuidString,
                                "-gofly-ui-imports-store", UUID().uuidString,
                                "-gofly-ui-favorite-routes-store", UUID().uuidString,

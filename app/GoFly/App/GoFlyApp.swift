@@ -4,7 +4,8 @@ import SwiftUI
 
 @main
 struct GoFlyApp: App {
-    @StateObject private var service = ServiceController(service: Self.deviceService())
+    @StateObject private var service: ServiceController
+    @StateObject private var sessionRecovery: SessionRecoveryStore
     @StateObject private var favorites = Self.favoritePlacesStore()
     @StateObject private var importedRoutes = Self.importedRoutesStore()
     @StateObject private var favoriteRoutes = Self.favoriteRoutesStore()
@@ -13,11 +14,24 @@ struct GoFlyApp: App {
     )
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
 
+    init() {
+        let recovery = goFlySessionRecoveryStore()
+        let service = ServiceController(service: Self.deviceService())
+        let snapshot = recovery.initialSnapshot
+        _ = service.restoreColdRecovery(
+            position: snapshot.position,
+            requiresConfirmation: recovery.loadState != .ready ||
+                snapshot.activeMovement != nil || snapshot.uncertainty != nil
+        )
+        _service = StateObject(wrappedValue: service)
+        _sessionRecovery = StateObject(wrappedValue: recovery)
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
                 if onboardingComplete {
-                    GoFlyMapView(service: service)
+                    GoFlyMapView(service: service, recoveryStore: sessionRecovery)
                 } else {
                     GoFlyOnboardingView(controller: onboarding) {
                         onboardingComplete = true

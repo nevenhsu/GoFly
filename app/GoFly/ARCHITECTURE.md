@@ -187,3 +187,12 @@ Advisor核准獨立FavoriteRoutes manifest／immutable payload，manual有序完
 Go／隨機只改 target與input revision，保留速度、接管、暫停及 owner；舊target receipt仍更新實際位置，但不能宣告新target抵達。抵達無下一站則實際 pause installed healthy lease後保留本地 suspended continuation與重試，不留下 running owner空轉。scene非active時健康已安裝 auto暫停，未安裝owner退休後僅保留本地 continuation，前景不自動恢復。實際 Stop或新任務 claim的movementBoundary事件作廢所有舊continuation；admission／failed preparation不是claim證據。
 
 App以獨立CandidateController處理漫步選點，與路線picker／瞬移分開；目前目標空心Pin無Go，候選黑點細線Pin的Go只明確換目標。各44pt詳情固定綁定點擊時place snapshot。選點／抵達／ACK不移鏡頭；明確回中仍可用。路線編輯優先使用自身picker、地圖Pin回填地名／地址／座標且沒有Go。正式實作與離線驗證完成：完整SwiftCore293／36suites＋Transport9／1suite，共302PASS；完整simulator UI39／39 PASS（1767.040s）；未簽署iPhoneOS build14、312key三語parser／native verifier／diffcheck通過，Standards及Spec最後readback零finding。三語AX／keyboard與路線地圖Pin回填無Go回歸通過。不能以source、Core controlled-device或simulator UI宣稱手機／接收App效果；實機驗收仍集中最後進行。
+
+
+## 連線修復與冷啟動（票13，已實作；手機待驗）
+
+核准v5將連線准入及冷啟動待確認分開：Service與MovementTaskAuthority共用原子派送門檻，連線失敗先封鎖新claim／撤回available，再暫停或退休Controller；已claim只結算實際回覆。TCP成功不改任務健康或自動恢復，Stop／clear／reset不受移動門檻封鎖。
+
+SessionRecovery保存完整既有草稿及data-only歷史／顯示快取，App只有一份store和穩定Controller。冷資料不提供origin／lease／健康證據；native沒有可驗證舊任務的query，所以冷啟動不提供舊Resume。若存有active／uncertainty或既有檔案無法安全讀回，必須實際clear ACK後才可建立新任務；discard、GPS、TCP及reset不能解除hold。缺檔正常fresh defaults，損壞檔禁止自動覆寫。上述程式已整合；完整Swift344、未簽署iPhoneOS build15及兩軸最後readback通過。完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43。手機驗收仍集中最後進行。
+
+持久化使用單一off-MainActor writer，一筆inflight與一筆最新pending；capture只是接受，flush依revision cutline等待實際寫入結果，取消waiter不取消原子寫入。損壞／unsafe／未知schema禁止自動覆寫；儲存失敗不顯示已保存。firstclaim-beforeACK與pending／failed clear分別保存不確定狀態，terminal active=nil；已ACK手動owner保留無方向摘要至實際settlement。Service first-route preparation的dispatch gate也是實際claim證據，不能只看後續tick。

@@ -11,6 +11,7 @@ public protocol DeviceService: Sendable {
 public enum DeviceServiceFailure: String, Error, Sendable, Equatable {
     case pairingRequired = "error.pairingRequired"
     case identityMismatch = "error.identityMismatch"
+    case developerModeRequired = "error.developerModeRequired"
     case devicePreparationRequired = "error.devicePreparationRequired"
     case serviceUnavailable = "error.serviceUnavailable"
     case tunnelUnavailable = "error.tunnelUnavailable"

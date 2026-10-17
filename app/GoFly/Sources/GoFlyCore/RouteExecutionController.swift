@@ -1,6 +1,11 @@
 import Combine
 import Foundation
 
+public enum RouteSuspensionReason: String, Equatable, Sendable {
+    case sceneInactive
+    case connectionUnavailable
+}
+
 @MainActor
 public final class RouteExecutionController: ObservableObject {
     @Published public private(set) var draft: RouteDraft
@@ -18,6 +23,7 @@ public final class RouteExecutionController: ObservableObject {
     @Published public private(set) var progress: RouteProgress?
     @Published public private(set) var error: RouteExecutionFailure?
     @Published public private(set) var completion: RouteCompletion?
+    @Published public private(set) var suspensionReason: RouteSuspensionReason?
     @Published public private(set) var roundTripEnabled = false
     @Published public private(set) var usesPositionAxis = false
     @Published public private(set) var heading: RouteHeading = .forward
@@ -34,15 +40,24 @@ public final class RouteExecutionController: ObservableObject {
     private var pickerCandidateSubscription: AnyCancellable?
     private var accumulatedElapsed: Duration = .zero
     private var activeStartedAt: Duration?
+    private var sceneActive = true
+    private var connectionAvailable = true
+    private var recoveryProbePending = false
+    private var pendingSuspensionReason: RouteSuspensionReason?
     private static let cadence: Duration = .milliseconds(500)
 
     public init(draft: RouteDraft = RouteDraft(), planner: any RoutePlanning, commands: any RouteCommanding,
                 search: any PlaceSearching, clock: any RouteClock = ContinuousRouteClock()) {
         self.draft = draft; self.planner = planner; self.commands = commands; self.search = search; self.clock = clock
+        if let source = draft.gpxSource {
+            // A persisted GPX draft is display data. Build only its existing
+            // exact preview; do not plan roads or touch the command seam.
+            self.plannedRoute = try? PlannedRoute(imported: source.document)
+        }
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
     public var canEdit: Bool { phase == .editing }
-    public var canStart: Bool { canEdit && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
+    public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canClearImportedRoute: Bool { canEdit && draft.gpxSource != nil }
     /// Capture before asynchronous archive validation; only this outstanding request may replace the draft.
@@ -118,7 +133,14 @@ public final class RouteExecutionController: ObservableObject {
         publishProgress(distance: progress?.committedDistanceMeters ?? 0, intent: intent)
         return true
     }
-    public var canResume: Bool { phase == .paused }
+    public var canResume: Bool {
+        sceneActive && connectionAvailable && !recoveryProbePending && phase == .paused && commands.canBeginRoute
+    }
+
+    /// Recovery blocks a paused resume until its fresh probe settles without
+    /// interrupting an already running route.
+    func recoveryProbeDidStart() { recoveryProbePending = true; objectWillChange.send() }
+    func recoveryProbeDidFinish() { recoveryProbePending = false; objectWillChange.send() }
     public var canCancel: Bool {
         [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
     }
@@ -292,6 +314,8 @@ public final class RouteExecutionController: ObservableObject {
         return resolved
     }
     @discardableResult public func pause() -> Bool {
+        let reason = pendingSuspensionReason
+        if reason == nil { suspensionReason = nil }
         guard canPause, let intent, commands.pauseRoute(executionID: intent.id, lease: intent.lease) else { return false }
         phase = .pausing
         let token = revision, running = task
@@ -303,7 +327,10 @@ public final class RouteExecutionController: ObservableObject {
             guard self.revision == token, self.phase == .pausing else { return }
             self.freezeElapsed()
             switch settlement {
-            case .settled: self.phase = .paused
+            case .settled:
+                self.phase = .paused
+                self.suspensionReason = reason
+                self.pendingSuspensionReason = nil
             case .requiresStop(let failure): self.phase = .unknown; self.error = .device(failure)
             }
         }
@@ -311,7 +338,7 @@ public final class RouteExecutionController: ObservableObject {
     }
     @discardableResult public func resume() -> Bool {
         guard canResume, let intent, commands.resumeRoute(executionID: intent.id, lease: intent.lease) else { return false }
-        phase = .running; activeStartedAt = clock.now
+        phase = .running; activeStartedAt = clock.now; suspensionReason = nil
         let token = revision
         task = Task { [weak self] in await self?.run(intent, token: token) }
         return true
@@ -319,9 +346,13 @@ public final class RouteExecutionController: ObservableObject {
     @discardableResult public func cancel() -> Bool {
         guard canCancel else { return false }
         if phase == .planning {
-            revision &+= 1; task?.cancel(); returnToEditing(); return true
+            revision &+= 1; task?.cancel(); returnToEditing()
+            suspensionReason = pendingSuspensionReason
+            pendingSuspensionReason = nil
+            return true
         }
         guard let intent else { return false }
+        let reason = pendingSuspensionReason
         phase = .cancelling
         let token = revision, running = task
         commands.endRoute(executionID: intent.id, lease: intent.lease)
@@ -333,7 +364,10 @@ public final class RouteExecutionController: ObservableObject {
             guard self.revision == token, self.intent?.id == intent.id,
                   self.phase == .cancelling || self.phase == .unknown else { return }
             switch settlement {
-            case .settled: self.returnToEditing()
+            case .settled:
+                self.returnToEditing()
+                self.suspensionReason = reason
+                self.pendingSuspensionReason = nil
             case .requiresStop(let failure):
                 self.freezeElapsed(); self.phase = .unknown; self.error = .device(failure)
             }
@@ -341,6 +375,44 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     public func dismissCompletion(executionID: UUID) { if completion?.executionID == executionID { completion = nil } }
+
+    public func releaseForInactiveScene() {
+        sceneActive = false
+        releaseForUnavailable(reason: .sceneInactive)
+    }
+
+    public func sceneDidBecomeActive() {
+        sceneActive = true
+        objectWillChange.send()
+    }
+
+    public func connectionDidBecomeUnavailable() {
+        connectionAvailable = false
+        releaseForUnavailable(reason: .connectionUnavailable)
+    }
+
+    public func connectionDidBecomeAvailable() {
+        connectionAvailable = true
+        objectWillChange.send()
+    }
+
+    private func releaseForUnavailable(reason: RouteSuspensionReason) {
+        switch phase {
+        case .running:
+            pendingSuspensionReason = reason
+            _ = pause()
+        case .planning:
+            revision &+= 1
+            task?.cancel()
+            returnToEditing()
+            suspensionReason = reason
+        case .preparing:
+            pendingSuspensionReason = reason
+            _ = cancel()
+        default:
+            break
+        }
+    }
 
     private func run(_ intent: RouteExecutionIntent, token: UInt64) async {
         var sequence: UInt64 = 1

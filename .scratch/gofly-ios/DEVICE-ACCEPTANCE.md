@@ -138,3 +138,16 @@
 本節是手機驗收步驟，尚未執行；Core controlled-device回覆、模擬器與編譯均不能代替接收App實際位置。
 
 票12離線交付基準：GoFly0.1.0 build14（未簽署），完整SwiftCore293／36suites＋Transport9／1suite，共302PASS；完整simulator UI39／39 PASS（1767.040s）；未簽署iPhoneOS build14、312key三語parser／native verifier／diffcheck通過，Standards及Spec最後readback零finding。以上手機步驟尚未執行，無安裝／操作實機。
+
+## 票13：連線、前景與冷啟動（已實作；集中手機待驗）
+
+1. 健康單次／來回路線及漫步中關閉VPN，確認停止新送點、已送出只結算真實結果；原模式保留暫停與短原因。重新開VPN只能更新可達狀態，由使用者明確繼續；核對同一路徑、ACK進度／方向或漫步目標，沒有追補中斷時間。
+2. 手動搖桿持續按住時切App或斷線，輸入必須釋放；返回不得重播方向／力度。準備尚未安裝的要求退休，只有明確新操作可重新準備，不能把畫面暫停當作健康owner。
+3. 輸入有序手動節點、速度與來回選項，或載入完整GPX後重開，核對資料保留且不自動送點。已保存最後位置先顯示無圓底半透明箭頭；取得有效GPS才按既有規則更新，不以快取供起點。
+4. 在存在移動／回覆未確認資料後終止重開，顯示原模式待確認摘要，沒有舊Resume。忘記摘要後仍須恢復GPS取得實際clear確認；VPN恢復、重置與新的GPS不解除此移動鎖。clear失敗仍保留鎖，真正確認後才可明確開始新任務；核對兩個接收App，不能僅看服務文字。
+5. 明確Stop／Cancel／取消漫步後重開，舊任務不可復活；若停止清理尚未確認，只保留待確認原因而非運作任務。裝置忙碌、claimed回覆未知與實際失敗應如實區分，不增加沒有native查詢能力的核對成功按鈕。
+6. 分別觀察配對缺少、Developer Mode未開、必要支援資料缺少／不相容的真實錯誤與Mac處理指引；未能實際重現的錯誤記待驗，不將generic錯誤或Core numeric fixture視為硬體已驗。
+
+資料安全、原子寫入失敗、損壞檔與遲到結果由離線故障注入驗證，不要求使用者破壞手機檔案。以上為本票待驗步驟，尚未操作實機。
+
+票13離線交付基準：GoFly0.1.0 build15。最新完整SwiftCore335／40suites＋Transport9／1suite，共344PASS；完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43。未簽署iPhoneOS build15、332key三語parser／格式／plutil、native mapper及personalized branch等3項邊界檢查、native verifier與diffcheck通過，Standards／Spec最後readback均0finding。實際裝置、接收位置與VoiceOver仍deferred-by-user；沒有連接／安裝／操作手機。

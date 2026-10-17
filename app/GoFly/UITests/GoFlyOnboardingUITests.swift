@@ -109,7 +109,7 @@ final class GoFlyOnboardingUITests: XCTestCase {
 
     private func onboardingApp(language: String = "en", locale: String = "en_US") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "NO", "-gofly-ui-unreachable",
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "NO", "-gofly-ui-unreachable",
                                "-AppleLanguages", "(\(language))", "-AppleLocale", locale]
         return app
     }

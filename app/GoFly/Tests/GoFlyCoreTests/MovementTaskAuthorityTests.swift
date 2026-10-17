@@ -1,6 +1,9 @@
+import Combine
+import Foundation
 import Testing
 @testable import GoFlyCore
 
+@Suite @MainActor
 struct MovementTaskAuthorityTests {
     @Test func handoffRevokesTheExactOldLeaseAndRejectsQueuedOldWrites() throws {
         let authority = MovementTaskAuthority()
@@ -59,5 +62,68 @@ struct MovementTaskAuthorityTests {
         authority.revokeAll()
         #expect(!PointDispatchGate(authority: authority, lease: old).claim())
         #expect(!PointDispatchGate(authority: authority, lease: new).claim())
+    }
+
+    @Test func serviceAvailabilityFenceInvalidatesOldCASWithoutChangingCleanupState() {
+        let service = ServiceController(service: FenceDevice())
+        let authority = service.movementAuthority
+        let old = MovementTaskLease()
+        #expect(authority.install(old, replacing: authority.snapshot))
+        #expect(authority.updateHealth(.confirmedHealthy, for: old))
+        let captured = authority.snapshot
+
+        service.setMovementConnectionAvailable(false)
+
+        #expect(!authority.permitsDispatch(for: old))
+        #expect(!authority.install(MovementTaskLease(), replacing: captured))
+        #expect(authority.snapshot.lease == old)
+        #expect(authority.snapshot.health == .confirmedHealthy)
+
+        service.setMovementConnectionAvailable(true)
+        #expect(!PointDispatchGate(authority: authority, lease: MovementTaskLease(), replacing: captured).claim())
+        #expect(authority.permitsDispatch(for: old))
+    }
+
+    @Test func availabilityPublicationSeesClosedFenceAndColdRestoreRejectsLateProof() {
+        let service = ServiceController(service: FenceDevice())
+        let authority = service.movementAuthority
+        var fenceWasClosedDuringPublication = false
+        let oldLease = MovementTaskLease()
+        #expect(authority.install(oldLease, replacing: authority.snapshot))
+        let observation = service.objectWillChange.sink { _ in
+            if service.movementConnectionAvailable {
+                fenceWasClosedDuringPublication = !service.canTeleport &&
+                    !service.movementAuthority.permitsDispatch(for: oldLease)
+            }
+        }
+        service.setMovementConnectionAvailable(false)
+        observation.cancel()
+        #expect(fenceWasClosedDuringPublication)
+        authority.revokeAll()
+
+        let position = SessionDisplayPosition(
+            coordinate: GeoCoordinate(latitude: 25, longitude: 121)!, source: .gps
+        )
+        let withHold = service.restoreColdRecovery(position: position, requiresConfirmation: true)
+        #expect(withHold)
+        #expect(service.coldRecoveryHeld)
+        #expect(!authority.permitsDispatch(for: oldLease))
+        #expect(!authority.install(MovementTaskLease(), replacing: authority.snapshot))
+        #expect(!service.restoreColdRecovery(position: nil, requiresConfirmation: false))
+
+        let late = ServiceController(service: FenceDevice())
+        late.observeRealLocation(RealLocationObservation(
+            latitude: 25, longitude: 121, horizontalAccuracy: 5, observedAt: Date()
+        ))
+        #expect(!late.restoreColdRecovery(position: position, requiresConfirmation: true))
+    }
+}
+
+private struct FenceDevice: DeviceService {
+    func prepare() async throws {}
+    func clearLocation() async throws {}
+    func resetClientConnection() async throws {}
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
+        .notSent(.operationCancelled)
     }
 }

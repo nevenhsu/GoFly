@@ -7,7 +7,7 @@ final class GoFlyServiceUITests: XCTestCase {
         throw XCTSkip("This failure-path test requires the simulator deviceRequired adapter; device clear is verified separately.")
         #else
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let start = app.buttons["map.serviceControl"]
         XCTAssertTrue(start.waitForExistence(timeout: 10))
@@ -49,7 +49,7 @@ final class GoFlyServiceUITests: XCTestCase {
         throw XCTSkip("This failure-path test requires the simulator deviceRequired adapter; device clear is verified separately.")
         #else
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"]
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"]
         app.launch()
         XCTAssertTrue(app.buttons["map.settings"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.alerts.count, 0)
@@ -74,7 +74,7 @@ final class GoFlyServiceUITests: XCTestCase {
 
     func testLargeEnglishDarkSettingsKeepActionsReachable() {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
                                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
                                "-AppleInterfaceStyle", "Dark"]
         app.launch()

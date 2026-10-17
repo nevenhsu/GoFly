@@ -175,7 +175,7 @@ final class GoFlyOperationUITests: XCTestCase {
 
     private func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
                                "-gofly-ui-operation-metrics", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         return app
     }

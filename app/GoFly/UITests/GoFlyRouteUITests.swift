@@ -239,7 +239,7 @@ final class GoFlyRouteUITests: XCTestCase {
     }
     private func makeApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
                                "-gofly-ui-map-metrics",
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         return app

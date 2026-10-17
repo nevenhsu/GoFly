@@ -1,13 +1,21 @@
 import GoFlyCore
+import GoFlyTransport
 import MapKit
 import SwiftUI
 import UIKit
 
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
+    @ObservedObject var recoveryStore: SessionRecoveryStore
     @StateObject private var route: RouteExecutionController
     @StateObject private var joystick: JoystickMovementController
-    @State private var mode: GoFlyMapMode = .teleport
+    @StateObject private var recovery: MovementRecoveryController
+    @State private var mode: GoFlyMapMode
+    @State private var lastCapturedSnapshot: SessionRecoverySnapshot
+    @State private var checkpointWindowStarted = false
+    @State private var checkpointWindowID: UUID?
+    @State private var checkpointBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @State private var checkpointFlushTask: Task<Void, Never>?
     @State private var modeHeaderHeight: CGFloat = 44
     @StateObject private var location = GoFlyRealLocation()
     @StateObject private var search = CandidateController(search: MapKitPlaceSearch())
@@ -18,6 +26,7 @@ struct GoFlyMapView: View {
     @State private var projection: GoFlyMapProjection?
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
+    @State private var bottomContentHeight: CGFloat = 260
     @State private var recenterHeight: CGFloat = 44
     @State private var normalStatusHeight: CGFloat = 0
     @State private var statusHeight: CGFloat = 0
@@ -35,19 +44,31 @@ struct GoFlyMapView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
 
-    init(service: ServiceController) {
+    init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
+        let snapshot = recoveryStore.initialSnapshot
+        let route = RouteExecutionController(
+            draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
+            commands: service, search: MapKitPlaceSearch()
+        )
+        _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
+        let joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
         _service = ObservedObject(wrappedValue: service)
-        _route = StateObject(wrappedValue: RouteExecutionController(
-            draft: Self.routeDraft(), planner: Self.routePlanner(), commands: service, search: MapKitPlaceSearch()
+        _recoveryStore = ObservedObject(wrappedValue: recoveryStore)
+        _route = StateObject(wrappedValue: route)
+        _joystick = StateObject(wrappedValue: joystick)
+        _recovery = StateObject(wrappedValue: MovementRecoveryController(
+            service: service, route: route, joystick: joystick,
+            probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
         ))
-        _joystick = StateObject(wrappedValue: JoystickMovementController(commands: service))
+        _mode = State(initialValue: snapshot.mode)
+        _lastCapturedSnapshot = State(initialValue: snapshot)
     }
 
-    private static func routeDraft() -> RouteDraft {
+    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
         #if DEBUG && targetEnvironment(simulator)
-        return initialRouteUITestDraft() ?? RouteDraft()
+        return initialRouteUITestDraft() ?? saved
         #else
-        return RouteDraft()
+        return saved
         #endif
     }
 
@@ -178,6 +199,16 @@ struct GoFlyMapView: View {
             .navigationDestination(isPresented: $showingSettings) {
                 ServiceSettingsView(service: service)
             }
+            .onAppear {
+                if cameraIntent == nil {
+                    if mode == .route, let planned = route.plannedRoute {
+                        cameraIntent = GoFlyCameraIntent(route: planned)
+                    } else if let position = service.positionMarker {
+                        cameraIntent = GoFlyCameraIntent(coordinate: position.coordinate)
+                    }
+                }
+                if scenePhase == .active { recovery.sceneDidBecomeActive() }
+            }
             .onReceive(service.$error) { error in
                 serviceNoticeDismissed = false
                 if let error {
@@ -228,11 +259,20 @@ struct GoFlyMapView: View {
                 } else if mode == .teleport, let candidate = search.candidate {
                     cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
                 }
+                captureCheckpoint()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { joystick.sceneDidBecomeActive() }
-                else { joystick.releaseForInactiveScene() }
+                if phase == .active {
+                    checkpointWindowStarted = false
+                    finishCheckpointWindow(id: checkpointWindowID)
+                    recovery.sceneDidBecomeActive()
+                } else {
+                    recovery.releaseForInactiveScene()
+                    captureCheckpoint()
+                    beginCheckpointFlush()
+                }
             }
+            .onChange(of: recovery.checkpointRevision) { _, _ in captureCheckpoint() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
             }
@@ -278,11 +318,74 @@ struct GoFlyMapView: View {
         .tint(GoFlyStyle.primary)
     }
 
+    private func captureCheckpoint() {
+        let snapshot = recovery.snapshot(mode: mode)
+        guard snapshot != lastCapturedSnapshot else { return }
+        lastCapturedSnapshot = snapshot
+        _ = recoveryStore.capture(snapshot)
+    }
+
+    /// A finite save window, independent of movement runtime and native cleanup.
+    private func beginCheckpointFlush() {
+        guard !checkpointWindowStarted else { return }
+        checkpointWindowStarted = true
+        guard recoveryStore.isSaving || recoveryStore.hasUnsavedChanges else { return }
+        let id = UUID()
+        checkpointWindowID = id
+        checkpointBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save GoFly session") {
+            Task { @MainActor in finishCheckpointWindow(id: id) }
+        }
+        checkpointFlushTask = Task { @MainActor in
+            _ = await recoveryStore.flush()
+            finishCheckpointWindow(id: id)
+        }
+    }
+
+    private func finishCheckpointWindow(id: UUID?) {
+        guard let id, checkpointWindowID == id else { return }
+        checkpointWindowID = nil
+        checkpointFlushTask?.cancel()
+        checkpointFlushTask = nil
+        let task = checkpointBackgroundTask
+        checkpointBackgroundTask = .invalid
+        if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+    }
+
     private func bottomPanel(in geometry: GeometryProxy) -> some View {
-        VStack(spacing: 8) {
-            if canSwitchMode {
-                modeSelector
+        Group {
+            if route.picker != nil {
+                // The picker already owns its keyboard-adjusted scroll viewport.
+                // Keep that layout independent of the ordinary recovery panel.
+                bottomPanelContent(in: geometry)
+            } else {
+                ScrollView {
+                    bottomPanelContent(in: geometry)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
+                }
+                .frame(height: min(bottomContentHeight, panelMaximumHeight(in: geometry)))
+                .accessibilityIdentifier("map.panels.scroll")
             }
+        }
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+    }
+
+    private func bottomPanelContent(in geometry: GeometryProxy) -> some View {
+        VStack(spacing: 8) {
+            if canSwitchMode { modeSelector }
+            if route.picker == nil, !showsOperationPanel {
+                let notice = GoFlyRecoveryView(
+                    recovery: recovery, store: recoveryStore, service: service,
+                    maximumHeight: .greatestFiniteMagnitude,
+                    onSettings: { showingSettings = true }
+                )
+                if notice.hasContent { notice }
+            }
+            modePanel(in: geometry)
+        }
+    }
+
+    private func modePanel(in geometry: GeometryProxy) -> some View {
+        Group {
             if mode == .joystick, route.canEdit, route.picker == nil {
                 ZStack(alignment: .bottom) {
                     GoFlyJoystickPanel(
@@ -333,7 +436,6 @@ struct GoFlyMapView: View {
                 )
             }
         }
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
     }
 
     private func operationPanel(in geometry: GeometryProxy) -> some View {
@@ -674,6 +776,15 @@ struct GoFlyMapView: View {
 
     @ViewBuilder private func mapMetrics(origin: CGPoint) -> some View {
         #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+            Text(sessionPersistenceStatus)
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityIdentifier("session.persistence.status")
+            Text(String(format: "%.2f,%.2f,%.2f,%.2f", panelFrame.minX + origin.x,
+                        panelFrame.minY + origin.y, panelFrame.width, panelFrame.height))
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityIdentifier("map.panel.viewportMetrics")
+        }
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"), let projection {
             Text(String(projection.routePointCount))
                 .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
@@ -703,6 +814,18 @@ struct GoFlyMapView: View {
         }
         #endif
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    private var sessionPersistenceStatus: String {
+        guard recoveryStore.loadState == .ready else { return "blocked" }
+        let current = lastCapturedSnapshot.mode == mode && lastCapturedSnapshot.draft == route.draft &&
+            lastCapturedSnapshot.roundTripEnabled == route.roundTripEnabled &&
+            lastCapturedSnapshot.joystickSpeed == joystick.speed
+        if !current || recoveryStore.isSaving { return "pending" }
+        if recoveryStore.hasUnsavedChanges || recoveryStore.error != nil { return "dirty" }
+        return "saved"
+    }
+    #endif
 
     private func locationNotice(_ key: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -765,7 +888,8 @@ private struct GoFlyMapSheet: Identifiable {
     let content: Content
 }
 
-private enum GoFlyMapMode: String, CaseIterable {
-    case teleport, route, joystick
+private typealias GoFlyMapMode = SessionMapMode
+
+private extension SessionMapMode {
     var localizationKey: String { "mode.\(rawValue)" }
 }

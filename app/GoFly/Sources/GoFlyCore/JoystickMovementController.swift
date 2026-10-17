@@ -26,23 +26,40 @@ public final class JoystickMovementController: ObservableObject {
         return JoystickInput(bearingDegrees: bearing, strength: 1)
     }
     public var displayBearingDegrees: Double? { input?.bearingDegrees ?? lastAcknowledgedBearingDegrees }
+    /// Data-only history used by the recovery checkpoint. It never carries a
+    /// native handle, input, lease, or authority proof.
+    var recoveryWanderHistory: [GeoCoordinate] { wanderHistory }
+    /// Recovery may describe manual movement only after this intent has
+    /// received an actual native acknowledgement.
+    var recoveryHasAcknowledgedLease: Bool { hasAcknowledgedLease }
     public var canBeginGesture: Bool {
-        guard sceneActive else { return false }
+        guard sceneActive, connectionAvailable else { return false }
         if wanderEnabled, activeGestureID == nil {
+            // A probe may not interrupt an already-running manual override;
+            // only the suspended wander-resume path is admission-gated.
             if phase == .preparing || phase == .moving { return true }
-            if phase == .suspended && suspensionReason == .targetUnavailable { return true }
+            if !recoveryProbePending, phase == .suspended && suspensionReason == .targetUnavailable { return true }
         }
         return phase == .neutral && commands.canBeginJoystick && !requiresOrigin
     }
     public var requiresOrigin: Bool { commands.currentJoystickOrigin == nil }
     public var requiresStop: Bool { phase == .unknown }
     public var canPause: Bool { phase == .moving && hasAcknowledgedLease }
-    public var canResume: Bool { sceneActive && (phase == .paused || (wanderEnabled && phase == .suspended && suspensionReason == .sceneInactive)) }
+    public var canResume: Bool {
+        sceneActive && connectionAvailable && !recoveryProbePending && commands.canBeginJoystick &&
+        (phase == .paused || (wanderEnabled && phase == .suspended && suspensionReason == .sceneInactive))
+    }
+    /// Recovery blocks a paused resume until its fresh probe settles without
+    /// interrupting an already moving gesture.
+    func recoveryProbeDidStart() { recoveryProbePending = true; objectWillChange.send() }
+    func recoveryProbeDidFinish() { recoveryProbePending = false; objectWillChange.send() }
     public var canSetSpeed: Bool { [.neutral, .preparing, .moving, .paused, .suspended, .interrupted].contains(phase) }
     private var wanderHistory: [GeoCoordinate] = []
     private let wanderBearingSamples: @Sendable () -> [Double]
     private var nextSequence: UInt64 = 1
     private var sceneActive = true
+    private var connectionAvailable = true
+    private var recoveryProbePending = false
     private let commands: any JoystickCommanding
     private let clock: any RouteClock
     private var task: Task<Void, Never>?
@@ -78,7 +95,7 @@ public final class JoystickMovementController: ObservableObject {
     }
 
     private func startMovement(gestureID: UUID? = nil, input: JoystickInput? = nil) -> Bool {
-        guard sceneActive, commands.canBeginJoystick, !requiresOrigin else { return false }
+        guard sceneActive, connectionAvailable, commands.canBeginJoystick, !requiresOrigin else { return false }
         generation &+= 1
         nextSequence = 1
         let token = generation, operation = JoystickMovementIntent(), admission = commands.movementAdmissionRevision
@@ -99,7 +116,8 @@ public final class JoystickMovementController: ObservableObject {
     }
 
     public var canSetWanderEnabled: Bool {
-        wanderEnabled || (sceneActive && [.neutral, .preparing, .moving, .paused].contains(phase) && !requiresOrigin && (phase != .neutral || commands.canBeginJoystick))
+        wanderEnabled || (sceneActive && connectionAvailable && [.neutral, .preparing, .moving, .paused].contains(phase) && !requiresOrigin &&
+            (phase != .neutral || commands.canBeginJoystick) && (phase != .paused || !recoveryProbePending))
     }
     @discardableResult public func setWanderEnabled(_ enabled: Bool) -> Bool {
         guard enabled != wanderEnabled else { return true }
@@ -135,7 +153,7 @@ public final class JoystickMovementController: ObservableObject {
     public func clearWanderError() { wanderError = nil }
 
     public var canRetryWander: Bool {
-        sceneActive && wanderEnabled && !requiresOrigin && (phase == .neutral || (phase == .suspended && suspensionReason == .targetUnavailable))
+        sceneActive && connectionAvailable && !recoveryProbePending && wanderEnabled && !requiresOrigin && (phase == .neutral || (phase == .suspended && suspensionReason == .targetUnavailable))
     }
     @discardableResult public func retryWander() -> Bool {
         guard canRetryWander else { return false }
@@ -149,6 +167,7 @@ public final class JoystickMovementController: ObservableObject {
         return resumeWanderStream(intent, selected: selected)
     }
     private func resumeWanderStream(_ operation: JoystickMovementIntent, selected: WanderTarget? = nil) -> Bool {
+        guard connectionAvailable, !recoveryProbePending else { return false }
         guard commands.resumeJoystickStream(executionID: operation.id, lease: operation.lease) else { error = .device(.serviceUnavailable); return false }
         if let selected { commitTarget(selected) }
         generation &+= 1
@@ -242,6 +261,22 @@ public final class JoystickMovementController: ObservableObject {
     }
     public func releaseForInactiveScene() {
         sceneActive = false
+        releaseForUnavailable(reason: .sceneInactive)
+    }
+
+    public func sceneDidBecomeActive() { sceneActive = true; objectWillChange.send() }
+
+    public func connectionDidBecomeUnavailable() {
+        connectionAvailable = false
+        releaseForUnavailable(reason: .connectionUnavailable)
+    }
+
+    public func connectionDidBecomeAvailable() {
+        connectionAvailable = true
+        objectWillChange.send()
+    }
+
+    private func releaseForUnavailable(reason: WanderSuspensionReason) {
         // A new preclaim gesture has not replaced the resumed healthy owner yet.
         if let neutral = resumedNeutralIntent, neutral.id != intent?.id {
             if commands.releaseJoystick(executionID: neutral.id, lease: neutral.lease, disposition: .endGesture) {
@@ -250,21 +285,20 @@ public final class JoystickMovementController: ObservableObject {
         }
         if wanderEnabled {
             if phase == .paused || phase == .suspended || phase == .pausing || phase == .unknown { return }
-            guard let intent else { phase = .suspended; suspensionReason = .sceneInactive; return }
+            guard let intent else { phase = .suspended; suspensionReason = reason; return }
             if hasAcknowledgedLease {
                 guard commands.releaseJoystick(executionID: intent.id, lease: intent.lease, disposition: .pause) else { markUnknown(.serviceUnavailable); return }
                 settle(intent, disposition: .pause, alreadyReleased: true,
                     finalPhase: wanderNeedsTarget ? .suspended : .paused,
-                    reason: wanderNeedsTarget ? .targetUnavailable : .sceneInactive)
+                    reason: wanderNeedsTarget ? .targetUnavailable : reason)
             } else {
-                settle(intent, disposition: .endGesture, finalPhase: .suspended, reason: .sceneInactive)
+                settle(intent, disposition: .endGesture, finalPhase: .suspended, reason: reason)
             }
             return
         }
         guard let intent, phase != .unknown, phase != .settling else { return }
         settle(intent, disposition: .endGesture)
     }
-    public func sceneDidBecomeActive() { sceneActive = true; objectWillChange.send() }
     public func clearError() { if !requiresStop { error = nil } }
 
     private func settle(_ operation: JoystickMovementIntent, disposition: JoystickReleaseDisposition, alreadyReleased: Bool = false,

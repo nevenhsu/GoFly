@@ -11,6 +11,7 @@ xcrun --sdk macosx swiftc -emit-module -emit-library -parse-as-library \
   "$project_dir/app/GoFly/Sources/GoFlyCore/DeviceService.swift" \
   "$project_dir/app/GoFly/Sources/GoFlyCore/GeoCoordinate.swift" \
   "$project_dir/app/GoFly/Sources/GoFlyCore/TeleportModels.swift" \
+  "$project_dir/app/GoFly/Sources/GoFlyCore/MovementTaskAuthority.swift" \
   "$project_dir/app/GoFly/Sources/GoFlyCore/PointDispatchGate.swift" \
   "$project_dir/app/GoFly/Sources/GoFlyCore/VerifiedDeviceSession.swift" \
   -emit-module-path "$output/GoFlyCore.swiftmodule" -o "$output/libGoFlyCore.dylib"
@@ -20,6 +21,25 @@ xcrun --sdk macosx swiftc -parse-as-library -module-cache-path "$output/module-c
   "$project_dir/app/GoFly/Device/NativeErrorMapping.swift" \
   "$bridge_dir/tests/NativeErrorMappingCheck.swift" -o "$output/check"
 "$output/check"
+
+# The mapper harness above exercises numeric mapping directly. This offline
+# source check additionally proves that the production personalized-image
+# branch delegates both code and subcode through that mapper before freeing
+# the native error, rather than silently falling back at the call site.
+session_source="$project_dir/app/GoFly/Device/NativeDeviceSession.swift"
+lookup_block="$(sed -n '/if let error = image_mounter_lookup_image/,/return signature != nil/p' "$session_source")"
+if ! printf '%s\n' "$lookup_block" | awk '
+    /let code = error\.pointee\.code/ { code = NR }
+    /let subcode = error\.pointee\.sub_code/ { subcode = NR }
+    /NativeErrorMapping\.isNotMounted\(code: code, subcode: subcode\)/ { absent = NR }
+    /NativeErrorMapping\.failure\(code: code, subcode: subcode/ { mapped = NR }
+    /idevice_error_free\(error\)/ { freed = NR }
+    END { exit !(code > 0 && subcode > code && absent > subcode && mapped > absent && freed > mapped) }
+'; then
+  echo "FAIL: NativeDeviceSession personalized lookup bypasses ordered native-error delegation" >&2
+  exit 1
+fi
+echo "PASS: production personalized lookup delegates code/subcode mapping before freeing FFI error"
 
 xcrun --sdk macosx clang -c "$bridge_dir/tests/timeout-stub.c" -o "$output/timeout-stub.o"
 xcrun --sdk macosx swiftc -parse-as-library -module-cache-path "$output/module-cache" \

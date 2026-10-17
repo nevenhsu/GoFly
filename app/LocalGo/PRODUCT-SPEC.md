@@ -474,3 +474,10 @@ Save只取按下當下的有效Current快照；無法解析時只從最愛副本
 進背景時，健康已安裝漫步暫停，未安裝的準備退休並保留本地待繼續資料；返回不自動重播。Stop或另一任務真正送出時作廢舊漫步，不以準備或瀏覽另一mode視為交接。背景持續能力仍屬14／15後續工作，本票不宣告已支援。兩Pin／Go／收藏與無自動移鏡頭沿06；路線地點編輯始終優先回填正確input且Pin沒有Go。實作、離線驗證及最終手機驗收分開記錄。
 
 票12正式實作與離線驗證完成：完整SwiftCore293／36suites＋Transport9／1suite，共302PASS；完整simulator UI39／39 PASS（1767.040s）；未簽署iPhoneOS build14、312key三語parser／native verifier／diffcheck通過，Standards及Spec最後readback零finding；路線地點編輯可直接點map Pin回填地名／地址／經緯度、Pin沒有Go的規則持續生效。實際接收App位置與觸控手感仍待最後集中手機驗收；不以靜態Figma／Core或模擬器結果替代。
+
+
+### 連線修復與冷啟動實作契約（票13，已實作；手機待驗）
+
+沿09／10原規則，連線恢復不自動繼續；同process健康route／roundtrip／auto保留同任務與ACK進度，由使用者明確操作。冷啟動的保存資料與實際任務證據分開：現有native沒有舊任務查詢能力，不能核對者均以原模式待確認，不製造舊Resume。保存草稿、最愛及最後位置但不送點；最後箭頭為等待半透明，不能當有效起點。保存有移動／未決回覆，或既有保存檔無法安全讀回時，明確恢復GPS並取得裝置clear確認後才可開始新任務；只丟棄摘要、修復VPN、重置或取得GPS都不宣稱舊命令已清除。
+
+GPX保存沿票09既有內容：種類、track／route群組、segments、原點序／精確經緯度及顯示檔名；不額外宣稱高程、時間或XMLmetadata支援。完整來源與active path上限均10,000點，超界拒絕、不截斷。上述程式已整合，完整Swift344、未簽署build15、兩軸最後readback及affected UI5／5通過；完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43，手機結果仍待集中驗收。路線地點編輯map Pin回填目前input、無Go始終保留。

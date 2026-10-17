@@ -12,7 +12,7 @@ final class GoFlyWanderUITests: XCTestCase {
         throw XCTSkip("This verifies the actual simulator origin-unavailable path, not successful wander movement.")
         #endif
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-map-metrics",
                                "-gofly-ui-favorites-store", UUID().uuidString,
                                "-gofly-ui-imports-store", UUID().uuidString,
                                "-gofly-ui-favorite-routes-store", UUID().uuidString,

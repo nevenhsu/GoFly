@@ -45,7 +45,17 @@ public struct RouteDraft: Equatable, Sendable {
     }
     public init(imported: ImportedRouteSnapshot, speed: RouteSpeed = .standard) { self.init(gpx: imported.source, speed: speed) }
     public init(gpx: GPXRouteSource, speed: RouteSpeed = .standard) { source = .gpx(gpx); self.speed = speed }
-    private init(nodes: [RouteNode], speed: RouteSpeed) { source = .manual(nodes); self.speed = speed }
+    /// Rebuilds a manual draft while preserving the supplied node identities and order.
+    ///
+    /// This is intentionally failable: persisted drafts are input data and must pass the
+    /// same limits as interactive edits before they can enter the live model.
+    public init?(nodes: [RouteNode], speed: RouteSpeed = .standard) {
+        guard nodes.count <= Self.maximumNodeCount,
+              nodes.filter({ $0.value == .current }).count <= 1,
+              Set(nodes.map(\.id)).count == nodes.count else { return nil }
+        source = .manual(nodes)
+        self.speed = speed
+    }
     private init(source: RouteDraftSource, speed: RouteSpeed) { self.source = source; self.speed = speed }
     public func role(of id: RouteNodeID) -> RouteNodeRole? {
         guard let index = nodes.firstIndex(where: { $0.id == id }) else { return nil }

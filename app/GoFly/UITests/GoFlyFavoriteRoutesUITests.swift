@@ -119,6 +119,16 @@ final class GoFlyFavoriteRoutesUITests: XCTestCase {
         app.terminate()
         app.launch()
         openRoute(app)
+        revealRoute(app.buttons["route.details"], in: app)
+        app.buttons["route.details"].tap()
+        let liveRoundTrip = app.descendants(matching: .any)["route.roundTrip"]
+        XCTAssertTrue(liveRoundTrip.waitForExistence(timeout: 5))
+        XCTAssertEqual(liveRoundTrip.value as? String, "1", "Cold restoration preserves the previously enabled option.")
+        app.sliders["route.speed"].adjust(toNormalizedSliderPosition: 0)
+        if liveRoundTrip.value as? String == "1" { liveRoundTrip.tap() }
+        XCTAssertEqual(liveRoundTrip.value as? String, "0")
+        XCTAssertEqual(app.staticTexts["route.speed.value"].label, "2 km/h")
+        app.buttons["route.details.back"].tap()
         openFavorites(app)
         waitForRecords(app, count: 2)
         XCTAssertEqual(Set(recordIDs(app)), Set(ids))
@@ -126,7 +136,7 @@ final class GoFlyFavoriteRoutesUITests: XCTestCase {
         assertRecordLabel(second, label: "Daily route")
         first.tap()
         waitUntil { !app.buttons["favoriteRoutes.return"].exists }
-        verifyOptions(app, speed: "20 km/h", roundTrip: "0")
+        verifyOptions(app, speed: "2 km/h", roundTrip: "0")
         XCTAssertTrue(app.staticTexts["map.positionStatus"].label.contains("Stopped"))
     }
 
@@ -257,7 +267,7 @@ final class GoFlyFavoriteRoutesUITests: XCTestCase {
     }
     private func makeApp(count: Int, language: String = "en") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
+        app.launchArguments = ["-gofly-ui-session-store", UUID().uuidString, "-gofly.onboarding.complete", "YES", "-gofly-ui-favorites-store", UUID().uuidString,
                                "-gofly-ui-imports-store", UUID().uuidString, "-gofly-ui-favorite-routes-store", UUID().uuidString,
                                "-gofly-ui-route-draft-count", String(count), "-gofly-ui-map-metrics",
                                "-AppleLanguages", "(\(language))", "-AppleLocale", language == "en" ? "en_US" : "zh_TW"]
