@@ -14,7 +14,7 @@ final class GoFlyRouteUITests: XCTestCase {
         XCTAssertFalse(app.buttons["route.start"].isEnabled)
         XCTAssertTrue(app.descendants(matching: .any)["route.error"].exists)
         XCTAssertFalse(app.sliders["route.speed"].exists)
-        app.buttons["route.node.destination"].tap()
+        app.buttons["route.addNode"].tap()
         let emptyQuery = app.textFields["search.query"]
         XCTAssertTrue(emptyQuery.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Opening a node should focus search automatically.")
@@ -35,8 +35,8 @@ final class GoFlyRouteUITests: XCTestCase {
         star.tap()
         XCTAssertEqual(star.value as? String, "Favorite")
         app.buttons["route.picker.cancel"].tap()
-        XCTAssertEqual(app.buttons["route.node.destination"].value as? String, "Choose destination")
-        app.buttons["route.node.destination"].tap()
+        XCTAssertFalse(app.buttons["route.node.destination"].exists, "Cancelling a provisional destination must not leave a phantom row.")
+        app.buttons["route.addNode"].tap()
         app.buttons["favorites.open"].tap()
         let saved = app.buttons["favorites.place.\(destination)"]
         XCTAssertTrue(saved.waitForExistence(timeout: 5))
@@ -94,7 +94,7 @@ final class GoFlyRouteUITests: XCTestCase {
         let app = makeApp()
         app.launch()
         openRoute(app)
-        app.buttons["route.node.destination"].tap()
+        app.buttons["route.addNode"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         dismissKeyboard(app)
         let map = app.maps.firstMatch
@@ -190,8 +190,7 @@ final class GoFlyRouteUITests: XCTestCase {
         app.launch()
         openRoute(app)
         let destinationNode = app.buttons["route.node.destination"]
-        if !destinationNode.isHittable { app.scrollViews["route.panel"].swipeUp() }
-        destinationNode.tap()
+        app.buttons["route.addNode"].tap()
         enter(app, "25.0330, 121.5654", dismissKeyboard: false)
         let pin = app.buttons["map.candidate.pin"]
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
@@ -256,10 +255,11 @@ final class GoFlyRouteUITests: XCTestCase {
         XCTAssertTrue(app.buttons["mode.teleport"].isSelected)
         app.buttons["mode.route"].tap()
         XCTAssertTrue(app.buttons["mode.route"].isSelected)
-        XCTAssertTrue(app.buttons["route.node.destination"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["route.panel"].waitForExistence(timeout: 5))
     }
     private func setNode(_ app: XCUIApplication, _ id: String, _ coordinate: String) {
-        app.buttons[id].tap()
+        if app.buttons[id].exists { app.buttons[id].tap() }
+        else { app.buttons["route.addNode"].tap() }
         enter(app, coordinate)
         app.buttons["route.picker.confirm"].tap()
         XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5))

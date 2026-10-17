@@ -37,14 +37,8 @@ public final class RouteExecutionController: ObservableObject {
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
     public var canEdit: Bool { phase == .editing }
-    public var canStart: Bool {
-        guard canEdit, commands.canBeginRoute, case .place = draft.destination.value else { return false }
-        switch draft.start.value {
-        case .place: return true
-        case .current: return commands.currentRouteOrigin != nil
-        case nil: return false
-        }
-    }
+    public var canStart: Bool { canEdit && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
+    public var canAddNode: Bool { canEdit && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canPause: Bool { phase == .running }
     public var canResume: Bool { phase == .paused }
     public var canCancel: Bool {
@@ -55,25 +49,82 @@ public final class RouteExecutionController: ObservableObject {
         let candidates = CandidateController(search: search)
         if case .place(let place) = node.value { candidates.select(place) }
         picker = RoutePickerSession(id: UUID(), nodeID: nodeID, candidates: candidates,
-                                    allowsCurrent: nodeID == draft.start.id, initialValue: node.value)
+            allowsCurrent: allowsCurrent(at: nodeID, isNew: false), initialValue: node.value,
+            isNew: false, role: draft.role(of: nodeID)!)
+        return true
+    }
+    @discardableResult public func openNewPicker() -> Bool {
+        guard canAddNode else { return false }
+        let nodeID = RouteNodeID()
+        picker = RoutePickerSession(id: UUID(), nodeID: nodeID, candidates: CandidateController(search: search),
+            allowsCurrent: allowsCurrent(at: nodeID, isNew: true), initialValue: nil,
+            isNew: true, role: newNodeRole)
+        return true
+    }
+    @discardableResult public func clearPickerPlace(id: UUID) -> Bool {
+        guard canEdit, var session = picker, session.id == id else { return false }
+        session.candidates.resetSelection()
+        session.clearRevision = session.candidates.editingRevision
+        picker = session
+        return true
+    }
+    @discardableResult public func stagePickerCurrent(id: UUID) -> Bool {
+        guard canEdit, let session = picker, session.id == id,
+              allowsCurrent(at: session.nodeID, isNew: session.isNew) else { return false }
+        session.candidates.cancelPendingLookups()
+        return true
+    }
+    @discardableResult public func removeNode(id: RouteNodeID) -> Bool {
+        guard canEdit, let changed = draft.removing(nodeID: id) else { return false }
+        applyDraft(changed)
+        return true
+    }
+    @discardableResult public func moveNode(id: RouteNodeID, toIndex: Int) -> Bool {
+        guard canEdit, let changed = draft.moving(nodeID: id, toIndex: toIndex) else { return false }
+        applyDraft(changed)
         return true
     }
     @discardableResult public func confirmPicker(id: UUID, useCurrentLocation: Bool = false) -> Bool {
         guard canEdit, let session = picker, session.id == id else { return false }
+        guard session.isNew || draft.nodes.contains(where: { $0.id == session.nodeID }) else { return false }
+        if !useCurrentLocation, session.clearedPlace {
+            if !session.isNew, !removeNode(id: session.nodeID) { return false }
+            picker = nil
+            return true
+        }
         let value: RouteNodeValue
         if useCurrentLocation {
-            guard session.allowsCurrent else { return false }
+            guard allowsCurrent(at: session.nodeID, isNew: session.isNew) else { return false }
             value = .current
         } else {
             guard session.candidates.canGo, let place = session.candidates.candidate?.place else { return false }
             value = .place(place)
         }
-        guard let changed = draft.replacing(nodeID: session.nodeID, value: value) else { return false }
-        draft = changed
-        picker = nil; plannedRoute = nil; completion = nil; error = nil
+        let changed = session.isNew ? draft.inserting(nodeID: session.nodeID, value: value) : draft.replacing(nodeID: session.nodeID, value: value)
+        guard let changed else { return false }
+        applyDraft(changed)
+        picker = nil
         return true
     }
     public func cancelPicker(id: UUID) { if picker?.id == id { picker = nil } }
+    private var newNodeRole: RouteNodeRole {
+        if draft.nodes.isEmpty { return .start }
+        return draft.nodes.count == 1 ? .destination : .waypoint(draft.nodes.count - 1)
+    }
+    private func allowsCurrent(at id: RouteNodeID, isNew: Bool) -> Bool {
+        let first = isNew ? draft.nodes.isEmpty : draft.start?.id == id
+        return first && !draft.nodes.contains { $0.id != id && $0.value == .current }
+    }
+    private func applyDraft(_ changed: RouteDraft) {
+        draft = changed; plannedRoute = nil; completion = nil; error = nil
+        if var session = picker {
+            if session.isNew { session.role = newNodeRole }
+            else if let role = draft.role(of: session.nodeID) { session.role = role }
+            else { picker = nil; return }
+            session.allowsCurrent = allowsCurrent(at: session.nodeID, isNew: session.isNew)
+            picker = session
+        }
+    }
     @discardableResult public func setSpeed(_ speed: RouteSpeed) -> Bool {
         guard canEdit else { return false }
         draft = draft.replacing(speed: speed)
@@ -81,27 +132,30 @@ public final class RouteExecutionController: ObservableObject {
     }
     @discardableResult public func start() -> Bool {
         guard canEdit, commands.canBeginRoute else { return false }
-        let snapshot = draft
-        let from: GeoCoordinate
-        switch snapshot.start.value {
-        case .place(let place): from = place.coordinate
-        case .current:
-            guard let current = commands.currentRouteOrigin else { error = .currentLocationUnavailable; return false }
-            from = current
-        case nil: error = .missingStart; return false
+        let snapshot: RouteDraft
+        do { snapshot = try resolvedDraft(draft) }
+        catch { self.error = error as? RouteExecutionFailure ?? .invalidPath; return false }
+        let coordinates = snapshot.nodes.compactMap { node -> GeoCoordinate? in
+            if case .place(let place) = node.value { return place.coordinate }; return nil
         }
-        guard case .place(let destination) = snapshot.destination.value else { error = .missingDestination; return false }
         revision &+= 1
         let token = revision
         let admission = commands.routeAdmissionRevision
-        phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil
+        phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil; plannedRoute = nil
         accumulatedElapsed = .zero; activeStartedAt = nil
         let planner = planner
         task = Task { [weak self] in
             do {
-                let points = try await planner.plan(from: from, to: destination.coordinate)
+                var legs: [PlannedRoute] = []
+                for index in 1..<coordinates.count {
+                    let from = coordinates[index - 1], to = coordinates[index]
+                    let points = try await planner.plan(from: from, to: to)
+                    guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
+                    guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
+                    legs.append(try PlannedRoute(points: points, from: from, to: to))
+                }
                 guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
-                let route = try PlannedRoute(points: points, from: from, to: destination.coordinate)
+                let route = try PlannedRoute(legs: legs)
                 let intent = RouteExecutionIntent(draft: snapshot, route: route)
                 self.plannedRoute = route; self.intent = intent; self.phase = .preparing
                 let outcome = await self.commands.beginRoute(intent, expectedAdmissionRevision: admission)
@@ -122,6 +176,17 @@ public final class RouteExecutionController: ObservableObject {
             }
         }
         return true
+    }
+    private func resolvedDraft(_ source: RouteDraft) throws -> RouteDraft {
+        guard !source.nodes.isEmpty else { throw RouteExecutionFailure.missingStart }
+        guard source.nodes.count >= 2 else { throw RouteExecutionFailure.missingDestination }
+        let current = source.nodes.contains { $0.value == .current } ? commands.currentRouteOrigin : nil
+        guard let resolved = source.resolvingCurrent(to: current) else { throw RouteExecutionFailure.currentLocationUnavailable }
+        let coordinates = resolved.nodes.compactMap { node -> GeoCoordinate? in
+            if case .place(let place) = node.value { return place.coordinate }; return nil
+        }
+        guard zip(coordinates, coordinates.dropFirst()).allSatisfy({ $0.0 != $0.1 }) else { throw RouteExecutionFailure.invalidPath }
+        return resolved
     }
     @discardableResult public func pause() -> Bool {
         guard canPause, let intent, commands.pauseRoute(executionID: intent.id, lease: intent.lease) else { return false }

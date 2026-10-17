@@ -9,6 +9,7 @@ struct GoFlyRoutePickerView: View {
     var onConfirm: (UUID, Bool) -> Void
     var onCancel: (UUID) -> Void
     var onStagedCurrentChange: (Bool) -> Void
+    var onClearPlace: (UUID) -> Void
     @ObservedObject private var candidates: CandidateController
     @State private var usesCurrent: Bool
     @State private var headerHeight: CGFloat = 70
@@ -18,10 +19,12 @@ struct GoFlyRoutePickerView: View {
 
     init(session: RoutePickerSession, maximumHeight: CGFloat, focusRequest: UUID?,
          onFavorites: @escaping () -> Void, onConfirm: @escaping (UUID, Bool) -> Void,
-         onCancel: @escaping (UUID) -> Void, onStagedCurrentChange: @escaping (Bool) -> Void = { _ in }) {
+         onCancel: @escaping (UUID) -> Void, onStagedCurrentChange: @escaping (Bool) -> Void = { _ in },
+         onClearPlace: @escaping (UUID) -> Void = { _ in }) {
         self.session = session; self.maximumHeight = maximumHeight; self.focusRequest = focusRequest
         self.onFavorites = onFavorites; self.onConfirm = onConfirm; self.onCancel = onCancel
         self.onStagedCurrentChange = onStagedCurrentChange
+        self.onClearPlace = onClearPlace
         _candidates = ObservedObject(wrappedValue: session.candidates)
         _usesCurrent = State(initialValue: session.allowsCurrent && session.initialValue == .current)
     }
@@ -32,7 +35,7 @@ struct GoFlyRoutePickerView: View {
                 VStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .top, spacing: 12) {
-                            Text(goFlyString(session.allowsCurrent ? "route.editOrigin" : "route.editDestination"))
+                            Text(goFlyRouteEditTitle(session.role))
                                 .font(.headline)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button(goFlyString("route.picker.cancel")) { onCancel(session.id) }
@@ -53,6 +56,28 @@ struct GoFlyRoutePickerView: View {
                             .buttonStyle(.plain)
                             .accessibilityValue(usesCurrent ? "1" : "0")
                             .accessibilityIdentifier("route.picker.current")
+                        }
+                        if session.initialValue == .current, !session.allowsCurrent, !session.clearedPlace,
+                           candidates.candidate == nil, candidates.query.isEmpty {
+                            Text(goFlyString("route.currentLocation"))
+                                .font(.body)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .accessibilityIdentifier("route.picker.existingCurrent")
+                        }
+                        if !session.isNew {
+                            Button {
+                                usesCurrent = false
+                                onStagedCurrentChange(false)
+                                onClearPlace(session.id)
+                            } label: {
+                                Text(goFlyString("route.clearPlace"))
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(session.clearedPlace)
+                            .accessibilityIdentifier("route.picker.clearPlace")
                         }
                     }
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { headerHeight = $0 }
@@ -76,7 +101,7 @@ struct GoFlyRoutePickerView: View {
             .accessibilityIdentifier("route.picker.content")
             Button(goFlyString("route.picker.confirm")) { onConfirm(session.id, usesCurrent) }
                 .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(!(usesCurrent && session.allowsCurrent) && !candidates.canGo)
+                .disabled(!session.clearedPlace && !(usesCurrent && session.allowsCurrent) && !candidates.canGo)
                 .accessibilityIdentifier("route.picker.confirm")
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { actionHeight = $0 }
         }

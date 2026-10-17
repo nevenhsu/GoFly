@@ -36,6 +36,7 @@ public final class CandidateController: ObservableObject {
     }
     deinit { searchTask?.cancel(); metadataTask?.cancel() }
     public var canGo: Bool { candidate != nil && !blockedByInvalidInput && !blockedByUnselectedNameQuery }
+    var editingRevision: UInt64 { revision }
     public func updateQuery(_ text: String) {
         cancelSearch()
         query = text
@@ -108,6 +109,13 @@ public final class CandidateController: ObservableObject {
         guard candidate?.id == id else { return }
         candidate = nil
     }
+    public func resetSelection() {
+        cancelSearch()
+        query = ""; queryKind = .empty; results = []; candidate = nil
+        inputError = nil; searchFailed = false
+        blockedByInvalidInput = false; blockedByUnselectedNameQuery = false
+    }
+    func cancelPendingLookups() { cancelSearch() }
 
     private func cancelSearch() {
         revision &+= 1

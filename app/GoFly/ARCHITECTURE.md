@@ -123,3 +123,17 @@ RouteExecutionController 擁有目前 picker candidates 的 objectWillChange 訂
 
 
 搜尋面板的最小可見高度依實際 input 列與上下 padding 量測，不能以固定 76pt 截掉最大字級輸入。Route picker 保持 Confirm 獨立固定，焦點輸入必須完整位於上層可捲動 viewport，不能只因 AX content rect 尚存在而視為可見；Debug simulator 實際幾何量測只用既有明確測試旗標、不製造位置或命令成功。
+
+
+## 多點路線（票 07）
+
+Advisor 已核准有效節點0…27（最多25途經點）、穩定身分與依位置衍生角色。RouteNode 不保留空值；預設只有一個動態目前位置。零點／一點新增操作分別為新增起點／目的地；兩點以上新增途經點，滿27停用。Provisional ID 不先插草稿，確認才追加或插在目前終點前，取消無空列。起終點 accessors 可為 nil，少於兩點不可開始。
+
+編輯 session 分開 role／allowsCurrent／isNew／明確清空狀態；清 query 仍只改搜尋，不能刪節點。清空地點專用動作取消搜尋與反查、清候選，確認才刪；新輸入或有效新選取不可沿用刪除狀態。Confirm 仍依穩定 ID 找現存節點；重排刷新角色與目前位置資格，已刪目標拒絕。全序列最多一個 .current，移到中間／終點仍只在 Start 解析一次確認模擬位置或新鮮 GPS；等待快取不能替代。
+
+先凍結全部有序座標並拒絕相鄰相同，逐段順序規劃／驗證50m端點吸附限制，拼接只移除共用界點；全軌最多10,000點。每段後檢查取消與 admission revision，失敗不提交部分 intent。完整不可變路徑沿用06同一 scheduler／FIFO／ACK／未知鎖。
+
+拖曳預覽只改 UI 暫存順序；左側44pt把手開始、整列浮起及等高佔位、長清單邊緣自動捲動，放開才原子套用完整 ID 順序，取消恢復原草稿。中間編輯與右側44pt刪除各自獨立，VoiceOver 排序／刪除走相同 ID mutation。公開Core與模擬器已驗證穩定ID／三命中區44pt／實際整列拖曳及27點邊緣捲動；實際VoiceOver動作、OS中斷手勢與手機位置效果仍待集中驗收。
+
+
+07 的專用 clear 意圖綁定 Candidate reset 完成後的確切編輯 revision；後續輸入／選取／map tap／reset 永久作廢，回到空 query 不復活。Current 勾選 true 經 stagePickerCurrent(id:) 檢查資格並取消舊查詢／反查，保留候選、query 與驗證鎖但推進 revision；false 不作廢新 clear，Confirm 仍傳本地 useCurrent 並複驗資格。這防止舊 metadata 清掉新勾選，或 Current on/off 後誤刪節點。

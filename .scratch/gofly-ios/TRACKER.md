@@ -6,8 +6,11 @@
 
 此安排適用所有剩餘 tickets（含 14 背景可行性、15 背景實作、17 跨端還原與 18 整合驗收準備）：不得在逐票結尾暫停要求接 iPhone，也不得因前置票尚待實機驗收阻擋下一票。14 先交付候選方案、設計審查與離線驗證，15 依此完成實作並保留硬體未知；18 先完成自動化回歸、最終建置與驗收包。全部實作及可離線驗證工作完成後，再一次交由使用者測試手機。實際程式失敗或契約未決仍須修正／釐清，不能以延後驗收跳過。
 
-各票審查基準記於該票 Implementation record：票 03 為 16d8f3f，票 04 為 0379d10，票 05 為 91d0188，票 06 為 bcf9d0d。既有未提交且不屬當票的文件變更不納入實作提交；每張實作完成後作適當驗證與 standards／spec 雙軸審查。
+各票審查基準記於該票 Implementation record：票 03 為 16d8f3f，票 04 為 0379d10，票 05 為 91d0188，票 06 為 bcf9d0d，票 07 為 9057718。既有未提交且不屬當票的文件變更不納入實作提交；每張實作完成後作適當驗證與 standards／spec 雙軸審查。
 
 測試界線沿用票 01 的正式服務 public interface 與 device-adapter 系統邊界，觀察啟停／clear／reset 可見結果、錯誤與取消／遲到結果；不測私有欄位。原生握手／同機身分／檔案保護另在 native 邊界驗證，不以 fake adapter 當真機證據。
 
 票 06 實作／離線驗證完成：完整 Swift 112 項、完整 simulator UI 19／19、未簽署 iPhoneOS build 8、三語與 native verifier 通過，雙軸無剩餘 finding；路線編輯依最新使用者規則可用地圖 Pin、無 Go。手機維持集中驗收，可開始票 07。
+
+
+票07實作／離線驗證完成：完整Swift134項、完整simulator UI23／23、未簽署iPhoneOS build9、真實host MapKit多段join、177key三語parser及native verifier通過，雙軸零finding。多點有效節點、穩定ID、確認刪除、拖曳／27點自動捲動與全路線規劃已完成；手機及實際VoiceOver／OS中斷取消保留集中驗收，可開始票08。

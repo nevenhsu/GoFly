@@ -138,7 +138,7 @@ struct ServiceRouteCommandsTests {
         let service = ServiceController(service: device)
         let start = GeoCoordinate(latitude: 25, longitude: 121)!
         let end = GeoCoordinate(latitude: 25.01, longitude: 121.01)!
-        let draft = RouteDraft(start: .place(place(start)), destination: .place(place(end)))
+        let draft = try #require(RouteDraft(start: .place(place(start)), destination: .place(place(end))))
         let intent = RouteExecutionIntent(draft: draft, route: try PlannedRoute(points: [start, end], from: start, to: end))
         let request = Task { await service.beginRoute(intent, expectedAdmissionRevision: service.routeAdmissionRevision) }
         await wait { await device.waiting }
@@ -375,7 +375,7 @@ struct ServiceRouteCommandsTests {
 
     private func routeIntent() throws -> RouteExecutionIntent {
         let start = GeoCoordinate(latitude: 25, longitude: 121)!, end = GeoCoordinate(latitude: 25.01, longitude: 121.01)!
-        let draft = RouteDraft(start: .place(place(start)), destination: .place(place(end)))
+        let draft = try #require(RouteDraft(start: .place(place(start)), destination: .place(place(end))))
         return RouteExecutionIntent(draft: draft, route: try PlannedRoute(points: [start, end], from: start, to: end))
     }
     private func place(_ coordinate: GeoCoordinate) -> MapPlace { MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate) }

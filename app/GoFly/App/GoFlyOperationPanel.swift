@@ -106,7 +106,7 @@ struct GoFlyOperationPanel: View {
             text = String.localizedStringWithFormat(goFlyString("operation.destination"), intent.candidate.place.title)
         case .route(let intent):
             let destination: String
-            if case .place(let place) = intent.draft.destination.value { destination = place.title }
+            if case .place(let place) = intent.draft.destination?.value { destination = place.title }
             else { destination = intent.route.end.displayText }
             text = String.localizedStringWithFormat(goFlyString("operation.destination"), destination)
         }

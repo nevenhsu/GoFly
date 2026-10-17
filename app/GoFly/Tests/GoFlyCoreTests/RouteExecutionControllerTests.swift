@@ -7,8 +7,8 @@ import Testing
 struct RouteExecutionControllerTests {
     @Test func currentPickerCandidateMetadataAndSearchChangesNotifyRouteObservers() async throws {
         let resolver = ControlledPlaceResolver(), search = RouteControlledSearch()
-        let controller = RouteExecutionController(planner: RouteTestPlanner(), commands: RouteTestCommands(), search: search)
-        #expect(controller.openPicker(for: controller.draft.destination.id))
+        let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: RouteTestCommands(), search: search)
+        #expect(controller.openPicker(for: controller.draft.destination!.id))
         let session = try #require(controller.picker)
         var notifications = 0
         let observation = controller.objectWillChange.sink { notifications += 1 }
@@ -38,7 +38,7 @@ struct RouteExecutionControllerTests {
     func closedOrReplacedPickerCandidatesStopNotifyingRouteObservers(action: String) async throws {
         let resolver = ControlledPlaceResolver()
         let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: RouteTestCommands(), search: RouteTestSearch())
-        #expect(controller.openPicker(for: controller.draft.destination.id))
+        #expect(controller.openPicker(for: controller.draft.destination!.id))
         let old = try #require(controller.picker)
         let tapped = GeoCoordinate(latitude: 26, longitude: 122)!
         old.candidates.selectMapCoordinate(tapped, resolver: resolver)
@@ -49,7 +49,7 @@ struct RouteExecutionControllerTests {
         switch action {
         case "cancel": controller.cancelPicker(id: old.id)
         case "confirm": #expect(controller.confirmPicker(id: old.id))
-        default: #expect(controller.openPicker(for: controller.draft.start.id))
+        default: #expect(controller.openPicker(for: controller.draft.start!.id))
         }
         let baseline = notifications, frozen = controller.draft
         await resolver.finish(at: tapped, with: MapPlace(id: .coordinate(tapped), title: "Old metadata", coordinate: tapped))
@@ -57,7 +57,7 @@ struct RouteExecutionControllerTests {
         old.candidates.updateQuery("27, 123")
         #expect(notifications == baseline)
         #expect(controller.draft == frozen)
-        if controller.picker == nil { #expect(controller.openPicker(for: controller.draft.start.id)) }
+        if controller.picker == nil { #expect(controller.openPicker(for: controller.draft.start!.id)) }
         let current = try #require(controller.picker)
         #expect(current.id != old.id)
         let beforeCurrent = notifications
@@ -71,7 +71,7 @@ struct RouteExecutionControllerTests {
         let resolver = ControlledPlaceResolver()
         let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: RouteTestCommands(), search: RouteTestSearch())
         let original = controller.draft
-        #expect(controller.openPicker(for: original.destination.id))
+        #expect(controller.openPicker(for: original.destination!.id))
         let old = try #require(controller.picker)
         let tapped = GeoCoordinate(latitude: 26.123456789, longitude: 122.987654321)!
         old.candidates.selectMapCoordinate(tapped, resolver: resolver)
@@ -80,9 +80,9 @@ struct RouteExecutionControllerTests {
         else { controller.cancelPicker(id: old.id) }
         let frozen = controller.draft
         if confirm {
-            #expect(frozen.destination.value == .place(MapPlace(id: .coordinate(tapped), title: tapped.displayText, coordinate: tapped)))
+            #expect(frozen.destination?.value == .place(MapPlace(id: .coordinate(tapped), title: tapped.displayText, coordinate: tapped)))
         } else { #expect(frozen == original) }
-        #expect(controller.openPicker(for: original.start.id))
+        #expect(controller.openPicker(for: original.start!.id))
         let latest = try #require(controller.picker)
         latest.candidates.updateQuery("27, 123")
         let newCandidate = latest.candidates.candidate
@@ -164,7 +164,7 @@ struct RouteExecutionControllerTests {
     @Test func editingAnExistingNodeRequiresSelectingTheNewNameBeforeConfirm() throws {
         let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: RouteTestCommands(), search: RouteTestSearch())
         let original = controller.draft
-        #expect(controller.openPicker(for: original.destination.id))
+        #expect(controller.openPicker(for: original.destination!.id))
         let session = try #require(controller.picker)
         let retained = try #require(session.candidates.candidate)
         session.candidates.updateQuery("A different destination")
@@ -178,27 +178,27 @@ struct RouteExecutionControllerTests {
         #expect(session.candidates.results == [selected])
         #expect(session.candidates.query == "A different destination")
         #expect(controller.confirmPicker(id: session.id))
-        #expect(controller.draft.destination.value == .place(selected))
-        #expect(controller.draft.destination.id == original.destination.id)
+        #expect(controller.draft.destination?.value == .place(selected))
+        #expect(controller.draft.destination!.id == original.destination!.id)
     }
 
     @Test func pickerCancelAndConfirmTargetOnlyTheOriginalStableNode() throws {
         let commands = RouteTestCommands()
-        let controller = RouteExecutionController(planner: RouteTestPlanner(), commands: commands, search: RouteTestSearch())
+        let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: commands, search: RouteTestSearch())
         let original = controller.draft
-        #expect(controller.openPicker(for: original.destination.id))
+        #expect(controller.openPicker(for: original.destination!.id))
         let cancelled = try #require(controller.picker)
         cancelled.candidates.updateQuery("25, 121")
         controller.cancelPicker(id: cancelled.id)
         #expect(controller.draft == original)
         #expect(!controller.confirmPicker(id: cancelled.id))
-        #expect(controller.openPicker(for: original.destination.id))
+        #expect(controller.openPicker(for: original.destination!.id))
         let session = try #require(controller.picker)
         session.candidates.updateQuery("26, 122")
         #expect(controller.confirmPicker(id: session.id))
-        #expect(controller.draft.destination.id == original.destination.id)
+        #expect(controller.draft.destination!.id == original.destination!.id)
         #expect(controller.draft.start == original.start)
-        #expect(controller.draft.destination.value == .place(try #require(session.candidates.candidate?.place)))
+        #expect(controller.draft.destination?.value == .place(try #require(session.candidates.candidate?.place)))
     }
     @Test func acknowledgementControlsDistanceAndDelayedCadenceNeverCatchesUpOrOverlaps() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
@@ -400,17 +400,19 @@ struct RouteExecutionControllerTests {
         let first = RealLocationObservation(latitude: 24, longitude: 120, horizontalAccuracy: 5, observedAt: date)!
         service.observeRealLocation(first)
         let end = GeoCoordinate(latitude: 26, longitude: 122)!
-        let draft = RouteDraft(destination: .place(MapPlace(id: .coordinate(end), title: "End", coordinate: end)))
+        let draft = try #require(RouteDraft(destination: .place(MapPlace(id: .coordinate(end), title: "End", coordinate: end))))
         let controller = RouteExecutionController(draft: draft, planner: planner, commands: service, search: RouteTestSearch(), clock: RouteTestClock())
         #expect(controller.start())
         await wait { await planner.waiting }
         service.observeRealLocation(RealLocationObservation(latitude: 25, longitude: 121, horizontalAccuracy: 5, observedAt: date))
         #expect(!controller.setSpeed(RouteSpeed(kilometersPerHour: 100)!))
-        #expect(!controller.openPicker(for: draft.start.id))
+        #expect(!controller.openPicker(for: draft.start!.id))
         await planner.finish()
         await wait { await device.waiting }
         #expect(await device.coordinates == [first.coordinate])
-        #expect(controller.intent?.draft == draft)
+        #expect(controller.intent?.draft.nodes.map(\.id) == draft.nodes.map(\.id))
+        #expect(controller.intent?.draft.start?.value == .place(MapPlace(id: .coordinate(first.coordinate), title: first.coordinate.displayText, coordinate: first.coordinate)))
+        #expect(controller.draft == draft)
         #expect(controller.intent?.route.start == first.coordinate)
         #expect(controller.intent?.speed == .standard)
         await device.finish(.acknowledged)
@@ -421,14 +423,14 @@ struct RouteExecutionControllerTests {
 
     @Test func aLatePickerSearchCannotConfirmIntoAClosedOrDifferentNodeSession() async throws {
         let search = RouteControlledSearch()
-        let controller = RouteExecutionController(planner: RouteTestPlanner(), commands: RouteTestCommands(), search: search)
+        let controller = RouteExecutionController(draft: routeDraft(), planner: RouteTestPlanner(), commands: RouteTestCommands(), search: search)
         let original = controller.draft
-        #expect(controller.openPicker(for: original.destination.id))
+        #expect(controller.openPicker(for: original.destination!.id))
         let old = try #require(controller.picker)
         old.candidates.updateQuery("old search")
         await wait { await search.waiting }
         controller.cancelPicker(id: old.id)
-        #expect(controller.openPicker(for: original.start.id))
+        #expect(controller.openPicker(for: original.start!.id))
         let current = try #require(controller.picker)
         current.candidates.updateQuery("26, 122")
         #expect(controller.confirmPicker(id: current.id))
@@ -443,7 +445,7 @@ struct RouteExecutionControllerTests {
     private var start: GeoCoordinate { GeoCoordinate(latitude: 25, longitude: 121)! }
     private func routeDraft(destination: GeoCoordinate = GeoCoordinate(latitude: 25.01, longitude: 121.01)!) -> RouteDraft {
         RouteDraft(start: .place(MapPlace(id: .coordinate(start), title: "Start", coordinate: start)),
-                   destination: .place(MapPlace(id: .coordinate(destination), title: "End", coordinate: destination)))
+                   destination: .place(MapPlace(id: .coordinate(destination), title: "End", coordinate: destination)))!
     }
     private func wait(_ condition: @MainActor () async -> Bool) async {
         let deadline = ContinuousClock.now + .seconds(2)

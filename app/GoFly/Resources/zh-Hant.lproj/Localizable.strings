@@ -151,7 +151,7 @@
 "route.resumeHint" = "從目前進度繼續同一路線。";
 "route.error.missingStart" = "請選擇起點。";
 "route.error.missingDestination" = "請選擇終點。";
-"route.error.currentLocationUnavailable" = "目前位置尚無法確認。可在地圖上或搜尋中手動選擇起點。";
+"route.error.currentLocationUnavailable" = "目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。";
 "route.error.planningFailed" = "無法規劃步行路線。請確認地點或連線後再試。";
 "route.error.invalidPath" = "規劃的路線無效。請重新選擇地點後再試。";
 "route.phase.editing" = "編輯路線";
@@ -163,3 +163,15 @@
 "route.phase.cancelling" = "正在取消路線⋯";
 "route.phase.interrupted" = "路線已中斷";
 "route.phase.unknown" = "裝置回應尚未確認";
+"route.waypoint" = "途經點 %ld";
+"route.editWaypoint" = "編輯途經點 %ld";
+"route.addOrigin" = "新增起點";
+"route.addDestination" = "新增目的地";
+"route.addWaypoint" = "＋ 新增途經點";
+"route.clearPlace" = "清空地點";
+"route.reorderNode" = "排序%@，%@";
+"route.dragHint" = "按住把手拖動整筆地點，也可使用上移、下移或刪除動作。";
+"route.moveUp" = "上移";
+"route.moveDown" = "下移";
+"route.deleteNode" = "刪除%@";
+"route.nodeLimit" = "一條路線最多 27 個地點。可先刪除地點再新增。";

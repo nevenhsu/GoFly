@@ -151,7 +151,7 @@
 "route.resumeHint" = "从当前进度继续同一路线。";
 "route.error.missingStart" = "请选择起点。";
 "route.error.missingDestination" = "请选择终点。";
-"route.error.currentLocationUnavailable" = "当前位置尚无法确认。可在地图上或搜索中手动选择起点。";
+"route.error.currentLocationUnavailable" = "当前位置尚无法确认。请在地图或搜索中，为使用当前位置的节点选择地点。";
 "route.error.planningFailed" = "无法规划步行路线。请确认地点或连接后重试。";
 "route.error.invalidPath" = "规划的路线无效。请重新选择地点后重试。";
 "route.phase.editing" = "编辑路线";
@@ -163,3 +163,15 @@
 "route.phase.cancelling" = "正在取消路线…";
 "route.phase.interrupted" = "路线已中断";
 "route.phase.unknown" = "设备响应尚未确认";
+"route.waypoint" = "途经点 %ld";
+"route.editWaypoint" = "编辑途经点 %ld";
+"route.addOrigin" = "新增起点";
+"route.addDestination" = "新增目的地";
+"route.addWaypoint" = "＋ 新增途经点";
+"route.clearPlace" = "清空地点";
+"route.reorderNode" = "排序%@，%@";
+"route.dragHint" = "按住把手拖动整笔地点，也可使用上移、下移或删除动作。";
+"route.moveUp" = "上移";
+"route.moveDown" = "下移";
+"route.deleteNode" = "删除%@";
+"route.nodeLimit" = "一条路线最多 27 个地点。可先删除地点再新增。";

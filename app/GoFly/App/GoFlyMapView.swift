@@ -33,8 +33,16 @@ struct GoFlyMapView: View {
     init(service: ServiceController) {
         _service = ObservedObject(wrappedValue: service)
         _route = StateObject(wrappedValue: RouteExecutionController(
-            planner: Self.routePlanner(), commands: service, search: MapKitPlaceSearch()
+            draft: Self.routeDraft(), planner: Self.routePlanner(), commands: service, search: MapKitPlaceSearch()
         ))
+    }
+
+    private static func routeDraft() -> RouteDraft {
+        #if DEBUG && targetEnvironment(simulator)
+        return initialRouteUITestDraft() ?? RouteDraft()
+        #else
+        return RouteDraft()
+        #endif
     }
 
     private static func routePlanner() -> any RoutePlanning {
@@ -259,10 +267,11 @@ struct GoFlyMapView: View {
                     onConfirm: { id, useCurrent in _ = route.confirmPicker(id: id, useCurrentLocation: useCurrent) },
                     onCancel: { route.cancelPicker(id: $0) },
                     onStagedCurrentChange: { useCurrent in
-                        if useCurrent, let origin = service.currentRouteOrigin {
+                        if useCurrent, route.stagePickerCurrent(id: picker.id), let origin = service.currentRouteOrigin {
                             cameraIntent = GoFlyCameraIntent(coordinate: origin)
                         }
-                    }
+                    },
+                    onClearPlace: { _ = route.clearPickerPlace(id: $0) }
                 )
                 .id(picker.id)
             } else if mode == .route || !route.canEdit {

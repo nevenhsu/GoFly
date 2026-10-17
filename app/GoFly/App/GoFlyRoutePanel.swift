@@ -10,26 +10,36 @@ struct GoFlyRoutePanel: View {
     @State private var contentHeight: CGFloat = 240
     @State private var showingDetails = false
     @State private var confirmingCancellation = false
+    @State private var visibleScrollFrame: CGRect = .zero
+    @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if controller.phase == .editing {
-                    editingContent
-                } else {
-                    executionContent
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if controller.phase == .editing {
+                        editingContent { id, anchor in
+                            withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
+                        }
+                    } else {
+                        executionContent
+                    }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+            .frame(height: min(contentHeight, max(100, maximumHeight)))
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+            .accessibilityIdentifier("route.panel.content")
         }
-        .frame(height: min(contentHeight, max(100, maximumHeight)))
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
         }
+        .overlay(alignment: .topLeading) { nodeMetrics }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
         .sheet(isPresented: $showingDetails) {
             GoFlyRouteDetailsView(controller: controller) { showingDetails = false }
@@ -46,7 +56,22 @@ struct GoFlyRoutePanel: View {
         }
     }
 
-    private var editingContent: some View {
+    @ViewBuilder private var nodeMetrics: some View {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+            VStack {
+                Text(controller.draft.nodes.map { $0.id.rawValue.uuidString }.joined(separator: ","))
+                    .accessibilityIdentifier("route.nodes.order")
+                Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
+                            visibleScrollFrame.width, visibleScrollFrame.height))
+                    .accessibilityIdentifier("route.nodes.viewport")
+            }
+            .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+        }
+        #endif
+    }
+
+    private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text(goFlyString("route.title")).font(.headline)
@@ -61,18 +86,28 @@ struct GoFlyRoutePanel: View {
                 .accessibilityLabel(goFlyString("route.details"))
                 .accessibilityIdentifier("route.details")
             }
-            VStack(spacing: 0) {
-                nodeButton(controller.draft.start, isStart: true)
-                Divider().padding(.horizontal, 12)
-                nodeButton(controller.draft.destination, isStart: false)
+            GoFlyRouteNodeList(
+                draft: controller.draft, isEditable: controller.canEdit, viewport: visibleScrollFrame,
+                onEdit: onEditNode,
+                onDelete: { _ = controller.removeNode(id: $0) },
+                onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
+                onScroll: scrollTo
+            )
+            Button { _ = controller.openNewPicker() } label: {
+                Text(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
+                                (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")))
+                    .font(.system(size: addFontSize))
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
-            .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-            }
+            .buttonStyle(.plain)
+            .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+            .disabled(!controller.canAddNode)
+            .accessibilityIdentifier("route.addNode")
+            .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             if let error = controller.error {
                 failure(error)
-            } else if controller.draft.start.value == .current, currentLocationAvailable == false {
+            } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {
                 failure(.currentLocationUnavailable)
             }
             Button(goFlyString("route.start")) { _ = controller.start() }
@@ -80,34 +115,6 @@ struct GoFlyRoutePanel: View {
                 .disabled(!controller.canStart)
                 .accessibilityIdentifier("route.start")
         }
-    }
-
-    private func nodeButton(_ node: RouteNode, isStart: Bool) -> some View {
-        Button { onEditNode(node.id) } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(goFlyString(isStart ? "route.origin" : "route.destination"))
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                    Text(nodeTitle(node.value, isStart: isStart))
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .accessibilityHidden(true)
-            }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!controller.canEdit)
-        .accessibilityLabel(goFlyString(isStart ? "route.editOrigin" : "route.editDestination"))
-        .accessibilityValue(nodeTitle(node.value, isStart: isStart))
-        .accessibilityIdentifier(isStart ? "route.node.start" : "route.node.destination")
     }
 
     @ViewBuilder private var executionContent: some View {
@@ -169,14 +176,6 @@ struct GoFlyRoutePanel: View {
         Button(goFlyString("operation.settings"), action: onSettings)
             .buttonStyle(GoFlyActionStyle(primary: true))
             .accessibilityIdentifier("route.settings")
-    }
-
-    private func nodeTitle(_ value: RouteNodeValue?, isStart: Bool) -> String {
-        switch value {
-        case .current: goFlyString("route.currentLocation")
-        case .place(let place): place.title
-        case nil: goFlyString(isStart ? "route.chooseOrigin" : "route.chooseDestination")
-        }
     }
 
     private func failure(_ error: RouteExecutionFailure) -> some View {

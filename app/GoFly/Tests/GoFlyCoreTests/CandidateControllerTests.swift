@@ -4,6 +4,36 @@ import Testing
 
 @Suite @MainActor
 struct CandidateControllerTests {
+    @Test func explicitResetClearsSelectionAndRejectsLateMetadataAndSearchResults() async throws {
+        let resolver = ControlledPlaceResolver(), search = ControlledPlaceSearch()
+        let controller = CandidateController(search: search, debounce: .zero)
+        let tapped = GeoCoordinate(latitude: 25, longitude: 121)!
+        controller.selectMapCoordinate(tapped, resolver: resolver)
+        await wait { await resolver.requests == [tapped] }
+        controller.resetSelection()
+        #expect(controller.candidate == nil)
+        #expect(controller.query.isEmpty)
+        #expect(controller.queryKind == .empty)
+        #expect(controller.results.isEmpty)
+        #expect(!controller.canGo)
+        await resolver.finish(at: tapped, with: place("Late metadata", latitude: 25, longitude: 121))
+        await wait { await resolver.returned.contains(tapped) }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(controller.candidate == nil)
+        controller.updateQuery("Pending query")
+        await wait { await search.queries == ["Pending query"] }
+        controller.resetSelection()
+        await search.finish("Pending query", with: [place("Late result", latitude: 26, longitude: 122)])
+        for _ in 0..<10 { await Task.yield() }
+        #expect(controller.candidate == nil)
+        #expect(controller.results.isEmpty)
+        #expect(controller.query.isEmpty)
+        #expect(controller.inputError == nil)
+        #expect(!controller.searchFailed)
+        #expect(!controller.isSearching)
+        #expect(!controller.canGo)
+    }
+
     @Test(arguments: ["tap", "query", "selection"])
     func lateMapMetadataCannotReplaceANewerExplicitAction(action: String) async throws {
         let resolver = ControlledPlaceResolver()

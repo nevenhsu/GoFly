@@ -151,7 +151,7 @@
 "route.resumeHint" = "Continue the same route from the current progress.";
 "route.error.missingStart" = "Choose an origin.";
 "route.error.missingDestination" = "Choose a destination.";
-"route.error.currentLocationUnavailable" = "Current location is unavailable. Choose an origin on the map or search for a place.";
+"route.error.currentLocationUnavailable" = "Current location is unavailable. Choose a place on the map or in search for the node using current location.";
 "route.error.planningFailed" = "A walking route could not be planned. Check the places or connection and try again.";
 "route.error.invalidPath" = "The planned route is invalid. Choose different places and try again.";
 "route.phase.editing" = "Edit route";
@@ -163,3 +163,15 @@
 "route.phase.cancelling" = "Cancelling route…";
 "route.phase.interrupted" = "Route interrupted";
 "route.phase.unknown" = "Device response unknown";
+"route.waypoint" = "Waypoint %ld";
+"route.editWaypoint" = "Edit waypoint %ld";
+"route.addOrigin" = "Add origin";
+"route.addDestination" = "Add destination";
+"route.addWaypoint" = "＋ Add waypoint";
+"route.clearPlace" = "Clear place";
+"route.reorderNode" = "Reorder %@, %@";
+"route.dragHint" = "Hold the handle to move the whole place. Move up, move down, and delete actions are also available.";
+"route.moveUp" = "Move up";
+"route.moveDown" = "Move down";
+"route.deleteNode" = "Delete %@";
+"route.nodeLimit" = "A route can contain up to 27 places. Remove a place to add another.";

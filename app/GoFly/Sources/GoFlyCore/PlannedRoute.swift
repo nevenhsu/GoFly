@@ -12,6 +12,17 @@ public struct PlannedRoute: Equatable, Sendable {
     public var end: GeoCoordinate { points.last! }
     private static let radius = 6_371_000.0
 
+    public init(legs: [PlannedRoute]) throws {
+        guard let first = legs.first, let last = legs.last else { throw RouteExecutionFailure.invalidPath }
+        var joined = first.points
+        for leg in legs.dropFirst() {
+            guard joined.last == leg.start else { throw RouteExecutionFailure.invalidPath }
+            joined.append(contentsOf: leg.points.dropFirst())
+            guard joined.count <= 10_000 else { throw RouteExecutionFailure.invalidPath }
+        }
+        try self.init(points: joined, from: first.start, to: last.end)
+    }
+
     public init(points: [GeoCoordinate], from: GeoCoordinate, to: GeoCoordinate) throws {
         guard (2...10_000).contains(points.count) else { throw RouteExecutionFailure.invalidPath }
         var normalized = Self.deduplicated(points)

@@ -3,6 +3,15 @@ import Testing
 @testable import GoFlyCore
 
 struct RouteModelsTests {
+    @Test func joiningLegsPreservesRoadVerticesAndRejectsDisconnectedBoundaries() throws {
+        let points = (0...4).map { GeoCoordinate(latitude: 25 + Double($0) * 0.0001, longitude: 121)! }
+        let first = try PlannedRoute(points: Array(points[0...2]), from: points[0], to: points[2])
+        let second = try PlannedRoute(points: Array(points[2...4]), from: points[2], to: points[4])
+        #expect(try PlannedRoute(legs: [first, second]).points == points)
+        #expect(throws: RouteExecutionFailure.invalidPath) { try PlannedRoute(legs: [second, first]) }
+        #expect(throws: RouteExecutionFailure.invalidPath) { try PlannedRoute(legs: []) }
+    }
+
     @Test func nearbyRoadEndpointsArePreservedBetweenExactRequestedAnchors() throws {
         let from = GeoCoordinate(latitude: 0, longitude: 0)!, to = GeoCoordinate(latitude: 0, longitude: 0.001)!
         let road = [GeoCoordinate(latitude: 0, longitude: 0.0001)!,
@@ -61,10 +70,9 @@ struct RouteModelsTests {
 
     @Test func routeSpeedAndDraftKeepValidatedValuesAndStableNodeIdentity() throws {
         let draft = RouteDraft()
-        #expect(draft.nodes.count == 2)
-        #expect(draft.start.id != draft.destination.id)
-        #expect(draft.start.value == .current)
-        #expect(draft.destination.value == nil)
+        #expect(draft.nodes.count == 1)
+        #expect(draft.start?.value == .current)
+        #expect(draft.destination == nil)
         #expect(draft.speed.kilometersPerHour == 20)
         #expect(RouteSpeed(kilometersPerHour: 1) == nil)
         #expect(RouteSpeed(kilometersPerHour: 101) == nil)
