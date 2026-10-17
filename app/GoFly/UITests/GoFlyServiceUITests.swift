@@ -2,6 +2,48 @@ import XCTest
 
 @MainActor
 final class GoFlyServiceUITests: XCTestCase {
+    func testMapStartShowsDismissibleFailureAndKeepsRepairAccessible() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("This failure-path test requires the simulator deviceRequired adapter; device clear is verified separately.")
+        #else
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let start = app.buttons["map.serviceControl"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertTrue(start.isEnabled)
+        XCTAssertEqual(app.alerts.count, 0)
+        start.tap()
+
+        let error = app.staticTexts["map.serviceError.message"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertEqual(error.label, "A prepared physical iPhone is required. The simulator cannot start the device service or confirm GPS recovery.")
+        XCTAssertEqual(app.alerts.count, 0)
+        XCTAssertTrue(start.isEnabled)
+        XCTAssertTrue(app.descendants(matching: .any)["map.positionStatus"].label.contains("Stopped"))
+        attach(app, name: "01-map-start-device-required")
+
+        app.buttons["map.serviceError.dismiss"].tap()
+        XCTAssertFalse(error.exists)
+        XCTAssertTrue(start.isEnabled)
+        XCTAssertTrue(app.descendants(matching: .any)["map.positionStatus"].label.contains("Stopped"))
+        app.buttons["map.settings"].tap()
+        let restore = app.buttons["service.restoreGPS"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        XCTAssertTrue(restore.isEnabled)
+        XCTAssertTrue(app.buttons["service.resetTunnel"].isEnabled)
+        restore.tap()
+        let repairFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: app.buttons["service.primary"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [repairFinished], timeout: 5), .completed)
+        XCTAssertTrue(restore.isEnabled)
+        XCTAssertEqual(app.staticTexts["service.gpsStatus"].label, "GPS recovery has not been confirmed.")
+        XCTAssertEqual(app.alerts.count, 0)
+        #endif
+    }
+
     func testServiceFailureKeepsRepairAvailableWithoutGPSPrompt() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("This failure-path test requires the simulator deviceRequired adapter; device clear is verified separately.")

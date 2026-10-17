@@ -24,6 +24,7 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 - 原生全域網路 timeout 在任何 FFI 前設為 10 秒；controller 另有 watchdog。watchdog 逾時只回報未知，**不算原生完成**，不釋放還在使用的 handle、不平行另開操作，也不解除 `nativeBusy`。
 - repairRequired 且底層未返回時，只能冪等 Stop，確保恰一筆 clear 排隊；其他副作用命令拒絕。真正返回且安全清理已執行後才解鎖。遲到成功不能覆寫逾時／Stop 的未知結果。
 - 任一世代最多一個服務操作；controller 與 native queue 都維持 FIFO。GPS 不作為 prepare／clear 的前置條件。
+- 從首頁 Start 發生的服務失敗，直接以可關閉的非模態提示顯示具體原因；關閉只隱藏提示，不清除服務錯誤、改變停止狀態或宣稱修復成功。
 
 ## 審查與證據
 

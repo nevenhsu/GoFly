@@ -1,12 +1,14 @@
 import GoFlyCore
 import MapKit
 import SwiftUI
+import UIKit
 
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
     @StateObject private var location = GoFlyRealLocation()
     @State private var camera: MapCameraPosition = .automatic
     @State private var showingSettings = false
+    @State private var serviceNoticeDismissed = false
 
     var body: some View {
         NavigationStack {
@@ -20,10 +22,13 @@ struct GoFlyMapView: View {
                         )
                     ) {
                         Image(systemName: "location.north.fill")
-                            .font(.title2.weight(.bold))
                             .foregroundStyle(GoFlyStyle.primary)
-                            .padding(8)
-                            .background(GoFlyStyle.surface, in: Circle())
+                            .overlay {
+                                Image(systemName: "location.north")
+                                    .foregroundStyle(GoFlyStyle.surface)
+                                    .accessibilityHidden(true)
+                            }
+                            .font(.title2.weight(.semibold))
                             .accessibilityLabel(goFlyString("map.realLocation"))
                     }
                     .annotationTitles(.hidden)
@@ -33,6 +38,9 @@ struct GoFlyMapView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 8) {
                     statusCard
+                    if let error = service.error, !serviceNoticeDismissed {
+                        serviceFailureNotice(error)
+                    }
                     if let notice = location.noticeKey {
                         locationNotice(notice)
                     }
@@ -54,6 +62,12 @@ struct GoFlyMapView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showingSettings) {
                 ServiceSettingsView(service: service)
+            }
+            .onReceive(service.$error) { error in
+                serviceNoticeDismissed = false
+                if let error {
+                    UIAccessibility.post(notification: .announcement, argument: goFlyString(error.rawValue))
+                }
             }
             .onReceive(location.$observation) { observation in
                 service.observeRealLocation(observation)
@@ -86,6 +100,7 @@ struct GoFlyMapView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("map.positionStatus")
 
             Button {
                 _ = service.start()
@@ -139,5 +154,33 @@ struct GoFlyMapView: View {
         .padding(.trailing, 4)
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityIdentifier("map.locationNotice")
+    }
+
+    private func serviceFailureNotice(_ error: DeviceServiceFailure) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .padding(.top, 12)
+                .accessibilityHidden(true)
+            Text(goFlyString(error.rawValue))
+                .font(.footnote)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+                .accessibilityIdentifier("map.serviceError.message")
+            Button {
+                serviceNoticeDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(goFlyString("common.dismiss"))
+            .accessibilityIdentifier("map.serviceError.dismiss")
+        }
+        .foregroundStyle(GoFlyStyle.errorForeground)
+        .padding(.leading, 16)
+        .padding(.trailing, 4)
+        .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
     }
 }
