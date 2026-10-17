@@ -211,7 +211,7 @@ struct GoFlyImportedRoutesView: View {
             .buttonStyle(.plain)
             .foregroundStyle(isBusy || !imports.canMutate ? GoFlyStyle.disabledForeground : GoFlyStyle.primary)
             .disabled(isBusy || !imports.canMutate)
-            .accessibilityLabel(String.localizedStringWithFormat(goFlyString("imports.delete"), record.filename))
+            .accessibilityLabel(goFlyLocalizedFormat(goFlyString("imports.delete"), record.filename))
             .accessibilityIdentifier("imports.delete.\(record.id.uuidString)")
             .padding(.trailing, 6)
         }
@@ -293,7 +293,8 @@ struct GoFlyImportedRoutesView: View {
     }
 }
 
+@MainActor
 func goFlyImportedRouteMetadata(_ record: ImportedRouteRecord) -> String {
-    String.localizedStringWithFormat(goFlyString("imports.metadata"),
+    goFlyLocalizedFormat(goFlyString("imports.metadata"),
                                     goFlyString("imports.kind.\(record.kind.rawValue)"), record.pointCount)
 }

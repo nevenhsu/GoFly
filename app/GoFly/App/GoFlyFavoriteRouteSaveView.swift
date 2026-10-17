@@ -97,7 +97,7 @@ struct GoFlySaveFavoriteRouteView: View {
 
     private var sourceSummary: String {
         if let source = controller.draft.gpxSource {
-            return source.displayFilename + " · " + String.localizedStringWithFormat(
+            return source.displayFilename + " · " + goFlyLocalizedFormat(
                 goFlyString("favoriteRoutes.pointCount"), source.document.pointCount)
         }
         func title(_ node: RouteNode?) -> String? {

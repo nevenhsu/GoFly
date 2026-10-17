@@ -16,6 +16,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// service health or changes the current task lease.
     @Published public private(set) var movementConnectionAvailable = true
     @Published public private(set) var coldRecoveryHeld = false
+    @Published public private(set) var tunnelResetState: TunnelResetState = .idle
 
     private struct DisplayedPosition {
         let coordinate: GeoCoordinate
@@ -136,6 +137,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private var adapterQueue: [AdapterCommand] = []
     private var pumping = false
     private var watchdog: Task<Void, Never>?
+    private var activeResetID: UUID?
+    private var activeResetToken: UInt64?
 
     public init(
         service: any DeviceService, operationTimeout: Duration = .seconds(30),
@@ -558,7 +561,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                 // Requeue behind already waiting healthy old ticks, never hold the pump for a whole round.
                 self.enqueuePreparationAttempt(context, attempt: next, token: token, point: point)
             } else {
-                self.complete(.preparing, token: token, result: result, point: point, preparation: context)
+                self.complete(.preparing, token: token, result: result, point: point,
+                              preparation: context, resetID: nil)
             }
             if let owner { self.settle(owner) }
             if let joystick { self.settleJoystick(joystick) }
@@ -578,6 +582,9 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// before dispatch but cannot cancel an FFI call that already owns handles.
     @discardableResult public func stop() -> Bool {
         guard canStop else { return false }
+        if let id = activeResetID, case .running = tunnelResetState {
+            tunnelResetState = .failed(id: id, failure: .operationCancelled)
+        }
         routeStopGeneration &+= 1
         routeAdmissionRevision &+= 1
         nativeBusy = true
@@ -619,7 +626,25 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     @discardableResult public func resetTunnel() -> Bool {
         guard canResetTunnel else { return false }
         admitExplicitOperation()
-        enqueue(.resetting) { try await $0.resetClientConnection() }
+        setMovementConnectionAvailable(false)
+        let id = UUID()
+        let token = beginLifecycle(.resetting, point: nil, preparation: nil)
+        activeResetID = id
+        activeResetToken = token
+        // Published emits the incoming value synchronously. Recovery consumes
+        // this value directly before the adapter work can be enqueued.
+        tunnelResetState = .running(id: id)
+        enqueueAdapter({ service in
+            do {
+                try await service.resetClientConnection()
+                return .success
+            } catch {
+                return .failure(error as? DeviceServiceFailure ?? .serviceUnavailable)
+            }
+        }) { [weak self] result in
+            self?.complete(.resetting, token: token, result: result, point: nil,
+                           preparation: nil, resetID: id)
+        }
         return true
     }
 
@@ -673,7 +698,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     ) {
         let token = beginLifecycle(operation, point: point, preparation: preparation)
         enqueueAdapter(work) { [weak self] result in
-            self?.complete(operation, token: token, result: result, point: point, preparation: preparation)
+            self?.complete(operation, token: token, result: result, point: point,
+                           preparation: preparation, resetID: nil)
         }
     }
 
@@ -719,6 +745,11 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             if operation == .stopping || operation == .restoring {
                 self.clearState = .unknown
             }
+            if operation == .resetting, let id = self.activeResetID,
+               self.activeResetToken == token,
+               case .running = self.tunnelResetState {
+                self.tunnelResetState = .failed(id: id, failure: .operationTimedOut)
+            }
             // Only actual completion releases nativeBusy and permits FIFO clear.
         }
         routeSubject.send(.availabilityChanged)
@@ -745,7 +776,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
 
     private func complete(
         _ operation: ServicePhase, token: UInt64,
-        result: CommandResult, point: PointContext?, preparation: PreparationContext?
+        result: CommandResult, point: PointContext?, preparation: PreparationContext?, resetID: UUID?
     ) {
         outstandingWork -= 1
         if operation == .stopping || operation == .restoring { clearScheduled = false }
@@ -793,6 +824,25 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         if outstandingWork == 0 {
             nativeBusy = hasPendingRouteRepair
             if phase == .repairRequired && !pointUnconfirmed && !routeUnconfirmed && !joystickUnconfirmed { phase = .stopped }
+        }
+        if operation == .resetting, let id = resetID, activeResetID == id,
+           activeResetToken == token, token == revision,
+           case .running(let runningID) = tunnelResetState, runningID == id {
+            switch result {
+            case .success:
+                tunnelResetState = .succeeded(id: id)
+            case .failure(let failure):
+                tunnelResetState = .failed(id: id, failure: failure)
+            case .point:
+                tunnelResetState = .failed(id: id, failure: .serviceUnavailable)
+            }
+            activeResetID = nil
+            activeResetToken = nil
+        } else if operation == .resetting, let id = resetID, activeResetID == id {
+            // A watchdog or a superseding lifecycle already sealed this
+            // attempt. The late adapter return only releases busy state.
+            activeResetID = nil
+            activeResetToken = nil
         }
         routeSubject.send(.availabilityChanged)
         joystickSubject.send(.availabilityChanged)

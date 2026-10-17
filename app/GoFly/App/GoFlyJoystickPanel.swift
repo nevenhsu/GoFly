@@ -76,7 +76,7 @@ struct GoFlyJoystickPanel: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text(goFlyString("route.speed"))
                             Spacer(minLength: 12)
-                            Text(String.localizedStringWithFormat(goFlyString("route.speedValue"),
+                            Text(goFlyLocalizedFormat(goFlyString("route.speedValue"),
                                                                  controller.speed.kilometersPerHour))
                                 .monospacedDigit()
                                 .accessibilityIdentifier("joystick.speed.value")
@@ -227,9 +227,9 @@ private struct GoFlyManualJoystickPad: View {
 
     private var accessibilityValue: String {
         guard let input = controller.displayInput, input.strength > 0 else { return goFlyString("joystick.centered") }
-        return String.localizedStringWithFormat(goFlyString("joystick.inputValue"),
-            input.bearingDegrees.formatted(.number.precision(.fractionLength(0))),
-            input.strength.formatted(.percent.precision(.fractionLength(0))))
+        return goFlyLocalizedFormat(goFlyString("joystick.inputValue"),
+            input.bearingDegrees.formatted(.number.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale)),
+            input.strength.formatted(.percent.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale)))
     }
 
     private func input(for vector: CGPoint) -> JoystickInput? {

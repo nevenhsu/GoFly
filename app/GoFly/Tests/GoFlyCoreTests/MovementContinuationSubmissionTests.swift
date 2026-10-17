@@ -150,6 +150,7 @@ struct MovementContinuationSubmissionTests {
         #expect(joystick.setWanderEnabled(true))
         #expect(driver.submitCalls == 0)
 
+        await waitForContinuation { clock.hasSleeper(for: .milliseconds(500)) }
         clock.advance(by: .milliseconds(500))
         await waitForContinuation { driver.submitCalls == 1 }
         let request = try #require(driver.requests.first)

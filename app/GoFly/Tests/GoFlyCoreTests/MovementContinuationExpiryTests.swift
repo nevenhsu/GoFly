@@ -33,6 +33,7 @@ struct MovementContinuationExpiryTests {
         await waitForContinuation { joystick.phase == .moving }
         #expect(joystick.setWanderEnabled(true))
 
+        await waitUntilAsync { clock.hasSleeper(for: .milliseconds(500)) }
         clock.advance(by: .milliseconds(500))
         await waitForContinuation { driver.submitCalls == 1 }
         let firstDeviceState = await device.snapshot()
@@ -44,6 +45,7 @@ struct MovementContinuationExpiryTests {
         #expect(joystick.phase == .moving)
         #expect(acknowledgements.count == 1)
 
+        await waitUntilAsync { clock.hasSleeper(for: .milliseconds(500)) }
         clock.advance(by: .milliseconds(500))
         await waitForContinuation { driver.submitCalls == 1 }
         await waitUntilAsync { await device.snapshot().waiting }
@@ -280,8 +282,9 @@ private final class ExpiringDriver: ContinuedProcessingDriving {
 
 @MainActor
 private func waitUntilAsync(_ condition: @escaping @MainActor () async -> Bool) async {
-    for _ in 0..<400 {
-        if await condition() { return }
+    let deadline = ContinuousClock.now + .seconds(2)
+    while !(await condition()), ContinuousClock.now < deadline {
         await Task.yield()
     }
+    #expect(await condition())
 }

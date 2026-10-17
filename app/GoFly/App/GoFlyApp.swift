@@ -4,6 +4,8 @@ import SwiftUI
 
 @main
 struct GoFlyApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var preferences = GoFlyPreferences.shared
     @StateObject private var service: ServiceController
     @StateObject private var sessionRecovery: SessionRecoveryStore
     @StateObject private var movement: GoFlyMovementModel
@@ -16,6 +18,7 @@ struct GoFlyApp: App {
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
 
     init() {
+        _ = GoFlyPreferences.shared
         let recovery = goFlySessionRecoveryStore()
         let service = ServiceController(service: Self.deviceService())
         let snapshot = recovery.initialSnapshot
@@ -40,6 +43,17 @@ struct GoFlyApp: App {
                         onboardingComplete = true
                     }
                 }
+            }
+            .environment(\.locale, preferences.locale)
+            .preferredColorScheme(preferences.colorScheme)
+            .onChange(of: preferences.effectiveLanguage) { _, _ in
+                movement.continuation.refreshPresentation()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { preferences.refreshSystemPreferences() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+                preferences.refreshSystemPreferences()
             }
             .environmentObject(favorites)
             .environmentObject(importedRoutes)

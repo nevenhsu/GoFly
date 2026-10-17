@@ -7,6 +7,7 @@ final class GoFlyContinuationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map.settings"].waitForExistence(timeout: 10))
 
         app.buttons["map.settings"].tap()
+        openBackgroundSettings(in: app)
 
         let card = app.otherElements["background.card"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
@@ -31,6 +32,7 @@ final class GoFlyContinuationUITests: XCTestCase {
             )
             XCTAssertTrue(app.buttons["map.settings"].waitForExistence(timeout: 10))
             app.buttons["map.settings"].tap()
+            openBackgroundSettings(in: app)
 
             let card = app.otherElements["background.card"]
             XCTAssertTrue(card.waitForExistence(timeout: 5))
@@ -69,6 +71,12 @@ final class GoFlyContinuationUITests: XCTestCase {
         for _ in 0..<8 where !element.isHittable {
             app.swipeUp()
         }
+    }
+
+    private func openBackgroundSettings(in app: XCUIApplication) {
+        let background = app.descendants(matching: .any)["settings.background"]
+        XCTAssertTrue(background.waitForExistence(timeout: 5))
+        background.tap()
     }
 
     private func attachSettingsScreenshot(_ app: XCUIApplication, name: String) {

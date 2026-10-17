@@ -115,7 +115,7 @@ struct GoFlyRoutePanel: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(goFlyString("imports.loadedPath")).font(.headline)
                     Text(imported.displayFilename).font(.body)
-                    Text(String.localizedStringWithFormat(goFlyString("imports.metadata"),
+                    Text(goFlyLocalizedFormat(goFlyString("imports.metadata"),
                          goFlyString("imports.kind.\(imported.document.kind.rawValue)"), imported.document.pointCount))
                         .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                 }
@@ -188,8 +188,8 @@ struct GoFlyRoutePanel: View {
                     .font(.caption)
                     .foregroundStyle(GoFlyStyle.secondary)
                     .accessibilityIdentifier("route.position.endpoints")
-                    Text(String.localizedStringWithFormat(goFlyString("route.positionValue"),
-                         progress.fraction.formatted(.percent.precision(.fractionLength(0)))))
+                    Text(goFlyLocalizedFormat(goFlyString("route.positionValue"),
+                         progress.fraction.formatted(.percent.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale))))
                         .font(.subheadline.monospacedDigit())
                         .accessibilityIdentifier("route.position.value")
                 } else {
@@ -312,7 +312,7 @@ private struct GoFlyRouteDetailsView: View {
                     .accessibilityIdentifier("route.importedRoutes")
                     GoFlyRoundTripControl(controller: controller)
                     Text(goFlyString("route.speed")).font(.headline)
-                    Text(String.localizedStringWithFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
+                    Text(goFlyLocalizedFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
                         .font(.title2.monospacedDigit())
                         .accessibilityIdentifier("route.speed.value")
                     Slider(value: Binding(
@@ -328,7 +328,7 @@ private struct GoFlyRouteDetailsView: View {
                         Text("100")
                     }
                     .disabled(!controller.canEdit)
-                    .accessibilityValue(String.localizedStringWithFormat(
+                    .accessibilityValue(goFlyLocalizedFormat(
                         goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour
                     ))
                     .accessibilityIdentifier("route.speed")

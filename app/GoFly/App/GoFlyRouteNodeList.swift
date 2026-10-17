@@ -1,19 +1,21 @@
 import GoFlyCore
 import SwiftUI
 
+@MainActor
 func goFlyRouteRoleTitle(_ role: RouteNodeRole) -> String {
     switch role {
     case .start: goFlyString("route.origin")
     case .destination: goFlyString("route.destination")
-    case .waypoint(let number): String.localizedStringWithFormat(goFlyString("route.waypoint"), number)
+    case .waypoint(let number): goFlyLocalizedFormat(goFlyString("route.waypoint"), number)
     }
 }
 
+@MainActor
 func goFlyRouteEditTitle(_ role: RouteNodeRole) -> String {
     switch role {
     case .start: goFlyString("route.editOrigin")
     case .destination: goFlyString("route.editDestination")
-    case .waypoint(let number): String.localizedStringWithFormat(goFlyString("route.editWaypoint"), number)
+    case .waypoint(let number): goFlyLocalizedFormat(goFlyString("route.editWaypoint"), number)
     }
 }
 
@@ -100,11 +102,11 @@ struct GoFlyRouteNodeList: View {
                 .contentShape(Rectangle())
                 .gesture(dragGesture(for: node.id))
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(String.localizedStringWithFormat(goFlyString("route.reorderNode"), goFlyRouteRoleTitle(role), title(node.value)))
+                .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.reorderNode"), goFlyRouteRoleTitle(role), title(node.value)))
                 .accessibilityHint(goFlyString("route.dragHint"))
                 .accessibilityAction(named: Text(goFlyString("route.moveUp"))) { move(node.id, by: -1) }
                 .accessibilityAction(named: Text(goFlyString("route.moveDown"))) { move(node.id, by: 1) }
-                .accessibilityAction(named: Text(String.localizedStringWithFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))) {
+                .accessibilityAction(named: Text(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))) {
                     if isEditable { onDelete(node.id) }
                 }
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
@@ -130,7 +132,7 @@ struct GoFlyRouteNodeList: View {
             }
             .buttonStyle(.plain)
             .disabled(!isEditable || draggingID != nil)
-            .accessibilityLabel(String.localizedStringWithFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
+            .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
             .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
         }
         .frame(minHeight: 72)

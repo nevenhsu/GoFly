@@ -96,8 +96,8 @@ struct GoFlyRecoveryView: View {
         switch recovery.unverifiedMovement {
         case .route(let route):
             Text(goFlyString("mode.route")).font(.subheadline.weight(.semibold))
-            Text(String.localizedStringWithFormat(goFlyString("recovery.routeProgress"),
-                route.progress.fraction.formatted(.percent.precision(.fractionLength(0)))))
+            Text(goFlyLocalizedFormat(goFlyString("recovery.routeProgress"),
+                route.progress.fraction.formatted(.percent.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale))))
                 .accessibilityIdentifier("recovery.routeProgress")
             if route.usesPositionAxis {
                 HStack(alignment: .top) {
@@ -111,7 +111,7 @@ struct GoFlyRecoveryView: View {
                 .accessibilityIdentifier("recovery.routeHeading")
             if route.roundTripEnabled { Text(goFlyString("route.roundTrip")) }
         case .wander(let wander):
-            Text(String.localizedStringWithFormat(goFlyString("joystick.currentTarget"), wander.target.place.title))
+            Text(goFlyLocalizedFormat(goFlyString("joystick.currentTarget"), wander.target.place.title))
                 .accessibilityIdentifier("recovery.wanderTarget")
         case .manual:
             Text(goFlyString("recovery.manualWaiting"))
@@ -120,7 +120,7 @@ struct GoFlyRecoveryView: View {
             Text(goFlyString("recovery.uncertain"))
                 .accessibilityIdentifier("recovery.uncertainty")
             if let place = recovery.unverifiedUncertainty?.requestedPlace {
-                Text(String.localizedStringWithFormat(goFlyString("operation.destination"), place.title))
+                Text(goFlyLocalizedFormat(goFlyString("operation.destination"), place.title))
                     .accessibilityIdentifier("recovery.requestedPlace")
             }
         }

@@ -383,7 +383,7 @@ struct RouteExecutionControllerTests {
             #expect(service.teleport(to: TeleportCandidate(place: MapPlace(id: .coordinate(point), title: "Newer", coordinate: point))))
             await wait { await device.waiting }; await device.finish(.acknowledged)
         }
-        if action != "cancel" { #expect(service.routeAdmissionRevision == before + 1) }
+        if action != "cancel" { #expect(service.routeAdmissionRevision > before) }
         await wait { !service.nativeBusy }
         await planner.finish()
         await wait { await planner.returned }

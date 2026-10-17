@@ -5,6 +5,56 @@ import GoFlyCore
 
 @Suite @MainActor
 struct MovementContinuationControllerTests {
+    @Test func presentationRefreshPreservesActualOwnerProgressAndWrites() async throws {
+        let device = ContinuationCountingDevice()
+        let service = ServiceController(service: device)
+        #expect(service.start())
+        await waitForContinuation { service.phase == .ready }
+        let clock = ContinuationTestClock()
+        let start = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        let end = try #require(GeoCoordinate(latitude: 25.001, longitude: 121.001))
+        let draft = try #require(RouteDraft(values: [
+            .place(MapPlace(id: .coordinate(start), title: "User start", coordinate: start)),
+            .place(MapPlace(id: .coordinate(end), title: "User end", coordinate: end))
+        ]))
+        let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
+            search: ContinuationSearch(), clock: clock)
+        let joystick = JoystickMovementController(commands: service, clock: clock)
+        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+            probe: ContinuationProbe(), clock: clock)
+        let driver = ContinuationRecordingDriver()
+        let presentation = ContinuationPresentationTitle()
+        let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
+            recovery: recovery, driver: driver) { _, progress in
+                (title: presentation.value, subtitle: "\(progress.acknowledgedWrites)")
+            }
+        controller.sceneDidBecomeActive()
+        #expect(route.start())
+        await waitForContinuation { route.phase == .running && controller.hasRuntime && !driver.updates.isEmpty }
+        let intent = try #require(route.intent)
+        let previous = try #require(driver.updates.last)
+        let request = try #require(driver.requests.first)
+        let writeCount = device.writeCount
+        presentation.value = "路線"
+
+        controller.refreshPresentation()
+
+        let refreshed = try #require(driver.updates.last)
+        #expect(refreshed.title == "路線")
+        #expect(refreshed.subtitle == "1")
+        #expect(refreshed.requestID == request.requestID)
+        #expect(refreshed.progress == previous.progress)
+        #expect(route.intent?.id == intent.id)
+        #expect(route.intent?.lease == intent.lease)
+        #expect(route.phase == .running)
+        #expect(controller.hasRuntime)
+        #expect(driver.submitCalls == 1)
+        #expect(device.writeCount == writeCount)
+        #expect(route.draft == draft)
+        #expect(route.cancel())
+        await waitForContinuation { route.phase == .editing }
+    }
+
     @Test func initializationFencesTheSceneRegistersReadinessWithoutSubmitting() async throws {
         let service = ServiceController(service: ContinuationNoopDevice())
         #expect(service.start())
@@ -934,7 +984,7 @@ private final class ContinuationRecordingDriver: ContinuedProcessingDriving {
     var registerCalls = 0
     var submitCalls = 0
     var requests: [ContinuedProcessingRequest] = []
-    var updates: [(requestID: UUID, progress: ContinuedProcessingProgress)] = []
+    var updates: [(requestID: UUID, progress: ContinuedProcessingProgress, title: String, subtitle: String)] = []
 
     func register() -> Bool {
         registerCalls += 1
@@ -953,7 +1003,7 @@ private final class ContinuationRecordingDriver: ContinuedProcessingDriving {
     }
 
     func update(requestID: UUID, progress: ContinuedProcessingProgress, title: String, subtitle: String) {
-        updates.append((requestID: requestID, progress: progress))
+        updates.append((requestID: requestID, progress: progress, title: title, subtitle: subtitle))
     }
     func finish(requestID: UUID, success: Bool) -> ContinuedProcessingCompletionOutcome? { nil }
     func cancel(requestID: UUID) {}
@@ -1103,4 +1153,23 @@ private final class ContinuationLaunchDriver: ContinuedProcessingDriving {
         completion?.claim(success ? .success : .cancelled).outcome
     }
     func cancel(requestID: UUID) { _ = completion?.claim(.cancelled) }
+}
+
+private final class ContinuationCountingDevice: DeviceService, @unchecked Sendable {
+    private let lock = NSLock()
+    private var writes = 0
+    var writeCount: Int { lock.withLock { writes } }
+    func prepare() async throws {}
+    func clearLocation() async throws {}
+    func resetClientConnection() async throws {}
+    func movePoint(to: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
+        guard dispatch.claim() else { return .notSent(.operationCancelled) }
+        lock.withLock { writes += 1 }
+        return .acknowledged
+    }
+}
+
+@MainActor
+private final class ContinuationPresentationTitle {
+    var value = "Route"
 }

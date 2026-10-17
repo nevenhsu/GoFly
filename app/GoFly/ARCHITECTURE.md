@@ -212,3 +212,16 @@ SessionRecovery保存完整既有草稿及data-only歷史／顯示快取，App�
 實際App adapter改為process singleton，Info permitted使用wildcard、SDK register／submit使用相同完整UUID；固定256次註冊嘗試，只保留weak handler及identity，耗盡如實拒絕且不自動續租。此為App資源界線，非Apple限制。BGC不需要新增BGProcessing mode或AppDelegate期限接線。程式已整合；完整 Swift 395、未簽署 SDK27.1 device／simulator、352 key 三語及兩軸審查通過，完整 UI 45／45 PASS，審查修正後背景 UI 2／2 與最大字級／淺色單項通過，皆零 runtime warning，Root 完成深淺色及三語可捲動畫面核對。真實 iOS26／27 scheduler、鎖屏／無期限持續及接收 App 位置仍集中最後手機驗收。
 
 票15 v2追加：實際整合bundle原預設多Scene，與process單一Service／driver及Map持有Controller衝突；第二輪Advisor核准明確單一Scene，實際兩 SDK bundle 已讀回 false。未擴充多視窗；App 在 SwiftUI observers 建立前一次建立 GoFlyMovementModel，StateObject 保留同一組 controller／facade；Map 只觀察，變更畫面不可建立第二個送點 owner。
+
+
+## 偏好與共用設定（票16，整合驗證中）
+
+App 的 `GoFlyPreferences.shared` 保存 `gofly.preferences.v1` 單一 UserDefaults 字典，語言與外觀為同一份已選值；無效欄位個別回退 system，讀取不覆寫。App 用 State 保留同一 singleton，在穩定 root 注入 Locale／preferredColorScheme；語言變更只刷新同一背景工作的文字，服務／路線／搖桿／恢復 owner 不變。本地化查詢讀實際選定 lproj 並明確英文 fallback，Foundation 格式與預先格式化的數字／百分比均使用選定 Locale。座標／檔案資料維持原格式；Apple 地圖標籤及系統權限對話框由 OS 管理。
+
+MKMapView 沿用既有實體、鏡頭與 annotation，實際 trait 使用公開 registerForTraitChanges 更新語意顏色，實際 locale 變更更新 annotation 輔助文字。除明確 DEBUG simulator 旗標下的唯讀實體／trait／鏡頭摘要外，不加入測試用成功狀態。原生 Picker 讀已保存值，明確 accessibilityValue 同步讀同一值，不合成選取狀態。
+
+C01／C03／C04／C05／C06／C07 共用實際狀態與原生導覽。定位服務開關在背景工作讀取，初次未返回時為未知，不在主執行緒呼叫阻塞式查詢；授權／精確定位與背景重新整理讀 OS 實際值。首頁與子頁使用同一狀態投影。配對資料已保存僅代表本機完整性核對；簽名日期未知如實顯示，不開隱藏裝置 session。
+
+Service 的 `TunnelResetState` 以真實 UUID 同步發布 running：准入先關閉實際連線 fence／開始 lifecycle，再發布 incoming 值，最後排入 native reset。Recovery 直接消費 incoming publisher，撤銷舊 probe generation，保留實體 Task 到真正返回；C01／C05 共用 reset 等舊探測排空後才送出。明確同意與實體 Task 身分分開，自身 running 不撤銷自身；直接 Service reset 則作廢等待中的舊同意。Restore／Stop／離開場景撤銷尚未送出的 reset。只有同一 revision、同一仍 running UUID 的實際完成能發布結果；watchdog／取消後遲到回覆只清理實體 bookkeeping。TCP 恢復不提高 native 健康、不解除 cold hold、不恢復 GPS 或自動 Resume。
+
+目前完整 Swift406（Core397／46 suites＋Transport9）、雙 SDK27.1 未簽署 build18、414key三語／格式／實際bundle、native verifier及最後兩軸審查通過；新設定 focused UI、兩種實際系統外觀、三語最大字級巡覽及資料保留檢查已通過，完整60項UI仍以凍結build18回歸中。實際權限變更、外部 VPN 成功、背景與接收 App 以及 VoiceOver 留最後集中手機驗收。

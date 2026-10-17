@@ -59,7 +59,7 @@ struct GoFlyOperationPanel: View {
                 Text(goFlyString(operation.attempt.value == 1 ? preparationTitle(operation.source) : "operation.retrying"))
                     .font(.headline)
             }
-            Text(String.localizedStringWithFormat(goFlyString("operation.attempt"), operation.attempt.value))
+            Text(goFlyLocalizedFormat(goFlyString("operation.attempt"), operation.attempt.value))
                 .font(.subheadline)
                 .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityIdentifier("operation.attempt")
@@ -103,12 +103,12 @@ struct GoFlyOperationPanel: View {
         switch source {
         case .start: text = goFlyString("operation.startSummary")
         case .point(let intent):
-            text = String.localizedStringWithFormat(goFlyString("operation.destination"), intent.candidate.place.title)
+            text = goFlyLocalizedFormat(goFlyString("operation.destination"), intent.candidate.place.title)
         case .route(let intent):
             let destination: String
             if case .place(let place) = intent.draft.destination?.value { destination = place.title }
             else { destination = intent.route.end.displayText }
-            text = String.localizedStringWithFormat(goFlyString("operation.destination"), destination)
+            text = goFlyLocalizedFormat(goFlyString("operation.destination"), destination)
         case .joystick: text = goFlyString("operation.joystickSummary")
         }
         return Text(text)

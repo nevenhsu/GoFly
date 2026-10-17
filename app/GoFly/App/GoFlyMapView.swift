@@ -30,7 +30,7 @@ final class GoFlyMovementModel: ObservableObject {
             driver: GoFlyContinuedProcessingDriver.shared,
             presentation: { kind, progress in
                 (title: goFlyString("background.activity.\(kind.rawValue)"),
-                 subtitle: String.localizedStringWithFormat(
+                 subtitle: goFlyLocalizedFormat(
                     goFlyString("background.activity.progress"), progress.acknowledgedWrites))
             }
         )
@@ -222,9 +222,10 @@ struct GoFlyMapView: View {
                 .onChange(of: displayStatusKey) { _, _ in normalStatusHeight = 0 }
             }
             .background(GoFlyStyle.canvas.ignoresSafeArea())
+            .goFlyNativeBackTitle()
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showingSettings) {
-                ServiceSettingsView(service: service, continuation: continuation)
+                ServiceSettingsView(service: service, continuation: continuation, recovery: recovery)
             }
             .onAppear {
                 if cameraIntent == nil {
@@ -749,7 +750,7 @@ struct GoFlyMapView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(goFlyString("search.placeDetails"))
-        .accessibilityValue(String.localizedStringWithFormat(goFlyString("joystick.currentTarget"), place.title))
+        .accessibilityValue(goFlyLocalizedFormat(goFlyString("joystick.currentTarget"), place.title))
         .accessibilityIdentifier("map.wander.target")
     }
 
@@ -817,6 +818,18 @@ struct GoFlyMapView: View {
                 .accessibilityIdentifier("map.panel.viewportMetrics")
         }
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"), let projection {
+            Text(projection.mapInstanceID)
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityValue(projection.mapInstanceID)
+                .accessibilityIdentifier("map.instanceID")
+            Text(String(projection.mapUserInterfaceStyle))
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityValue(String(projection.mapUserInterfaceStyle))
+                .accessibilityIdentifier("map.trait.userInterfaceStyle")
+            Text(String(projection.cameraStateToken))
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityValue(String(projection.cameraStateToken))
+                .accessibilityIdentifier("map.camera.state")
             Text(String(projection.routePointCount))
                 .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
                 .accessibilityIdentifier("map.routePreview.points")

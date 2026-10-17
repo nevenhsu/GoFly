@@ -107,7 +107,7 @@ struct GoFlyFavoriteRoutesView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(record.label.map { $0 + ", " + goFlyFavoriteRouteEndpoints(record) }
                                 ?? goFlyFavoriteRouteEndpoints(record))
-            .accessibilityValue(String.localizedStringWithFormat(goFlyString(record.sourceKind == .gpx
+            .accessibilityValue(goFlyLocalizedFormat(goFlyString(record.sourceKind == .gpx
                 ? "favoriteRoutes.pointCount" : "favoriteRoutes.placeCount"), record.count))
             .accessibilityAddTraits(.isButton)
             .accessibilityAddTraits(favorites.selectedID == record.id ? .isSelected : [])
@@ -126,7 +126,7 @@ struct GoFlyFavoriteRoutesView: View {
             .buttonStyle(.plain)
             .foregroundStyle(favorites.canMutate ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .disabled(!favorites.canMutate)
-            .accessibilityLabel(String.localizedStringWithFormat(goFlyString("favoriteRoutes.delete"),
+            .accessibilityLabel(goFlyLocalizedFormat(goFlyString("favoriteRoutes.delete"),
                 record.label ?? goFlyFavoriteRouteEndpoints(record)))
             .accessibilityIdentifier("favoriteRoutes.delete.\(record.id.uuidString)")
             .padding(.trailing, 6)

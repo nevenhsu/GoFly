@@ -7,6 +7,7 @@ import Foundation
 public final class MovementRecoveryController: ObservableObject {
     @Published public private(set) var connectionState: VPNCheckState = .unknown
     @Published public private(set) var isChecking = false
+    @Published public private(set) var isResettingTunnel = false
     @Published public private(set) var checkpointRevision: UInt64 = 0
 
     private let service: ServiceController
@@ -26,6 +27,11 @@ public final class MovementRecoveryController: ObservableObject {
     private var recoveredNotice = false
     private var probeStartedFromFailure = false
     private var checkNoticeVisible = false
+    private var currentResetID: UUID?
+    private var resetConsentID: UUID?
+    private var physicalResetTaskID: UUID?
+    private var resetTask: Task<Void, Never>?
+    private var admittingOwnedReset = false
     private var revisionQueued = false
     private var subscriptions: [AnyCancellable] = []
 
@@ -46,6 +52,12 @@ public final class MovementRecoveryController: ObservableObject {
         self.lastObservedPhase = service.phase
 
         subscriptions = [
+            service.$tunnelResetState.sink { [weak self] state in
+                self?.receiveTunnelResetState(state)
+            },
+            service.$phase.sink { [weak self] phase in
+                self?.receiveServicePhase(phase)
+            },
             service.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
             route.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
             joystick.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
@@ -65,6 +77,7 @@ public final class MovementRecoveryController: ObservableObject {
     deinit {
         checkTask?.cancel()
         monitorTask?.cancel()
+        resetTask?.cancel()
     }
 
     public var requiresColdConfirmation: Bool {
@@ -96,7 +109,46 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     public var canCheck: Bool {
-        sceneActive && !isChecking && isManualProbeEligible
+        sceneActive && !isChecking && checkTask == nil && isManualProbeEligible
+    }
+
+    public var canResetTunnel: Bool {
+        sceneActive && service.canResetTunnel && !isChecking &&
+            !isResettingTunnel && resetConsentID == nil && currentResetID == nil && resetTask == nil
+    }
+
+    @discardableResult
+    public func resetTunnel() -> Bool {
+        guard canResetTunnel else { return false }
+        let consentID = UUID()
+        let physicalID = UUID()
+        resetConsentID = consentID
+        physicalResetTaskID = physicalID
+        isResettingTunnel = true
+        invalidateProbeForReset()
+        let oldCheckTask = checkTask
+        resetTask = Task { @MainActor [weak self] in
+            if let oldCheckTask { await oldCheckTask.value }
+            guard let self else { return }
+            guard self.resetConsentID == consentID,
+                  !Task.isCancelled,
+                  self.sceneActive,
+                  self.service.canResetTunnel,
+                  self.currentResetID == nil else {
+                self.finishPhysicalResetTask(physicalID, consentID: consentID)
+                return
+            }
+            self.admittingOwnedReset = true
+            let accepted = self.service.resetTunnel()
+            self.admittingOwnedReset = false
+            guard accepted, self.currentResetID != nil else {
+                self.finishPhysicalResetTask(physicalID, consentID: consentID)
+                return
+            }
+            self.resetConsentID = nil
+            self.finishPhysicalResetTask(physicalID, consentID: consentID)
+        }
+        return true
     }
 
     public func sceneDidBecomeActive() {
@@ -111,6 +163,7 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
+        retirePendingReset()
         sceneActive = false
         generation &+= 1
         checkTask?.cancel()
@@ -173,7 +226,8 @@ public final class MovementRecoveryController: ObservableObject {
     /// Manual checks are allowed while stopped so an initial or cold session
     /// can explicitly establish connectivity. They never create movement.
     private var isManualProbeEligible: Bool {
-        guard !service.nativeBusy else { return false }
+        guard !service.nativeBusy, resetConsentID == nil, currentResetID == nil,
+              resetTask == nil, !isResettingTunnel else { return false }
         if service.phase == .ready { return true }
         return service.phase == .stopped || service.phase == .repairRequired
     }
@@ -182,7 +236,8 @@ public final class MovementRecoveryController: ObservableObject {
     /// unavailable connection fence. A cold hold alone is display state, not
     /// evidence that a probe should run.
     private var isAutomaticProbeEligible: Bool {
-        guard !service.nativeBusy else { return false }
+        guard !service.nativeBusy, resetConsentID == nil, currentResetID == nil,
+              resetTask == nil, !isResettingTunnel else { return false }
         if service.phase == .ready { return true }
         guard service.phase == .stopped || service.phase == .repairRequired else { return false }
         return !service.movementConnectionAvailable
@@ -284,11 +339,7 @@ public final class MovementRecoveryController: ObservableObject {
             self.lastProbeFinishedAt = self.clock.now
             switch result {
             case .success:
-                self.connectionState = .reachable
-                self.recoveredNotice = self.probeStartedFromFailure
-                self.service.setMovementConnectionAvailable(true)
-                self.route.connectionDidBecomeAvailable()
-                self.joystick.connectionDidBecomeAvailable()
+                self.finishConnectionRecovery(recovered: self.probeStartedFromFailure)
             case .failure(let failure):
                 self.connectionState = failure == .timedOut ? .timedOut : .unavailable
                 self.service.setMovementConnectionAvailable(false)
@@ -299,10 +350,104 @@ public final class MovementRecoveryController: ObservableObject {
         }
     }
 
+    private func receiveTunnelResetState(_ state: TunnelResetState) {
+        switch state {
+        case .idle:
+            break
+        case .running(let id):
+            guard currentResetID != id else { return }
+            if !admittingOwnedReset { retirePendingReset() }
+            currentResetID = id
+            isResettingTunnel = true
+            generation &+= 1
+            checkTask?.cancel()
+            monitorTask?.cancel()
+            monitorTask = nil
+            isChecking = false
+            connectionState = .unknown
+            recoveredNotice = false
+            checkNoticeVisible = false
+            if checkTask == nil {
+                route.recoveryProbeDidFinish()
+                joystick.recoveryProbeDidFinish()
+            }
+        case .succeeded(let id):
+            guard currentResetID == id else { return }
+            currentResetID = nil
+            isResettingTunnel = false
+            finishConnectionRecovery(recovered: false)
+        case .failed(let id, let failure):
+            guard currentResetID == id else { return }
+            currentResetID = nil
+            isResettingTunnel = false
+            lastProbeFinishedAt = clock.now
+            recoveredNotice = false
+            checkNoticeVisible = false
+            switch failure {
+            case .operationCancelled:
+                connectionState = .unknown
+            case .operationTimedOut:
+                connectionState = .timedOut
+            default:
+                connectionState = .unavailable
+            }
+            if connectionState == .unknown {
+                service.setMovementConnectionAvailable(false)
+            } else {
+                service.setMovementConnectionAvailable(false)
+                route.connectionDidBecomeUnavailable()
+                joystick.connectionDidBecomeUnavailable()
+            }
+        }
+    }
+
+    private func receiveServicePhase(_ phase: ServicePhase) {
+        guard phase == .stopping || phase == .restoring else { return }
+        guard currentResetID == nil else { return }
+        retirePendingReset()
+    }
+
+    private func retirePendingReset() {
+        resetConsentID = nil
+        resetTask?.cancel()
+    }
+
+    private func finishPhysicalResetTask(_ physicalID: UUID, consentID: UUID) {
+        guard physicalResetTaskID == physicalID else { return }
+        physicalResetTaskID = nil
+        resetTask = nil
+        if resetConsentID == consentID { resetConsentID = nil }
+        if currentResetID == nil { isResettingTunnel = false }
+    }
+
+    private func invalidateProbeForReset() {
+        generation &+= 1
+        checkTask?.cancel()
+        monitorTask?.cancel()
+        monitorTask = nil
+        isChecking = false
+        connectionState = .unknown
+        recoveredNotice = false
+        checkNoticeVisible = false
+        if checkTask == nil {
+            route.recoveryProbeDidFinish()
+            joystick.recoveryProbeDidFinish()
+        }
+    }
+
+    private func finishConnectionRecovery(recovered: Bool) {
+        connectionState = .reachable
+        recoveredNotice = recovered
+        service.setMovementConnectionAvailable(true)
+        route.connectionDidBecomeAvailable()
+        joystick.connectionDidBecomeAvailable()
+    }
+
     /// Stop/reset emits this synchronously before any adapter clear work. It
     /// invalidates an in-flight probe generation before a late positive can
     /// reopen movement admission.
     private func invalidateProbeForSafety() {
+        retirePendingReset()
         generation &+= 1
         checkTask?.cancel()
         monitorTask?.cancel()

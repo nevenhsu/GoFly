@@ -26,6 +26,10 @@ final class ContinuationTestClock: RouteClock, @unchecked Sendable {
     var now: Duration { lock.withLock { instant } }
     var sleepingCount: Int { lock.withLock { sleepers.count } }
 
+    func hasSleeper(for duration: Duration) -> Bool {
+        lock.withLock { sleepers.values.contains { $0.deadline == instant + duration } }
+    }
+
     func sleep(for duration: Duration) async throws {
         let id = UUID()
         try await withTaskCancellationHandler(operation: {

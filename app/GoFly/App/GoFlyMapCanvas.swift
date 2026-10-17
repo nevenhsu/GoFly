@@ -22,6 +22,9 @@ struct GoFlyMapProjection: Equatable {
     #if DEBUG && targetEnvironment(simulator)
     private(set) var routePointCount = 0
     private(set) var routeIsVisible = false
+    private(set) var mapInstanceID = ""
+    private(set) var mapUserInterfaceStyle = UIUserInterfaceStyle.unspecified.rawValue
+    private(set) var cameraStateToken = 0
     #endif
 
     @MainActor init(candidatePoint: CGPoint?, wanderTargetPoint: CGPoint? = nil, viewport: CGRect, map: MKMapView) {
@@ -31,6 +34,15 @@ struct GoFlyMapProjection: Equatable {
         self.cameraHeadingDegrees = map.camera.heading
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+            mapInstanceID = String(describing: ObjectIdentifier(map))
+            mapUserInterfaceStyle = map.traitCollection.userInterfaceStyle.rawValue
+            var cameraHasher = Hasher()
+            cameraHasher.combine(map.camera.centerCoordinate.latitude)
+            cameraHasher.combine(map.camera.centerCoordinate.longitude)
+            cameraHasher.combine(map.camera.altitude)
+            cameraHasher.combine(map.camera.pitch)
+            cameraHasher.combine(map.camera.heading)
+            cameraStateToken = cameraHasher.finalize()
             let lines = map.overlays.compactMap { $0 as? MKPolyline }
             routePointCount = lines.reduce(0) { $0 + $1.pointCount }
             if !lines.isEmpty {
@@ -53,6 +65,9 @@ struct GoFlyMapProjection: Equatable {
 }
 
 struct GoFlyMapCanvas: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.locale) private var locale
+
     var marker: PositionMarker?
     var candidate: TeleportCandidate?
     var viewport: CGRect
@@ -92,14 +107,21 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             coordinator.correctFocusIfNeeded(on: map)
             coordinator.publishProjection(on: map)
         }
+        map.onTraitChange = { [weak map, weak coordinator] in
+            guard let map, let coordinator else { return }
+            coordinator.refreshAppearance(on: map)
+        }
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
+        coordinator.applyColorScheme(colorScheme, on: map)
+        coordinator.applyPresentationLocale(locale, on: map)
         coordinator.updateMarker(on: map)
         coordinator.updateRoute(on: map)
+        coordinator.refreshAppearance(on: map)
         coordinator.compass?.frame = CGRect(x: max(0, map.bounds.width - 60), y: max(0, viewport.minY + 12), width: 44, height: 44)
         coordinator.applyCameraIfNeeded(on: map)
         coordinator.publishProjection(on: map)
@@ -119,8 +141,34 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var publication: UInt64 = 0
         private var routePoints: [GeoCoordinate] = []
         private var routeOverlay: MKPolyline?
+        private var routeRenderer: MKPolylineRenderer?
+        private var presentationLocaleIdentifier = ""
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
+
+        func applyColorScheme(_ colorScheme: ColorScheme?, on map: MKMapView) {
+            let style: UIUserInterfaceStyle
+            switch colorScheme {
+            case .light: style = .light
+            case .dark: style = .dark
+            default: style = .unspecified
+            }
+            if map.overrideUserInterfaceStyle != style {
+                map.overrideUserInterfaceStyle = style
+            }
+        }
+
+        func refreshAppearance(on map: MKMapView) {
+            updateMarkerAppearance(on: map)
+            routeRenderer?.strokeColor = .label
+            routeRenderer?.setNeedsDisplay()
+        }
+
+        func applyPresentationLocale(_ locale: Locale, on map: MKMapView) {
+            guard presentationLocaleIdentifier != locale.identifier else { return }
+            presentationLocaleIdentifier = locale.identifier
+            updateMarkerAppearance(on: map)
+        }
 
         @objc func mapTapped(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let map = gesture.view as? MKMapView else { return }
@@ -168,6 +216,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             routePoints = points
             if let routeOverlay { map.removeOverlay(routeOverlay) }
             routeOverlay = nil
+            routeRenderer = nil
             guard points.count > 1 else { return }
             let coordinates = points.map(\.clLocationCoordinate)
             let overlay = MKPolyline(coordinates: coordinates, count: coordinates.count)
@@ -282,6 +331,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             renderer.lineWidth = 4
             renderer.lineCap = .round
             renderer.lineJoin = .round
+            if let routeOverlay, routeOverlay === line {
+                routeRenderer = renderer
+            }
             return renderer
         }
     }
@@ -289,9 +341,28 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
 private final class LayoutMapView: MKMapView {
     var onLayout: (() -> Void)?
+    var onTraitChange: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        registerTraitChanges()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerTraitChanges()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         onLayout?()
+    }
+
+    private func registerTraitChanges() {
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: LayoutMapView, previousTraitCollection) in
+            guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
+            view.onTraitChange?()
+        }
     }
 }
 
@@ -316,8 +387,7 @@ private final class PositionAnnotationView: MKAnnotationView {
             image.isAccessibilityElement = false
             addSubview(image)
         }
-        fill.tintColor = .label
-        edge.tintColor = .systemBackground
+        applySemanticColors()
         isAccessibilityElement = true
         accessibilityIdentifier = "map.positionMarker"
         canShowCallout = false
@@ -326,6 +396,7 @@ private final class PositionAnnotationView: MKAnnotationView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func apply(_ marker: PositionMarker, bearingDegrees: Double?, cameraHeadingDegrees: Double) {
+        applySemanticColors()
         alpha = marker.freshness == .waiting ? 0.5 : 1
         let angle = bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0
         for image in [fill, edge] {
@@ -340,6 +411,11 @@ private final class PositionAnnotationView: MKAnnotationView {
         }
         accessibilityLabel = goFlyString(key)
         accessibilityValue = marker.coordinate.displayText
+    }
+
+    private func applySemanticColors() {
+        fill.tintColor = .label
+        edge.tintColor = .systemBackground
     }
 }
 

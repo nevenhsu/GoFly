@@ -12,7 +12,7 @@ struct GoFlyGPXPreview: View {
             .frame(minHeight: 200, idealHeight: 240, maxHeight: 280)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .accessibilityLabel(goFlyString("imports.preview"))
-            .accessibilityValue(String.localizedStringWithFormat(goFlyString("imports.preview.summary"),
+            .accessibilityValue(goFlyLocalizedFormat(goFlyString("imports.preview.summary"),
                                                                 document.pointCount, document.segments.count))
             .accessibilityIdentifier("imports.preview")
             .overlay(alignment: .topLeading) {
