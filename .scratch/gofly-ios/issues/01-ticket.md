@@ -21,7 +21,7 @@
 
 ## Implementation record
 
-2026-10-17：正式 GoFly target、純 Swift core 與同 session 原生 adapter 已建立。最終 12 項核心測試、2 項 simulator UI 測試及實際深色／最大字級補驗通過；最新 unsigned iPhoneOS／iPhoneSimulator App 與 UI test target 均 build-for-testing 成功。真機服務及拔 USB 驗收未執行，未標完成。
+2026-10-17：正式 GoFly target、純 Swift core 與同 session 原生 adapter 已建立。最終 12 項核心測試、2 項 simulator UI 測試及實際深色／最大字級補驗通過；最新 unsigned iPhoneOS／iPhoneSimulator App 與 UI test target 均 build-for-testing 成功。真機觀察見下方最新紀錄；其餘裝置驗收未完成，未標完成。
 
 審查修正：Restore 逾時後 Stop 的重複 clear、GPS 證據依賴與配對拒絕分類已修正。原生固定 idevice commit 加 verify-only patch，禁止 fallback pair-setup；4 項 Rust 回歸、5 項 Swift 6 錯誤契約、29 個 API／符號、C layout 與 plist enum ABI 檢查通過；新 archive 的 manifest／輸入輸出 hash 已由 root 核對。Standards／Spec 獨立審查皆無剩餘程式 finding。
 
