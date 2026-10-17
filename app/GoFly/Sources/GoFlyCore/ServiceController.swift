@@ -99,6 +99,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private final class JoystickTick {
         let sequence: UInt64
         let input: JoystickInputRevision
+        var origin: GeoCoordinate?
         var gate: PointDispatchGate?
         var receipt: JoystickStepReceipt?
         var failure: JoystickFailure?
@@ -106,11 +107,14 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         var timedOut = false
         var didInvalidateProof = false
         var watchdog: Task<Void, Never>?
-        init(sequence: UInt64, input: JoystickInputRevision) { self.sequence = sequence; self.input = input }
+        init(sequence: UInt64, input: JoystickInputRevision) {
+            self.sequence = sequence; self.input = input
+        }
     }
     private var joystickUnconfirmed = false
     private var joystickOwners: [UUID: JoystickOwner] = [:]
     private let joystickSubject = PassthroughSubject<JoystickCommandEvent, Never>()
+    private let movementAcknowledgementSubject = PassthroughSubject<MovementAcknowledgement, Never>()
     public private(set) var routeAdmissionRevision: UInt64 = 0
     private let routeSubject = PassthroughSubject<RouteCommandEvent, Never>()
     private var routeOwners: [UUID: RouteOwner] = [:]
@@ -189,6 +193,121 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         movementConnectionAvailable = available
         routeSubject.send(.availabilityChanged)
         joystickSubject.send(.availabilityChanged)
+    }
+
+    /// Updates the scene fence used by native claim admission. Scene changes
+    /// do not revoke a live grant or pause an owner; the facade performs that
+    /// lifecycle action after closing this fence.
+    public func setMovementSceneActive(_ active: Bool) {
+        movementAuthority.setSceneActive(active)
+        routeAdmissionRevision &+= 1
+        routeSubject.send(.availabilityChanged)
+        joystickSubject.send(.availabilityChanged)
+    }
+
+    /// Binds a concrete framework grant to the currently healthy native owner.
+    /// The owner check is intentionally based on ServiceController state, so a
+    /// caller cannot manufacture health by presenting a grant alone.
+    @discardableResult
+    public func bindMovementContinuation(_ grant: ContinuedProcessingGrant) -> Bool {
+        guard grant.isValid, !clearScheduled, !routeUnconfirmed, !joystickUnconfirmed,
+              let owner = movementOwner(movementID: grant.movementID, lease: grant.lease),
+              owner.isHealthyRunning else { return false }
+        return movementAuthority.bind(grant)
+    }
+
+    public func hasMovementContinuation(movementID: UUID, lease: MovementTaskLease,
+                                        requestID: UUID) -> Bool {
+        guard let owner = movementOwner(movementID: movementID, lease: lease), owner.isHealthyRunning else { return false }
+        return movementAuthority.hasValidBinding(movementID: movementID, lease: lease, requestID: requestID)
+    }
+
+    /// Reports the exact runtime binding without treating a closed grant as
+    /// dispatch-valid. Facades use this distinction to tell a trusted atomic
+    /// resume apart from a binding that has already been retired.
+    func movementContinuationIsBound(requestID: UUID, lease: MovementTaskLease) -> Bool {
+        movementAuthority.bindingMatches(requestID: requestID, lease: lease)
+    }
+
+    private func pauseExpiredContinuation(movementID: UUID, lease: MovementTaskLease,
+                                          result: CommandResult) -> Bool {
+        // Only an explicitly unsent runtime denial is safe to pause. Claimed,
+        // malformed, timed-out and uncertain native results keep their existing
+        // interruption/recovery paths.
+        switch result {
+        case .point(.notSent(.operationCancelled)), .point(.notSent(.serviceUnavailable)),
+             .failure(.operationCancelled), .failure(.serviceUnavailable): break
+        default: return false
+        }
+        guard !clearScheduled, !routeUnconfirmed, !joystickUnconfirmed,
+              movementOwner(movementID: movementID, lease: lease)?.isHealthyRunning == true,
+              movementAuthority.pauseForClosedBinding(movementID: movementID, lease: lease) else { return false }
+        routeSubject.send(.availabilityChanged)
+        joystickSubject.send(.availabilityChanged)
+        return true
+    }
+
+    @discardableResult
+    public func retireMovementContinuation(requestID: UUID, lease: MovementTaskLease,
+                                           reason: MovementContinuationRetirement) -> Bool {
+        guard movementAuthority.bindingMatches(requestID: requestID, lease: lease) else { return false }
+        switch reason {
+        case .ownerPausedOrEnded:
+            if let owner = movementOwner(lease: lease) {
+                guard !owner.isHealthyRunning else { return false }
+            } else {
+                let snapshot = movementAuthority.snapshot
+                guard snapshot.lease != lease || snapshot.runState != .running ||
+                      snapshot.health != .confirmedHealthy else { return false }
+            }
+        case .foregroundGoalChange:
+            guard movementAuthority.isSceneActive,
+                  let owner = movementOwner(lease: lease), owner.isHealthyRunning,
+                  movementAuthority.hasValidBinding(movementID: owner.movementID,
+                      lease: lease, requestID: requestID) else { return false }
+        case .foregroundManualAfterAutoOff:
+            guard movementAuthority.isSceneActive,
+                  let owner = joystickOwners.values.first(where: {
+                      $0.intent.lease == lease && $0.installed && !$0.ended && !$0.neutral &&
+                      !$0.paused && $0.unknownFailure == nil
+                  }),
+                  let view = movementOwner(movementID: owner.intent.id, lease: lease),
+                  view.isHealthyRunning else { return false }
+        }
+        return movementAuthority.retireBinding(requestID: requestID, lease: lease, reason: reason)
+    }
+
+    private struct MovementOwnerView {
+        let movementID: UUID
+        let isHealthyRunning: Bool
+    }
+
+    private func movementOwner(movementID: UUID, lease: MovementTaskLease) -> MovementOwnerView? {
+        let snapshot = movementAuthority.snapshot
+        if let owner = routeOwners[movementID], owner.intent.lease == lease {
+            return MovementOwnerView(movementID: owner.intent.id,
+                isHealthyRunning: owner.begun && !owner.ended && !owner.unknown &&
+                    snapshot.lease == lease && snapshot.health == .confirmedHealthy &&
+                    snapshot.runState == .running)
+        }
+        if let owner = joystickOwners[movementID], owner.intent.lease == lease {
+            return MovementOwnerView(movementID: owner.intent.id,
+                isHealthyRunning: owner.prepared && owner.installed && !owner.ended &&
+                    !owner.paused && !owner.neutral && owner.unknownFailure == nil &&
+                    snapshot.lease == lease && snapshot.health == .confirmedHealthy &&
+                    snapshot.runState == .running)
+        }
+        return nil
+    }
+
+    private func movementOwner(lease: MovementTaskLease) -> MovementOwnerView? {
+        if let owner = routeOwners.values.first(where: { $0.intent.lease == lease }) {
+            return movementOwner(movementID: owner.intent.id, lease: lease)
+        }
+        if let owner = joystickOwners.values.first(where: { $0.intent.lease == lease }) {
+            return movementOwner(movementID: owner.intent.id, lease: lease)
+        }
+        return nil
     }
 
     /// Applies a persisted snapshot as waiting display data only. It never
@@ -763,8 +882,14 @@ extension ServiceController {
     public func sendRoutePoint(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedControlRevision: UInt64,
                                coordinate: GeoCoordinate) async -> RouteCommandOutcome {
         guard let owner = routeOwners[executionID], owner.intent.lease == lease, owner.begun,
-              !owner.ended, !owner.unknown, owner.tick == nil, sequence == owner.lastSequence + 1,
-              movementAdmissionAllowed, movementAuthority.permitsDispatch(for: lease), !routeUnconfirmed, !joystickUnconfirmed else { return .cancelled }
+              !owner.ended, !owner.unknown, owner.tick == nil,
+              owner.lastSequence < UInt64.max, sequence == owner.lastSequence + 1,
+              movementAdmissionAllowed, !routeUnconfirmed, !joystickUnconfirmed else { return .cancelled }
+        guard movementAuthority.permitsDispatch(for: lease) else {
+            _ = pauseExpiredContinuation(movementID: executionID, lease: lease,
+                result: .point(.notSent(.operationCancelled)))
+            return .cancelled
+        }
         guard owner.controlRevision == expectedControlRevision else { return .controlCancelled }
         let gate = PointDispatchGate(authority: movementAuthority, lease: lease) { [weak self] in
             Task { @MainActor in self?.routeTickDidDispatch(executionID: executionID, sequence: sequence) }
@@ -814,9 +939,10 @@ extension ServiceController {
     public func resumeRoute(executionID: UUID, lease: MovementTaskLease) -> Bool {
         guard let owner = routeOwners[executionID], owner.intent.lease == lease, owner.begun, !owner.ended, !owner.unknown,
               owner.tick == nil, movementAuthority.snapshot.lease == lease,
-              movementAdmissionAllowed, movementAuthority.snapshot.health == .confirmedHealthy,
+              !clearScheduled, !routeUnconfirmed, !joystickUnconfirmed,
+              movementAuthority.snapshot.health == .confirmedHealthy,
               movementAuthority.snapshot.runState == .paused else { return false }
-        return movementAuthority.updateRunState(.running, for: lease)
+        return movementAuthority.resumeForeground(lease)
     }
     public func endRoute(executionID: UUID, lease: MovementTaskLease) {
         guard let owner = routeOwners[executionID], owner.intent.lease == lease else { return }
@@ -922,6 +1048,10 @@ extension ServiceController {
               movementAuthority.snapshot.lease == owner.intent.lease else { return .cancelled }
         if tick.timedOut { return tick.gate.hasDispatched ? .unconfirmed(.operationTimedOut) : .notSent(.operationTimedOut) }
         guard !owner.unknown else { return .unconfirmed(error ?? .serviceUnavailable) }
+        if !tick.gate.hasDispatched,
+           pauseExpiredContinuation(movementID: owner.intent.id, lease: owner.intent.lease, result: result) {
+            return .cancelled
+        }
         if tick.skipped { return .cancelled }
         if tick.gate.hasDispatched { routeTickDidDispatch(executionID: owner.intent.id, sequence: tick.sequence) }
         let outcome: PointDeliveryOutcome
@@ -1012,6 +1142,9 @@ extension ServiceController {
     public var currentJoystickOrigin: GeoCoordinate? { currentRouteOrigin }
     public var movementAdmissionRevision: UInt64 { routeAdmissionRevision }
     public var joystickEvents: AnyPublisher<JoystickCommandEvent, Never> { joystickSubject.eraseToAnyPublisher() }
+    public var movementAcknowledgements: AnyPublisher<MovementAcknowledgement, Never> {
+        movementAcknowledgementSubject.eraseToAnyPublisher()
+    }
     public func beginJoystick(_ intent: JoystickMovementIntent, expectedMovementAdmissionRevision: UInt64) async -> JoystickPreparationOutcome {
         guard canBeginJoystick, expectedMovementAdmissionRevision == movementAdmissionRevision,
               joystickOwners[intent.id] == nil else { return .cancelled }
@@ -1100,10 +1233,12 @@ extension ServiceController {
         guard let owner = joystickOwners[executionID], owner.intent.lease == lease, owner.prepared,
               !owner.ended, !owner.neutral, !owner.paused, owner.disposition == nil,
               owner.unknownFailure == nil, owner.tick == nil, owner.stopGeneration == routeStopGeneration,
-              movementAdmissionAllowed, sequence == owner.lastSequence + 1 else { return .cancelled }
+              movementAdmissionAllowed, owner.lastSequence < UInt64.max,
+              sequence == owner.lastSequence + 1 else { return .cancelled }
         guard owner.inputRevision == expectedInputRevision else { return .inputCancelled }
         let tick = JoystickTick(sequence: sequence, input: expectedInputRevision)
         owner.tick = tick; owner.pendingCalls += 1
+        nativeBusy = true
         return await withCheckedContinuation { continuation in
             enqueueAdapter({ [weak self] service in
                 guard let self, self.joystickTickIsCurrent(owner, tick), self.movementAdmissionAllowed else { return .failure(.operationCancelled) }
@@ -1117,6 +1252,7 @@ extension ServiceController {
                 guard let origin = self.currentJoystickOrigin else {
                     tick.failure = .originUnavailable; return .failure(.operationCancelled)
                 }
+                tick.origin = origin
                 // No suspension between current truth, geometry, fresh CAS snapshot and gate construction.
                 let receipt: JoystickStepReceipt
                 switch recipe {
@@ -1197,6 +1333,10 @@ extension ServiceController {
             return unknownJoystick(owner, failure: .serviceUnavailable)
         }
         if tick.inputCancelled { return .inputCancelled }
+        if tick.gate?.hasDispatched != true,
+           pauseExpiredContinuation(movementID: owner.intent.id, lease: owner.intent.lease, result: result) {
+            return .cancelled
+        }
         if let failure = tick.failure { return failJoystickBeforeClaim(owner, failure: failure) }
         let outcome: PointDeliveryOutcome
         switch result {
@@ -1213,6 +1353,17 @@ extension ServiceController {
             owner.installed = true; owner.lastSequence = tick.sequence
             movementAuthority.updateHealth(.confirmedHealthy, for: owner.intent.lease)
             publishSimulation(receipt.actualCoordinate)
+            guard let origin = tick.origin else {
+                return unknownJoystick(owner, failure: .serviceUnavailable)
+            }
+            let distance = JoystickGeodesy.distanceMeters(from: origin, to: receipt.actualCoordinate)
+            guard distance.isFinite, distance >= 0 else {
+                return unknownJoystick(owner, failure: .serviceUnavailable)
+            }
+            movementAcknowledgementSubject.send(MovementAcknowledgement(
+                movementID: owner.intent.id, lease: owner.intent.lease, sequence: tick.sequence,
+                source: .joystick, acknowledgedDistanceMeters: distance,
+                routePositionMeters: nil, finiteArrival: false))
             return .acknowledged(receipt)
         case .notSent(let failure) where tick.gate?.hasDispatched != true:
             return failJoystickBeforeClaim(owner, failure: .device(failure))
@@ -1270,9 +1421,9 @@ extension ServiceController {
     public func resumeJoystick(executionID: UUID, lease: MovementTaskLease) -> Bool {
         guard let owner = joystickOwners[executionID], owner.intent.lease == lease, !owner.ended,
               owner.paused, owner.pendingCalls == 0, owner.unknownFailure == nil,
-              movementAuthority.snapshot.lease == lease, movementAuthority.snapshot.health == .confirmedHealthy,
-              movementAdmissionAllowed,
-              movementAuthority.updateRunState(.running, for: lease) else { return false }
+              !clearScheduled, !pointUnconfirmed, !routeUnconfirmed, !joystickUnconfirmed,
+              movementAuthority.snapshot.lease == lease, movementAuthority.snapshot.health == .confirmedHealthy else { return false }
+        guard movementAuthority.resumeForeground(lease) else { return false }
         owner.inputRevision = JoystickInputRevision()
         owner.paused = false; owner.neutral = true
         joystickSubject.send(.availabilityChanged)
@@ -1283,10 +1434,9 @@ extension ServiceController {
               owner.installed, owner.paused, owner.pendingCalls == 0, owner.tick == nil,
               owner.disposition == nil, owner.unknownFailure == nil, owner.stopGeneration == routeStopGeneration,
               !clearScheduled, !pointUnconfirmed, !routeUnconfirmed, !joystickUnconfirmed,
-              movementAdmissionAllowed,
               movementAuthority.snapshot.lease == lease, movementAuthority.snapshot.runState == .paused,
-              movementAuthority.snapshot.health == .confirmedHealthy,
-              movementAuthority.updateRunState(.running, for: lease) else { return false }
+              movementAuthority.snapshot.health == .confirmedHealthy else { return false }
+        guard movementAuthority.resumeForeground(lease) else { return false }
         owner.inputRevision = JoystickInputRevision()
         owner.paused = false; owner.neutral = false
         joystickSubject.send(.availabilityChanged)

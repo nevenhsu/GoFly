@@ -110,8 +110,7 @@ public final class MovementRecoveryController: ObservableObject {
         evaluateServiceState(immediate: true)
     }
 
-    public func releaseForInactiveScene() {
-        guard sceneActive else { return }
+    public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         sceneActive = false
         generation &+= 1
         checkTask?.cancel()
@@ -125,8 +124,8 @@ public final class MovementRecoveryController: ObservableObject {
             route.recoveryProbeDidFinish()
             joystick.recoveryProbeDidFinish()
         }
-        route.releaseForInactiveScene()
-        joystick.releaseForInactiveScene()
+        route.releaseForInactiveScene(continuingLease: continuingLease)
+        joystick.releaseForInactiveScene(continuingLease: continuingLease)
     }
 
     /// A manual check joins an in-flight check; it never starts a second probe.

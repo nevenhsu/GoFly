@@ -184,7 +184,7 @@ Advisor核准獨立FavoriteRoutes manifest／immutable payload，manual有序完
 
 純 selector 最多32個均勻方向樣本，以目前速度十分鐘距離選球面目標，排除目前點、目標及本次 session 最近100個成功目的地1m內重複；不要求道路或 MapKit routing。target geometry 保留跨日界／極點與固定 antipodal 方向，最後一步 clamp 到精確目的地，零距離仍須 set/ACK。自動／手動共用500ms ACK後時脈及 intent-scope sequence；手動優先、放手取消未claim舊輸入，已claim等真實回覆後才自動前進，不另開 writer。
 
-Go／隨機只改 target與input revision，保留速度、接管、暫停及 owner；舊target receipt仍更新實際位置，但不能宣告新target抵達。抵達無下一站則實際 pause installed healthy lease後保留本地 suspended continuation與重試，不留下 running owner空轉。scene非active時健康已安裝 auto暫停，未安裝owner退休後僅保留本地 continuation，前景不自動恢復。實際 Stop或新任務 claim的movementBoundary事件作廢所有舊continuation；admission／failed preparation不是claim證據。
+Go／隨機只改 target與input revision，保留速度、接管、暫停及 owner；舊target receipt仍更新實際位置，但不能宣告新target抵達。抵達無下一站則實際 pause installed healthy lease後保留本地 suspended continuation與重試，不留下 running owner空轉。票12交付時 scene 非 active 一律暫停；目前改依票15：僅相符、健康且有有效實際 grant 的 auto 可繼續，否則暫停或退休未安裝 owner，回前景不自動恢復。實際 Stop或新任務 claim的movementBoundary事件作廢所有舊continuation；admission／failed preparation不是claim證據。
 
 App以獨立CandidateController處理漫步選點，與路線picker／瞬移分開；目前目標空心Pin無Go，候選黑點細線Pin的Go只明確換目標。各44pt詳情固定綁定點擊時place snapshot。選點／抵達／ACK不移鏡頭；明確回中仍可用。路線編輯優先使用自身picker、地圖Pin回填地名／地址／座標且沒有Go。正式實作與離線驗證完成：完整SwiftCore293／36suites＋Transport9／1suite，共302PASS；完整simulator UI39／39 PASS（1767.040s）；未簽署iPhoneOS build14、312key三語parser／native verifier／diffcheck通過，Standards及Spec最後readback零finding。三語AX／keyboard與路線地圖Pin回填無Go回歸通過。不能以source、Core controlled-device或simulator UI宣稱手機／接收App效果；實機驗收仍集中最後進行。
 
@@ -198,8 +198,17 @@ SessionRecovery保存完整既有草稿及data-only歷史／顯示快取，App�
 持久化使用單一off-MainActor writer，一筆inflight與一筆最新pending；capture只是接受，flush依revision cutline等待實際寫入結果，取消waiter不取消原子寫入。損壞／unsafe／未知schema禁止自動覆寫；儲存失敗不顯示已保存。firstclaim-beforeACK與pending／failed clear分別保存不確定狀態，terminal active=nil；已ACK手動owner保留無方向摘要至實際settlement。Service first-route preparation的dispatch gate也是實際claim證據，不能只看後續tick。
 
 
-## 背景工作候選（票14，離線交付完成；App未啟用）
+## 背景工作候選（票14交付時未啟用；目前接線見票15）
 
 採核准v5的BGContinuedProcessingTask候選：submission與matching實際launch分開，close-only grant可跨queue同步撤銷；atomic completion固定outcome並回傳有效finish結果，expiry與finite-arrival先贏者唯一完成。Core公共controller／driver seam不認識native writer；實際iOS adapter只編譯、不從App建立／register／submit，15才接入原子派送邊界。有限路線依真ACK距離與實際抵達，來回／漫步保留無期限產品目標、以total=-1實驗，不改有限圈數／時間、不自動renew。SDK／controlled tests不能證明真實scheduler／背景／接收端，全部手機留最後。
 
 票14離線證據：完整SwiftCore355／41suites＋Transport9／1suite，共364PASS；final public focused20／20PASS；未簽署iPhoneOS／iPhoneSimulator SDK27.1 build16皆成功（simulator含arm64／x86_64）；native verifier／diffcheck通過，Standards0／Spec0。App初始化、plist、既有送點／生命週期及三語資源未變，本票未重跑UI；332key三語的13既有驗證仍適用。沒有手機／USB／簽署／安裝／實際scheduler或接收App測試。 literal-wildcard handler dispatch仍是未證實候選，15接線前改以官方完整ID註冊／提交及bounded一次註冊，另經15審查；不得由14建置或controlled callback當作已支援。
+
+
+## 正式背景接線（票15，已實作／離線驗證；手機未驗）
+
+[核准15v2與凍結介面](../../.scratch/gofly-ios/decisions/15-continuation.md) 將真實ACK／同步明確使用者意圖接入穩定MovementContinuationController；它協調既有Service、route、joystick及recovery，不增加native writer。scene與具體可撤銷grant由同一原子authority在最終claim檢查，expiry於任意queue關閉grant後才送MainActor通知。claimed命令只結算實際結果；回前景不把closed grant重新開啟。
+
+實際App adapter改為process singleton，Info permitted使用wildcard、SDK register／submit使用相同完整UUID；固定256次註冊嘗試，只保留weak handler及identity，耗盡如實拒絕且不自動續租。此為App資源界線，非Apple限制。BGC不需要新增BGProcessing mode或AppDelegate期限接線。程式已整合；完整 Swift 395、未簽署 SDK27.1 device／simulator、352 key 三語及兩軸審查通過，完整 UI 45／45 PASS，審查修正後背景 UI 2／2 與最大字級／淺色單項通過，皆零 runtime warning，Root 完成深淺色及三語可捲動畫面核對。真實 iOS26／27 scheduler、鎖屏／無期限持續及接收 App 位置仍集中最後手機驗收。
+
+票15 v2追加：實際整合bundle原預設多Scene，與process單一Service／driver及Map持有Controller衝突；第二輪Advisor核准明確單一Scene，實際兩 SDK bundle 已讀回 false。未擴充多視窗；App 在 SwiftUI observers 建立前一次建立 GoFlyMovementModel，StateObject 保留同一組 controller／facade；Map 只觀察，變更畫面不可建立第二個送點 owner。

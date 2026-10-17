@@ -74,6 +74,7 @@ public struct ContinuedProcessingProgress: Equatable, Sendable {
 public enum ContinuedProcessingFailure: Error, Equatable, Sendable {
     case unsupportedSystem
     case registrationFailed
+    case registrationLimitReached
     case notForeground
     case submissionRejected
     case cancelled

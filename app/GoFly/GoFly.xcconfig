@@ -1,7 +1,7 @@
 PRODUCT_BUNDLE_IDENTIFIER = com.neven.gofly
 PRODUCT_NAME = GoFly
 MARKETING_VERSION = 0.1.0
-CURRENT_PROJECT_VERSION = 16
+CURRENT_PROJECT_VERSION = 17
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 SUPPORTED_PLATFORMS = iphoneos iphonesimulator
 TARGETED_DEVICE_FAMILY = 1,2
@@ -14,7 +14,7 @@ INFOPLIST_FILE = GoFly-Info.plist
 INFOPLIST_KEY_CFBundleDisplayName = GoFly
 INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = Show your location and center the map when you ask.
 INFOPLIST_KEY_NSLocalNetworkUsageDescription = GoFly connects to this iPhone through your local VPN tunnel.
-INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
 INFOPLIST_KEY_UIFileSharingEnabled = NO
 INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO

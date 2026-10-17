@@ -4,20 +4,19 @@ import GoFlyCore
 
 /// The concrete BackgroundTasks adapter for the continued-processing candidate.
 ///
-/// This type is deliberately compiled into the app target but is not created by
-/// app startup yet. The Core controller owns the product lifecycle; this adapter
-/// only translates that lifecycle to actual BackgroundTasks callbacks.
+/// One process-owned adapter translates Core lifecycle commands to actual
+/// BackgroundTasks callbacks. Only a matching framework launch creates a grant.
 @available(iOS 26.0, *)
 @MainActor
 public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
-    // RELEASE14 candidate only: literal wildcard registration remains an
-    // unverified experiment; RELEASE15 must revalidate concrete-ID
-    // registration before activation.
+    public static let shared = GoFlyContinuedProcessingDriver()
+
     private static let permittedIdentifier = "com.neven.gofly.movement.*"
     private static let identifierPrefix = "com.neven.gofly.movement."
 
     private let scheduler: BGTaskScheduler
     private var registrationResult: Bool?
+    private let registrationBook = ContinuedProcessingRegistrationBook()
     private var currentRequest: ContinuedProcessingRequest?
     private var currentBox: TaskBox?
     private var currentEventHandler: (@MainActor @Sendable (ContinuedProcessingEvent) -> Void)?
@@ -30,7 +29,7 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
         valueOptions: [.strongMemory]
     )
 
-    public init() {
+    private init() {
         scheduler = .shared
     }
 
@@ -40,17 +39,11 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
             return registrationResult
         }
 
-        let result = scheduler.register(
-            forTaskWithIdentifier: Self.permittedIdentifier,
-            using: .main
-        ) { [weak self] task in
-            // The registration queue is explicitly DispatchQueue.main. Using
-            // assumeIsolated keeps the non-Sendable framework object on that
-            // queue instead of transferring it through an unchecked Task.
-            MainActor.assumeIsolated {
-                self?.receive(task: task)
-            }
-        }
+        // Continued-processing handlers may be registered after launch. The
+        // plist permits a family; SDK registration uses each concrete ID below.
+        let permitted = Bundle.main.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers")
+            as? [String] ?? []
+        let result = permitted.contains(Self.permittedIdentifier)
         registrationResult = result
         return result
     }
@@ -59,16 +52,43 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
         _ request: ContinuedProcessingRequest,
         onEvent: @escaping @MainActor @Sendable (ContinuedProcessingEvent) -> Void
     ) async throws {
-        // Core normally closes old work before submitting a replacement. Keep
-        // the adapter single-owned as well so a direct caller cannot leave an
-        // old real task active while a new request is being submitted.
-        retireCurrentRequest()
+        guard register() else {
+            throw ContinuedProcessingFailure.registrationFailed
+        }
+        switch registrationBook.reserve(request.requestID) {
+        case .reserved:
+            break
+        case .alreadyAttempted:
+            throw ContinuedProcessingFailure.registrationFailed
+        case .capacityReached:
+            throw ContinuedProcessingFailure.registrationLimitReached
+        }
 
+        let requestID = request.requestID
+        let identifier = Self.identifier(for: request)
+        // SDK has no unregister-handler API. Reserve every attempt permanently
+        // within the bounded book; retain only a weak adapter and an identity.
+        let registered = scheduler.register(forTaskWithIdentifier: identifier, using: .main) {
+            [weak self] task in
+            MainActor.assumeIsolated {
+                guard let self else {
+                    task.setTaskCompleted(success: false)
+                    return
+                }
+                self.receive(task: task, expectedRequestID: requestID)
+            }
+        }
+        guard registered else {
+            throw ContinuedProcessingFailure.registrationFailed
+        }
+
+        // Registration failure does not retire another current task. Actual
+        // takeover follows the Core consent/ownership policy before submission.
+        retireCurrentRequest()
         currentRequest = request
         currentBox = nil
         currentEventHandler = onEvent
 
-        let identifier = Self.identifier(for: request)
         let taskRequest = BGContinuedProcessingTaskRequest(
             identifier: identifier,
             title: request.title,
@@ -161,7 +181,7 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
         clearCurrentRequest()
     }
 
-    private func receive(task: BGTask) {
+    private func receive(task: BGTask, expectedRequestID: UUID) {
         // A duplicate callback for the same object reuses its box. In
         // particular, it never replaces a valid current task or completes the
         // framework object a second time.
@@ -171,6 +191,7 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
 
         guard let continuedTask = task as? BGContinuedProcessingTask,
               let request = currentRequest,
+              request.requestID == expectedRequestID,
               currentBox == nil,
               task.identifier == Self.identifier(for: request),
               let eventHandler = currentEventHandler else {

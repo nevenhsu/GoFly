@@ -23,12 +23,32 @@ public struct MovementAuthoritySnapshot: Equatable, Sendable {
 /// Synchronous ownership checks shared by the native dispatch gate and future schedulers.
 /// This type never calls a gate or an arbitrary callback while holding its lock.
 public final class MovementTaskAuthority: @unchecked Sendable {
+    private struct GrantBinding {
+        let grant: ContinuedProcessingGrant
+    }
+
     private let lock = NSLock()
     private var stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: 0)
     private var connectionBlocked = false
     private var coldRecoveryHeld = false
+    private var foreground = true
+    private var grantBinding: GrantBinding?
     public init() {}
     public var snapshot: MovementAuthoritySnapshot { lock.withLock { stored } }
+
+    /// Scene admission is independent from connection and cold-recovery
+    /// fences. A valid bound grant is what permits a running healthy owner
+    /// to dispatch while this flag is false.
+    func setSceneActive(_ active: Bool) {
+        lock.withLock {
+            guard foreground != active else { return }
+            foreground = active
+            stored = MovementAuthoritySnapshot(lease: stored.lease, runState: stored.runState,
+                health: stored.health, revision: stored.revision &+ 1)
+        }
+    }
+
+    var isSceneActive: Bool { lock.withLock { foreground } }
 
     /// Service-owned admission fence shared by install CAS and dispatch permits.
     /// The setter intentionally changes only admission; it does not revoke the
@@ -50,17 +70,27 @@ public final class MovementTaskAuthority: @unchecked Sendable {
     /// Reserve the replacement lease with unknown health until its first validated ACK.
     @discardableResult public func install(_ lease: MovementTaskLease, replacing captured: MovementAuthoritySnapshot) -> Bool {
         lock.withLock {
-            guard !connectionBlocked, !coldRecoveryHeld,
+            guard foreground, !connectionBlocked, !coldRecoveryHeld,
                   stored == captured,
                   stored.lease == nil || stored.health == .confirmedHealthy else { return false }
+            if stored.lease == lease, let binding = grantBinding, !binding.grant.isValid { return false }
+            if stored.lease != lease { grantBinding = nil }
             stored = MovementAuthoritySnapshot(lease: lease, runState: .running, health: .unknown, revision: stored.revision &+ 1)
             return true
         }
     }
     public func permitsDispatch(for lease: MovementTaskLease) -> Bool {
         lock.withLock {
-            !connectionBlocked && !coldRecoveryHeld && stored.lease == lease &&
-            stored.runState == .running && stored.health == .confirmedHealthy
+            guard !connectionBlocked, !coldRecoveryHeld,
+                  stored.lease == lease, stored.runState == .running,
+                  stored.health == .confirmedHealthy else { return false }
+            guard foreground else {
+                return grantBinding?.grant.lease == lease && grantBinding?.grant.isValid == true
+            }
+            if let binding = grantBinding, binding.grant.lease == lease {
+                return binding.grant.isValid
+            }
+            return true
         }
     }
     @discardableResult public func updateHealth(_ health: MovementTaskHealth, for lease: MovementTaskLease) -> Bool {
@@ -82,13 +112,113 @@ public final class MovementTaskAuthority: @unchecked Sendable {
     @discardableResult public func revoke(_ lease: MovementTaskLease) -> Bool {
         lock.withLock {
             guard stored.lease == lease else { return false }
+            grantBinding = nil
             stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)
             return true
         }
     }
     public func revokeAll() {
         lock.withLock {
+            grantBinding = nil
             stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)
+        }
+    }
+
+    /// Binds an already validated concrete owner to a live framework grant.
+    /// ServiceController performs the owner/health checks before calling this
+    /// method; this lock only protects the identity binding and its fence.
+    @discardableResult
+    func bind(_ grant: ContinuedProcessingGrant) -> Bool {
+        lock.withLock {
+            guard !connectionBlocked, !coldRecoveryHeld,
+                  stored.lease == grant.lease, stored.runState == .running,
+                  stored.health == .confirmedHealthy, grant.isValid else { return false }
+            if let existing = grantBinding {
+                return existing.grant === grant && existing.grant.isValid
+            }
+            grantBinding = GrantBinding(grant: grant)
+            stored = MovementAuthoritySnapshot(lease: stored.lease, runState: stored.runState,
+                health: stored.health, revision: stored.revision &+ 1)
+            return true
+        }
+    }
+
+    func hasValidBinding(movementID: UUID, lease: MovementTaskLease, requestID: UUID) -> Bool {
+        lock.withLock {
+            guard let binding = grantBinding,
+                  stored.lease == lease, stored.runState == .running,
+                  stored.health == .confirmedHealthy,
+                  binding.grant.movementID == movementID,
+                  binding.grant.requestID == requestID,
+                  binding.grant.lease == lease,
+                  binding.grant.isValid,
+                  !connectionBlocked, !coldRecoveryHeld else { return false }
+            return true
+        }
+    }
+
+    func bindingMatches(requestID: UUID, lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard let binding = grantBinding else { return false }
+            return binding.grant.requestID == requestID && binding.grant.lease == lease
+        }
+    }
+
+    /// A rejected native claim can observe expiry before its MainActor event.
+    /// Preserve the proven owner while closing its run state atomically.
+    func pauseForClosedBinding(movementID: UUID, lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard !connectionBlocked, !coldRecoveryHeld,
+                  stored.lease == lease, stored.health == .confirmedHealthy,
+                  let binding = grantBinding,
+                  binding.grant.movementID == movementID,
+                  binding.grant.lease == lease, !binding.grant.isValid else { return false }
+            stored = MovementAuthoritySnapshot(lease: lease, runState: .paused,
+                health: stored.health, revision: stored.revision &+ 1)
+            return true
+        }
+    }
+
+    /// Drops only the exact bound request. Validity and foreground requirements
+    /// are checked again while this lock is held so a grant that closes on a
+    /// different queue cannot race a foreground-goal retirement.
+    @discardableResult
+    func retireBinding(requestID: UUID, lease: MovementTaskLease,
+                       reason: MovementContinuationRetirement) -> Bool {
+        lock.withLock {
+            guard let binding = grantBinding,
+                  binding.grant.requestID == requestID,
+                  binding.grant.lease == lease else { return false }
+            let healthyRunning = stored.lease == lease && stored.runState == .running &&
+                stored.health == .confirmedHealthy
+            switch reason {
+            case .foregroundGoalChange:
+                guard foreground, healthyRunning, binding.grant.isValid else { return false }
+            case .foregroundManualAfterAutoOff:
+                guard foreground, healthyRunning else { return false }
+            case .ownerPausedOrEnded:
+                guard !healthyRunning else { return false }
+            }
+            grantBinding = nil
+            stored = MovementAuthoritySnapshot(lease: stored.lease, runState: stored.runState,
+                health: stored.health, revision: stored.revision &+ 1)
+            return true
+        }
+    }
+
+    /// Explicit foreground resume is the only operation that reopens a
+    /// paused owner. It atomically drops a matching runtime binding and
+    /// changes the run state under this authority lock.
+    @discardableResult
+    func resumeForeground(_ lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard foreground, !connectionBlocked, !coldRecoveryHeld,
+                  stored.lease == lease, stored.runState == .paused,
+                  stored.health == .confirmedHealthy else { return false }
+            grantBinding = nil
+            stored = MovementAuthoritySnapshot(lease: lease, runState: .running,
+                health: stored.health, revision: stored.revision &+ 1)
+            return true
         }
     }
 }

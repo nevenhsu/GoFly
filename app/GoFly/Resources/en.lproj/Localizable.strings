@@ -334,3 +334,24 @@
 "recovery.error.invalidSnapshot" = "The session data is invalid and was not saved.";
 "recovery.error.revisionExhausted" = "This session can no longer save changes. Existing data has been preserved.";
 "error.developerModeRequired" = "Enable Developer Mode on this iPhone, then connect it to the Mac app to complete device preparation.";
+
+"background.title" = "Background continuation";
+"background.description" = "GoFly can ask the system to continue a movement while the app is inactive.";
+"background.systemDecidesRuntime" = "The system decides whether and when the request runs. Accepted means the request was received; running means the system has started it.";
+"background.runtimeAvailable" = "A system continuation is available for this request.";
+"background.state.idle" = "Idle";
+"background.state.submitting" = "Submitting";
+"background.state.accepted" = "Accepted";
+"background.state.running" = "Running";
+"background.state.rejected" = "Rejected";
+"background.state.expired" = "Expired";
+"background.state.finished" = "Ended";
+"background.unavailable" = "Background continuation is unavailable. Return to GoFly to check the task state.";
+"background.expired" = "The system ended background continuation. Return to GoFly to check the task state.";
+"background.rejected" = "The system declined the background continuation request. Return to GoFly to check the task state.";
+"background.registrationLimit" = "Background continuation is temporarily unavailable. Return to GoFly to check the task state.";
+"background.unsupported" = "Background continuation is not supported on this system. Return to GoFly to check the task state.";
+"background.activity.finiteRoute" = "GoFly route";
+"background.activity.roundTrip" = "GoFly round trip";
+"background.activity.wander" = "GoFly wander";
+"background.activity.progress" = "%lld location updates acknowledged";

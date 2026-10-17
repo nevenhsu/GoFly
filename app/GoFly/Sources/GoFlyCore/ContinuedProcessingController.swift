@@ -13,6 +13,7 @@ public final class ContinuedProcessingController: ObservableObject {
 
     private let driver: any ContinuedProcessingDriving
     private let now: @Sendable () -> Date
+    private let onRuntimeAvailable: @MainActor @Sendable (ContinuedProcessingGrant) -> Void
     private let onRuntimeUnavailable: @MainActor @Sendable (UUID, ContinuedProcessingRuntimeLoss) -> Void
     private var registrationResult: Bool?
     private var generation: UInt64 = 0
@@ -22,9 +23,11 @@ public final class ContinuedProcessingController: ObservableObject {
 
     public init(driver: any ContinuedProcessingDriving,
                 now: @escaping @Sendable () -> Date = { Date() },
+                onRuntimeAvailable: @escaping @MainActor @Sendable (ContinuedProcessingGrant) -> Void = { _ in },
                 onRuntimeUnavailable: @escaping @MainActor @Sendable (UUID, ContinuedProcessingRuntimeLoss) -> Void = { _, _ in }) {
         self.driver = driver
         self.now = now
+        self.onRuntimeAvailable = onRuntimeAvailable
         self.onRuntimeUnavailable = onRuntimeUnavailable
     }
 
@@ -236,7 +239,18 @@ public final class ContinuedProcessingController: ObservableObject {
             grant = incomingGrant
             state = .running
             appendReceipt(for: request, event: .launched)
-            if progress != .zero || currentTitle != request.title || currentSubtitle != request.subtitle {
+            let bufferedProgress = progress
+            let bufferedTitle = currentTitle
+            let bufferedSubtitle = currentSubtitle
+            onRuntimeAvailable(incomingGrant)
+            guard generation == eventGeneration, currentRequest?.requestID == request.requestID,
+                  state == .running, let grant, grant === incomingGrant, grant.isValid,
+                  grant.movementID == request.movementID, grant.lease == request.lease else { return }
+            // A synchronous owner callback may have forwarded a newer real
+            // progress/text value through update(). Do not forward it twice.
+            if progress == bufferedProgress, currentTitle == bufferedTitle,
+               currentSubtitle == bufferedSubtitle,
+               progress != .zero || currentTitle != request.title || currentSubtitle != request.subtitle {
                 driver.update(requestID: request.requestID, progress: progress,
                               title: currentTitle, subtitle: currentSubtitle)
             }

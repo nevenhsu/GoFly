@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ServiceSettingsView: View {
     @ObservedObject var service: ServiceController
+    @ObservedObject var continuation: MovementContinuationController
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -10,6 +11,7 @@ struct ServiceSettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     serviceCard
+                    GoFlyContinuationStatus(continuation: continuation)
                     if let error = service.error, service.preparedOperation == nil {
                         Label {
                             Text(goFlyString(error.rawValue))

@@ -4,6 +4,7 @@ import Foundation
 public enum RouteSuspensionReason: String, Equatable, Sendable {
     case sceneInactive
     case connectionUnavailable
+    case backgroundUnavailable
 }
 
 @MainActor
@@ -44,7 +45,17 @@ public final class RouteExecutionController: ObservableObject {
     private var connectionAvailable = true
     private var recoveryProbePending = false
     private var pendingSuspensionReason: RouteSuspensionReason?
+    private let continuationControlSubject = PassthroughSubject<MovementContinuationControlEvent, Never>()
+    private let movementAcknowledgementSubject = PassthroughSubject<MovementAcknowledgement, Never>()
+    private var continuationIdentity: MovementContinuationIdentity?
     private static let cadence: Duration = .milliseconds(500)
+
+    public var continuationControlEvents: AnyPublisher<MovementContinuationControlEvent, Never> {
+        continuationControlSubject.eraseToAnyPublisher()
+    }
+    public var movementAcknowledgements: AnyPublisher<MovementAcknowledgement, Never> {
+        movementAcknowledgementSubject.eraseToAnyPublisher()
+    }
 
     public init(draft: RouteDraft = RouteDraft(), planner: any RoutePlanning, commands: any RouteCommanding,
                 search: any PlaceSearching, clock: any RouteClock = ContinuousRouteClock()) {
@@ -124,6 +135,7 @@ public final class RouteExecutionController: ObservableObject {
         guard canSetRoundTrip else { return false }
         roundTripEnabled = enabled
         if enabled, phase == .running || phase == .paused { usesPositionAxis = true }
+        if phase == .running, let intent { requestContinuationIfEligible(for: intent) }
         return true
     }
     @discardableResult public func toggleHeading() -> Bool {
@@ -131,6 +143,7 @@ public final class RouteExecutionController: ObservableObject {
               commands.reviseRouteControl(executionID: intent.id, lease: intent.lease) != nil else { return false }
         heading = heading == .forward ? .reverse : .forward
         publishProgress(distance: progress?.committedDistanceMeters ?? 0, intent: intent)
+        if phase == .running { requestContinuationIfEligible(for: intent) }
         return true
     }
     public var canResume: Bool {
@@ -243,7 +256,7 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     @discardableResult public func start() -> Bool {
-        guard canEdit else { return false }
+        guard canEdit, sceneActive else { return false }
         invalidateFavoriteLoadAdmission()
         guard commands.canBeginRoute else { return false }
         let snapshot: RouteDraft
@@ -281,20 +294,36 @@ public final class RouteExecutionController: ObservableObject {
                 guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
                 guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
                 let intent = RouteExecutionIntent(draft: snapshot, route: route)
+                let continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
                 self.plannedRoute = route; self.intent = intent; self.phase = .preparing
+                self.requestContinuationIfEligible(for: intent)
                 let outcome = await self.commands.beginRoute(intent, expectedAdmissionRevision: admission)
-                guard self.revision == token, self.phase == .preparing else { return }
+                guard self.revision == token, self.phase == .preparing else {
+                    if self.continuationIdentity == continuationIdentity {
+                        self.withdrawContinuation(.userCancelled)
+                    }
+                    return
+                }
                 switch outcome {
                 case .acknowledged:
                     self.phase = .running; self.activeStartedAt = self.clock.now
                     self.publishProgress(distance: 0, intent: intent)
+                    self.publishRouteAcknowledgement(sequence: 0, distance: 0, position: 0,
+                        finiteArrival: false, intent: intent)
                     await self.run(intent, token: token)
-                case .cancelled, .controlCancelled: self.returnToEditing()
-                case .notSent(let failure): self.phase = .interrupted; self.error = .device(failure)
-                case .unconfirmed(let failure): self.phase = .unknown; self.error = .device(failure)
+                case .cancelled, .controlCancelled:
+                    self.withdrawContinuation(.userCancelled)
+                    self.returnToEditing()
+                case .notSent(let failure):
+                    self.withdrawContinuation(.ended)
+                    self.phase = .interrupted; self.error = .device(failure)
+                case .unconfirmed(let failure):
+                    self.withdrawContinuation(.ended)
+                    self.phase = .unknown; self.error = .device(failure)
                 }
             } catch {
                 guard let self, self.revision == token, self.phase == .planning else { return }
+                self.withdrawContinuation(.ended)
                 self.phase = .editing
                 self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .planningFailed)
             }
@@ -316,7 +345,9 @@ public final class RouteExecutionController: ObservableObject {
     @discardableResult public func pause() -> Bool {
         let reason = pendingSuspensionReason
         if reason == nil { suspensionReason = nil }
-        guard canPause, let intent, commands.pauseRoute(executionID: intent.id, lease: intent.lease) else { return false }
+        guard canPause, let intent else { return false }
+        guard commands.pauseRoute(executionID: intent.id, lease: intent.lease) else { return false }
+        withdrawContinuation(.userPaused)
         phase = .pausing
         let token = revision, running = task
         running?.cancel()
@@ -339,6 +370,7 @@ public final class RouteExecutionController: ObservableObject {
     @discardableResult public func resume() -> Bool {
         guard canResume, let intent, commands.resumeRoute(executionID: intent.id, lease: intent.lease) else { return false }
         phase = .running; activeStartedAt = clock.now; suspensionReason = nil
+        requestContinuationIfEligible(for: intent)
         let token = revision
         task = Task { [weak self] in await self?.run(intent, token: token) }
         return true
@@ -353,6 +385,7 @@ public final class RouteExecutionController: ObservableObject {
         }
         guard let intent else { return false }
         let reason = pendingSuspensionReason
+        withdrawContinuation(.userCancelled)
         phase = .cancelling
         let token = revision, running = task
         commands.endRoute(executionID: intent.id, lease: intent.lease)
@@ -376,8 +409,12 @@ public final class RouteExecutionController: ObservableObject {
     }
     public func dismissCompletion(executionID: UUID) { if completion?.executionID == executionID { completion = nil } }
 
-    public func releaseForInactiveScene() {
+    public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         sceneActive = false
+        if let intent, phase == .running, continuingLease == intent.lease {
+            objectWillChange.send()
+            return
+        }
         releaseForUnavailable(reason: .sceneInactive)
     }
 
@@ -394,6 +431,10 @@ public final class RouteExecutionController: ObservableObject {
     public func connectionDidBecomeAvailable() {
         connectionAvailable = true
         objectWillChange.send()
+    }
+
+    public func continuationDidBecomeUnavailable() {
+        releaseForUnavailable(reason: .backgroundUnavailable)
     }
 
     private func releaseForUnavailable(reason: RouteSuspensionReason) {
@@ -421,6 +462,10 @@ public final class RouteExecutionController: ObservableObject {
         while revision == token, phase == .running {
             do { try await clock.sleep(for: Self.cadence) } catch { return }
             guard revision == token, phase == .running, !Task.isCancelled else { return }
+            guard sequence < UInt64.max else {
+                continuationDidBecomeUnavailable()
+                return
+            }
             guard let controlRevision = commands.routeControlRevision(executionID: intent.id, lease: intent.lease) else { return }
             let direction = heading == .forward ? 1.0 : -1.0
             let distance = min(intent.route.totalDistanceMeters, max(0,
@@ -431,12 +476,22 @@ public final class RouteExecutionController: ObservableObject {
             guard revision == token, self.intent?.id == intent.id, phase == .running || phase == .pausing else { return }
             switch outcome {
             case .acknowledged:
-                sequence &+= 1; nextSequence[intent.id] = sequence
+                let previousDistance = progress?.committedDistanceMeters ?? 0
+                let delta = abs(distance - previousDistance)
                 let atEndpoint = distance == 0 || distance == intent.route.totalDistanceMeters
-                if atEndpoint, roundTripEnabled { heading = distance == 0 ? .forward : .reverse }
+                // Commit the accepted physical axis before publishing the
+                // ACK. Synchronous consumers may change RT at the endpoint;
+                // they must compute a zero remaining goal from this actual
+                // position while the old heading is still in force.
                 publishProgress(distance: distance, intent: intent)
+                publishRouteAcknowledgement(sequence: sequence, distance: delta, position: distance,
+                    finiteArrival: atEndpoint && !roundTripEnabled, intent: intent)
+                sequence += 1; nextSequence[intent.id] = sequence
+                if atEndpoint, roundTripEnabled { heading = distance == 0 ? .forward : .reverse }
+                if atEndpoint, roundTripEnabled { publishProgress(distance: distance, intent: intent) }
                 if atEndpoint, !roundTripEnabled {
                     freezeElapsed()
+                    withdrawContinuation(.ended)
                     self.intent = nil; phase = .editing
                     completion = RouteCompletion(executionID: intent.id, coordinate: coordinate)
                     commands.endRoute(executionID: intent.id, lease: intent.lease)
@@ -473,11 +528,43 @@ public final class RouteExecutionController: ObservableObject {
         if let id = intent?.id { nextSequence.removeValue(forKey: id) }
         intent = nil
     }
+
+    private func requestContinuationIfEligible(for intent: RouteExecutionIntent) {
+        guard sceneActive else { return }
+        let current = progress?.committedDistanceMeters ?? 0
+        let remaining = heading == .forward
+            ? max(0, intent.route.totalDistanceMeters - current)
+            : max(0, current)
+        let kind: ContinuedProcessingKind = roundTripEnabled ? .roundTrip : .finiteRoute
+        let goal: ContinuedProcessingGoal? = roundTripEnabled
+            ? .experimentalIndeterminate
+            : (remaining > 0 && remaining.isFinite ? .finiteDistance(meters: remaining) : nil)
+        continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
+        continuationControlSubject.send(.requested(MovementContinuationDemand(
+            movementID: intent.id, lease: intent.lease, kind: kind, goal: goal)))
+    }
+
+    private func withdrawContinuation(_ reason: MovementContinuationWithdrawalReason) {
+        guard let identity = continuationIdentity else { return }
+        continuationIdentity = nil
+        continuationControlSubject.send(.withdrawn(identity, reason))
+    }
+
+    private func publishRouteAcknowledgement(sequence: UInt64, distance: Double, position: Double,
+                                             finiteArrival: Bool, intent: RouteExecutionIntent) {
+        guard distance.isFinite, distance >= 0, position.isFinite, position >= 0 else { return }
+        movementAcknowledgementSubject.send(MovementAcknowledgement(
+            movementID: intent.id, lease: intent.lease, sequence: sequence, source: .route,
+            acknowledgedDistanceMeters: distance, routePositionMeters: position,
+            finiteArrival: finiteArrival))
+    }
+
     private func receive(_ event: RouteCommandEvent) {
         switch event {
         case .availabilityChanged: objectWillChange.send()
         case .ended(let id):
             guard intent?.id == id, phase != .cancelling else { return }
+            withdrawContinuation(.ended)
             revision &+= 1; task?.cancel(); transition?.cancel(); returnToEditing(); error = nil
             nextSequence.removeValue(forKey: id)
         case .interrupted(let id, let failure):
@@ -485,6 +572,7 @@ public final class RouteExecutionController: ObservableObject {
             freezeElapsed(); phase = .interrupted; error = .device(failure); task?.cancel()
         case .unknown(let id, let failure):
             guard intent?.id == id else { return }
+            withdrawContinuation(.ended)
             freezeElapsed(); phase = .unknown; error = .device(failure); task?.cancel()
         }
     }

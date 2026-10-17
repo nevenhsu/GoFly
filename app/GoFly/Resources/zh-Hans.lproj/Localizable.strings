@@ -334,3 +334,24 @@
 "recovery.error.invalidSnapshot" = "会话数据无效，未保存此次更改。";
 "recovery.error.revisionExhausted" = "无法继续保存此会话，原始数据已保留。";
 "error.developerModeRequired" = "请在这部 iPhone 开启开发者模式，再连接 Mac App 完成设备准备。";
+
+"background.title" = "后台继续运行";
+"background.description" = "GoFly 可以请求系统在 App 暂时离开画面时继续移动。";
+"background.systemDecidesRuntime" = "是否运行以及何时运行由系统决定。“已接受”表示系统已收到请求；“运行中”表示系统已开始运行。";
+"background.runtimeAvailable" = "系统已为此请求提供继续运行。";
+"background.state.idle" = "待机";
+"background.state.submitting" = "提交中";
+"background.state.accepted" = "已接受";
+"background.state.running" = "运行中";
+"background.state.rejected" = "已拒绝";
+"background.state.expired" = "已过期";
+"background.state.finished" = "已结束";
+"background.unavailable" = "后台继续运行目前不可用。请回到 GoFly 检查任务状态。";
+"background.expired" = "系统已结束后台继续运行。请回到 GoFly 检查任务状态。";
+"background.rejected" = "系统拒绝了后台继续运行请求。请回到 GoFly 检查任务状态。";
+"background.registrationLimit" = "后台继续运行目前暂时不可用。请回到 GoFly 检查任务状态。";
+"background.unsupported" = "此系统不支持后台继续运行。请回到 GoFly 检查任务状态。";
+"background.activity.finiteRoute" = "GoFly 路线";
+"background.activity.roundTrip" = "GoFly 往返路线";
+"background.activity.wander" = "GoFly 漫步";
+"background.activity.progress" = "已确认 %lld 次位置更新";

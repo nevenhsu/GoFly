@@ -4,12 +4,64 @@ import MapKit
 import SwiftUI
 import UIKit
 
+/// One App-owned assembly, created before SwiftUI attaches its observers.
+/// View reconstruction reuses these exact domain owners and cannot fence live work.
+@MainActor
+final class GoFlyMovementModel: ObservableObject {
+    let route: RouteExecutionController
+    let joystick: JoystickMovementController
+    let recovery: MovementRecoveryController
+    let continuation: MovementContinuationController
+
+    init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
+        let snapshot = recoveryStore.initialSnapshot
+        route = RouteExecutionController(
+            draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
+            commands: service, search: MapKitPlaceSearch()
+        )
+        _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
+        joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
+        recovery = MovementRecoveryController(
+            service: service, route: route, joystick: joystick,
+            probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
+        )
+        continuation = MovementContinuationController(
+            service: service, route: route, joystick: joystick, recovery: recovery,
+            driver: GoFlyContinuedProcessingDriver.shared,
+            presentation: { kind, progress in
+                (title: goFlyString("background.activity.\(kind.rawValue)"),
+                 subtitle: String.localizedStringWithFormat(
+                    goFlyString("background.activity.progress"), progress.acknowledgedWrites))
+            }
+        )
+    }
+
+    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
+        #if DEBUG && targetEnvironment(simulator)
+        return initialRouteUITestDraft() ?? saved
+        #else
+        return saved
+        #endif
+    }
+
+    private static func routePlanner() -> any RoutePlanning {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-route-planning-delay") {
+            return DelayedFailureRouteUITestPlanner()
+        }
+        #endif
+        return MapKitWalkingRoutePlanner()
+    }
+
+}
+
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
     @ObservedObject var recoveryStore: SessionRecoveryStore
-    @StateObject private var route: RouteExecutionController
-    @StateObject private var joystick: JoystickMovementController
-    @StateObject private var recovery: MovementRecoveryController
+    @ObservedObject private var route: RouteExecutionController
+    @ObservedObject private var joystick: JoystickMovementController
+    @ObservedObject private var recovery: MovementRecoveryController
+    @ObservedObject private var continuation: MovementContinuationController
     @State private var mode: GoFlyMapMode
     @State private var lastCapturedSnapshot: SessionRecoverySnapshot
     @State private var checkpointWindowStarted = false
@@ -44,41 +96,16 @@ struct GoFlyMapView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
 
-    init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
+    init(service: ServiceController, recoveryStore: SessionRecoveryStore, movement: GoFlyMovementModel) {
         let snapshot = recoveryStore.initialSnapshot
-        let route = RouteExecutionController(
-            draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
-            commands: service, search: MapKitPlaceSearch()
-        )
-        _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
-        let joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
         _service = ObservedObject(wrappedValue: service)
         _recoveryStore = ObservedObject(wrappedValue: recoveryStore)
-        _route = StateObject(wrappedValue: route)
-        _joystick = StateObject(wrappedValue: joystick)
-        _recovery = StateObject(wrappedValue: MovementRecoveryController(
-            service: service, route: route, joystick: joystick,
-            probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
-        ))
+        _route = ObservedObject(wrappedValue: movement.route)
+        _joystick = ObservedObject(wrappedValue: movement.joystick)
+        _recovery = ObservedObject(wrappedValue: movement.recovery)
+        _continuation = ObservedObject(wrappedValue: movement.continuation)
         _mode = State(initialValue: snapshot.mode)
         _lastCapturedSnapshot = State(initialValue: snapshot)
-    }
-
-    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
-        #if DEBUG && targetEnvironment(simulator)
-        return initialRouteUITestDraft() ?? saved
-        #else
-        return saved
-        #endif
-    }
-
-    private static func routePlanner() -> any RoutePlanning {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-route-planning-delay") {
-            return DelayedFailureRouteUITestPlanner()
-        }
-        #endif
-        return MapKitWalkingRoutePlanner()
     }
 
     private var isWanderMap: Bool { mode == .joystick && joystick.wanderEnabled && route.picker == nil }
@@ -197,7 +224,7 @@ struct GoFlyMapView: View {
             .background(GoFlyStyle.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showingSettings) {
-                ServiceSettingsView(service: service)
+                ServiceSettingsView(service: service, continuation: continuation)
             }
             .onAppear {
                 if cameraIntent == nil {
@@ -207,7 +234,7 @@ struct GoFlyMapView: View {
                         cameraIntent = GoFlyCameraIntent(coordinate: position.coordinate)
                     }
                 }
-                if scenePhase == .active { recovery.sceneDidBecomeActive() }
+                if scenePhase == .active { continuation.sceneDidBecomeActive() }
             }
             .onReceive(service.$error) { error in
                 serviceNoticeDismissed = false
@@ -265,9 +292,9 @@ struct GoFlyMapView: View {
                 if phase == .active {
                     checkpointWindowStarted = false
                     finishCheckpointWindow(id: checkpointWindowID)
-                    recovery.sceneDidBecomeActive()
+                    continuation.sceneDidBecomeActive()
                 } else {
-                    recovery.releaseForInactiveScene()
+                    continuation.releaseForInactiveScene()
                     captureCheckpoint()
                     beginCheckpointFlush()
                 }
@@ -379,6 +406,10 @@ struct GoFlyMapView: View {
                     onSettings: { showingSettings = true }
                 )
                 if notice.hasContent { notice }
+                if recovery.noticeKey == nil, !recovery.requiresColdConfirmation,
+                   continuation.noticeKey != nil {
+                    GoFlyContinuationNotice(continuation: continuation) { showingSettings = true }
+                }
             }
             modePanel(in: geometry)
         }

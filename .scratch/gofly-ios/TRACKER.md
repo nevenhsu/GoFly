@@ -34,3 +34,6 @@
 
 
 票14候選／離線交付完成：基準1b6dcd6／build16，Root v5第5輪核准且API凍結。完整SwiftCore355／41suites＋Transport9／1suite，共364PASS；final public focused20／20PASS；未簽署iPhoneOS／iPhoneSimulator SDK27.1 build16皆成功（simulator含arm64／x86_64）；native verifier／diffcheck通過，Standards0／Spec0。App初始化、plist、既有送點／生命週期及三語資源未變，本票未重跑UI；332key三語的13既有驗證仍適用。沒有手機／USB／簽署／安裝／實際scheduler或接收App測試。 literal-wildcard dispatch未證實，15先核准完整ID一次註冊及原子native admission再啟用；實際iOS26／27背景／接收位置仍deferred-by-user，可依序開始15。
+
+
+票 15 實作／離線交付完成：基準703309e／build17，v2 經 Advisor 第2輪核准。正式 App 的完整 ID 註冊、固定256次嘗試界線、真實 ACK／明確意圖與原子背景資格門檻已接入；Core386＋Transport9共395PASS、未簽署 SDK27.1 device／simulator（arm64／x86_64）建置及單一 Scene／352key資源讀回通過，兩軸無剩餘 finding。完整 UI 45／45 PASS（runner 2105.041s；wall 2127.022s），審查修正後背景 UI 2／2、三語最大字級與淺色單項通過，皆零 runtime warning，Root 完成畫面核對。手機、真實 scheduler 與接收端集中最後驗收；可依序進入票16。

@@ -174,3 +174,21 @@
 Core public controlled-driver／atomic completion證明可攜狀態機與鎖次序；實際SDK編譯／source checks證明adapter存在與API接線；均不能證明真實scheduler callback、背景期限、VPN傳輸或receiver位置。iOS26沒有本機SDK，僅以27.1 SDK availability分支編譯，26 runtime留到最後手機矩陣。來源為Apple官方API／已記錄本機header，無新增保活機制。
 
 票14離線交付基準：GoFly0.1.0 build16。完整SwiftCore355／41suites＋Transport9／1suite，共364PASS；final public focused20／20PASS；未簽署iPhoneOS／iPhoneSimulator SDK27.1 build16皆成功（simulator含arm64／x86_64）；native verifier／diffcheck通過，Standards0／Spec0。App初始化、plist、既有送點／生命週期及三語資源未變，本票未重跑UI；332key三語的13既有驗證仍適用。沒有手機／USB／簽署／安裝／實際scheduler或接收App測試。 本節手機步驟待15正式接線與全部開發完成後由使用者集中執行。
+
+
+## 票15：正式背景整合（實作／離線驗證完成；最終集中手機待驗）
+
+正式App完成後，在iOS26／27各自記錄14固定欄位，不能沿用prototype或controlled-driver成功。
+
+1. 明確開始有限路線、來回、自動漫步，分別區分申請／接受／實際啟動，確認同一任務、lease、進度與方向在切App、鎖屏、回前景延續。有限終點與framework expiry競爭時分別記錄native實際抵達和framework完成原因。
+2. 手動only切App釋放；自動中手動接管再切App，已送出的只結算一次，後續回自動、不重播held input。返回不自動Resume。來回跨折返、漫步跨換站不另申請工作或重設有限百分比。
+3. 系統拒絕、Live Activity取消、expiry、低進度、背景重新整理各設定及VPN斷復線，核對新送點停止、可見原因與明確繼續。回前景不解除已失效資格，GPS／reset／TCP成功不重啟移動。
+4. 暫停／Stop／clear及新工作接管後，舊callback不得影響新工作；失敗的新準備保留原健康任務。前景來回選項變更、已失效後變更、auto-off且仍按住手動，各核對實際使用者意圖。
+5. app switcher kill後冷啟動只還原資料及待確認摘要，沒有舊背景資格／舊Resume；實際clear確認才解除冷hold。路線地點編輯仍可點地圖Pin回填目前input，無Go；等待有效GPS仍留50%透明箭頭。
+
+以上手機步驟尚未執行；256次process註冊資源界線與各競態使用離線public-seam檢查，不要求手機反覆消耗資源。
+
+
+2026-10-18 使用者已選擇保留無期限來回／漫步：最終背景驗收以受限時安全暫停／明確繼續為必要結果，不要求新增時長或距離限制；無期限實際持續能力仍如實記錄，不能以有限路線成功代替。
+
+票15離線基準為 build17：Swift395、完整UI45／45及current-source背景2／2通過；另三語最大字級／淺色單項與雙SDK27.1未簽署建置、352key資源、兩軸零finding通過。上述不代替本節任何手機結果。

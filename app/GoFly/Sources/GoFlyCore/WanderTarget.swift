@@ -11,4 +11,6 @@ public enum WanderSelectionFailure: String, Error, Sendable {
     case noCandidate = "joystick.error.noCandidate"
     public var localizationKey: String { rawValue }
 }
-public enum WanderSuspensionReason: String, Sendable { case targetUnavailable, sceneInactive, connectionUnavailable }
+public enum WanderSuspensionReason: String, Sendable {
+    case targetUnavailable, sceneInactive, connectionUnavailable, backgroundUnavailable
+}

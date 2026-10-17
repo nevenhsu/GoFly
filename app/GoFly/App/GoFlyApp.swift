@@ -6,6 +6,7 @@ import SwiftUI
 struct GoFlyApp: App {
     @StateObject private var service: ServiceController
     @StateObject private var sessionRecovery: SessionRecoveryStore
+    @StateObject private var movement: GoFlyMovementModel
     @StateObject private var favorites = Self.favoritePlacesStore()
     @StateObject private var importedRoutes = Self.importedRoutesStore()
     @StateObject private var favoriteRoutes = Self.favoriteRoutesStore()
@@ -25,13 +26,15 @@ struct GoFlyApp: App {
         )
         _service = StateObject(wrappedValue: service)
         _sessionRecovery = StateObject(wrappedValue: recovery)
+        let movement = GoFlyMovementModel(service: service, recoveryStore: recovery)
+        _movement = StateObject(wrappedValue: movement)
     }
 
     var body: some Scene {
         WindowGroup {
             Group {
                 if onboardingComplete {
-                    GoFlyMapView(service: service, recoveryStore: sessionRecovery)
+                    GoFlyMapView(service: service, recoveryStore: sessionRecovery, movement: movement)
                 } else {
                     GoFlyOnboardingView(controller: onboarding) {
                         onboardingComplete = true
