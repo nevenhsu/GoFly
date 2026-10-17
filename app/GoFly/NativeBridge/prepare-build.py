@@ -41,7 +41,8 @@ def prepare():
             raise SystemExit('Pinned upstream export failed')
         if sha256(stage / 'Cargo.lock') != PIN['cargoLockSHA256']:
             raise SystemExit('Upstream Cargo.lock differs from the pin')
-        run('patch', '--batch', '-p1', '-i', str(BRIDGE / 'verify-only.patch'), cwd=stage)
+        for patch in PIN['patches']:
+            run('patch', '--batch', '-p1', '-i', str(BRIDGE / patch), cwd=stage)
         if sha256(stage / 'Cargo.lock') != PIN['cargoLockSHA256']:
             raise SystemExit('Patch unexpectedly changed dependency resolution')
         destination = BUILD / 'native-source'
@@ -88,13 +89,14 @@ def record():
         'features': PIN['features'],
         'deploymentTarget': '26.0',
         'cargoLocked': True,
-        'swiftShimABI': '29 declarations checked against generated C ABI and archive symbols',
-        'nativeTests': 'cargo test -p idevice-ffi --locked --no-default-features --features ' + ','.join(PIN['features']) + ' gofly_verify_only -- --nocapture',
+        'swiftShimABI': '30 declarations checked against generated C ABI and archive symbols',
+        'nativeTests': 'cargo test -p idevice-ffi --locked --no-default-features --features ' + ','.join(PIN['features']) + ' gofly_ -- --nocapture',
         'xcodeVersion': subprocess.check_output(['xcodebuild', '-version'], text=True).strip(),
         'sdkVersion': subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-version'], text=True).strip(),
         'sha256': {
             'Cargo.lock': sha256(source / 'Cargo.lock'),
             'verify-only.patch': sha256(BRIDGE / 'verify-only.patch'),
+            'location-reply.patch': sha256(BRIDGE / 'location-reply.patch'),
             'upstream.json': sha256(BRIDGE / 'upstream.json'),
             'idevice-full.h': sha256(output / 'idevice-full.h'),
             'libidevice_ffi.a': sha256(output / 'libidevice_ffi.a'),

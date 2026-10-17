@@ -18,9 +18,9 @@ fi
 python3 "$bridge_dir/prepare-build.py"
 mkdir -p "$build_dir/native"
 bash "$bridge_dir/tests/check-error-mapping.sh"
-# Host tests exercise real RP framing and cryptography against scripted peers.
+# Host tests exercise RP verification and actual location C exports against scripted peers.
 cargo test --manifest-path "$build_dir/native-source/Cargo.toml" -p idevice-ffi \
-  --locked --no-default-features --features "$features" gofly_verify_only -- --nocapture
+  --locked --no-default-features --features "$features" gofly_ -- --nocapture
 # These environment variables are scoped to the iOS build, not host tests.
 SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)" \
 IPHONEOS_DEPLOYMENT_TARGET=26.0 \

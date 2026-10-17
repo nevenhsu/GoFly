@@ -11,7 +11,7 @@ prototypes = re.findall(
     r'(?m)^((?:struct IdeviceFfiError \*|void |plist_type |const char\* )([a-z_][a-z_0-9]*)\([^;]*\);)',
     shim,
 )
-if len(prototypes) != 29:
+if len(prototypes) != 30:
     raise SystemExit('Unexpected Swift shim API count')
 checks = ['#include "idevice-full.h"\n#include <stddef.h>\n']
 # Compare the actual shim definitions, renamed to coexist with the generated
@@ -52,4 +52,4 @@ symbols = subprocess.check_output(['nm', '-gjU', str(output / 'libidevice_ffi.a'
 missing = [name for _, name in prototypes if '_' + name not in symbols]
 if missing:
     raise SystemExit('Archive missing Swift shim symbols: ' + ', '.join(missing))
-print('All 29 Swift shim declarations, struct layouts and plist enum values match generated ABI/archive')
+print('All 30 Swift shim declarations, struct layouts and plist enum values match generated ABI/archive')

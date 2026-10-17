@@ -42,5 +42,9 @@
       "url": "https://static.rust-lang.org/dist/2026-03-05/rust-std-1.94.0-aarch64-apple-ios.tar.xz",
       "sha256": "41ec1d18f4762f85231a19cf8aba3385da78fece2ff900a435c62881a3a3b44b"
     }
+  ],
+  "patches": [
+    "verify-only.patch",
+    "location-reply.patch"
   ]
 }

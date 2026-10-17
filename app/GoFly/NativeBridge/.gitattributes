@@ -1,2 +1,3 @@
 # Unified-diff blank context lines contain a required single space.
 verify-only.patch whitespace=-blank-at-eol
+location-reply.patch whitespace=-blank-at-eol

@@ -66,6 +66,7 @@ void remote_server_free(struct RemoteServerHandle *handle);
 struct IdeviceFfiError *location_simulation_new(struct RemoteServerHandle *server, struct LocationSimulationHandle **handle);
 void location_simulation_free(struct LocationSimulationHandle *handle);
 struct IdeviceFfiError *location_simulation_clear(struct LocationSimulationHandle *handle);
+struct IdeviceFfiError *location_simulation_set(struct LocationSimulationHandle *client, double latitude, double longitude);
 void plist_free(plist_t plist);
 plist_type plist_get_node_type(plist_t node);
 const char* plist_get_string_ptr(plist_t node, uint64_t* length);

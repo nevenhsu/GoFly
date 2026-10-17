@@ -1,6 +1,6 @@
 # 票 03：搜尋、候選與單點命令邊界
 
-狀態：Advisor 審查中，尚未開始 executable Executor。使用者已明確要求依序完成所有實作與自動驗證，真機測試延至最後集中驗收；本票不安裝或操作手機。
+狀態：Advisor 已核准執行，以下不變量列為實作與審查要求。使用者已明確要求依序完成所有實作與自動驗證，真機測試延至最後集中驗收；本票不安裝或操作手機。
 
 ## 候選與搜尋
 
@@ -17,17 +17,18 @@
 - 成功才發布已確認模擬座標並移除原候選 Pin／Go；若使用者準備期間已瀏覽新候選，只清除與原快照 candidate ID 相同者，保留未提交的新選取。
 - `VerifiedDeviceSession` 在同一 owned session 的 set 前立即重驗綁定身分。Native adapter 在既有 serial queue 擁有並保留 location session，成功／unknown set 後均不按次關閉；clear 使用 owned verified session，該次 clear 真正返回後才釋放。clear 失敗不自動重送；下一次明確 Restore 可建立新 session。Reset 仍僅 stopped 時修復 GoFly 連線，不當作 clear 證據。
 
-## 回覆與原生來源補強（待最後核准）
+## 回覆與原生來源補強（已核准）
 
 Pinned archive 已有 location_simulation_set symbol，但目前 shim 未匯出。上游 set／clear 只接收下一個 channel message，未核對請求／錯誤；新增 checked void reply helper，核對請求 ID、channel、conversation 及合法成功 payload，設有整體逾時。set／clear 共用，避免遲到 point reply 被當成 clear ACK。
 
-成功 void profile 需依 primary 實作確認，不能只假定空 OK：已發現 pymobiledevice3 支援 OK 空回覆與 OBJECT null／NSNull。Pinned ns-keyed-archive decoder 把 `$null` 解成空 dictionary，不能只用 decoded empty dictionary 判斷 null；須檢查原 archive root／class 身分。詳細 patch 與可接受 payload 以 Advisor 最後核准及 scripted Rust 測試為準，不宣稱真機已驗。
+成功 void profile 需依 primary 實作確認，不能只假定空 OK：已發現 pymobiledevice3 支援 OK 空回覆與 OBJECT null／NSNull。Pinned ns-keyed-archive decoder 把 `$null` 解成空 dictionary，不能只用 decoded empty dictionary 判斷 null；須檢查原 archive root／class 身分。Advisor 已核准 empty OK 與 OBJECT absent／raw archive $null／NSNull profile，要求 ID／正規化 channel／conversation 1／no-expects-reply 全部符合；以 scripted Rust 測試驗證，不宣稱真機已驗。
 
 ## 顯示位置與鏡頭
 
 - 泛用 `PositionMarker` 分開記錄 GPS／模擬來源及 fresh／waiting，只供地圖顯示；不捏造 `RealLocationObservation`。
 - 目前 GPS 證據、已確認模擬位置及最後顯示快取分開。Stop／Restore／未知送點作廢目前位置證據，但保留最後箭頭，以 50% 透明表示等待；有效新 GPS 才更新並恢復 100%。模擬任務有效時，GPS callback 不覆寫已確認模擬箭頭。
 - 使用 SwiftUI 面板與獨立 MKMapView canvas。量測頂部實際狀態／提示底緣、底面板頂緣及安全區；面板已跟隨鍵盤時不重扣鍵盤。用 setVisibleMapRect(_:edgePadding:animated:) 置中可見區域。
+- 候選存在時，一般 GPS callback 不搶走候選鏡頭。Go ACK 若清除原候選，置中確認模擬位置；若使用者已選取另一個 candidate ID，保留較新的候選鏡頭，ACK 仍只更新確認模擬箭頭。明確按回中可改看目前位置。
 - 候選／成功位置或 viewport 尺寸變更才建立鏡頭意圖；使用者拖圖不觸發送點或無限拉回。Pin 與 Go 各自至少 44 pt，所有地圖 icon 下方不加文字；詳情與選項單 title。最愛功能與模式切換由後續票接入，不放無作用按鈕。
 
 ## 已核可票單的公開驗證界線
@@ -35,3 +36,10 @@ Pinned archive 已有 location_simulation_set symbol，但目前 shim 未匯出�
 票 03 Verification 的座標／候選／送點身分對應 Core 公開 controller／protocol，沿用票 01 的服務 FIFO 與同-session device seam。驗證輸入分類、無效保留、首結果不自選、遲到搜尋、快照不串位、防連點、Stop 前後、unknown 鎖定、顯示快取不作為 GPS／clear 證據。Rust scripted peer 驗證 reply correlation／error／EOF／timeout 與遲到 set 不冒充 clear；shim／ABI／manifest hash 一併檢查。
 
 模擬器驗證實際座標候選、Pin 詳情不執行 Go、鍵盤／面板／Dynamic Type 下的可見置中；不以假 native 成功當硬體證據。兩個接收 App 與最終手機效果列入集中驗收表。
+
+## Advisor 必要補充
+
+- 使用同步原子 pre-dispatch gate：Stop／watchdog 同時作廢 gate 與 UI 世代。Native 在 set 之前最後一步 claim；gate 未跨過則不送點，已跨過就不得假取消，clear 等待真正返回。
+- 結果明列 not-sent／acknowledged／unconfirmed；準備失敗保留舊位置證據，dispatch 才作廢目前證據並保留等待快取。unconfirmed 後新有效 GPS 可更新顯示，但不能替代命令確認或解鎖 Go。
+- Owned session 的存取／釋放全在 native queue；clear 真正返回後才釋放，即使失敗。Reset 不關閉 active location session，不暗示 clear。
+- 鏡頭使用 revisioned intent，保存有效現有 zoom，非零 map rect；不因一般 SwiftUI 更新或拖圖重置。

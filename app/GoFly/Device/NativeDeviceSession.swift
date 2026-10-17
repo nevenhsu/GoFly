@@ -112,6 +112,12 @@ final class NativeDeviceSession: DeviceSession {
         // Opening a channel validates readiness without setting a coordinate.
     }
 
+    func setLocation(_ coordinate: GeoCoordinate) throws {
+        // Preparation opens the channel before the final dispatch gate.
+        guard let location else { throw DeviceServiceFailure.serviceUnavailable }
+        try throwIfFFIError(location_simulation_set(location, coordinate.latitude, coordinate.longitude), .serviceUnavailable)
+    }
+
     func clearLocation() throws {
         try validateLocationService()
         try throwIfFFIError(location_simulation_clear(location), .serviceUnavailable)

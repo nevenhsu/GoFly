@@ -100,17 +100,17 @@ struct ServiceControllerTests {
         let fix = RealLocationObservation(latitude: 25, longitude: 121,
             horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
         controller.observeRealLocation(fix)
-        #expect(controller.locationMarker?.observation == fix)
-        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.positionMarker?.coordinate == fix?.coordinate)
+        #expect(controller.positionMarker?.freshness == .fresh)
         switch command {
         case "stop": #expect(controller.stop())
         case "restore": #expect(controller.restoreGPS())
         default: #expect(controller.resetTunnel())
         }
-        #expect(controller.locationMarker?.observation == fix, "A service command must not remove the last confirmed map marker")
-        #expect(controller.locationMarker?.freshness == (command == "reset" ? .fresh : .waiting))
+        #expect(controller.positionMarker?.coordinate == fix?.coordinate, "A service command must not remove the last confirmed map marker")
+        #expect(controller.positionMarker?.freshness == (command == "reset" ? .fresh : .waiting))
         await settle(controller)
-        #expect(controller.locationMarker?.observation == fix)
+        #expect(controller.positionMarker?.coordinate == fix?.coordinate)
         #expect(controller.realLocation == (command == "reset" ? fix : nil))
         #expect(controller.gpsStatusKey == (command == "reset" ? "gps.unknown" : "gps.clearedWaiting"))
     }
@@ -119,7 +119,7 @@ struct ServiceControllerTests {
         let now = Date(timeIntervalSince1970: 10_000)
         let controller = ServiceController(service: TestDevice(), now: { now })
         controller.observeRealLocation(nil)
-        #expect(controller.locationMarker == nil)
+        #expect(controller.positionMarker == nil)
         let fix = RealLocationObservation(latitude: 25, longitude: 121,
             horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
         controller.observeRealLocation(fix)
@@ -133,8 +133,8 @@ struct ServiceControllerTests {
         for sample in rejected {
             controller.observeRealLocation(sample)
             #expect(controller.realLocation == nil)
-            #expect(controller.locationMarker?.observation == fix)
-            #expect(controller.locationMarker?.freshness == .waiting)
+            #expect(controller.positionMarker?.coordinate == fix?.coordinate)
+            #expect(controller.positionMarker?.freshness == .waiting)
         }
         #expect(controller.restoreGPS())
         await settle(controller)
@@ -142,8 +142,8 @@ struct ServiceControllerTests {
         let current = RealLocationObservation(latitude: 26, longitude: 122,
             horizontalAccuracy: 5, observedAt: now)
         controller.observeRealLocation(current)
-        #expect(controller.locationMarker?.observation == current)
-        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.positionMarker?.coordinate == current?.coordinate)
+        #expect(controller.positionMarker?.freshness == .fresh)
         #expect(controller.gpsStatusKey == "gps.observed")
     }
 
@@ -154,8 +154,8 @@ struct ServiceControllerTests {
         controller.observeRealLocation(fix)
         #expect(controller.restoreGPS())
         await settle(controller)
-        #expect(controller.locationMarker?.observation == fix)
-        #expect(controller.locationMarker?.freshness == .waiting)
+        #expect(controller.positionMarker?.coordinate == fix?.coordinate)
+        #expect(controller.positionMarker?.freshness == .waiting)
         #expect(controller.realLocation == nil)
         #expect(controller.clearState == .unknown)
         #expect(controller.gpsStatusKey == "gps.unknown")
@@ -170,15 +170,15 @@ struct ServiceControllerTests {
         let beforeClear = RealLocationObservation(latitude: 25, longitude: 121,
             horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
         controller.observeRealLocation(beforeClear)
-        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.positionMarker?.freshness == .fresh)
         #expect(controller.gpsStatusKey == "gps.clearing")
         await device.finishClear()
         await settle(controller)
-        #expect(controller.locationMarker?.observation == beforeClear)
+        #expect(controller.positionMarker?.coordinate == beforeClear?.coordinate)
         #expect(controller.gpsStatusKey == "gps.clearedWaiting")
         controller.observeRealLocation(RealLocationObservation(latitude: 26, longitude: 122,
             horizontalAccuracy: 5, observedAt: now))
-        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.positionMarker?.freshness == .fresh)
         #expect(controller.gpsStatusKey == "gps.observed")
     }
 
@@ -256,6 +256,7 @@ private actor TestDevice: DeviceService {
     func prepare() async throws { operations.append("prepare"); try failIfNeeded() }
     func clearLocation() async throws { operations.append("clear"); try failIfNeeded() }
     func resetClientConnection() async throws { operations.append("reset"); try failIfNeeded() }
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome { .notSent(.deviceRequired) }
     private func failIfNeeded() throws { if let failure { throw failure } }
 }
 
@@ -272,6 +273,7 @@ private actor ControlledDevice: DeviceService {
         await withCheckedContinuation { clearing = $0 }
     }
     func resetClientConnection() async throws { operations.append("reset") }
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome { .notSent(.deviceRequired) }
     func finishPrepare() { preparation?.resume(); preparation = nil }
     func finishClear() { clearing?.resume(); clearing = nil }
     func waitForPrepare() async { while preparation == nil { await Task.yield() } }

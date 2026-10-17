@@ -8,6 +8,7 @@ public protocol DeviceSession: AnyObject {
     func mountProvisionedSupport() throws
     func validateLocationService() throws
     func clearLocation() throws
+    func setLocation(_ coordinate: GeoCoordinate) throws
 }
 
 public struct VerifiedDeviceSession {
@@ -36,6 +37,18 @@ public struct VerifiedDeviceSession {
     public func clearLocation() throws {
         try verifyIdentity()
         try session.clearLocation()
+    }
+
+    public func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) -> PointDeliveryOutcome {
+        do { try verifyIdentity() }
+        catch { return .notSent(error as? DeviceServiceFailure ?? .serviceUnavailable) }
+        guard dispatch.claim() else { return .notSent(.operationCancelled) }
+        do {
+            try session.setLocation(coordinate)
+            return .acknowledged
+        } catch {
+            return .unconfirmed(error as? DeviceServiceFailure ?? .serviceUnavailable)
+        }
     }
 
     private func verifyIdentity() throws {

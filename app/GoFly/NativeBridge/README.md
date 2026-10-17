@@ -1,6 +1,6 @@
 # GoFly native bridge
 
-GoFly uses a small, verification-only extension to MIT-licensed idevice by
+GoFly uses narrow verification-only tunnel and checked location extensions to MIT-licensed idevice by
 Jackson Coxson. The Swift module exposes only the functions used by the
 production device boundary and audited pairing store. It does not expose
 pair-setup, pairing-file generation/write, process-control or JIT APIs.
@@ -12,6 +12,38 @@ completion. A rejected credential is terminal. There is no PIN callback and no
 credential update. Output handles are nulled before fallible work and published
 only after complete success. Swift still verifies the expected UDID on this
 same adapter/handshake before DDI or location operations.
+
+## Location reply boundary
+
+`location-reply.patch` makes the set and clear C exports share a checked void
+reply helper. One snapshot of the configured global timeout covers sending,
+flushing, waiting and validating; pending request IDs are removed on every
+returned outcome. The production Swift queue configures 10 seconds and remains
+busy until the actual native call returns. Missing replies, errors, malformed or
+unsupported results cannot acknowledge a point, and no point is automatically
+resent.
+
+A success requires the same request ID and normalized channel, conversation 1,
+no reply request or auxiliary data, and an empty OK or OBJECT nil/NSNull profile.
+Raw keyed-archive root/class identity distinguishes nil from an empty dictionary;
+the pinned decoder otherwise conflates them. The profiles follow maintained
+pymobiledevice3 source at commit `06f3c1c786e11b94c5e20f7d31a3b283f133fa0c`
+(`dtx/channel.py`, `dtx/_sender.py`, `dtx/ns_types.py`). An acknowledgement proves
+a checked protocol reply, not an observation by a recipient application.
+
+The actual C-export tests use scripted duplex streams for set/clear success,
+selector and coordinate arguments, wrong IDs, remote errors, unknown payloads,
+channel/conversation mismatches, EOF, blocked sending, silence, unsolicited traffic, and a late
+point reply followed by a failing fresh clear. The original source fails the
+remote-error rejection test before applying this patch. Four verify-only tunnel
+regressions remain part of the same test invocation.
+
+Swift retains the owned location channel after an acknowledged or unconfirmed
+set. Revalidation and later points use that same session. Explicit clear releases
+it only after native clear returns, even on error; reset refuses an active
+session. The host Swift 6 harness compiles the exact production service with
+session doubles to test these lifetimes and the actual Core dispatch gate. It
+links a timeout setter stub and never links or calls the device library.
 
 ## Build
 
@@ -60,7 +92,7 @@ messages, preserves credentials and leaves both output handles null. Rejection c
 pointer arguments and malformed address/hostname data also return errors with valid outputs cleared. These tests do
 not claim device or end-to-end tunnel acceptance.
 
-The build also compiles C type-compatibility assertions for all 29 shim
+The build also compiles C type-compatibility assertions for all 30 shim
 declarations, the sizes/alignment/field offsets of both concrete C structs,
 and every plist enum value against the newly generated full header. It checks that every
 permitted symbol exists in the device archive. This C-only verification never
@@ -68,7 +100,7 @@ adds the full header to the production Swift import path.
 
 The device archive is built for `aarch64-apple-ios` with deployment target 26.0.
 Generated `work/gofly-ios/native/manifest.json` records the upstream commit,
-lockfile, patch, toolchain, Xcode/SDK, feature selection and archive/header hashes.
+lockfile, both patches, toolchain, Xcode/SDK, feature selection and archive/header hashes.
 `idevice-full.h` is retained there as provenance only. Production Swift imports
 only the checked-in `include/idevice.h` shim and `include/module.modulemap`.
 Generated artifacts and credentials must never be committed.

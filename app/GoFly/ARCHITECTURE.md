@@ -1,4 +1,4 @@
-# 正式 GoFly：服務與首次流程邊界
+# 正式 GoFly：服務、首次流程與單點瞬移
 
 2026-10-17。票 01 為正式 App 的地圖、裝置服務啟停與恢復 GPS／VPN 修復；票 02 加入首次開啟、選用定位與必要 VPN 確認。既有 iOS 專案維持 prototype，不把它的完成紀錄繼承為正式驗收。
 
@@ -20,7 +20,7 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 ## 狀態與命令不變量
 
 - 服務狀態、本機送點終止、裝置清除確認、有效實際位置是獨立結果。沒有 clear 回覆，不宣稱解除模擬；沒有有效新位置，不宣稱取得 GPS；不以此推導其他接收 App 已恢復。
-- `realLocation` 僅保存目前接受的 GPS 證據；Stop／Restore 或拒絕讀值仍將其設為 nil。最後一次有效座標另外保存在 controller 私有記憶體，僅透過唯讀 `locationMarker` 投影供地圖顯示：等待時 50% 透明、有效時 100%，無圓底；未曾取得有效位置時不畫箭頭。快取不持久化、不供路線起點或 clear 判斷，鏡頭只追蹤新接受的 `realLocation`。Reset 本身不清除位置；clear 前有效位置可顯示，但只有 clear 後的有效觀察才證明恢復序列。
+- `realLocation` 僅保存目前接受的 GPS 證據；Stop／Restore 或拒絕讀值仍將其設為 nil。最後顯示座標與來源另外保存在 controller 私有記憶體，僅透過唯讀 `positionMarker` 投影供地圖顯示：等待時 50% 透明、有效時 100%，無圓底；未曾取得有效位置時不畫箭頭。快取不持久化、不供路線起點或 clear 判斷，已確認模擬位置優先於 GPS 顯示與鏡頭；尚無模擬位置時才使用新接受的 `realLocation`。Reset 本身不清除位置；clear 前有效位置可顯示，但只有 clear 後的有效觀察才證明恢復序列。
 - Stop 立即作廢舊結果的發布權，但它排定的安全 clear 必須執行。準備工作先返回，再執行 clear；新 Start／Restore／Reset 不越過尚未返回的清理。
 - 原生全域網路 timeout 在任何 FFI 前設為 10 秒；controller 另有 watchdog。watchdog 逾時只回報未知，**不算原生完成**，不釋放還在使用的 handle、不平行另開操作，也不解除 `nativeBusy`。
 - repairRequired 且底層未返回時，只能冪等 Stop，確保恰一筆 clear 排隊；其他副作用命令拒絕。真正返回且安全清理已執行後才解鎖。遲到成功不能覆寫逾時／Stop 的未知結果。
@@ -46,3 +46,21 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 - 已完成引導的地圖 UI 測試以明確 defaults fixture 進入地圖；首次失敗 UI 僅 Debug simulator 可選 real localhost:0 拒絕連線 fixture，不製造 VPN／native 成功。Release 沒有此入口。
 
 Figma Console 既有本機讀回／截圖保留於 work/design-localgo-v2；本次重連顯示 Transport closed，未宣稱重新讀回成功或修改 Figma。畫面依已核可同輪線框內容及 DESIGN.md 的 Uber 語意樣式轉譯。
+
+## 搜尋與單點瞬移（票 03）
+
+`GeoCoordinate` 在建構時拒絕非有限或超界值；`MapPlace` 保留 MapKit／座標身分、單一 title 與精確座標。`TeleportCandidate` 每次選取產生獨立 ID，與地點身分分開。`CandidateController` 只依公開 `PlaceSearching` 取得資料，沒有裝置命令能力；實際 MapKit lookup 可取消，Core 同時以取消及 query 世代防止舊結果發布。名稱初次搜尋不預選，有效座標自動選取；無效格式／緯度／經度保留舊候選但鎖 Go，清空輸入不偷偷恢復舊 Go，明確有效選取才恢復。地圖選點不將顯示格式的小數截位寫回實際座標。
+
+Go 捕捉整份候選與新操作 ID；`ServiceController` 將它與 Start／Stop／Restore／Reset 共用 FIFO、nativeBusy 與 watchdog。`PointDispatchGate` 的同步 claim 是最後派送門檻：同-session 身分確認後、native set 前才可跨過。Stop／watchdog 在此前作廢 gate 就不送點；跨過後不假裝取消 FFI，clear 必須等待其實際返回。點選／移動鏡頭不會進這條命令路徑。票 03 不自動重試，三次準備與任務交接由票 04 接入。
+
+結果分為 not-sent、acknowledged、unconfirmed。準備失敗保留先前位置證據並可明確重試；set 一旦派送，只有經核對的同請求成功回覆能確認，其他錯誤／逾時皆 unconfirmed，保留候選、鎖所有 Go，直到明確 Stop 完成。新的有效 GPS 可更新畫面，但無法解除未知命令鎖。成功回報只可清除同一 candidate ID，新瀏覽而未提交的候選保留。
+
+Native 原本 set／clear 只讀下一則 DTX message，現以獨立 location-reply.patch 補強兩者共用的 correlated void helper：核對保留的 ID、正規化 channel、conversation 1、無 reply-expected，接受空 OK 或 raw archive 證實的 null／NSNull；拒絕錯誤、非 null 物件與不明格式。整體 deadline 包含 send／flush／wait／validation，所有出口清除 pending ID；遲到 set 回覆不能冒充 clear。協定確認不等同接收 App 已觀察位置。Swift shim 增至 30 個宣告，來源、patch、header、archive 及 ABI 證據一起更新。
+
+Native adapter 在既有 serial queue 保留同一 location session，acknowledged 與 unconfirmed set 後都不立即關閉；首次 Go 與 Start 都會先消費私有 setup handoff。既有 session 的下一次準備重用該 session，失敗不破壞舊位置。clear 只嘗試一次、真正返回後才關閉（包含失敗）；後續明確 Restore 可另開新 session。Reset 不關閉 active session、不宣告 clear。
+
+派送門檻作廢目前 GPS／模擬位置與先前 clear 證據，只保留等待中的顯示快取；確認回覆後才發布模擬位置。Stop／Restore 保留最後箭頭為 50% 透明，新的有效 GPS 才更新並恢復實心。`PositionMarker` 含來源，不能以模擬座標捏造 `RealLocationObservation` 或把快取當路線起點。
+
+地圖由獨立 MKMapView canvas 提供實際投影，以量測的頂部／底面板界線作 edgePadding；候選與成功位置、viewport 變更才發出 revisioned camera intent，保持非零 map rect 與現有縮放。拖圖只更新畫面，不反覆拉回或送點。候選 Pin、其上方 Go、詳情各自獨立；圖示下方無 caption，鍵盤已反映在面板位置時不重扣高度。Debug simulator 的投影量測僅在明確測試旗標下供實際 UI 驗證，不製造 native 成功。
+
+鏡頭採最新明確選取優先：一般 GPS callback 不覆蓋仍存在的候選鏡頭。成功 ACK 清除原候選後置中確認模擬位置；若準備期間已瀏覽另一 candidate ID，保留新候選及其鏡頭，仍更新模擬箭頭。明確回中可切到目前位置。

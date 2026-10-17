@@ -33,15 +33,15 @@ def main():
     for excluded in ("JITEnableContext.swift", "IdeviceFFIBridge.swift", "DeveloperDiskImageService.swift", "LocalGoMapView.swift"):
         if excluded in project:
             raise SystemExit("Forbidden prototype source in formal target: " + excluded)
-    # This list is intentional: ticket 01 can validate/clear but cannot set a
-    # coordinate, debug a process, pair a new device or download support data.
+    # This list includes ticket 03 single-point set with correlated native replies.
+    # It excludes process debugging, pair-setup and support downloads.
     allowed = set("""
         adapter_free cryptex1_assets_free cryptex1_assets_load
         cryptexd_free_installed_cryptex cryptexd_install_ddi cryptexd_installed_ddi
         idevice_data_free idevice_error_free idevice_set_global_timeout
         image_mounter_connect_rsd image_mounter_free image_mounter_lookup_image
         image_mounter_mount_personalized_rsd location_simulation_clear
-        location_simulation_free location_simulation_new lockdownd_client_free
+        location_simulation_free location_simulation_new location_simulation_set lockdownd_client_free
         lockdownd_connect_rsd lockdownd_get_value plist_free plist_get_node_type
         plist_get_string_ptr plist_get_uint_val remote_server_connect_rsd
         remote_server_free rp_pairing_file_free rp_pairing_file_read
@@ -88,7 +88,7 @@ def main():
         "upstreamRepository": pin["repository"], "upstreamCommit": pin["commit"],
         "target": pin["target"], "features": pin["features"],
         "deploymentTarget": "26.0", "cargoLocked": True,
-        "swiftShimABI": "29 declarations checked against generated C ABI and archive symbols",
+        "swiftShimABI": "30 declarations checked against generated C ABI and archive symbols",
     }
     for key, expected in expected_metadata.items():
         if built.get(key) != expected:
@@ -97,6 +97,7 @@ def main():
         raise SystemExit("Native build used an unexpected Rust version")
     inputs = {
         "Cargo.lock": output / "Cargo.lock", "verify-only.patch": bridge / "verify-only.patch",
+        "location-reply.patch": bridge / "location-reply.patch",
         "upstream.json": bridge / "upstream.json", "idevice-full.h": output / "idevice-full.h",
         "libidevice_ffi.a": output / "libidevice_ffi.a",
         "swiftShimHeader": bridge / "include/idevice.h",

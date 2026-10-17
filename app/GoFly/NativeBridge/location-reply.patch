@@ -1,0 +1,425 @@
+--- a/ffi/src/lib.rs
++++ b/ffi/src/lib.rs
+@@ -516,3 +516,6 @@
+         let _ = unsafe { Vec::from_raw_parts(slice, len, len) };
+     }
+ }
++
++#[cfg(test)]
++mod gofly_location_reply_tests;
+--- a/ffi/src/dvt/location_simulation.rs
++++ b/ffi/src/dvt/location_simulation.rs
+@@ -76,7 +76,8 @@
+     }
+ 
+     let client = unsafe { &mut (*handle).0 };
+-    let res = run_sync(async move { client.clear().await });
++    let timeout = std::time::Duration::from_secs(crate::GLOBAL_TIMEOUT.load(std::sync::atomic::Ordering::Relaxed));
++    let res = run_sync(async move { client.clear_with_timeout(timeout).await });
+ 
+     match res {
+         Ok(_) => null_mut(),
+@@ -107,7 +108,8 @@
+     }
+ 
+     let client = unsafe { &mut (*handle).0 };
+-    let res = run_sync(async move { client.set(latitude, longitude).await });
++    let timeout = std::time::Duration::from_secs(crate::GLOBAL_TIMEOUT.load(std::sync::atomic::Ordering::Relaxed));
++    let res = run_sync(async move { client.set_with_timeout(latitude, longitude, timeout).await });
+ 
+     match res {
+         Ok(_) => null_mut(),
+--- /dev/null
++++ b/ffi/src/gofly_location_reply_tests.rs
+@@ -0,0 +1,225 @@
++//! Scripted DTX peer tests exercise the actual C exports, framing and decoder.
++use crate::{dvt::{location_simulation::*, remote_server::*}, *};
++use idevice::dvt::message::{Message, MessageHeader, PayloadHeader, AuxValue};
++use plist::{Dictionary, Uid, Value};
++use std::{io::Cursor, ptr::null_mut, time::{Duration, Instant}};
++use tokio::io::{AsyncWriteExt, DuplexStream};
++
++fn archive(root: Value, classes: Option<&str>) -> Vec<u8> {
++    let mut objects = vec![Value::String("$null".into())];
++    let root_id = if let Some(class_name) = classes {
++        let mut object = root.into_dictionary().unwrap();
++        object.insert("$class".into(), Value::Uid(Uid::new(2)));
++        objects.push(Value::Dictionary(object));
++        let mut class = Dictionary::new();
++        class.insert("$classname".into(), Value::String(class_name.into()));
++        class.insert("$classes".into(), Value::Array(vec![Value::String(class_name.into()), Value::String("NSObject".into())]));
++        objects.push(Value::Dictionary(class));
++        1
++    } else if root.as_string() == Some("$null") { 0 } else { objects.push(root); 1 };
++    let mut top = Dictionary::new(); top.insert("root".into(), Value::Uid(Uid::new(root_id)));
++    let mut value = Dictionary::new();
++    value.insert("$archiver".into(), Value::String("NSKeyedArchiver".into()));
++    value.insert("$version".into(), Value::Integer(100000.into()));
++    value.insert("$top".into(), Value::Dictionary(top));
++    value.insert("$objects".into(), Value::Array(objects));
++    let mut bytes = Vec::new(); Value::Dictionary(value).to_writer_binary(&mut bytes).unwrap(); bytes
++}
++
++fn identifier(message: &Message) -> u32 {
++    u32::from_le_bytes(message.message_header.serialize()[16..20].try_into().unwrap())
++}
++
++async fn reply(peer: &mut DuplexStream, request: &Message, kind: u8, raw: Option<Vec<u8>>, id_delta: u32, channel_delta: i32, conversation: u32, expects: bool) {
++    let header = MessageHeader::new(0, 1, identifier(request) + id_delta, conversation,
++        -request.message_header.channel + channel_delta, expects);
++    let mut frame = Message::new(header, PayloadHeader::new(), None, None).serialize();
++    let raw = raw.unwrap_or_default();
++    frame[12..16].copy_from_slice(&(16_u32 + raw.len() as u32).to_le_bytes());
++    frame[32] = kind;
++    frame[40..44].copy_from_slice(&(raw.len() as u32).to_le_bytes());
++    frame.extend(raw);
++    peer.write_all(&frame).await.unwrap(); peer.flush().await.unwrap();
++}
++
++async fn begin(peer: &mut DuplexStream) {
++    let hello = Message::new(MessageHeader::new(0,1,0,0,0,false), PayloadHeader::new(), None, None);
++    peer.write_all(&hello.serialize()).await.unwrap();
++    let request = Message::from_reader(peer).await.unwrap();
++    assert_eq!(request.data.as_ref().and_then(Value::as_string), Some("_requestChannelWithCode:identifier:"));
++    reply(peer, &request, 0, None, 0, 0, 1, false).await;
++}
++
++fn assert_point(request: &Message) {
++    assert_eq!(request.data.as_ref().and_then(Value::as_string), Some("simulateLocationWithLatitude:longitude:"));
++    assert_eq!(&request.message_header.serialize()[28..32], &1_u32.to_le_bytes());
++    let args = &request.aux.as_ref().unwrap().values;
++    assert_eq!(args.len(), 2);
++    for (argument, expected) in args.iter().zip([37.5, -122.25]) {
++        let AuxValue::Array(bytes) = argument else { panic!("expected archived coordinate") };
++        let encoded = Value::from_reader(Cursor::new(bytes)).unwrap();
++        let encoded = encoded.as_dictionary().unwrap();
++        let objects = encoded["$objects"].as_array().unwrap();
++        let root = encoded["$top"].as_dictionary().unwrap()["root"].as_uid().unwrap().get() as usize;
++        assert_eq!(objects[root].as_real(), Some(expected));
++    }
++}
++
++fn scenario(action: impl FnOnce(DuplexStream) -> std::pin::Pin<Box<dyn std::future::Future<Output=()> + Send>> + Send + 'static,
++    check: impl FnOnce(*mut LocationSimulationHandle<'static>)) {
++    scenario_capacity(65536, action, check);
++}
++
++fn scenario_capacity(capacity: usize,
++    action: impl FnOnce(DuplexStream) -> std::pin::Pin<Box<dyn std::future::Future<Output=()> + Send>> + Send + 'static,
++    check: impl FnOnce(*mut LocationSimulationHandle<'static>)) {
++    let (client, peer) = tokio::io::duplex(capacity);
++    let server = std::thread::spawn(move || {
++        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
++            tokio::time::timeout(Duration::from_secs(4), action(peer)).await.unwrap();
++        });
++    });
++    let socket = Box::into_raw(Box::new(ReadWriteOpaque { inner: Some(Box::new(client)) }));
++    let mut remote = null_mut(); let mut location = null_mut();
++    unsafe {
++        let error = remote_server_new(socket, &mut remote); assert!(error.is_null());
++        // remote_server_new borrows this wrapper and takes only its inner stream.
++        drop(Box::from_raw(socket));
++        let error = location_simulation_new(remote, &mut location); assert!(error.is_null());
++        check(location);
++        location_simulation_free(location); remote_server_free(remote);
++    }
++    server.join().unwrap();
++}
++
++#[test]
++fn gofly_location_supported_void_profiles_and_actual_c_exports() {
++    let profiles = [(0,None), (3,None), (3,Some(archive(Value::String("$null".into()),None))),
++        (3,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSNull"))))];
++    for (kind, payload) in profiles {
++        scenario(move |mut peer| Box::pin(async move {
++            begin(&mut peer).await;
++            for selector in ["simulateLocationWithLatitude:longitude:", "stopLocationSimulation"] {
++                let request = Message::from_reader(&mut peer).await.unwrap();
++                assert_eq!(request.data.as_ref().and_then(Value::as_string), Some(selector));
++                if selector.starts_with("simulate") { assert_point(&request); }
++                reply(&mut peer,&request,kind,payload.clone(),0,0,1,false).await;
++            }
++        }), |handle| unsafe {
++            assert!(location_simulation_set(handle,37.5,-122.25).is_null());
++            assert!(location_simulation_clear(handle).is_null());
++        });
++    }
++}
++
++#[test]
++fn gofly_location_rejects_remote_error_and_nonvoid_profiles() {
++    let profiles = [(4,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSError")))),
++        (3,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSDictionary")))),
++        (3,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSError")))),
++        (3,Some(archive(Value::Boolean(false),None))), (0,Some(archive(Value::String("$null".into()),None))),
++        (3,Some(vec![0,1,2,3]))];
++    for (kind,payload) in profiles {
++        scenario(move |mut peer| Box::pin(async move {
++            begin(&mut peer).await;
++            let request = Message::from_reader(&mut peer).await.unwrap(); assert_point(&request);
++            reply(&mut peer,&request,kind,payload,0,0,1,false).await;
++        }), |handle| unsafe {
++            let error=location_simulation_set(handle,37.5,-122.25);
++            assert!(!error.is_null(), "remote error/nonvoid reply must never confirm a point");
++            idevice_error_free(error);
++        });
++    }
++}
++
++#[test]
++fn gofly_location_wrong_id_then_matching_reply_uses_matching_reply() {
++    scenario(|mut peer| Box::pin(async move {
++        begin(&mut peer).await;
++        let request=Message::from_reader(&mut peer).await.unwrap();
++        reply(&mut peer,&request,4,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSError"))),100,0,1,false).await;
++        reply(&mut peer,&request,0,None,0,0,1,false).await;
++    }), |handle| unsafe { assert!(location_simulation_set(handle,37.5,-122.25).is_null()); });
++}
++
++#[test]
++fn gofly_location_mismatched_channel_conversation_and_expects_fail() {
++    for (channel,conversation,expects) in [(1,1,false),(0,3,false),(0,1,true)] {
++        scenario(move |mut peer| Box::pin(async move {
++            begin(&mut peer).await;
++            let request=Message::from_reader(&mut peer).await.unwrap();
++            reply(&mut peer,&request,0,None,0,channel,conversation,expects).await;
++        }), |handle| unsafe {
++            let error=location_simulation_set(handle,37.5,-122.25); assert!(!error.is_null()); idevice_error_free(error);
++        });
++    }
++}
++
++#[test]
++fn gofly_location_eof_after_dispatch_is_error() {
++    scenario(|mut peer| Box::pin(async move {
++        begin(&mut peer).await;
++        let request=Message::from_reader(&mut peer).await.unwrap(); assert_point(&request);
++    }), |handle| unsafe {
++        let error=location_simulation_set(handle,37.5,-122.25); assert!(!error.is_null()); idevice_error_free(error);
++    });
++}
++
++#[test]
++fn gofly_location_overall_timeout_and_late_point_cannot_ack_clear() {
++    unsafe { idevice_set_global_timeout(1) };
++    struct RestoreTimeout;
++    impl Drop for RestoreTimeout { fn drop(&mut self) { unsafe { idevice_set_global_timeout(5) }; } }
++    let _restore=RestoreTimeout;
++    // A tiny stream fills during the point frame: the same deadline must bound
++    // send/flush, not only the later wait for a reply.
++    scenario_capacity(64, |mut peer| Box::pin(async move {
++        begin(&mut peer).await;
++        tokio::time::sleep(Duration::from_millis(1250)).await;
++    }), |handle| unsafe {
++        let start=Instant::now();
++        let error=location_simulation_set(handle,37.5,-122.25); assert!(!error.is_null());
++        assert_eq!((*error).code,109); idevice_error_free(error);
++        assert!(start.elapsed() < Duration::from_millis(1500));
++        std::thread::sleep(Duration::from_millis(300));
++    });
++    // Silence and unsolicited conversation-0 frames cannot extend one deadline.
++    for unsolicited in [false, true] {
++        scenario(move |mut peer| Box::pin(async move {
++            begin(&mut peer).await;
++            let point=Message::from_reader(&mut peer).await.unwrap(); assert_point(&point);
++            for _ in 0..55 {
++                if unsolicited { reply(&mut peer,&point,0,None,100,0,0,false).await; }
++                tokio::time::sleep(Duration::from_millis(20)).await;
++            }
++        }), |handle| unsafe {
++            let start=Instant::now();
++            let error=location_simulation_set(handle,37.5,-122.25); assert!(!error.is_null());
++            assert_eq!((*error).code,109); idevice_error_free(error);
++            assert!(start.elapsed() < Duration::from_millis(1500));
++            // Leave the transport owned until the scripted traffic finishes;
++            // the assertion above measures only the actual native deadline.
++            std::thread::sleep(Duration::from_millis(250));
++        });
++    }
++    scenario(|mut peer| Box::pin(async move {
++        begin(&mut peer).await;
++        let point=Message::from_reader(&mut peer).await.unwrap(); assert_point(&point);
++        // Wrong IDs continue arriving; they must not satisfy or extend the deadline.
++        for _ in 0..55 {
++            reply(&mut peer,&point,0,None,100,0,1,false).await;
++            tokio::time::sleep(Duration::from_millis(20)).await;
++        }
++        let clear=Message::from_reader(&mut peer).await.unwrap();
++        assert_eq!(clear.data.as_ref().and_then(Value::as_string),Some("stopLocationSimulation"));
++        reply(&mut peer,&point,0,None,0,0,1,false).await;
++        // Actual clear reply is an error: a late point ACK must not hide it.
++        reply(&mut peer,&clear,4,Some(archive(Value::Dictionary(Dictionary::new()),Some("NSError"))),0,0,1,false).await;
++    }), |handle| unsafe {
++        let start=Instant::now();
++        let error=location_simulation_set(handle,37.5,-122.25); assert!(!error.is_null());
++        assert_eq!((*error).code,109); idevice_error_free(error);
++        assert!(start.elapsed() < Duration::from_millis(1500));
++        let error=location_simulation_clear(handle); assert!(!error.is_null()); idevice_error_free(error);
++    });
++}
+--- a/idevice/src/services/dvt/message.rs
++++ b/idevice/src/services/dvt/message.rs
+@@ -808,3 +808,6 @@
+             .finish()
+     }
+ }
++
++#[path = "gofly_void_reply.rs"]
++mod gofly_void_reply;
+--- a/idevice/src/services/dvt/remote_server.rs
++++ b/idevice/src/services/dvt/remote_server.rs
+@@ -811,6 +811,23 @@
+         self.wait_for_reply(identifier, receiver).await
+     }
+ 
++    /// One deadline spans send, flush, correlated wait and reply validation.
++    /// A timed-out request ID is removed before another command can begin.
++    async fn call_void_method_with_reply(
++        &mut self, channel: i32, data: Option<impl Into<plist::Value>>,
++        args: Option<Vec<AuxValue>>, timeout: std::time::Duration,
++    ) -> Result<(), IdeviceError> {
++        let identifier = self.shared.current_message.fetch_add(1, Ordering::Relaxed) + 1;
++        let result = crate::time::timeout(timeout, async {
++            let receiver = self.send_method(channel, identifier, data, args, true, true).await?
++                .ok_or_else(|| IdeviceError::UnexpectedResponse("missing location reply receiver".into()))?;
++            let reply = self.wait_for_reply(identifier, receiver).await?;
++            reply.validate_void_reply(identifier, channel)
++        }).await;
++        self.shared.pending_replies.lock().await.remove(&identifier);
++        result.map_err(|_| IdeviceError::Timeout)?
++    }
++
+     /// Reads the next message from the specified channel
+     ///
+     /// Checks cached messages first, then reads from transport if needed.
+@@ -1342,6 +1359,13 @@
+             .await
+     }
+ 
++    pub(crate) async fn call_void_method_with_reply(
++        &mut self, method: Option<impl Into<plist::Value>>, args: Option<Vec<AuxValue>>,
++        timeout: std::time::Duration,
++    ) -> Result<(), IdeviceError> {
++        self.client.call_void_method_with_reply(self.channel, method, args, timeout).await
++    }
++
+     /// Calls a method on this channel and waits for the correlated reply.
+     pub(crate) async fn call_method_with_reply(
+         &mut self,
+--- a/idevice/src/services/dvt/location_simulation.rs
++++ b/idevice/src/services/dvt/location_simulation.rs
+@@ -72,13 +72,13 @@
+ 
+     /// Clears the set GPS location
+     pub async fn clear(&mut self) -> Result<(), IdeviceError> {
+-        let method = Value::String("stopLocationSimulation".into());
++        self.clear_with_timeout(std::time::Duration::from_secs(10)).await
++    }
+ 
+-        self.channel.call_method(Some(method), None, true).await?;
+-
+-        let _ = self.channel.read_message().await?;
+-
+-        Ok(())
++    pub async fn clear_with_timeout(&mut self, timeout: std::time::Duration) -> Result<(), IdeviceError> {
++        self.channel.call_void_method_with_reply(
++            Some(Value::String("stopLocationSimulation".into())), None, timeout,
++        ).await
+     }
+ 
+     /// Sets the GPS location
+@@ -90,22 +90,13 @@
+     /// # Errors
+     /// Returns an IdeviceError on failure
+     pub async fn set(&mut self, latitude: f64, longitude: f64) -> Result<(), IdeviceError> {
+-        let method = Value::String("simulateLocationWithLatitude:longitude:".into());
++        self.set_with_timeout(latitude, longitude, std::time::Duration::from_secs(10)).await
++    }
+ 
+-        self.channel
+-            .call_method(
+-                Some(method),
+-                Some(vec![
+-                    AuxValue::archived_value(latitude),
+-                    AuxValue::archived_value(longitude),
+-                ]),
+-                true,
+-            )
+-            .await?;
+-
+-        // We don't actually care what's in the response, but we need to request one and read it
+-        let _ = self.channel.read_message().await?;
+-
+-        Ok(())
++    pub async fn set_with_timeout(&mut self, latitude: f64, longitude: f64, timeout: std::time::Duration) -> Result<(), IdeviceError> {
++        self.channel.call_void_method_with_reply(
++            Some(Value::String("simulateLocationWithLatitude:longitude:".into())),
++            Some(vec![AuxValue::archived_value(latitude), AuxValue::archived_value(longitude)]), timeout,
++        ).await
+     }
+ }
+--- /dev/null
++++ b/idevice/src/services/dvt/gofly_void_reply.rs
+@@ -0,0 +1,62 @@
++//! GoFly's bounded void reply profile. See pymobiledevice3 primary source at
++//! 06f3c1c786e11b94c5e20f7d31a3b283f133fa0c: dtx/channel.py, _sender.py,
++//! ns_types.py. Both empty OK and OBJECT nil/NSNull are supported.
++use super::Message;
++use crate::IdeviceError;
++use plist::Value;
++use std::io::Cursor;
++
++impl Message {
++    pub(crate) fn validate_void_reply(&self, identifier: u32, channel: i32) -> Result<(), IdeviceError> {
++        let header = &self.message_header;
++        let payload = &self.payload_header;
++        let envelope = header.identifier == identifier && header.channel == channel
++            && header.conversation_index == 1 && !header.expects_reply
++            && payload.aux_length == 0 && self.aux.is_none()
++            && payload.flags_a == 0 && payload.flags_b == 0 && payload.reserved == 0 && payload.flags == 0;
++        let empty = payload.total_length == 0 && self.data.is_none() && self.raw_data.is_none();
++        let accepted = match payload.msg_type {
++            0 => empty,
++            3 => empty || self.raw_data.as_ref().is_some_and(|raw| {
++                payload.total_length as usize == raw.len() && archive_is_null(raw)
++            }),
++            _ => false,
++        };
++        if envelope && accepted { return Ok(()); }
++        // Never publish a raw remote NSError or archive in a native error.
++        Err(IdeviceError::UnexpectedResponse("location command reply was not a confirmed void result".into()))
++    }
++}
++
++fn archive_is_null(bytes: &[u8]) -> bool {
++    // The pinned decoder conflates `$null` and empty NSDictionary. Inspect the
++    // archive root and class identity instead of the lossy decoded Value.
++    let Ok(Value::Dictionary(archive)) = Value::from_reader(Cursor::new(bytes)) else { return false };
++    if archive.get("$archiver").and_then(Value::as_string) != Some("NSKeyedArchiver") { return false; }
++    if archive.get("$version").and_then(Value::as_unsigned_integer) != Some(100000) { return false; }
++    let Some(objects) = archive.get("$objects").and_then(Value::as_array) else { return false };
++    let Some(root) = archive.get("$top").and_then(Value::as_dictionary)
++        .and_then(|top| top.get("root")).and_then(Value::as_uid) else { return false };
++    let Ok(mut index) = usize::try_from(root.get()) else { return false };
++    // Bound UID indirection and reject cycles without recursively decoding data.
++    let mut visited = std::collections::HashSet::new();
++    for _ in 0..32 {
++        if !visited.insert(index) { return false; }
++        match objects.get(index) {
++            Some(Value::Uid(next)) => {
++                let Ok(next) = usize::try_from(next.get()) else { return false }; index = next;
++            }
++            Some(Value::String(value)) => return index == 0 && value == "$null",
++            Some(Value::Dictionary(value)) if value.len() == 1 => {
++                let Some(class) = value.get("$class").and_then(Value::as_uid) else { return false };
++                let Ok(class) = usize::try_from(class.get()) else { return false };
++                let Some(class) = objects.get(class).and_then(Value::as_dictionary) else { return false };
++                return class.get("$classname").and_then(Value::as_string) == Some("NSNull")
++                    && class.get("$classes").and_then(Value::as_array)
++                        .is_some_and(|classes| classes.iter().any(|name| name.as_string() == Some("NSNull")));
++            }
++            _ => return false,
++        }
++    }
++    false
++}

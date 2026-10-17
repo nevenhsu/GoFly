@@ -5,6 +5,7 @@ public protocol DeviceService: Sendable {
     func prepare() async throws
     func clearLocation() async throws
     func resetClientConnection() async throws
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome
 }
 
 public enum DeviceServiceFailure: String, Error, Sendable, Equatable {
@@ -16,6 +17,7 @@ public enum DeviceServiceFailure: String, Error, Sendable, Equatable {
     case operationTimedOut = "error.operationTimedOut"
     case deviceRequired = "error.deviceRequired"
     case storageUnavailable = "error.storageUnavailable"
+    case operationCancelled = "error.operationCancelled"
 }
 
 public enum ServicePhase: String, Sendable {
@@ -27,8 +29,9 @@ public enum ClearState: Sendable {
 }
 
 public struct RealLocationObservation: Equatable, Sendable {
-    public let latitude: Double
-    public let longitude: Double
+    public let coordinate: GeoCoordinate
+    public var latitude: Double { coordinate.latitude }
+    public var longitude: Double { coordinate.longitude }
     public let horizontalAccuracy: Double
     public let observedAt: Date
 
@@ -36,11 +39,9 @@ public struct RealLocationObservation: Equatable, Sendable {
         latitude: Double, longitude: Double, horizontalAccuracy: Double,
         observedAt: Date, isSoftwareSimulated: Bool = false
     ) {
-        guard !isSoftwareSimulated, latitude.isFinite, longitude.isFinite,
-              (-90...90).contains(latitude), (-180...180).contains(longitude),
+        guard !isSoftwareSimulated, let coordinate = GeoCoordinate(latitude: latitude, longitude: longitude),
               horizontalAccuracy.isFinite, horizontalAccuracy >= 0 else { return nil }
-        self.latitude = latitude
-        self.longitude = longitude
+        self.coordinate = coordinate
         self.horizontalAccuracy = horizontalAccuracy
         self.observedAt = observedAt
     }

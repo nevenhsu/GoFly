@@ -4,39 +4,88 @@ import GoFlyCore
 #if !targetEnvironment(simulator)
 import idevice
 
-/// The only native device boundary in the production app. Every handle is
-/// created, used and released on this queue before its continuation resumes.
+/// Owns every native handle on one queue. A dispatched location channel stays
+/// alive until its explicit clear has actually returned, including on errors.
 final class NativeDeviceService: DeviceService, @unchecked Sendable {
+    private struct OwnedSession {
+        let native: NativeDeviceSession
+        let verified: VerifiedDeviceSession
+    }
     private let queue = DispatchQueue(label: "com.neven.gofly.device", qos: .userInitiated)
+    // Access only on queue; neither handles nor the verified wrapper escape it.
+    private var ownedSession: OwnedSession?
 
     init() {}
 
     func prepare() async throws {
         try await perform {
-            // This queue has no active native session at the handoff boundary.
-            let handoff = LocalGoSetupHandoff(importSetupData: {
-                try PairingFileStore.importSetupData($0, expectedDeviceUDID: $1)
-            })
-            do { try handoff.prepare() } catch { throw DeviceServiceFailure.storageUnavailable }
-            switch handoff.consume(commandsIdle: true, isPreparing: false) {
-            case .noPayload, .imported: break
-            case .rejected: throw DeviceServiceFailure.pairingRequired
-            case .storageFailure: throw DeviceServiceFailure.storageUnavailable
+            if let owned = self.ownedSession {
+                try owned.verified.prepare()
+                return
             }
-            try Self.withVerifiedSession { try $0.prepare() }
+            try Self.consumeSetupHandoff()
+            let fresh = try Self.makeSession()
+            defer { fresh.native.close() }
+            try fresh.verified.prepare()
+        }
+    }
+
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                idevice_set_global_timeout(10)
+                let candidate: OwnedSession
+                let wasOwned = self.ownedSession != nil
+                do {
+                    if let owned = self.ownedSession {
+                        candidate = owned
+                    } else {
+                        try Self.consumeSetupHandoff()
+                        candidate = try Self.makeSession()
+                    }
+                } catch {
+                    continuation.resume(returning: .notSent(Self.failure(error)))
+                    return
+                }
+                do {
+                    try candidate.verified.prepare()
+                } catch {
+                    if !wasOwned { candidate.native.close() }
+                    continuation.resume(returning: .notSent(Self.failure(error)))
+                    return
+                }
+                // VerifiedDeviceSession rechecks this same session's identity,
+                // then atomically claims the gate immediately before set.
+                let outcome = candidate.verified.movePoint(to: coordinate, dispatch: dispatch)
+                switch outcome {
+                case .acknowledged, .unconfirmed:
+                    self.ownedSession = candidate
+                case .notSent:
+                    if !wasOwned { candidate.native.close() }
+                }
+                continuation.resume(returning: outcome)
+            }
         }
     }
 
     func clearLocation() async throws {
-        // Deliberately independent of DDI preparation, GPS and cancellation.
-        // An uncertain clear result is reported once; it is never resent here.
-        try await perform { try Self.withVerifiedSession { try $0.clearLocation() } }
+        // Independent of DDI/GPS/cancellation. Never resend an uncertain clear.
+        try await perform {
+            let session = try self.ownedSession ?? Self.makeSession()
+            defer {
+                // Release only after the real clear call returns, even on error.
+                session.native.close()
+                self.ownedSession = nil
+            }
+            try session.verified.clearLocation()
+        }
     }
 
     func resetClientConnection() async throws {
-        // Sessions are scoped to each operation, so all our client state is
-        // already released. A fresh TCP probe changes no remote service state.
-        try await perform { try TunnelProbe.run() }
+        try await perform {
+            guard self.ownedSession == nil else { throw DeviceServiceFailure.serviceUnavailable }
+            try TunnelProbe.run()
+        }
     }
 
     private func perform(_ operation: @escaping @Sendable () throws -> Void) async throws {
@@ -45,23 +94,37 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
                 // Never return early while an FFI call still owns handles.
                 idevice_set_global_timeout(10)
                 do { try operation(); continuation.resume() }
-                catch let failure as DeviceServiceFailure { continuation.resume(throwing: failure) }
-                catch { continuation.resume(throwing: DeviceServiceFailure.serviceUnavailable) }
+                catch { continuation.resume(throwing: Self.failure(error)) }
             }
         }
     }
 
-    private static func withVerifiedSession(_ operation: (VerifiedDeviceSession) throws -> Void) throws {
+    private static func failure(_ error: Error) -> DeviceServiceFailure {
+        error as? DeviceServiceFailure ?? .serviceUnavailable
+    }
+
+    private static func consumeSetupHandoff() throws {
+        // Only called without an owned location session.
+        let handoff = LocalGoSetupHandoff(importSetupData: {
+            try PairingFileStore.importSetupData($0, expectedDeviceUDID: $1)
+        })
+        do { try handoff.prepare() } catch { throw DeviceServiceFailure.storageUnavailable }
+        switch handoff.consume(commandsIdle: true, isPreparing: false) {
+        case .noPayload, .imported: break
+        case .rejected: throw DeviceServiceFailure.pairingRequired
+        case .storageFailure: throw DeviceServiceFailure.storageUnavailable
+        }
+    }
+
+    private static func makeSession() throws -> OwnedSession {
         let path = PairingFileStore.prepareURL()
         guard let expected = PairingFileStore.expectedDeviceUDID,
               PairingFileStore.verifyStoredRecord(expectedDeviceUDID: expected) else {
             throw DeviceServiceFailure.pairingRequired
         }
         let session = try NativeDeviceSession(pairingURL: path)
-        defer { session.close() }
-        try operation(VerifiedDeviceSession(session: session, expectedIdentifier: expected))
+        return OwnedSession(native: session, verified: VerifiedDeviceSession(session: session, expectedIdentifier: expected))
     }
-
 }
 
 #else
@@ -69,6 +132,9 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
 final class NativeDeviceService: DeviceService, @unchecked Sendable {
     init() {}
     func prepare() async throws { throw DeviceServiceFailure.deviceRequired }
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
+        .notSent(.deviceRequired)
+    }
     func clearLocation() async throws { throw DeviceServiceFailure.deviceRequired }
     func resetClientConnection() async throws { throw DeviceServiceFailure.deviceRequired }
 }
