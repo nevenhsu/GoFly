@@ -1,8 +1,8 @@
 # 02: 首次開啟、選用定位與必要 VPN 確認
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
-**Blocked by:** 01。
+**Blocked by:** 01（已完成）。
 
 **What to build:** 完成歡迎、選用定位與 VPN 確認後進入地圖；拒絕定位仍能繼續。
 
