@@ -4,6 +4,13 @@ This workspace contains the local REA research environment. The research target
 and implementation specification have not been selected yet.
 
 - Follow the user's current request and preserve unrelated work.
+- When confirmed design or interaction requirements change, including Figma-only
+  work, update the related development specifications, terminology, and acceptance
+  criteria in the same task. Replace superseded rules and distinguish design
+  updates from implemented behavior and device verification.
+- Figma work is currently limited to UI/UX wireframes. Unless the user explicitly
+  requests prototypes again, do not add prototype wiring, interaction tests, or
+  combinatorial state screens. Keep only the wireframes needed for discussion.
 - Source `scripts/env.sh` for the project's JDK 21 and Ghidra paths.
 - For reverse-engineering tasks, read `tools/reverse-skill/README_AI.md`,
   `tools/reverse-skill/RULES.md`, and `tools/reverse-skill/skills/SKILL.md`.

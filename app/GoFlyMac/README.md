@@ -1,6 +1,16 @@
 # GoFly for Mac
 
+使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
+
 原生 SwiftUI macOS app，依 GoFly 的 Mac 線框製作。目前交付範圍是 **介面與唯讀檢查**。不安裝手機 App，不簽署、不建立或交付配對、不重新安裝，也不備份／刪除手機資料；既有 iOS 程式沒有變更。
+
+## 最新開發需求：安裝完成前自動準備裝置
+
+Mac 安裝 iOS App 時，依裝置實際需要自動準備及驗證 DDI 等必要項目，已就緒則重用／略過；UI 僅「準備裝置」。App、配對與必要裝置準備均通過後才顯示安裝完成，不讓 iOS 額外下載或手動設定；H12／U19 撤下，Mac 以 U18 結束。現有 GUI 仍為唯讀／預覽，這些是待實作要求，見 [DEVELOPMENT.md](DEVELOPMENT.md)。
+
+## 最新開發需求：裝置管理自動重新簽名
+
+使用者選擇裝置並成功連線後，無論 USB 或 Wi-Fi，Mac 裝置管理自動重新簽名 GoFly App，保留既有資料；目前的手動「簽名與重新簽名」flow 及入口保留。自動與手動共用同一操作／進度，避免列表刷新或同機傳輸切換重複觸發。此為待實作規格，**不改變下方現有唯讀／預覽版本的能力**；完整觸發條件、中斷與驗收見 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
 ## 開啟
 

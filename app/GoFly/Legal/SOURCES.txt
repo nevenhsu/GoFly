@@ -1,0 +1,16 @@
+GoFly includes work adapted from StikDebug (AGPL-3.0):
+https://github.com/StikDebug/StikDebug
+Source commit: 734361bb9d03817ed8dd82cb27cf8b2b3792b458
+
+Native library upstream: https://github.com/jkcoxson/idevice
+The exact generator commit and full native transitive dependency license
+inventory have not been independently reconstructed. Do not infer that this
+development build has completed a release/distribution audit.
+
+Selected setup codec, protected pairing store and private handoff sources
+retain their original author notices. The production native session adapts
+only tunnel, identity, DDI and location ownership logic; prototype UI,
+debug/JIT wrappers, and phone-side DDI downloader are not compiled in.
+
+See AGPL-3.0.txt for the license. Source and audited input hashes are kept in
+the development repository at app/GoFly and app/GoFly/NativeSources.json.

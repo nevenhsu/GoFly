@@ -1,8 +1,18 @@
 # LocalGo 首次 Mac 設定
 
+這是 LocalGo prototype 的 USB CLI，不是新版 GoFly 安裝器。GoFly 預定 DMG 流程、Mac／iPhone 需求與三語使用者文件見[專案 README](../../../README.zh-Hant.md)；AI 代理執行前請讀[安裝操作說明](../../../docs/AI-INSTALL.md)。目前 Mac GUI 仍為唯讀／預覽，沒有公開 DMG 發行網址。
+
 此工具將自己的 LocalGo 簽署版本安裝至指定 USB iPhone，建立獨立 RP 配對身分，並透過 USB 自動交付至 App 私有空間。不需要手動輸入 UDID 或搬配對檔；沒有常駐 Mac tunnel，也不連接 AnyGo／iToolab 服務。
 
 目前使用免費 Apple ID／Personal Team，手機另裝並啟用 LocalDevVPN。**Apple 官方說明免費 Personal Team 預設有七日佈建限制；請以工具顯示的實際核發有效期為準，屆期需續簽重裝。首次 Mac 設定後獨立操作，不表示永久免續簽。** 開發者模式不能解除簽署期限。
+
+## Mac App 後續裝置管理需求
+
+2026-10-17 使用者確認：Mac App 裝置管理選擇裝置並成功連線後，USB／Wi-Fi 均自動重新簽名 GoFly，現有手動重新簽名 flow 保留，且應保留 App 資料。這是後續 GUI 開發要求，見 [Mac 開發規格](../../GoFlyMac/DEVELOPMENT.md)；不代表本 CLI 已加入 Wi-Fi 簽署／安裝能力，也不改變下方首次設定的 USB 限制與停止／清除模擬定位等前置條件。本輪只更新 docs，沒有實際簽名或寫入裝置。
+
+## 最新安裝完成條件（待實作）
+
+2026-10-17 最新設計：Mac 在部署 App、匯入配對的同一安裝流程，依實際需要自動完成 DDI 等裝置準備與驗證；已備妥則重用／略過，UI 只顯示「準備裝置」。完成後才能交接，不增加 iOS 下載／資料設定或 Mac U19 頁。現有 CLI 成功回報仍只證明 App／配對匯入，不代表已達此新門檻；實作要求見 [Mac 開發規格](../../GoFlyMac/DEVELOPMENT.md)。
 
 ## 首次執行
 
@@ -43,9 +53,9 @@ work/mac-setup-env/bin/python app/LocalGo/MacSetup/localgo_setup.py install \
 
 `install` 未加 `--execute` 只檢查。既有配對會先驗證並重用；驗證失敗時不默默換身分，明確指定 `--repair` 才重建。再次執行設定／續簽前，先在 LocalGo 停止並清除模擬定位；安裝更新不代表定位已恢復。
 
-## 手機獨立操作與驗收
+## 手機獨立操作與驗收（現有 CLI 行為）
 
-Mac 回報「安裝及匯入成功」後，在手機啟用 LocalDevVPN，再開 LocalGo → 啟動。下載及掛載成功後可用地圖控制定位。之後斷開 USB、停止 Mac 工具，在 Apple 地圖與另一個 App 驗證位置，再回 LocalGo 停止清除。
+現有 CLI 回報「安裝及匯入成功」後，在手機啟用 LocalDevVPN，再開 LocalGo → 啟動，目前程式仍會下載及掛載 DDI。這是現有行為，尚未符合上方 Mac 安裝完成前準備的最新要求；後續 GUI 不應把此手機下載當成額外步驟。之後斷開 USB、停止 Mac 工具，在 Apple 地圖與另一個 App 驗證位置，再回 LocalGo 停止清除。
 
 匯入回報只證明此交易的配對已被 App 接收；不表示 VPN、DDI、手機開發者服務或其他 App 的定位已成功。iOS 26、27 的接收效果、VPN／網路切換、鎖屏與重啟需分開驗收。路線在背景暫停，保留最後送出位置，返回需手動繼續。
 
