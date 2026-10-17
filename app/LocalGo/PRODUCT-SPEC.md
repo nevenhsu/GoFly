@@ -481,3 +481,10 @@ Save只取按下當下的有效Current快照；無法解析時只從最愛副本
 沿09／10原規則，連線恢復不自動繼續；同process健康route／roundtrip／auto保留同任務與ACK進度，由使用者明確操作。冷啟動的保存資料與實際任務證據分開：現有native沒有舊任務查詢能力，不能核對者均以原模式待確認，不製造舊Resume。保存草稿、最愛及最後位置但不送點；最後箭頭為等待半透明，不能當有效起點。保存有移動／未決回覆，或既有保存檔無法安全讀回時，明確恢復GPS並取得裝置clear確認後才可開始新任務；只丟棄摘要、修復VPN、重置或取得GPS都不宣稱舊命令已清除。
 
 GPX保存沿票09既有內容：種類、track／route群組、segments、原點序／精確經緯度及顯示檔名；不額外宣稱高程、時間或XMLmetadata支援。完整來源與active path上限均10,000點，超界拒絕、不截斷。上述程式已整合，完整Swift344、未簽署build15、兩軸最後readback及affected UI5／5通過；完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43，手機結果仍待集中驗收。路線地點編輯map Pin回填目前input、無Go始終保留。
+
+
+### 背景候選與產品效果的界線（票14，離線交付完成；手機待驗）
+
+一般背景重新整理設定、系統提交接受與實際runtime互不等同。票14只交付尚未在App啟用的候選生命週期與iOSadapter，15再整合既有路線／來回／漫步；不以候選編譯成功宣稱鎖屏後已支援。來回與漫步仍持續至使用者停止，不默改有限圈數／時間、不用假進度或自動續租；具體scheduler／VPN／兩接收App效果仍待最終集中手機驗收。
+
+票14候選交付通過完整Swift364、未簽署SDK27.1 device／simulator build16、native verifier／diffcheck與兩軸零finding。App尚未啟用候選；literal-wildcard handler dispatch不能視為已驗，15正式接線先按官方完整ID及一次註冊契約修正。

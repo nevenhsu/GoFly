@@ -151,3 +151,26 @@
 資料安全、原子寫入失敗、損壞檔與遲到結果由離線故障注入驗證，不要求使用者破壞手機檔案。以上為本票待驗步驟，尚未操作實機。
 
 票13離線交付基準：GoFly0.1.0 build15。最新完整SwiftCore335／40suites＋Transport9／1suite，共344PASS；完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43。未簽署iPhoneOS build15、332key三語parser／格式／plutil、native mapper及personalized branch等3項邊界檢查、native verifier與diffcheck通過，Standards／Spec最後readback均0finding。實際裝置、接收位置與VoiceOver仍deferred-by-user；沒有連接／安裝／操作手機。
+
+
+## 票14：背景候選集中實機腳本（離線交付完成；手機未執行）
+
+## 最終集中實驗的固定紀錄欄位
+
+每輪以真實系統／App版本、GoFly build、模式、前景使用者動作、VPN通道、背景重新整理設定、接收App A／B與開始時間建立獨立紀錄。區分：submission接受、matching framework launch、可撤銷runtime grant、native attempted、native ACK、receiver A位置、receiver B位置。記錄實際時間，不把timer／GPS／UI進度當ACK；不匯出UDID、配對檔、credentials或rawFFI。14記憶體bounded receipts不能證明kill後歷程，需保留原始觀察時間與接收畫面；15如提供保護匯出再引用其獨立證據。
+
+## 14離線adapter的最後手機實驗（15接線前不可直接在App操作）
+
+1. iOS26與27各建立獨立矩陣。記錄真實registration結果、plist permitted wildcard及registration／submission一致的具體unique UUID；正式15接線後才執行，不用14未證實的literal-wildcard dispatch當既成事實。API available、未簽署編譯或背景重新整理開啟不算取得runtime。
+2. 前景明確開始有效有限路線：分別記錄submit接受與實際launch，確認兩者間不允許聲稱背景已開始。模擬器不可用／系統拒絕保留真實結果，不能回傳測試grant。開始後切App與鎖屏，比對唯一writer的attempt／ACK及兩接收App。
+3. 在一般背景重新整理開、關、受限分別重做；這是設定條件，結果仍以matching launch／ACK／receiver為準。系統拒絕時不使用queue延後重播、auto-renew或新的背景submission。
+4. 有限路線由實際同owner ACK累計距離推進，固定總量，抵達前不得100%。唯有實際終點ACK後請求success；expiry先贏的任務即使稍後native抵達，framework完成仍為expired／false。兩種真相分別記錄。
+5. 來回跨多個折返、漫步跨多個自動目標，各使用同一request／同一indeterminate Progress（total=-1），只累計真ACK數與距離。不能加有限圈數／時間、重設每段百分比或自動續租。記錄scheduler實際接受／顯示／存活／expiry；有限路線成功不得外推無期限支援。
+6. 測試低進度、系統expiry及Live Activity取消：立即關閉grant／新派送，claimed只結算一次真ACK或unknown，framework完成一次。已正常完成／取消／invalidated後的遲到expiry不再製造expired事件或第二次完成。
+7. 暫停、Stop、實際clear、VPN斷復線、前景返回、手動override釋放及app switcher kill／冷啟動由正式15整合矩陣重跑；14adapter的controlled driver測試不可當正式App驗收。冷啟動不重建grant或自動Resume。
+
+## 離線證據應如何命名
+
+Core public controlled-driver／atomic completion證明可攜狀態機與鎖次序；實際SDK編譯／source checks證明adapter存在與API接線；均不能證明真實scheduler callback、背景期限、VPN傳輸或receiver位置。iOS26沒有本機SDK，僅以27.1 SDK availability分支編譯，26 runtime留到最後手機矩陣。來源為Apple官方API／已記錄本機header，無新增保活機制。
+
+票14離線交付基準：GoFly0.1.0 build16。完整SwiftCore355／41suites＋Transport9／1suite，共364PASS；final public focused20／20PASS；未簽署iPhoneOS／iPhoneSimulator SDK27.1 build16皆成功（simulator含arm64／x86_64）；native verifier／diffcheck通過，Standards0／Spec0。App初始化、plist、既有送點／生命週期及三語資源未變，本票未重跑UI；332key三語的13既有驗證仍適用。沒有手機／USB／簽署／安裝／實際scheduler或接收App測試。 本節手機步驟待15正式接線與全部開發完成後由使用者集中執行。

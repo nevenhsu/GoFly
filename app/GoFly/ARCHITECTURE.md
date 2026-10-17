@@ -196,3 +196,10 @@ App以獨立CandidateController處理漫步選點，與路線picker／瞬移分�
 SessionRecovery保存完整既有草稿及data-only歷史／顯示快取，App只有一份store和穩定Controller。冷資料不提供origin／lease／健康證據；native沒有可驗證舊任務的query，所以冷啟動不提供舊Resume。若存有active／uncertainty或既有檔案無法安全讀回，必須實際clear ACK後才可建立新任務；discard、GPS、TCP及reset不能解除hold。缺檔正常fresh defaults，損壞檔禁止自動覆寫。上述程式已整合；完整Swift344、未簽署iPhoneOS build15及兩軸最後readback通過。完整simulator回歸42／43（2017.930s，唯一失敗為舊RT預設值預期），test-only改成先明確設定live速度2／RT0再Load後，受影響單項1／1通過（210.374s）；其餘42項不重跑，合計43案例覆蓋，不將原run稱43／43。手機驗收仍集中最後進行。
 
 持久化使用單一off-MainActor writer，一筆inflight與一筆最新pending；capture只是接受，flush依revision cutline等待實際寫入結果，取消waiter不取消原子寫入。損壞／unsafe／未知schema禁止自動覆寫；儲存失敗不顯示已保存。firstclaim-beforeACK與pending／failed clear分別保存不確定狀態，terminal active=nil；已ACK手動owner保留無方向摘要至實際settlement。Service first-route preparation的dispatch gate也是實際claim證據，不能只看後續tick。
+
+
+## 背景工作候選（票14，離線交付完成；App未啟用）
+
+採核准v5的BGContinuedProcessingTask候選：submission與matching實際launch分開，close-only grant可跨queue同步撤銷；atomic completion固定outcome並回傳有效finish結果，expiry與finite-arrival先贏者唯一完成。Core公共controller／driver seam不認識native writer；實際iOS adapter只編譯、不從App建立／register／submit，15才接入原子派送邊界。有限路線依真ACK距離與實際抵達，來回／漫步保留無期限產品目標、以total=-1實驗，不改有限圈數／時間、不自動renew。SDK／controlled tests不能證明真實scheduler／背景／接收端，全部手機留最後。
+
+票14離線證據：完整SwiftCore355／41suites＋Transport9／1suite，共364PASS；final public focused20／20PASS；未簽署iPhoneOS／iPhoneSimulator SDK27.1 build16皆成功（simulator含arm64／x86_64）；native verifier／diffcheck通過，Standards0／Spec0。App初始化、plist、既有送點／生命週期及三語資源未變，本票未重跑UI；332key三語的13既有驗證仍適用。沒有手機／USB／簽署／安裝／實際scheduler或接收App測試。 literal-wildcard handler dispatch仍是未證實候選，15接線前改以官方完整ID註冊／提交及bounded一次註冊，另經15審查；不得由14建置或controlled callback當作已支援。
