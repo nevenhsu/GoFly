@@ -57,12 +57,14 @@ public struct ImportedRouteArtifact: Equatable, Sendable {
 }
 
 public struct ImportedRouteSnapshot: Equatable, Sendable {
+    public let source: GPXRouteSource
     public let record: ImportedRouteRecord
     public let document: GPXDocument
     public init(record: ImportedRouteRecord, document: GPXDocument) throws {
         let artifact = try ImportedRouteArtifact(document: document, filename: record.filename)
         guard try artifact.record(id: record.id) == record else { throw ImportedRoutesFailure.metadataMismatch }
         self.record = record; self.document = document
+        source = try GPXRouteSource(document: document, displayFilename: record.filename)
     }
     public init(document: GPXDocument, filename: String, id: UUID = UUID()) throws {
         let artifact = try ImportedRouteArtifact(document: document, filename: filename)

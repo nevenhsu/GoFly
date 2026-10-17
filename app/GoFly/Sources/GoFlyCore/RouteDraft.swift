@@ -22,13 +22,13 @@ public struct RouteSpeed: Equatable, Sendable {
 }
 public enum RouteDraftSource: Equatable, Sendable {
     case manual([RouteNode])
-    case gpx(ImportedRouteSnapshot)
+    case gpx(GPXRouteSource)
 }
 public struct RouteDraft: Equatable, Sendable {
     public static let maximumNodeCount = 27
     public let source: RouteDraftSource
     public var nodes: [RouteNode] { if case .manual(let nodes) = source { return nodes }; return [] }
-    public var importedRoute: ImportedRouteSnapshot? { if case .gpx(let snapshot) = source { return snapshot }; return nil }
+    public var gpxSource: GPXRouteSource? { if case .gpx(let source) = source { return source }; return nil }
     public var isManual: Bool { if case .manual = source { return true }; return false }
     public let speed: RouteSpeed
     public var start: RouteNode? { nodes.first }
@@ -43,7 +43,8 @@ public struct RouteDraft: Equatable, Sendable {
         guard values.count <= Self.maximumNodeCount, values.filter({ $0 == .current }).count <= 1 else { return nil }
         source = .manual(values.map { RouteNode(value: $0) }); self.speed = speed
     }
-    public init(imported: ImportedRouteSnapshot, speed: RouteSpeed = .standard) { source = .gpx(imported); self.speed = speed }
+    public init(imported: ImportedRouteSnapshot, speed: RouteSpeed = .standard) { self.init(gpx: imported.source, speed: speed) }
+    public init(gpx: GPXRouteSource, speed: RouteSpeed = .standard) { source = .gpx(gpx); self.speed = speed }
     private init(nodes: [RouteNode], speed: RouteSpeed) { source = .manual(nodes); self.speed = speed }
     private init(source: RouteDraftSource, speed: RouteSpeed) { self.source = source; self.speed = speed }
     public func role(of id: RouteNodeID) -> RouteNodeRole? {

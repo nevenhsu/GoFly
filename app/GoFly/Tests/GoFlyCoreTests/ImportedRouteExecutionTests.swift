@@ -21,7 +21,7 @@ struct ImportedRouteExecutionTests {
         #expect(controller.phase == .editing)
         #expect(controller.plannedRoute == expected)
         #expect(controller.intent == nil)
-        #expect(controller.draft.importedRoute == imported)
+        #expect(controller.draft.gpxSource == imported.source)
         #expect(controller.draft.speed == speed)
         #expect(controller.roundTripEnabled)
         #expect(await planner.calls == 0)
@@ -47,7 +47,7 @@ struct ImportedRouteExecutionTests {
         #expect(service.cancelPreparation(id: try #require(service.preparedOperation?.id)))
         #expect(controller.phase == .editing)
         #expect(controller.plannedRoute == expected)
-        #expect(controller.draft.importedRoute == imported)
+        #expect(controller.draft.gpxSource == imported.source)
         #expect(await planner.calls == 0)
         #expect(await device.clears == 0)
     }
@@ -70,7 +70,7 @@ struct ImportedRouteExecutionTests {
         #expect(await planner.calls == 0)
         #expect(await device.coordinates == [coordinate(0)])
         #expect(controller.progress == nil)
-        #expect(controller.intent?.draft.importedRoute == imported)
+        #expect(controller.intent?.draft.gpxSource == imported.source)
         #expect(controller.intent?.draft.nodes.isEmpty == true)
         #expect(controller.intent?.route.points == [coordinate(0), coordinate(1), coordinate(2)])
         #expect(controller.intent?.speed == speed)
@@ -112,7 +112,7 @@ struct ImportedRouteExecutionTests {
             await wait { !service.nativeBusy }
             #expect(await device.clears == 1)
         }
-        #expect(controller.draft.importedRoute == imported)
+        #expect(controller.draft.gpxSource == imported.source)
         #expect(controller.draft.speed == speed)
         #expect(controller.roundTripEnabled)
         #expect(imported.document.pointCount == 4)
@@ -129,7 +129,7 @@ struct ImportedRouteExecutionTests {
         await wait { controller.phase == .running }
         #expect(commands.originReads == 0)
         #expect(await planner.calls == 0)
-        #expect(commands.begins.first?.draft.source == .gpx(imported))
+        #expect(commands.begins.first?.draft.source == .gpx(imported.source))
         #expect(commands.begins.first?.route.start == coordinate(0))
         #expect(controller.cancel())
         await wait { controller.phase == .editing }
@@ -148,7 +148,7 @@ struct ImportedRouteExecutionTests {
         #expect(commands.begins.isEmpty)
         #expect(commands.originReads == 0)
         #expect(await planner.calls == 0)
-        #expect(controller.draft.importedRoute == imported)
+        #expect(controller.draft.gpxSource == imported.source)
     }
 
     @Test(arguments: [false, true])
@@ -164,7 +164,7 @@ struct ImportedRouteExecutionTests {
         #expect(commands.begins.isEmpty)
         #expect(commands.originReads == 0)
         #expect(await planner.calls == 0)
-        #expect(controller.draft.importedRoute == imported)
+        #expect(controller.draft.gpxSource == imported.source)
         #expect(controller.clearImportedRoute())
         #expect(controller.draft.isManual)
     }
@@ -182,7 +182,7 @@ struct ImportedRouteExecutionTests {
         let controller = RouteExecutionController(planner: ImportedPlannerSpy(), commands: ImportedCommandSpy(), search: ImportedSearch())
         #expect(controller.loadImportedRoute(imported))
         #expect(controller.draft.nodes.isEmpty)
-        #expect(controller.draft.importedRoute?.document.pointCount == 10_000)
+        #expect(controller.draft.gpxSource?.document.pointCount == 10_000)
         #expect(controller.canStart)
     }
 
@@ -239,8 +239,8 @@ struct ImportedRouteExecutionTests {
         let stale = try #require(controller.picker)
         let snapshot = try snapshot()
         #expect(controller.loadImportedRoute(snapshot))
-        #expect(controller.draft.source == .gpx(snapshot))
-        #expect(controller.draft.importedRoute == snapshot)
+        #expect(controller.draft.source == .gpx(snapshot.source))
+        #expect(controller.draft.gpxSource == snapshot.source)
         #expect(!controller.draft.isManual)
         #expect(controller.draft.nodes.isEmpty)
         #expect(controller.draft.start == nil)
@@ -260,7 +260,7 @@ struct ImportedRouteExecutionTests {
         #expect(commands.originReads == 0)
         let changedSpeed = RouteSpeed(kilometersPerHour: 42)!
         #expect(controller.setSpeed(changedSpeed))
-        #expect(controller.draft.importedRoute == snapshot)
+        #expect(controller.draft.gpxSource == snapshot.source)
         #expect(controller.canClearImportedRoute)
         #expect(controller.clearImportedRoute())
         #expect(controller.plannedRoute == nil)

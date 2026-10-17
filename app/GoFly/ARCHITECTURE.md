@@ -157,3 +157,12 @@ RouteDraftSource明確分manual／gpx完整snapshot，GPX不製造節點；只�
 ImportedRoutesStore與配對、FavoritePlaces分開；單一persistence actor序列管理immutable UUID payload、versioned manifest、quota／O_EXCL／private modes/protection／fsync-rename／deleteundo／cleanup。實際64MiB上限涵蓋staging／final／undo與orphan，最多100筆，manifest1MiB；commit時重讀最新資料，不跨await套舊proposal。manifest成功才publish，失敗保留observer／selection／undo token；manifest損壞／未知schema不cleanup或覆寫。來源檔永不改／刪，payload hash與filename/kind/count/start/end metadata在選取／Load／Export重驗。
 
 App單一env store由root載入，UUID DEBUGsim namespace只隔離真實檔案。Import測試只用明確flag在按Import時選一個真實GPX來源檔，仍走相同security scope／regular-file／bounded read／codec／store；不是啟動預填、nativeACK或GPSfixture。選取preview逐segment畫線、singleton用sample annotation，不跨gap造線；main route只在明確Load成功後更新。GPXUTType以Info additions登錄，FileDocument只用輸出，不用其整檔reader匯入。正式實作與離線驗證完成：Swift188、unsigned build11、完整UI30case覆蓋（29通過＋唯一test浮點容差修正後AX三語單項重驗通過）、248key三語與native verifier，兩軸零finding；詳細run結果分列work驗證紀錄，不將test誤判run記30／30。Load即保留完整主地圖預覽，取消規劃／準備失敗回編輯仍保留；Clear才移除。手機位置及Files真實儲存／授權仍待集中驗收。
+
+
+## 完整最愛路線（票10）
+
+Advisor核准獨立FavoriteRoutes manifest／immutable payload，manual有序完整MapPlace、GPX中立GPXRouteSource完整文件及檔名；標籤只改manifest。每次Save獨立UUID，與ImportedRoutes及FavoritePlaces無刪除連動。只抽共用安全FD I/O primitives，不抽domain transaction／quota／undo，保留05/09既有commit與fault語意。
+
+最愛Save純builder捕捉tap-time draft與service.currentRouteOrigin單一值，無效Current只在副本排除，≥2有效點才存；實際commit receipt攜帶omittedUnavailableCurrent，UI明確結果後Done，不能以過期eligibility假稱已保存Current或再讀service。Start仍拒絕未解析Current。FavoriteLoad用controller新發出的token，在async validation後同步檢查、消耗，編輯／picker／Start／Load／Clear或dismiss失效，遲到結果不能覆寫新草稿；speed／roundtrip保留最新值。
+
+正式實作與離線驗證完成：完整Swift231、完整simulator UI35／35（1537.711s）、未簽署iPhoneOS build12、285key三語parser／native verifier／diffcheck及Standards／Spec零finding。完整GPX10k與27點重開讀回、精確標籤及三語最大字級皆通過；實際GPS／接收App／Files與VoiceOver仍集中手機驗收。沒有Figma回寫或手機操作。

@@ -279,7 +279,8 @@ struct GoFlyMapView: View {
                     controller: route, maximumHeight: contentMaximumHeight(in: geometry),
                     onEditNode: { _ = route.openPicker(for: $0) },
                     onSettings: { showingSettings = true },
-                    currentLocationAvailable: service.currentRouteOrigin != nil
+                    currentLocationAvailable: service.currentRouteOrigin != nil,
+                    currentRouteOrigin: { service.currentRouteOrigin }
                 )
             } else {
                 GoFlySearchPanel(

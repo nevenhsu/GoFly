@@ -7,8 +7,11 @@ struct GoFlyRoutePanel: View {
     var onEditNode: (RouteNodeID) -> Void
     var onSettings: () -> Void = { }
     var currentLocationAvailable: Bool? = nil
+    var currentRouteOrigin: @MainActor () -> GeoCoordinate? = { nil }
     @State private var contentHeight: CGFloat = 240
     @State private var showingDetails = false
+    @State private var showingFavoriteRoutes = false
+    @State private var showingSaveFavorite = false
     @State private var confirmingCancellation = false
     @State private var visibleScrollFrame: CGRect = .zero
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
@@ -44,8 +47,19 @@ struct GoFlyRoutePanel: View {
         .sheet(isPresented: $showingDetails) {
             GoFlyRouteDetailsView(controller: controller) { showingDetails = false }
         }
+        .sheet(isPresented: $showingFavoriteRoutes) {
+            GoFlyFavoriteRoutesView(controller: controller) { showingFavoriteRoutes = false }
+        }
+        .sheet(isPresented: $showingSaveFavorite) {
+            GoFlySaveFavoriteRouteView(controller: controller, currentLocationAvailable: currentLocationAvailable,
+                                      currentRouteOrigin: currentRouteOrigin) { showingSaveFavorite = false }
+        }
         .onChange(of: controller.canEdit) { _, canEdit in
-            if !canEdit { showingDetails = false }
+            if !canEdit {
+                showingDetails = false
+                showingFavoriteRoutes = false
+                showingSaveFavorite = false
+            }
         }
         .confirmationDialog(goFlyString("route.cancelConfirmation.title"),
                             isPresented: $confirmingCancellation, titleVisibility: .visible) {
@@ -76,6 +90,16 @@ struct GoFlyRoutePanel: View {
             HStack {
                 Text(goFlyString("route.title")).font(.headline)
                 Spacer(minLength: 12)
+                Button { showingSaveFavorite = true } label: {
+                    Image(systemName: "star")
+                        .font(.system(size: 20))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!controller.canEdit)
+                .accessibilityLabel(goFlyString("favoriteRoutes.add"))
+                .accessibilityIdentifier("route.favorite.add")
                 Button { showingDetails = true } label: {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 20, weight: .semibold))
@@ -87,11 +111,12 @@ struct GoFlyRoutePanel: View {
                 .accessibilityLabel(goFlyString("route.details"))
                 .accessibilityIdentifier("route.details")
             }
-            if let imported = controller.draft.importedRoute {
+            if let imported = controller.draft.gpxSource {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(goFlyString("imports.loadedPath")).font(.headline)
-                    Text(imported.record.filename).font(.body)
-                    Text(goFlyImportedRouteMetadata(imported.record))
+                    Text(imported.displayFilename).font(.body)
+                    Text(String.localizedStringWithFormat(goFlyString("imports.metadata"),
+                         goFlyString("imports.kind.\(imported.document.kind.rawValue)"), imported.document.pointCount))
                         .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,6 +147,12 @@ struct GoFlyRoutePanel: View {
                 .accessibilityIdentifier("route.addNode")
                 .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             }
+            Button { showingFavoriteRoutes = true } label: {
+                Label(goFlyString("favoriteRoutes.title"), systemImage: "star")
+            }
+            .buttonStyle(GoFlyActionStyle())
+            .disabled(!controller.canEdit)
+            .accessibilityIdentifier("route.favorite.list")
             if let error = controller.error {
                 failure(error)
             } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {

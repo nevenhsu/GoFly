@@ -7,6 +7,7 @@ struct GoFlyApp: App {
     @StateObject private var service = ServiceController(service: Self.deviceService())
     @StateObject private var favorites = Self.favoritePlacesStore()
     @StateObject private var importedRoutes = Self.importedRoutesStore()
+    @StateObject private var favoriteRoutes = Self.favoriteRoutesStore()
     @StateObject private var onboarding = OnboardingController(
         probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
     )
@@ -25,7 +26,11 @@ struct GoFlyApp: App {
             }
             .environmentObject(favorites)
             .environmentObject(importedRoutes)
-            .task { await importedRoutes.load() }
+            .environmentObject(favoriteRoutes)
+            .task {
+                await importedRoutes.load()
+                await favoriteRoutes.load()
+            }
         }
     }
 
@@ -78,6 +83,27 @@ struct GoFlyApp: App {
             return ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: directory))
         } catch {
             return ImportedRoutesStore(persistence: UnavailableImportedRoutesPersistence())
+        }
+    }
+
+    private static func favoriteRoutesStore() -> FavoriteRoutesStore {
+        do {
+            let support = try FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: true
+            )
+            var directory = support.appendingPathComponent("FavoriteRoutes", isDirectory: true)
+            #if DEBUG && targetEnvironment(simulator)
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-gofly-ui-favorite-routes-store"),
+               arguments.indices.contains(index + 1), let namespace = UUID(uuidString: arguments[index + 1]) {
+                directory = support.appendingPathComponent("UITests/FavoriteRoutes", isDirectory: true)
+                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
+            }
+            #endif
+            return FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: directory))
+        } catch {
+            return FavoriteRoutesStore(persistence: UnavailableFavoriteRoutesPersistence())
         }
     }
 
