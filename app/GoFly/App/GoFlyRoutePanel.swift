@@ -1,0 +1,251 @@
+import GoFlyCore
+import SwiftUI
+
+struct GoFlyRoutePanel: View {
+    @ObservedObject var controller: RouteExecutionController
+    var maximumHeight: CGFloat
+    var onEditNode: (RouteNodeID) -> Void
+    var onSettings: () -> Void = { }
+    var currentLocationAvailable: Bool? = nil
+    @State private var contentHeight: CGFloat = 240
+    @State private var showingDetails = false
+    @State private var confirmingCancellation = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if controller.phase == .editing {
+                    editingContent
+                } else {
+                    executionContent
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        }
+        .frame(height: min(contentHeight, max(100, maximumHeight)))
+        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
+        }
+        .accessibilityIdentifier("route.panel")
+        .sheet(isPresented: $showingDetails) {
+            GoFlyRouteDetailsView(controller: controller) { showingDetails = false }
+        }
+        .onChange(of: controller.canEdit) { _, canEdit in
+            if !canEdit { showingDetails = false }
+        }
+        .confirmationDialog(goFlyString("route.cancelConfirmation.title"),
+                            isPresented: $confirmingCancellation, titleVisibility: .visible) {
+            Button(goFlyString("route.cancelConfirmation.confirm"), role: .destructive) { _ = controller.cancel() }
+            Button(goFlyString("route.cancelConfirmation.return"), role: .cancel) { }
+        } message: {
+            Text(goFlyString("route.cancelConfirmation.message"))
+        }
+    }
+
+    private var editingContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text(goFlyString("route.title")).font(.headline)
+                Spacer(minLength: 12)
+                Button { showingDetails = true } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(!controller.canEdit)
+                .accessibilityLabel(goFlyString("route.details"))
+                .accessibilityIdentifier("route.details")
+            }
+            VStack(spacing: 0) {
+                nodeButton(controller.draft.start, isStart: true)
+                Divider().padding(.horizontal, 12)
+                nodeButton(controller.draft.destination, isStart: false)
+            }
+            .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
+            }
+            if let error = controller.error {
+                failure(error)
+            } else if controller.draft.start.value == .current, currentLocationAvailable == false {
+                failure(.currentLocationUnavailable)
+            }
+            Button(goFlyString("route.start")) { _ = controller.start() }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .disabled(!controller.canStart)
+                .accessibilityIdentifier("route.start")
+        }
+    }
+
+    private func nodeButton(_ node: RouteNode, isStart: Bool) -> some View {
+        Button { onEditNode(node.id) } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(goFlyString(isStart ? "route.origin" : "route.destination"))
+                        .font(.caption)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                    Text(nodeTitle(node.value, isStart: isStart))
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!controller.canEdit)
+        .accessibilityLabel(goFlyString(isStart ? "route.editOrigin" : "route.editDestination"))
+        .accessibilityValue(nodeTitle(node.value, isStart: isStart))
+        .accessibilityIdentifier(isStart ? "route.node.start" : "route.node.destination")
+    }
+
+    @ViewBuilder private var executionContent: some View {
+        if [.planning, .preparing, .pausing, .cancelling].contains(controller.phase) {
+            ProgressView(goFlyString("route.phase.\(controller.phase.rawValue)"))
+                .font(.headline)
+        } else if controller.phase != .running && controller.phase != .paused {
+            Text(goFlyString("route.phase.\(controller.phase.rawValue)"))
+                .font(.headline)
+        }
+        if let progress = controller.progress {
+            VStack(alignment: .leading, spacing: 10) {
+                ProgressView(value: progress.fraction, total: 1)
+                    .accessibilityLabel(goFlyString("route.progress"))
+                    .accessibilityIdentifier("route.progress")
+                Text(progress.fraction, format: .percent.precision(.fractionLength(0)))
+                    .font(.subheadline.monospacedDigit())
+            }
+        }
+        if let error = controller.error { failure(error) }
+        switch controller.phase {
+        case .running, .paused:
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    cancelButton
+                    playbackButton
+                }
+                VStack(spacing: 12) {
+                    cancelButton
+                    playbackButton
+                }
+            }
+        case .planning, .pausing:
+            cancelButton
+        case .interrupted:
+            settingsButton
+            cancelButton
+        case .unknown:
+            Text(goFlyString("route.unknown.message"))
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+            settingsButton
+        case .preparing, .cancelling, .editing:
+            EmptyView()
+        }
+    }
+
+    private var cancelButton: some View {
+        Button(goFlyString("route.cancel")) {
+            if controller.phase == .paused { confirmingCancellation = true }
+            else { _ = controller.cancel() }
+        }
+        .buttonStyle(GoFlyActionStyle())
+        .disabled(!controller.canCancel)
+        .accessibilityIdentifier("route.cancel")
+    }
+
+    private var settingsButton: some View {
+        Button(goFlyString("operation.settings"), action: onSettings)
+            .buttonStyle(GoFlyActionStyle(primary: true))
+            .accessibilityIdentifier("route.settings")
+    }
+
+    private func nodeTitle(_ value: RouteNodeValue?, isStart: Bool) -> String {
+        switch value {
+        case .current: goFlyString("route.currentLocation")
+        case .place(let place): place.title
+        case nil: goFlyString(isStart ? "route.chooseOrigin" : "route.chooseDestination")
+        }
+    }
+
+    private func failure(_ error: RouteExecutionFailure) -> some View {
+        Label(goFlyString(error.localizationKey), systemImage: "exclamationmark.triangle")
+            .font(.footnote)
+            .foregroundStyle(GoFlyStyle.errorForeground)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("route.error")
+    }
+
+    private var playbackButton: some View {
+        Button(goFlyString(controller.phase == .paused ? "route.resume" : "route.pause")) {
+            if controller.phase == .paused { _ = controller.resume() }
+            else { _ = controller.pause() }
+        }
+        .buttonStyle(GoFlyActionStyle(primary: true))
+        .disabled(controller.phase == .paused ? !controller.canResume : !controller.canPause)
+        .accessibilityIdentifier(controller.phase == .paused ? "route.resume" : "route.pause")
+    }
+
+}
+
+private struct GoFlyRouteDetailsView: View {
+    @ObservedObject var controller: RouteExecutionController
+    var onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(goFlyString("route.speed")).font(.headline)
+                    Text(String.localizedStringWithFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
+                        .font(.title2.monospacedDigit())
+                        .accessibilityIdentifier("route.speed.value")
+                    Slider(value: Binding(
+                        get: { Double(controller.draft.speed.kilometersPerHour) },
+                        set: { value in
+                            if let speed = RouteSpeed(kilometersPerHour: Int(value.rounded())) { _ = controller.setSpeed(speed) }
+                        }
+                    ), in: 2...100, step: 1) {
+                        Text(goFlyString("route.speed"))
+                    } minimumValueLabel: {
+                        Text("2")
+                    } maximumValueLabel: {
+                        Text("100")
+                    }
+                    .disabled(!controller.canEdit)
+                    .accessibilityValue(String.localizedStringWithFormat(
+                        goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour
+                    ))
+                    .accessibilityIdentifier("route.speed")
+                }
+                .padding(24)
+            }
+            .background(GoFlyStyle.surface)
+            .navigationTitle(goFlyString("route.details"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(goFlyString("common.back"), action: onDismiss)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier("route.details.back")
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationBackground(GoFlyStyle.surface)
+    }
+}

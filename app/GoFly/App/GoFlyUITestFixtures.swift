@@ -14,4 +14,13 @@ struct UnconfirmedPointUITestService: DeviceService {
         return .unconfirmed(.operationTimedOut)
     }
 }
+
+/// A deterministic planning failure; it neither supplies a path nor calls native code.
+struct DelayedFailureRouteUITestPlanner: RoutePlanning {
+    func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
+        try await Task.sleep(for: .seconds(5))
+        try Task.checkCancellation()
+        throw RouteExecutionFailure.planningFailed
+    }
+}
 #endif

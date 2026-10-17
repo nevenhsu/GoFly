@@ -3,6 +3,7 @@ import Foundation
 public enum PreparedOperationSource: Equatable, Sendable {
     case start
     case point(PointMoveIntent)
+    case route(RouteExecutionIntent)
 }
 
 public struct PreparationAttempt: Equatable, Sendable {

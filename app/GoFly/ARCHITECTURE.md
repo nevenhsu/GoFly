@@ -92,3 +92,34 @@ Label editor 保存被長按項目的不可變 key／place 與本地草稿；星
 App factory 只建立一份 store；無法準備位置時也建立 blocked store，不能退回健康空資料。Debug simulator 可用有效 UUID 選獨立的真實檔案 namespace；明確的 unknown-point fault fixture 只令 Core 進 unconfirmed，不製造 native ACK、GPS 或接收 App 位置證據，Release 不含這些入口。
 
 完整 suite 揭露百筆同步儲存驗證會干擾舊 20–40ms wall-clock 測試；經 Advisor 核准，ServiceController 注入 watchdogSleep（正式仍 Task.sleep），測試以每筆獨立可取消 waiter 在觀察 native 邊界後觸發，保留原 watchdog／nativeBusy／FIFO 語意，不提高正式 timeout 或提前解除忙碌。
+
+## 兩點路線（票 06）
+
+`RouteDraft` 與 `RouteExecutionIntent` 分離，兩個穩定 node ID 的地點 picker 使用獨立候選；Confirm 才回填同一節點。收藏直接寫共用 store，Cancel 只丟棄地點草稿。路線地點編輯依最新使用者要求顯示選點 Pin／共用詳情，但沒有 Go；搜尋、最愛及地圖選點均由明確確認寫入草稿。運作／暫停只留進度與取消／暫停／繼續，不提供模式切換或地點編輯。
+
+`RoutePlanning` 純規劃；App 以可取消的 MapKit 步行 directions 提供路徑，失敗不替換直線。開始時凍結精確首尾與速度；目前位置只用確認模擬位置或當下仍有效的 GPS，等待箭頭快取不是座標來源。路徑限制與相鄰重複點驗證在 Core，第一筆送精確起點，第一 ACK 的進度為零，沒有接近起點的額外路段。
+
+`ServiceController` 為唯一裝置命令 owner；每次 adapter call 進私有 FIFO pump，實際返回並完成 completion 後才取下一筆。準備重試重新排尾，舊健康任務的送點可在 attempts 間完成；每 lease 最多一筆 queued／in-flight tick。所有最後派送仍須通過 verified native gate。Stop 立即撤權，但 clear 等已 claim 呼叫真正返回，不能把 async 取消當 FFI 已停。
+
+規劃前擷取 admission revision，較新的明確使用者動作會使遲到規劃失效；健康 ticks 不遞增。Retry 只略過原規劃 revision，不能略過身分、unknown lock 或 lifecycle guards。已派送未知停止排程並要求 Stop；未 claim 的一般失敗只在仍屬相同 running execution 時標 interrupted，不能蓋過 Pause／Cancel／Stop／handoff。
+
+每筆 ACK 後重新等單調 500ms cadence，再前進一個 cadence 距離，不補 native latency、暫停或排隊期間漏掉的步數。ACK 才更新進度及模擬位置。Pause 保留同 lease／路徑／進度並等待已 claim 結果；最終端點 ACK 優先自然完成。Cancel 撤回精確 lease、等待實際返回，不 clear，保留草稿與最後確認位置；Stop／Cancel／新交接的遲到 ACK 不得發布或復活舊任務。
+
+Debug simulator 的 route-planning-delay 只產生可取消的延遲規劃失敗，不提供路徑、不呼叫 native、不製造 ACK。Core injected command／clock 測試與模擬器 UI 證據不代替最後手機／接收 App 驗收。
+
+票 06 共用搜尋複查補強：新非空名稱 query 必須重新明確選取才可 Go／Confirm，搜尋過程保留舊候選與其收藏。空 query 不刪除原地點，只解除名稱改查鎖；無效座標鎖仍須有效選取／修正。Route picker 的最愛入口依空 query 或無 options 顯示，與鍵盤焦點無關；每次開 picker 產生新的聚焦要求，確認按鈕固定於可見鍵盤上方，長內容可捲動。
+
+路線端點先驗道路吸附：原始路徑首尾各在所選端點 50m 內才補入精確端點，保留所有原始道路頂點，最終仍最多 10,000 點。超限拒絕整條路線，不能任意改寫 raw 首尾而製造長直線；這與禁止目前位置到明確起點的 approach leg 分別驗證。取消後的 waitForRouteIdle 以 RouteIdleSettlement 明確回報 settled／requiresStop；未知命令不能因 Cancel 而解鎖，只有明確 Stop generation 接管後才忽略舊不確定結果，clear 仍等實際返回。
+
+`PlaceResolving` 是可選的 map metadata 邊界，只有路線 active picker 傳入正式 MapKit reverse-geocoding adapter；原瞬移 map tap 預設不補查詢。Core 立即建立精確座標候選，再以 revision／UUID／exact coordinate 核對遲到結果，只接受名稱／地址並重建原座標身分。任何輸入或選取使待回覆失效；nil／error 保留可用座標，不冒充搜尋或 native 狀態。Confirm snapshot 與候選不同，後續 metadata 不改已提交草稿。Root camera 依候選 UUID 去重，因此補資料不打斷手動 pan。
+
+搜尋面板在短 viewport 仍保留完整選項／星號：一般空間內清單捲動，不能容納最小選項時改整個面板捲動，不以 availableResultsHeight 判斷移除地點。輸入、星號及清除均可捲動抵達，面板仍受鍵盤調整後的可見高度限制。
+
+
+相機只在已發布完成的 activeCandidate UUID onChange 時建立選點 intent，避免 @Published willSet 與舊值身分 guard 阻擋新選點；同 UUID metadata 補資料不搶鏡頭。地圖帶高度統一依實測 Pin／回中控制計算。瞬移短高度以正常狀態 card 的保留實測高度判斷是否精簡，不能依精簡後 topFrame 造成震盪；精簡只省略真實位置的重複標題，保留狀態、模擬來源、未知提示、44pt 控制及完整 VoiceOver 來源／狀態，空間恢復自動還原。
+
+
+RouteExecutionController 擁有目前 picker candidates 的 objectWillChange 訂閱並轉發 aggregate 的公開通知，讓父層地圖與編輯子面板同步收到候選／metadata／搜尋變化。picker 關閉或替換即取消舊訂閱，舊 session 完成不再觸發 aggregate；候選 UUID 仍是相機選點更新依據，不因補名稱而重新置中。公開 observable 邊界測試覆蓋 Confirm／Cancel／替換後解除及新 session 接續通知。
+
+
+搜尋面板的最小可見高度依實際 input 列與上下 padding 量測，不能以固定 76pt 截掉最大字級輸入。Route picker 保持 Confirm 獨立固定，焦點輸入必須完整位於上層可捲動 viewport，不能只因 AX content rect 尚存在而視為可見；Debug simulator 實際幾何量測只用既有明確測試旗標、不製造位置或命令成功。

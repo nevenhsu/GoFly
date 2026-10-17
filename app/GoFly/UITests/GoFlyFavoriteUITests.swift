@@ -56,11 +56,13 @@ final class GoFlyFavoriteUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["search.inputError"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["map.candidate.go"].isEnabled)
         XCTAssertEqual(pin.value as? String, first)
+        revealInSearch(star, app: app, scrollUp: true)
         XCTAssertEqual(star.value as? String, "Favorite")
         star.tap()
         star.tap()
         XCTAssertEqual(pin.value as? String, first)
         XCTAssertFalse(app.buttons["map.candidate.go"].isEnabled)
+        revealInSearch(app.buttons["search.clear"], app: app, scrollUp: false)
         app.buttons["search.clear"].tap()
         dismissKeyboard(app)
         XCTAssertFalse(app.buttons["map.candidate.go"].isEnabled,
@@ -293,6 +295,19 @@ final class GoFlyFavoriteUITests: XCTestCase {
                        "Selecting a favorite must center its actual projection in the visible map.", file: file, line: line)
     }
 
+    private func revealInSearch(_ element: XCUIElement, app: XCUIApplication, scrollUp: Bool,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        let panel = app.descendants(matching: .any)["search.panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 5), file: file, line: line)
+        for _ in 0..<4 {
+            if element.exists, element.isHittable, panel.frame.contains(element.frame) { break }
+            if scrollUp { panel.swipeUp() } else { panel.swipeDown() }
+        }
+        XCTAssertTrue(element.isHittable, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(element.frame.width, 44, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(element.frame.height, 44, file: file, line: line)
+        XCTAssertTrue(panel.frame.contains(element.frame), "The full control must fit inside the visible search panel.", file: file, line: line)
+    }
     private func dismissKeyboard(_ app: XCUIApplication) {
         if app.keyboards.buttons["Done"].exists { app.keyboards.buttons["Done"].tap() }
     }

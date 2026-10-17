@@ -5,13 +5,21 @@ import UIKit
 
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
+    @StateObject private var route: RouteExecutionController
+    @State private var mode: GoFlyMapMode = .teleport
+    @State private var modeHeaderHeight: CGFloat = 44
     @StateObject private var location = GoFlyRealLocation()
     @StateObject private var search = CandidateController(search: MapKitPlaceSearch())
     @State private var cameraIntent: GoFlyCameraIntent?
+    private let mapPlaces = MapKitPlaceResolver()
     @State private var pendingGPSRecenter = false
     @State private var projection: GoFlyMapProjection?
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
+    @State private var recenterHeight: CGFloat = 44
+    @State private var normalStatusHeight: CGFloat = 0
+    @State private var statusHeight: CGFloat = 0
+    @State private var searchMinimumHeight: CGFloat = 76
     @State private var presentedSheet: GoFlyMapSheet?
     @State private var searchFocusRequest: UUID?
     @State private var focusAfterSheet = false
@@ -22,6 +30,29 @@ struct GoFlyMapView: View {
     @State private var returnedFromUnconfirmed: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    init(service: ServiceController) {
+        _service = ObservedObject(wrappedValue: service)
+        _route = StateObject(wrappedValue: RouteExecutionController(
+            planner: Self.routePlanner(), commands: service, search: MapKitPlaceSearch()
+        ))
+    }
+
+    private static func routePlanner() -> any RoutePlanning {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-route-planning-delay") {
+            return DelayedFailureRouteUITestPlanner()
+        }
+        #endif
+        return MapKitWalkingRoutePlanner()
+    }
+
+    private var activeSearch: CandidateController { route.picker?.candidates ?? search }
+    private var activeCandidate: TeleportCandidate? {
+        if let picker = route.picker { return picker.candidates.candidate }
+        return mode == .teleport && route.canEdit ? search.candidate : nil
+    }
+    private var canSwitchMode: Bool { route.canEdit && route.picker == nil && !showsOperationPanel }
+
     private var viewportGap: CGFloat { dynamicTypeSize.isAccessibilitySize ? 4 : 8 }
     private var bottomPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 12 }
 
@@ -29,20 +60,40 @@ struct GoFlyMapView: View {
         NavigationStack {
             GeometryReader { geometry in
                 let viewport = visibleViewport(in: geometry)
+                let compactStatus = usesCompactStatus(in: geometry)
                 ZStack(alignment: .topLeading) {
                     GoFlyMapCanvas(
-                        marker: service.positionMarker, candidate: search.candidate,
+                        marker: service.positionMarker, candidate: activeCandidate,
                         viewport: viewport, cameraIntent: cameraIntent,
-                        onMapTap: { search.selectMapCoordinate($0) },
+                        route: mode == .route ? route.plannedRoute : nil,
+                        onMapTap: { coordinate in
+                            if let picker = route.picker {
+                                picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
+                            } else if mode == .teleport, route.canEdit {
+                                search.selectMapCoordinate(coordinate)
+                            }
+                        },
                         onProjection: { if projection != $0 { projection = $0 } }
                     )
-                    if let candidate = search.candidate, let point = projection?.candidatePoint {
+                    if let candidate = activeCandidate, let point = projection?.candidatePoint {
                         candidatePin(candidate)
                             .position(x: point.x, y: point.y - candidateHeight / 2)
                     }
                     VStack(spacing: 0) {
                         VStack(spacing: 8) {
-                            statusCard
+                            statusCard(compact: compactStatus)
+                                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                                    statusHeight = height
+                                    if !compactStatus { normalStatusHeight = height }
+                                }
+                            if route.completion != nil {
+                                Text(goFlyString("route.completed"))
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(12)
+                                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
+                                    .accessibilityIdentifier("route.completed")
+                            }
                             if let error = service.error, !serviceNoticeDismissed, !panelPresentsFailure {
                                 serviceFailureNotice(error)
                             }
@@ -57,7 +108,7 @@ struct GoFlyMapView: View {
                             }
                         }
                         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
-                        Spacer(minLength: search.candidate == nil ? 100 : max(100, candidateHeight * 2 - 52 + viewportGap * 2 + 4))
+                        Spacer(minLength: max(viewportGap, minimumMapBand - recenterHeight - 8))
                         HStack {
                             Spacer()
                             Button(action: recenter) {
@@ -68,30 +119,9 @@ struct GoFlyMapView: View {
                             .accessibilityHint(goFlyString("map.recenterHint"))
                             .accessibilityIdentifier("map.recenter")
                         }
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { recenterHeight = $0 }
                         .padding(.bottom, 8)
-                        Group {
-                            if showsOperationPanel {
-                                GoFlyOperationPanel(
-                                    operation: service.preparedOperation,
-                                    unconfirmedFailure: unconfirmedFailure,
-                                    nativeBusy: service.nativeBusy,
-                                    maximumHeight: panelMaximumHeight(in: geometry),
-                                    reasonIdentifier: "map.serviceError.message",
-                                    cancelIdentifier: "map.serviceError.dismiss",
-                                    onCancel: cancelPreparation,
-                                    onRetry: { _ = service.retryPreparedOperation(id: $0) },
-                                    onSettings: { showingSettings = true },
-                                    onReturn: { returnedFromUnconfirmed = unconfirmedID }
-                                )
-                            } else {
-                                GoFlySearchPanel(
-                                    search: search, maximumHeight: panelMaximumHeight(in: geometry),
-                                    focusRequest: searchFocusRequest,
-                                    onFavorites: { presentedSheet = GoFlyMapSheet(content: .favorites) }
-                                )
-                            }
-                        }
-                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+                        bottomPanel(in: geometry)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 8)
@@ -100,6 +130,10 @@ struct GoFlyMapView: View {
                 }
                 .coordinateSpace(name: "mapRoot")
                 .accessibilityHidden(presentedSheet != nil)
+                .onChange(of: geometry.size.width) { _, _ in normalStatusHeight = 0 }
+                .onChange(of: dynamicTypeSize) { _, _ in normalStatusHeight = 0 }
+                .onChange(of: positionSourceTitle) { _, _ in normalStatusHeight = 0 }
+                .onChange(of: displayStatusKey) { _, _ in normalStatusHeight = 0 }
             }
             .background(GoFlyStyle.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -126,14 +160,39 @@ struct GoFlyMapView: View {
                 }
                 location.acceptedFix()
                 guard service.confirmedSimulatedLocation == nil,
-                      search.candidate == nil || explicitlyRequested,
+                      mode == .teleport || route.plannedRoute == nil || explicitlyRequested,
+                      (route.picker == nil ? activeCandidate == nil : activeSearch.candidate == nil) || explicitlyRequested,
                       let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else { return }
                 cameraIntent = GoFlyCameraIntent(coordinate: coordinate)
             }
-            .onChange(of: search.candidate?.id) { _, _ in
-                guard let candidate = search.candidate else { return }
+            .onChange(of: activeCandidate?.id, initial: true) { _, id in
+                guard let candidate = activeCandidate, candidate.id == id else { return }
                 pendingGPSRecenter = false
                 cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
+            }
+            .onChange(of: route.picker?.id) { _, id in
+                if id != nil {
+                    searchFocusRequest = UUID()
+                } else {
+                    searchFocusRequest = nil
+                    dismissKeyboard()
+                }
+            }
+            .onChange(of: route.plannedRoute) { _, planned in
+                if mode == .route, let planned { cameraIntent = GoFlyCameraIntent(route: planned) }
+            }
+            .onChange(of: mode) { _, mode in
+                dismissKeyboard()
+                if mode == .route, let planned = route.plannedRoute {
+                    cameraIntent = GoFlyCameraIntent(route: planned)
+                } else if mode == .teleport, let candidate = search.candidate {
+                    cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
+                }
+            }
+            .task(id: route.completion?.executionID) {
+                guard let id = route.completion?.executionID else { return }
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                route.dismissCompletion(executionID: id)
             }
             .onChange(of: service.pointState) { _, state in
                 guard case .acknowledged(let intent) = state else { return }
@@ -152,8 +211,8 @@ struct GoFlyMapView: View {
                 switch sheet.content {
                 case .favorites:
                     GoFlyFavoritesView(
-                        candidate: search.candidate?.place,
-                        onSelect: { search.select($0); presentedSheet = nil },
+                        candidate: activeSearch.candidate?.place,
+                        onSelect: { activeSearch.select($0); presentedSheet = nil },
                         onSearch: { focusAfterSheet = true; presentedSheet = nil },
                         onDismiss: { presentedSheet = nil }
                     )
@@ -165,34 +224,119 @@ struct GoFlyMapView: View {
         .tint(GoFlyStyle.primary)
     }
 
-    private var statusCard: some View {
+    private func bottomPanel(in geometry: GeometryProxy) -> some View {
+        VStack(spacing: 8) {
+            if canSwitchMode {
+                HStack(spacing: 8) {
+                    modeButton(.teleport, key: "mode.teleport")
+                    modeButton(.route, key: "mode.route")
+                }
+                .padding(4)
+                .background(GoFlyStyle.surface, in: Capsule())
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(goFlyString("mode.title"))
+                .accessibilityIdentifier("map.mode")
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { modeHeaderHeight = $0 }
+            }
+            if showsOperationPanel {
+                GoFlyOperationPanel(
+                    operation: service.preparedOperation,
+                    unconfirmedFailure: unconfirmedFailure,
+                    nativeBusy: service.nativeBusy,
+                    maximumHeight: panelMaximumHeight(in: geometry),
+                    reasonIdentifier: "map.serviceError.message",
+                    cancelIdentifier: "map.serviceError.dismiss",
+                    onCancel: cancelPreparation,
+                    onRetry: { _ = service.retryPreparedOperation(id: $0) },
+                    onSettings: { showingSettings = true },
+                    onReturn: { returnedFromUnconfirmed = unconfirmedID }
+                )
+            } else if let picker = route.picker {
+                GoFlyRoutePickerView(
+                    session: picker, maximumHeight: contentMaximumHeight(in: geometry),
+                    focusRequest: searchFocusRequest,
+                    onFavorites: { presentedSheet = GoFlyMapSheet(content: .favorites) },
+                    onConfirm: { id, useCurrent in _ = route.confirmPicker(id: id, useCurrentLocation: useCurrent) },
+                    onCancel: { route.cancelPicker(id: $0) },
+                    onStagedCurrentChange: { useCurrent in
+                        if useCurrent, let origin = service.currentRouteOrigin {
+                            cameraIntent = GoFlyCameraIntent(coordinate: origin)
+                        }
+                    }
+                )
+                .id(picker.id)
+            } else if mode == .route || !route.canEdit {
+                GoFlyRoutePanel(
+                    controller: route, maximumHeight: contentMaximumHeight(in: geometry),
+                    onEditNode: { _ = route.openPicker(for: $0) },
+                    onSettings: { showingSettings = true },
+                    currentLocationAvailable: service.currentRouteOrigin != nil
+                )
+            } else {
+                GoFlySearchPanel(
+                    search: search, maximumHeight: contentMaximumHeight(in: geometry),
+                    focusRequest: searchFocusRequest,
+                    onFavorites: { presentedSheet = GoFlyMapSheet(content: .favorites) },
+                    onMinimumHeightChange: { searchMinimumHeight = $0 }
+                )
+            }
+        }
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+    }
+
+    private func modeButton(_ value: GoFlyMapMode, key: String) -> some View {
+        Button { mode = value } label: {
+            Text(goFlyString(key))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .padding(.horizontal, 8)
+                .foregroundStyle(mode == value ? GoFlyStyle.surface : GoFlyStyle.primary)
+                .background(mode == value ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(mode == value ? .clear : GoFlyStyle.border, lineWidth: 0.5)
+                        .allowsHitTesting(false)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(mode == value ? .isSelected : [])
+        .accessibilityIdentifier(key)
+    }
+
+    private func statusCard(compact: Bool) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(goFlyString(service.positionMarker?.source == .simulation ? "map.simulatedLocation" : "map.currentLocation"))
-                    .font(.headline)
+                if !compact || service.positionMarker?.source == .simulation {
+                    Text(positionSourceTitle).font(compact ? .caption : .headline)
+                }
                 Text(goFlyString(displayStatusKey))
                     .font(.subheadline)
                     .foregroundStyle(GoFlyStyle.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(positionSourceTitle), \(goFlyString(displayStatusKey))")
             .accessibilityIdentifier("map.positionStatus")
 
             Button {
-                _ = service.start()
+                if route.canPause { _ = route.pause() }
+                else if route.canResume { _ = route.resume() }
+                else { _ = service.start() }
             } label: {
-                if service.phase == .preparing {
+                if route.phase == .pausing || service.phase == .preparing {
                     ProgressView()
                 } else {
-                    Image(systemName: service.phase == .ready ? "pause.fill" : "play.fill")
+                    Image(systemName: route.canPause ? "pause.fill" : "play.fill")
                 }
             }
-            .disabled(!service.canStart)
+            .disabled(!route.canPause && !route.canResume && (!route.canEdit || !service.canStart))
             .buttonStyle(GoFlyIconStyle())
             .accessibilityLabel(goFlyString(
-                service.nativeBusy ? service.statusKey : (service.phase == .ready ? "map.pause" : "service.start")
+                route.canPause ? "map.pause" : (route.canResume ? "route.resume" : (service.nativeBusy ? service.statusKey : "service.start"))
             ))
-            .accessibilityHint(goFlyString(service.canStart ? "map.startServiceHint" : "map.noActiveTask"))
+            .accessibilityHint(goFlyString(route.canPause ? "route.pauseHint" :
+                (route.canResume ? "route.resumeHint" : (service.canStart ? "map.startServiceHint" : "map.noActiveTask"))))
             .accessibilityIdentifier("map.serviceControl")
 
             Button {
@@ -209,11 +353,25 @@ struct GoFlyMapView: View {
         .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
     }
 
+    private var positionSourceTitle: String {
+        goFlyString(service.positionMarker?.source == .simulation ? "map.simulatedLocation" : "map.currentLocation")
+    }
+
+    private func usesCompactStatus(in geometry: GeometryProxy) -> Bool {
+        guard normalStatusHeight > 0, mode == .teleport, canSwitchMode else { return false }
+        let otherNotices = max(0, topFrame.height - statusHeight)
+        // Keep the full-card measurement while compact, so fitting cannot toggle the layout back.
+        let required = topFrame.minY + normalStatusHeight + otherNotices + minimumMapBand
+            + modeHeaderHeight + 8 + searchMinimumHeight + bottomPadding
+        return required > geometry.size.height
+    }
+
     private var displayStatusKey: String {
+        if mode == .route, !route.canEdit { return "route.phase.\(route.phase.rawValue)" }
         switch service.pointState {
-        case .sending: "teleport.moving"
-        case .unconfirmed: "teleport.unconfirmed"
-        default: service.statusKey
+        case .sending: return "teleport.moving"
+        case .unconfirmed: return "teleport.unconfirmed"
+        default: return service.statusKey
         }
     }
 
@@ -224,9 +382,16 @@ struct GoFlyMapView: View {
     }
 
     private func panelMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(76, geometry.size.height - topFrame.maxY
-            - (search.candidate == nil ? 120 : candidateHeight * 2 + 4)
-            - bottomPadding - viewportGap * 2)
+        max(76, geometry.size.height - topFrame.maxY - minimumMapBand - bottomPadding)
+    }
+
+    private var minimumMapBand: CGFloat {
+        max(recenterHeight + 8 + viewportGap * 2,
+            activeCandidate == nil ? (route.picker == nil ? 120 : 0) : candidateHeight * 2 + viewportGap * 2)
+    }
+
+    private func contentMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
+        max(76, panelMaximumHeight(in: geometry) - (canSwitchMode ? modeHeaderHeight + 8 : 0))
     }
 
     private var unconfirmedID: UUID? {
@@ -245,6 +410,7 @@ struct GoFlyMapView: View {
 
     private var panelPresentsFailure: Bool {
         if case .failed = service.preparedOperation?.state { return true }
+        if route.error != nil, !route.canEdit { return true }
         return showsOperationPanel && unconfirmedFailure != nil
     }
 
@@ -254,7 +420,7 @@ struct GoFlyMapView: View {
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {
         VStack(spacing: 8) {
-            goButton(candidate)
+            if route.picker == nil { goButton(candidate) }
             pinButton(candidate)
         }
         .frame(width: max(84, goWidth))
@@ -287,7 +453,7 @@ struct GoFlyMapView: View {
             .buttonStyle(.plain)
             .foregroundStyle(GoFlyStyle.primary)
             .accessibilityLabel(goFlyString("search.placeDetails"))
-            .accessibilityValue(candidate.place.title)
+            .accessibilityValue(route.picker != nil ? candidate.place.coordinate.displayText : candidate.place.title)
             .accessibilityIdentifier("map.candidate.pin")
     }
 
@@ -325,7 +491,7 @@ struct GoFlyMapView: View {
                 .frame(width: 1, height: 1)
                 .allowsHitTesting(false)
                 .accessibilityIdentifier("map.viewportMetrics")
-            if let selection = search.candidate?.id {
+            if let selection = activeCandidate?.id {
                 Text(selection.uuidString)
                     .font(.caption2)
                     .foregroundStyle(.clear)
@@ -397,3 +563,5 @@ private struct GoFlyMapSheet: Identifiable {
     let id = UUID()
     let content: Content
 }
+
+private enum GoFlyMapMode: Hashable { case teleport, route }

@@ -56,6 +56,13 @@ public final class MovementTaskAuthority: @unchecked Sendable {
             return true
         }
     }
+    @discardableResult public func revoke(_ lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard stored.lease == lease else { return false }
+            stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)
+            return true
+        }
+    }
     public func revokeAll() {
         lock.withLock {
             stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)

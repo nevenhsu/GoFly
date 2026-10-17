@@ -59,17 +59,35 @@ final class GoFlySearchUITests: XCTestCase {
         app.launch()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 10))
+        let status = app.descendants(matching: .any)["map.positionStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let sourceAndState = status.label
+        let normalStatusHeight = status.frame.height
+        XCTAssertTrue(sourceAndState.contains("Current location"))
+        XCTAssertTrue(sourceAndState.contains("Stopped"))
         query.tap()
         query.typeText("25.0478, 121.5170")
         XCTAssertTrue(app.buttons["map.candidate.pin"].waitForExistence(timeout: 5))
         assertCentered(app)
+        XCTAssertEqual(status.label, sourceAndState, "Compact visuals must retain full VoiceOver position source and service state.")
+        let compactHeight = status.frame.height
+        XCTAssertLessThan(compactHeight, normalStatusHeight)
+        assertStableHeight(status, expected: compactHeight)
         attach(app, name: "03-coordinate-large-dark-keyboard-centered")
         let keyboard = app.keyboards.firstMatch
         if keyboard.exists {
             XCTAssertLessThanOrEqual(query.frame.maxY, keyboard.frame.minY + 2,
                                      "Search input must stay above keyboard. Query: \(query.frame), keyboard: \(keyboard.frame)")
+            XCTAssertLessThanOrEqual(query.frame.maxY, app.maps.firstMatch.frame.maxY + 1,
+                                     "Search input must fit inside the keyboard-adjusted map surface, above keyboard accessories.")
         }
         dismissKeyboard(app)
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            abs(status.frame.height - normalStatusHeight) < 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
+        XCTAssertEqual(status.label, sourceAndState)
+        assertStableHeight(status, expected: normalStatusHeight)
         assertCentered(app)
         let before = app.buttons["map.candidate.pin"].value as? String
         let values = metrics(app)
@@ -130,7 +148,20 @@ final class GoFlySearchUITests: XCTestCase {
         }
     }
 
+    private func assertStableHeight(_ element: XCUIElement, expected: CGFloat,
+                                    file: StaticString = #filePath, line: UInt = #line) {
+        let oscillated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            abs(element.frame.height - expected) > 1
+        }, object: nil)
+        oscillated.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [oscillated], timeout: 2), .completed,
+                       "The status layout must settle without oscillating between compact and full height.", file: file, line: line)
+    }
     private func attach(_ app: XCUIApplication, name: String) {
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = name + "-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways

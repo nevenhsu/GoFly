@@ -5,6 +5,13 @@ import SwiftUI
 struct GoFlyCameraIntent: Equatable {
     let id = UUID()
     let coordinate: GeoCoordinate
+    var routeCoordinates: [GeoCoordinate]? = nil
+
+    init(coordinate: GeoCoordinate) { self.coordinate = coordinate }
+    init(route: PlannedRoute) {
+        coordinate = route.start
+        routeCoordinates = route.points
+    }
 }
 
 struct GoFlyMapProjection: Equatable {
@@ -17,6 +24,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var candidate: TeleportCandidate?
     var viewport: CGRect
     var cameraIntent: GoFlyCameraIntent?
+    var route: PlannedRoute? = nil
     var onMapTap: (GeoCoordinate) -> Void
     var onProjection: (GoFlyMapProjection) -> Void
 
@@ -27,6 +35,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = false
         map.showsCompass = false
+        map.selectableMapFeatures = []
         map.isPitchEnabled = false
         map.layoutMargins = .zero
         map.insetsLayoutMarginsFromSafeArea = false
@@ -54,6 +63,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         coordinator.updateMarker(on: map)
+        coordinator.updateRoute(on: map)
         coordinator.compass?.frame = CGRect(x: max(0, map.bounds.width - 60), y: max(0, viewport.minY + 12), width: 44, height: 44)
         coordinator.applyCameraIfNeeded(on: map)
         coordinator.publishProjection(on: map)
@@ -71,6 +81,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var correctionsRemaining = 0
         private var hasFocused = false
         private var publication: UInt64 = 0
+        private var routePoints: [GeoCoordinate] = []
+        private var routeOverlay: MKPolyline?
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
 
@@ -110,6 +122,19 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             }
         }
 
+        func updateRoute(on map: MKMapView) {
+            let points = parent.route?.points ?? []
+            guard points != routePoints else { return }
+            routePoints = points
+            if let routeOverlay { map.removeOverlay(routeOverlay) }
+            routeOverlay = nil
+            guard points.count > 1 else { return }
+            let coordinates = points.map(\.clLocationCoordinate)
+            let overlay = MKPolyline(coordinates: coordinates, count: coordinates.count)
+            routeOverlay = overlay
+            map.addOverlay(overlay, level: .aboveRoads)
+        }
+
         func applyCameraIfNeeded(on map: MKMapView) {
             guard let intent = parent.cameraIntent,
                   map.bounds.width > 0, map.bounds.height > 0 else { return }
@@ -122,6 +147,24 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             appliedBounds = map.bounds
             appliedSafeArea = map.safeAreaInsets
             correctionsRemaining = 2
+            let padding = UIEdgeInsets(
+                top: visible.minY, left: visible.minX,
+                bottom: map.bounds.maxY - visible.maxY, right: map.bounds.maxX - visible.maxX
+            )
+            if let routeCoordinates = intent.routeCoordinates, routeCoordinates.count > 1 {
+                let coordinates = routeCoordinates.map(\.clLocationCoordinate)
+                let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
+                let minimumSize = MKMapPointsPerMeterAtLatitude(min(85, max(-85, intent.coordinate.latitude))) * 100
+                let bounds = polyline.boundingMapRect
+                let routeRect = bounds.insetBy(dx: -max(0, minimumSize - bounds.width) / 2,
+                                              dy: -max(0, minimumSize - bounds.height) / 2)
+                correctionsRemaining = 0
+                hasFocused = true
+                let routePadding = UIEdgeInsets(top: padding.top + 16, left: padding.left + 16,
+                                                bottom: padding.bottom + 16, right: padding.right + 16)
+                map.setVisibleMapRect(routeRect, edgePadding: routePadding, animated: false)
+                return
+            }
             let point = MKMapPoint(intent.coordinate.clLocationCoordinate)
             let currentScale = map.visibleMapRect.width / map.bounds.width
             // Only the display's Mercator zoom scale is bounded near the poles;
@@ -132,10 +175,6 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             let width = max(1, visible.width * scale)
             let height = max(1, visible.height * scale)
             let rect = MKMapRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
-            let padding = UIEdgeInsets(
-                top: visible.minY, left: visible.minX,
-                bottom: map.bounds.maxY - visible.maxY, right: map.bounds.maxX - visible.maxX
-            )
             hasFocused = true
             map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
             correctFocusIfNeeded(on: map)
@@ -189,6 +228,16 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             view.annotation = annotation
             view.apply(marker)
             return view
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
+            guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
+            let renderer = MKPolylineRenderer(polyline: line)
+            renderer.strokeColor = .label
+            renderer.lineWidth = 4
+            renderer.lineCap = .round
+            renderer.lineJoin = .round
+            return renderer
         }
     }
 }

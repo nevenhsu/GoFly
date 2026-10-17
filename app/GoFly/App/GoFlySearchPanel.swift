@@ -6,14 +6,20 @@ struct GoFlySearchPanel: View {
     var maximumHeight: CGFloat
     var focusRequest: UUID?
     var onFavorites: () -> Void
+    var favoritesVisible: Bool? = nil
+    var inputIsEmphasized = false
+    var onMinimumHeightChange: (CGFloat) -> Void = { _ in }
     @FocusState private var focused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var resultsHeight: CGFloat = 56
     @State private var fixedHeight: CGFloat = 44
+    @State private var inputHeight: CGFloat = 44
     @State private var favoritesHeight: CGFloat = 44
+    @State private var contentHeight: CGFloat = 180
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").accessibilityHidden(true)
@@ -29,7 +35,9 @@ struct GoFlySearchPanel: View {
                     .accessibilityIdentifier("search.query")
                     if !search.query.isEmpty {
                         Button { search.updateQuery("") } label: {
-                            Image(systemName: "xmark.circle.fill").frame(minWidth: 44, minHeight: 44)
+                            Image(systemName: "xmark.circle.fill")
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(goFlyString("search.clear"))
@@ -37,8 +45,14 @@ struct GoFlySearchPanel: View {
                     }
                 }
                 .frame(minHeight: 44)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { inputHeight = $0 }
                 .padding(.leading, 12)
                 .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(inputIsEmphasized ? GoFlyStyle.primary : .clear, lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
 
                 if let error = search.inputError {
                     Text(goFlyString(error.rawValue))
@@ -51,7 +65,7 @@ struct GoFlySearchPanel: View {
                 }
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { fixedHeight = $0 }
-            if !visiblePlaces.isEmpty && availableResultsHeight >= 44 {
+            if !visiblePlaces.isEmpty {
                 ScrollView {
                     VStack(spacing: 8) {
                         ForEach(visiblePlaces) { place in
@@ -60,7 +74,8 @@ struct GoFlySearchPanel: View {
                     }
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { resultsHeight = $0 }
                 }
-                .frame(height: min(availableResultsHeight, max(44, resultsHeight)))
+                .frame(height: needsCompactScroll ? max(56, resultsHeight) : min(max(56, availableResultsHeight), max(56, resultsHeight)))
+                .scrollDisabled(needsCompactScroll)
             } else if visiblePlaces.isEmpty && !search.isSearching && search.queryKind == .name {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goFlyString(search.searchFailed ? "search.failed" : "search.noResults"))
@@ -69,7 +84,7 @@ struct GoFlySearchPanel: View {
                 .font(.footnote)
                 .accessibilityIdentifier("search.emptyResults")
             }
-            if !focused {
+            if showsFavorites {
                 Button {
                     focused = false
                     onFavorites()
@@ -81,7 +96,13 @@ struct GoFlySearchPanel: View {
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { favoritesHeight = $0 }
             }
         }
-        .padding(dynamicTypeSize.isAccessibilitySize ? 8 : 16)
+            .padding(panelPadding)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        }
+        .frame(height: min(contentHeight, max(minimumInputHeight, maximumHeight)))
+        .scrollBounceBehavior(.basedOnSize)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("search.panel")
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
@@ -89,6 +110,7 @@ struct GoFlySearchPanel: View {
         .onChange(of: focusRequest) { _, request in
             if request != nil { focused = true }
         }
+        .onChange(of: minimumInputHeight, initial: true) { _, height in onMinimumHeightChange(height) }
     }
 
     private var visiblePlaces: [MapPlace] {
@@ -101,8 +123,13 @@ struct GoFlySearchPanel: View {
 
     private var availableResultsHeight: CGFloat {
         max(0, min(220, maximumHeight - fixedHeight - (dynamicTypeSize.isAccessibilitySize ? 28 : 44)
-            - (focused ? 0 : favoritesHeight + 12)))
+            - (showsFavorites ? favoritesHeight + 12 : 0)))
     }
+
+    private var needsCompactScroll: Bool { !visiblePlaces.isEmpty && availableResultsHeight < 56 }
+    private var panelPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 16 }
+    private var minimumInputHeight: CGFloat { inputHeight + panelPadding * 2 }
+    private var showsFavorites: Bool { favoritesVisible ?? !focused }
 
     private func placeRow(_ place: MapPlace) -> some View {
         GoFlyPlaceOptionCard(
