@@ -146,3 +146,14 @@ Advisor核准以同一不可變路徑、速度及lease執行；heading與來回�
 Service以同execution／lease的同步control revision讀取及遞增，讓await callee-entry前計算的舊方向也無法建立派送；只在原子作廢available gate成功時標controlCancelled並抑制其watchdog。已claim命令等待實際結果，真實ACK後從該位置沿最新方向下一cadence；timeout先鎖存則沿用隔離，任意unconfirmed／claimednotSent／無claim卻ACK不能降為安全取消。未claim安全撤回不推進序號／位置，不清除、不換lease。既有FIFO／native最後gate／Stop generation不變。
 
 App同列checkbox與單一無框icon-left改向控件，關閉收起改向但topbar保留實際方向／目標至結束。初始選項放細項，運作／暫停不提供編輯入口。正式實作已通過完整Swift150／UI25與unsigned build10，兩軸無剩餘finding。模擬器只驗真實編輯／規劃與可達介面，active往返與實際接收App效果仍待手機集中驗收。
+
+
+## GPX完整來源與匯入清單（票09）
+
+GPXDocument使用tracks（保留track→segments分組）／routes（每route一段）／ordered waypoints單一來源，所有原始點與重複點保留。嚴格GPX1.1 namespace/version／合法parent，拒絕混合種類、空分組、無效座標及不安全XML；原始檔先max+1 bounded regular-file read，2MiB／10,000點、depth64及100,000元素限制。UTF8/UTF16安全掃描配合entity／DTD拒絕，編碼保留可回讀同Double的非指數座標，不用displayText捨入。
+
+RouteDraftSource明確分manual／gpx完整snapshot，GPX不製造節點；只有Load更新草稿，Start才進既有準備與ACK排程。PlannedRoute(imported:)是唯一可執行性判定，segment必須精確接合且全路徑正長度；gapped或零長度合法文件仍可保存、分段預覽／匯出，但Load停用並說明原因。GPX直接走原軌跡，不MapKit重算或套道路50m吸附。執行用去重不改保存資料；Load／Clear保留speed／roundtrip，刪除紀錄不改已載入snapshot。
+
+ImportedRoutesStore與配對、FavoritePlaces分開；單一persistence actor序列管理immutable UUID payload、versioned manifest、quota／O_EXCL／private modes/protection／fsync-rename／deleteundo／cleanup。實際64MiB上限涵蓋staging／final／undo與orphan，最多100筆，manifest1MiB；commit時重讀最新資料，不跨await套舊proposal。manifest成功才publish，失敗保留observer／selection／undo token；manifest損壞／未知schema不cleanup或覆寫。來源檔永不改／刪，payload hash與filename/kind/count/start/end metadata在選取／Load／Export重驗。
+
+App單一env store由root載入，UUID DEBUGsim namespace只隔離真實檔案。Import測試只用明確flag在按Import時選一個真實GPX來源檔，仍走相同security scope／regular-file／bounded read／codec／store；不是啟動預填、nativeACK或GPSfixture。選取preview逐segment畫線、singleton用sample annotation，不跨gap造線；main route只在明確Load成功後更新。GPXUTType以Info additions登錄，FileDocument只用輸出，不用其整檔reader匯入。正式實作與離線驗證完成：Swift188、unsigned build11、完整UI30case覆蓋（29通過＋唯一test浮點容差修正後AX三語單項重驗通過）、248key三語與native verifier，兩軸零finding；詳細run結果分列work驗證紀錄，不將test誤判run記30／30。Load即保留完整主地圖預覽，取消規劃／準備失敗回編輯仍保留；Clear才移除。手機位置及Files真實儲存／授權仍待集中驗收。

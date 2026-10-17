@@ -20,54 +20,64 @@ public struct RouteSpeed: Equatable, Sendable {
         self.kilometersPerHour = kilometersPerHour
     }
 }
+public enum RouteDraftSource: Equatable, Sendable {
+    case manual([RouteNode])
+    case gpx(ImportedRouteSnapshot)
+}
 public struct RouteDraft: Equatable, Sendable {
     public static let maximumNodeCount = 27
-    public let nodes: [RouteNode]
+    public let source: RouteDraftSource
+    public var nodes: [RouteNode] { if case .manual(let nodes) = source { return nodes }; return [] }
+    public var importedRoute: ImportedRouteSnapshot? { if case .gpx(let snapshot) = source { return snapshot }; return nil }
+    public var isManual: Bool { if case .manual = source { return true }; return false }
     public let speed: RouteSpeed
     public var start: RouteNode? { nodes.first }
     public var destination: RouteNode? { nodes.count >= 2 ? nodes.last : nil }
     public init(speed: RouteSpeed = .standard) {
-        nodes = [RouteNode(value: .current)]; self.speed = speed
+        source = .manual([RouteNode(value: .current)]); self.speed = speed
     }
     public init?(start: RouteNodeValue? = .current, destination: RouteNodeValue?, speed: RouteSpeed = .standard) {
         self.init(values: [start, destination].compactMap { $0 }, speed: speed)
     }
     public init?(values: [RouteNodeValue], speed: RouteSpeed = .standard) {
         guard values.count <= Self.maximumNodeCount, values.filter({ $0 == .current }).count <= 1 else { return nil }
-        nodes = values.map { RouteNode(value: $0) }; self.speed = speed
+        source = .manual(values.map { RouteNode(value: $0) }); self.speed = speed
     }
-    private init(nodes: [RouteNode], speed: RouteSpeed) { self.nodes = nodes; self.speed = speed }
+    public init(imported: ImportedRouteSnapshot, speed: RouteSpeed = .standard) { source = .gpx(imported); self.speed = speed }
+    private init(nodes: [RouteNode], speed: RouteSpeed) { source = .manual(nodes); self.speed = speed }
+    private init(source: RouteDraftSource, speed: RouteSpeed) { self.source = source; self.speed = speed }
     public func role(of id: RouteNodeID) -> RouteNodeRole? {
         guard let index = nodes.firstIndex(where: { $0.id == id }) else { return nil }
         if index == 0 { return .start }
         return index == nodes.count - 1 ? .destination : .waypoint(index)
     }
     func replacing(nodeID: RouteNodeID, value: RouteNodeValue) -> RouteDraft? {
-        guard let index = nodes.firstIndex(where: { $0.id == nodeID }),
+        guard isManual, let index = nodes.firstIndex(where: { $0.id == nodeID }),
               value != .current || !nodes.contains(where: { $0.id != nodeID && $0.value == .current }) else { return nil }
         var nodes = nodes
         nodes[index] = RouteNode(id: nodeID, value: value)
         return RouteDraft(nodes: nodes, speed: speed)
     }
     func inserting(nodeID: RouteNodeID, value: RouteNodeValue) -> RouteDraft? {
-        guard nodes.count < Self.maximumNodeCount, !nodes.contains(where: { $0.id == nodeID }),
+        guard isManual, nodes.count < Self.maximumNodeCount, !nodes.contains(where: { $0.id == nodeID }),
               value != .current || !nodes.contains(where: { $0.value == .current }) else { return nil }
         var nodes = nodes
         nodes.insert(RouteNode(id: nodeID, value: value), at: nodes.count < 2 ? nodes.count : nodes.count - 1)
         return RouteDraft(nodes: nodes, speed: speed)
     }
     func removing(nodeID: RouteNodeID) -> RouteDraft? {
-        guard nodes.contains(where: { $0.id == nodeID }) else { return nil }
+        guard isManual, nodes.contains(where: { $0.id == nodeID }) else { return nil }
         return RouteDraft(nodes: nodes.filter { $0.id != nodeID }, speed: speed)
     }
     func moving(nodeID: RouteNodeID, toIndex: Int) -> RouteDraft? {
-        guard nodes.indices.contains(toIndex), let index = nodes.firstIndex(where: { $0.id == nodeID }) else { return nil }
+        guard isManual, nodes.indices.contains(toIndex), let index = nodes.firstIndex(where: { $0.id == nodeID }) else { return nil }
         var nodes = nodes
         let node = nodes.remove(at: index)
         nodes.insert(node, at: toIndex)
         return RouteDraft(nodes: nodes, speed: speed)
     }
     func resolvingCurrent(to coordinate: GeoCoordinate?) -> RouteDraft? {
+        guard isManual else { return self }
         var resolved: [RouteNode] = []
         for node in nodes {
             if node.value == .current {
@@ -77,7 +87,7 @@ public struct RouteDraft: Equatable, Sendable {
         }
         return RouteDraft(nodes: resolved, speed: speed)
     }
-    func replacing(speed: RouteSpeed) -> RouteDraft { RouteDraft(nodes: nodes, speed: speed) }
+    func replacing(speed: RouteSpeed) -> RouteDraft { RouteDraft(source: source, speed: speed) }
 }
 
 public enum RouteExecutionPhase: String, Equatable, Sendable {
@@ -87,6 +97,7 @@ public enum RouteHeading: String, Equatable, Sendable { case forward, reverse }
 public enum RouteExecutionFailure: Error, Equatable, Sendable {
     case missingStart, missingDestination, currentLocationUnavailable, planningFailed, invalidPath
     case device(DeviceServiceFailure)
+    case imported(ImportedRouteExecutionFailure)
     public var localizationKey: String {
         switch self {
         case .missingStart: "route.error.missingStart"
@@ -95,6 +106,7 @@ public enum RouteExecutionFailure: Error, Equatable, Sendable {
         case .planningFailed: "route.error.planningFailed"
         case .invalidPath: "route.error.invalidPath"
         case .device(let failure): failure.rawValue
+        case .imported(let failure): failure.localizationKey
         }
     }
 }

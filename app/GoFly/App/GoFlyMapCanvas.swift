@@ -17,6 +17,35 @@ struct GoFlyCameraIntent: Equatable {
 struct GoFlyMapProjection: Equatable {
     let candidatePoint: CGPoint?
     let viewport: CGRect
+    #if DEBUG && targetEnvironment(simulator)
+    private(set) var routePointCount = 0
+    private(set) var routeIsVisible = false
+    #endif
+
+    @MainActor init(candidatePoint: CGPoint?, viewport: CGRect, map: MKMapView) {
+        self.candidatePoint = candidatePoint
+        self.viewport = viewport
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+            let lines = map.overlays.compactMap { $0 as? MKPolyline }
+            routePointCount = lines.reduce(0) { $0 + $1.pointCount }
+            if !lines.isEmpty {
+                let bounds = lines.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+                let corners = [MKMapPoint(x: bounds.minX, y: bounds.minY),
+                               MKMapPoint(x: bounds.maxX, y: bounds.minY),
+                               MKMapPoint(x: bounds.minX, y: bounds.maxY),
+                               MKMapPoint(x: bounds.maxX, y: bounds.maxY)]
+                    .map { map.convert($0.coordinate, toPointTo: map) }
+                let minimumX = corners.map(\.x).min()!, maximumX = corners.map(\.x).max()!
+                let minimumY = corners.map(\.y).min()!, maximumY = corners.map(\.y).max()!
+                let screenBounds = CGRect(x: minimumX, y: minimumY,
+                                          width: maximumX - minimumX, height: maximumY - minimumY)
+                    .insetBy(dx: -0.5, dy: -0.5)
+                routeIsVisible = viewport.insetBy(dx: -2, dy: -2).contains(screenBounds)
+            }
+        }
+        #endif
+    }
 }
 
 struct GoFlyMapCanvas: UIViewRepresentable {
@@ -199,7 +228,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             publication &+= 1
             let revision = publication
             let point = parent.candidate.map { map.convert($0.place.coordinate.clLocationCoordinate, toPointTo: map) }
-            let snapshot = GoFlyMapProjection(candidatePoint: point, viewport: parent.viewport)
+            let snapshot = GoFlyMapProjection(candidatePoint: point, viewport: parent.viewport, map: map)
             Task { @MainActor [weak self] in
                 guard let self, self.publication == revision else { return }
                 self.parent.onProjection(snapshot)

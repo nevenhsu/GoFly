@@ -6,7 +6,7 @@
 
 此安排適用所有剩餘 tickets（含 14 背景可行性、15 背景實作、17 跨端還原與 18 整合驗收準備）：不得在逐票結尾暫停要求接 iPhone，也不得因前置票尚待實機驗收阻擋下一票。14 先交付候選方案、設計審查與離線驗證，15 依此完成實作並保留硬體未知；18 先完成自動化回歸、最終建置與驗收包。全部實作及可離線驗證工作完成後，再一次交由使用者測試手機。實際程式失敗或契約未決仍須修正／釐清，不能以延後驗收跳過。
 
-各票審查基準記於該票 Implementation record：票 03 為 16d8f3f，票 04 為 0379d10，票 05 為 91d0188，票 06 為 bcf9d0d，票 07 為 9057718，票 08 為 d98f8c7。既有未提交且不屬當票的文件變更不納入實作提交；每張實作完成後作適當驗證與 standards／spec 雙軸審查。
+各票審查基準記於該票 Implementation record：票 03 為 16d8f3f，票 04 為 0379d10，票 05 為 91d0188，票 06 為 bcf9d0d，票 07 為 9057718，票 08 為 d98f8c7，票09為1e5835d。既有未提交且不屬當票的文件變更不納入實作提交；每張實作完成後作適當驗證與 standards／spec 雙軸審查。
 
 測試界線沿用票 01 的正式服務 public interface 與 device-adapter 系統邊界，觀察啟停／clear／reset 可見結果、錯誤與取消／遲到結果；不測私有欄位。原生握手／同機身分／檔案保護另在 native 邊界驗證，不以 fake adapter 當真機證據。
 
@@ -17,3 +17,6 @@
 
 
 票08實作／離線驗證完成：完整Swift150、完整simulator UI25／25、unsigned iPhoneOS build10、198key三語parser／native verifier／diffcheck及雙軸零finding。ACK固定位置軸、同lease即時改向、端點折返、關閉後原方向至下一端點、暫停控制與控制修訂競態已實作。手機實際往返及active方向控件手感仍集中驗收，可繼續票09。
+
+
+票09實作／離線驗證完成：Swift188、unsigned iPhoneOS build11、248key三語parser／native verifier／diffcheck、Standards及Spec零finding。完整UI30case已覆蓋，full run29通過／唯一test浮點43.99999999999994誤判，test-only1e-6pt容差修正後受影響AX三語單項重驗通過；產品未變，不重跑其餘29且不宣稱該run30／30。GPX三kind完整資料／安全匯入匯出、10kactual主地圖預覽、獨立紀錄與deleteundo／relaunch皆已實作；手機deferred-by-user。可繼續票10。

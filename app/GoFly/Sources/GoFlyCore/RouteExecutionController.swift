@@ -41,7 +41,25 @@ public final class RouteExecutionController: ObservableObject {
     }
     public var canEdit: Bool { phase == .editing }
     public var canStart: Bool { canEdit && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
-    public var canAddNode: Bool { canEdit && draft.nodes.count < RouteDraft.maximumNodeCount }
+    public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
+    public var canClearImportedRoute: Bool { canEdit && draft.importedRoute != nil }
+    @discardableResult public func loadImportedRoute(_ snapshot: ImportedRouteSnapshot) -> Bool {
+        guard canEdit else { return false }
+        let preview: PlannedRoute
+        do { preview = try PlannedRoute(imported: snapshot.document) }
+        catch {
+            self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? .invalidPath
+            return false
+        }
+        applyDraft(RouteDraft(imported: snapshot, speed: draft.speed))
+        plannedRoute = preview
+        return true
+    }
+    @discardableResult public func clearImportedRoute() -> Bool {
+        guard canClearImportedRoute else { return false }
+        applyDraft(RouteDraft(speed: draft.speed))
+        return true
+    }
     public var canPause: Bool { phase == .running }
     public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
     public var canToggleHeading: Bool {
@@ -110,7 +128,7 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     @discardableResult public func confirmPicker(id: UUID, useCurrentLocation: Bool = false) -> Bool {
-        guard canEdit, let session = picker, session.id == id else { return false }
+        guard canEdit, draft.isManual, let session = picker, session.id == id else { return false }
         guard session.isNew || draft.nodes.contains(where: { $0.id == session.nodeID }) else { return false }
         if !useCurrentLocation, session.clearedPlace {
             if !session.isNew, !removeNode(id: session.nodeID) { return false }
@@ -137,11 +155,13 @@ public final class RouteExecutionController: ObservableObject {
         return draft.nodes.count == 1 ? .destination : .waypoint(draft.nodes.count - 1)
     }
     private func allowsCurrent(at id: RouteNodeID, isNew: Bool) -> Bool {
+        guard draft.isManual else { return false }
         let first = isNew ? draft.nodes.isEmpty : draft.start?.id == id
         return first && !draft.nodes.contains { $0.id != id && $0.value == .current }
     }
     private func applyDraft(_ changed: RouteDraft) {
         draft = changed; plannedRoute = nil; completion = nil; error = nil
+        guard draft.isManual else { picker = nil; return }
         if var session = picker {
             if session.isNew { session.role = newNodeRole }
             else if let role = draft.role(of: session.nodeID) { session.role = role }
@@ -159,29 +179,38 @@ public final class RouteExecutionController: ObservableObject {
         guard canEdit, commands.canBeginRoute else { return false }
         let snapshot: RouteDraft
         do { snapshot = try resolvedDraft(draft) }
-        catch { self.error = error as? RouteExecutionFailure ?? .invalidPath; return false }
+        catch {
+            self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .invalidPath)
+            return false
+        }
         let coordinates = snapshot.nodes.compactMap { node -> GeoCoordinate? in
             if case .place(let place) = node.value { return place.coordinate }; return nil
         }
         revision &+= 1
         let token = revision
         let admission = commands.routeAdmissionRevision
-        phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil; plannedRoute = nil
+        phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil
+        if snapshot.isManual { plannedRoute = nil }
         accumulatedElapsed = .zero; activeStartedAt = nil
         heading = .forward; usesPositionAxis = roundTripEnabled
         let planner = planner
         task = Task { [weak self] in
             do {
-                var legs: [PlannedRoute] = []
-                for index in 1..<coordinates.count {
-                    let from = coordinates[index - 1], to = coordinates[index]
-                    let points = try await planner.plan(from: from, to: to)
-                    guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
-                    guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
-                    legs.append(try PlannedRoute(points: points, from: from, to: to))
+                let route: PlannedRoute
+                if let imported = snapshot.importedRoute { route = try PlannedRoute(imported: imported.document) }
+                else {
+                    var legs: [PlannedRoute] = []
+                    for index in 1..<coordinates.count {
+                        let from = coordinates[index - 1], to = coordinates[index]
+                        let points = try await planner.plan(from: from, to: to)
+                        guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
+                        guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
+                        legs.append(try PlannedRoute(points: points, from: from, to: to))
+                    }
+                    route = try PlannedRoute(legs: legs)
                 }
                 guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
-                let route = try PlannedRoute(legs: legs)
+                guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
                 let intent = RouteExecutionIntent(draft: snapshot, route: route)
                 self.plannedRoute = route; self.intent = intent; self.phase = .preparing
                 let outcome = await self.commands.beginRoute(intent, expectedAdmissionRevision: admission)
@@ -198,12 +227,13 @@ public final class RouteExecutionController: ObservableObject {
             } catch {
                 guard let self, self.revision == token, self.phase == .planning else { return }
                 self.phase = .editing
-                self.error = error as? RouteExecutionFailure ?? .planningFailed
+                self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .planningFailed)
             }
         }
         return true
     }
     private func resolvedDraft(_ source: RouteDraft) throws -> RouteDraft {
+        if let imported = source.importedRoute { _ = try PlannedRoute(imported: imported.document); return source }
         guard !source.nodes.isEmpty else { throw RouteExecutionFailure.missingStart }
         guard source.nodes.count >= 2 else { throw RouteExecutionFailure.missingDestination }
         let current = source.nodes.contains { $0.value == .current } ? commands.currentRouteOrigin : nil

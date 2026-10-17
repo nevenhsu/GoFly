@@ -4,6 +4,12 @@ public protocol RoutePlanning: Sendable {
     func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate]
 }
 
+public enum ImportedRouteExecutionFailure: String, Error, Equatable, Sendable {
+    case disconnectedSegments = "imports.execution.disconnectedSegments"
+    case zeroDistance = "imports.execution.zeroDistance"
+    public var localizationKey: String { rawValue }
+}
+
 public struct PlannedRoute: Equatable, Sendable {
     public let points: [GeoCoordinate]
     public let cumulativeDistancesMeters: [Double]
@@ -11,6 +17,22 @@ public struct PlannedRoute: Equatable, Sendable {
     public var start: GeoCoordinate { points[0] }
     public var end: GeoCoordinate { points.last! }
     private static let radius = 6_371_000.0
+
+    public init(imported document: GPXDocument) throws {
+        let segments = document.segments
+        guard (2...GPXLimits.points).contains(document.pointCount), segments.allSatisfy({ !$0.isEmpty }) else {
+            throw RouteExecutionFailure.invalidPath
+        }
+        for index in 1..<segments.count {
+            guard segments[index - 1].last == segments[index].first else { throw ImportedRouteExecutionFailure.disconnectedSegments }
+        }
+        let normalized = Self.deduplicated(segments.flatMap { $0 })
+        let distances = Self.distances(normalized)
+        guard normalized.count >= 2, let total = distances.last, total.isFinite, total > 0 else {
+            throw ImportedRouteExecutionFailure.zeroDistance
+        }
+        points = normalized; cumulativeDistancesMeters = distances
+    }
 
     public init(legs: [PlannedRoute]) throws {
         guard let first = legs.first, let last = legs.last else { throw RouteExecutionFailure.invalidPath }

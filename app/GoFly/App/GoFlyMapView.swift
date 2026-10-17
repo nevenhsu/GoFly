@@ -496,6 +496,14 @@ struct GoFlyMapView: View {
 
     @ViewBuilder private func mapMetrics(origin: CGPoint) -> some View {
         #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"), let projection {
+            Text(String(projection.routePointCount))
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityIdentifier("map.routePreview.points")
+            Text(projection.routeIsVisible ? "true" : "false")
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityIdentifier("map.routePreview.visible")
+        }
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"),
            let projection, let candidate = projection.candidatePoint {
             Text(String(format: "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",

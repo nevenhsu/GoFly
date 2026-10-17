@@ -80,31 +80,48 @@ struct GoFlyRoutePanel: View {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 20, weight: .semibold))
                         .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!controller.canEdit)
                 .accessibilityLabel(goFlyString("route.details"))
                 .accessibilityIdentifier("route.details")
             }
-            GoFlyRouteNodeList(
-                draft: controller.draft, isEditable: controller.canEdit, viewport: visibleScrollFrame,
-                onEdit: onEditNode,
-                onDelete: { _ = controller.removeNode(id: $0) },
-                onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
-                onScroll: scrollTo
-            )
-            Button { _ = controller.openNewPicker() } label: {
-                Text(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
-                                (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")))
-                    .font(.system(size: addFontSize))
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
+            if let imported = controller.draft.importedRoute {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(goFlyString("imports.loadedPath")).font(.headline)
+                    Text(imported.record.filename).font(.body)
+                    Text(goFlyImportedRouteMetadata(imported.record))
+                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("route.importedSummary")
+                Button(goFlyString("imports.clearLoaded")) { _ = controller.clearImportedRoute() }
+                    .buttonStyle(GoFlyActionStyle())
+                    .disabled(!controller.canClearImportedRoute)
+                    .accessibilityIdentifier("route.clearImported")
+            } else {
+                GoFlyRouteNodeList(
+                    draft: controller.draft, isEditable: controller.canEdit, viewport: visibleScrollFrame,
+                    onEdit: onEditNode,
+                    onDelete: { _ = controller.removeNode(id: $0) },
+                    onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
+                    onScroll: scrollTo
+                )
+                Button { _ = controller.openNewPicker() } label: {
+                    Text(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
+                                    (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")))
+                        .font(.system(size: addFontSize))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                .disabled(!controller.canAddNode)
+                .accessibilityIdentifier("route.addNode")
+                .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-            .disabled(!controller.canAddNode)
-            .accessibilityIdentifier("route.addNode")
-            .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             if let error = controller.error {
                 failure(error)
             } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {
@@ -250,6 +267,18 @@ private struct GoFlyRouteDetailsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    NavigationLink {
+                        GoFlyImportedRoutesView(controller: controller, onLoaded: onDismiss)
+                    } label: {
+                        HStack {
+                            Text(goFlyString("imports.title"))
+                            Spacer(minLength: 12)
+                            Image(systemName: "chevron.right")
+                        }
+                    }
+                    .buttonStyle(GoFlyActionStyle())
+                    .disabled(!controller.canEdit)
+                    .accessibilityIdentifier("route.importedRoutes")
                     GoFlyRoundTripControl(controller: controller)
                     Text(goFlyString("route.speed")).font(.headline)
                     Text(String.localizedStringWithFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
