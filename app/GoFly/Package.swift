@@ -4,9 +4,14 @@ import PackageDescription
 let package = Package(
     name: "GoFly",
     platforms: [.iOS(.v26), .macOS(.v15)],
-    products: [.library(name: "GoFlyCore", targets: ["GoFlyCore"])],
+    products: [
+        .library(name: "GoFlyCore", targets: ["GoFlyCore"]),
+        .library(name: "GoFlyTransport", targets: ["GoFlyTransport"])
+    ],
     targets: [
         .target(name: "GoFlyCore"),
-        .testTarget(name: "GoFlyCoreTests", dependencies: ["GoFlyCore"])
+        .target(name: "GoFlyTransport", dependencies: ["GoFlyCore"]),
+        .testTarget(name: "GoFlyCoreTests", dependencies: ["GoFlyCore"]),
+        .testTarget(name: "GoFlyTransportTests", dependencies: ["GoFlyTransport", "GoFlyCore"])
     ]
 )

@@ -1,5 +1,6 @@
 import Foundation
 import GoFlyCore
+import GoFlyTransport
 
 #if !targetEnvironment(simulator)
 import Darwin
@@ -22,7 +23,7 @@ enum TunnelProbe {
         if result == 0 { return }
         guard errno == EINPROGRESS else { throw DeviceServiceFailure.tunnelUnavailable }
         var pollDescriptor = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
-        let ready = poll(&pollDescriptor, 1, 3_000)
+        let ready = poll(&pollDescriptor, 1, Int32(LocalTunnelEndpoint.timeoutSeconds * 1_000))
         guard ready > 0 else {
             throw ready == 0 ? DeviceServiceFailure.operationTimedOut : .tunnelUnavailable
         }
@@ -37,9 +38,9 @@ func localTunnelAddress() -> sockaddr_in {
     var address = sockaddr_in()
     address.sin_len = UInt8(MemoryLayout<sockaddr_in>.stride)
     address.sin_family = sa_family_t(AF_INET)
-    address.sin_port = in_port_t(49152).bigEndian
+    address.sin_port = in_port_t(LocalTunnelEndpoint.port).bigEndian
     // The transport is a fixed LocalDevVPN endpoint, never user/defaults input.
-    _ = "10.7.0.1".withCString { inet_pton(AF_INET, $0, &address.sin_addr) }
+    _ = LocalTunnelEndpoint.host.withCString { inet_pton(AF_INET, $0, &address.sin_addr) }
     return address
 }
 

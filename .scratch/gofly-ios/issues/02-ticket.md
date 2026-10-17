@@ -1,6 +1,6 @@
 # 02: 首次開啟、選用定位與必要 VPN 確認
 
-**Status:** in-progress
+**Status:** verification-pending
 
 **Blocked by:** 01（已完成）。
 
@@ -15,3 +15,9 @@
 - [ ] 手動檢查與外部返回重查共用結果；按下一步再次核對，成功或返回外部 App 均不自動啟動／送點。
 
 **Verification:** 首次流程 UI 驗收；探測逾時／取消／成功後失效測試；實機切換 LocalDevVPN。
+
+## Implementation record
+
+2026-10-17：以票 01 結案後 `e1b6c5c` 為本票比對基準。沿用已核可的 public controller／probe／permission／UI 測試界線，依序 red → green 驗證略過、允許／拒絕定位、不自動跨頁、fresh Next、背景／遲到結果、五秒節奏及返回前頁。Core 不含裝置啟動能力；completion flag 只由目前世代的 fresh Next 成功 callback 同步提交。
+
+新增 GoFlyTransport（Advisor 補充核准），與 native reset 共用固定端點／兩秒 timeout；實際 loopback 與可控網路終止測試分開驗證。SwiftUI 三語首次流程與實際 permission-only adapter、已完成地圖測試 fixture、Debug simulator 實際拒絕端點已建立；最終完整 Swift 測試分別為 Core 23 項／3 suites、Transport 9 項／1 suite，全數通過；simulator 4 項 UI 驗證通過，包含實際系統拒絕定位仍到 VPN、實際拒絕端點停用下一步、返回與繁中深色最大字級，以及既有地圖 fixture。build 4 已簽署建置。Standards／Spec 雙軸獨立審查皆無 finding。真機 LocalDevVPN 切換／完成後重啟持久化仍待驗，未標完成。

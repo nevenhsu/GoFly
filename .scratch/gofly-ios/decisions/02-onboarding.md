@@ -24,3 +24,7 @@
 Public controller/probe seam 驗證單飛、fresh Next、舊結果、取消、節奏及允許／拒絕／略過三種定位結果。既有地圖 UI 測試可明確載入已完成 onboarding 的持久化 fixture，不製造 native 或 VPN 成功。B01 失敗 UI 測試需確定關閉的測試端點，或記錄隔離 simulator 前置，不能假設每台 Mac 都無法連到生產端點。
 
 成功主線仍須實機 LocalDevVPN 驗證。M1、背景能力與後續任務票的驗收不因本次架構核准而完成。
+
+## 實作包裝補充核准
+
+Advisor 已核准 Network adapter 放在 `GoFlyTransport` Swift package product（依賴 Core），供 iOS 與 macOS host probe 測試共用；Core 不引入 Network。正式 init 僅固定 endpoint，internal 任意端點／timeout 僅供 @testable；原生 reset 保留同步 Darwin 生命週期，共用唯一 host／port 與兩秒 timeout。
