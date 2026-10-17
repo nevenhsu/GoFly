@@ -23,7 +23,7 @@
 
 Public controller/probe seam 驗證單飛、fresh Next、舊結果、取消、節奏及允許／拒絕／略過三種定位結果。既有地圖 UI 測試可明確載入已完成 onboarding 的持久化 fixture，不製造 native 或 VPN 成功。B01 失敗 UI 測試需確定關閉的測試端點，或記錄隔離 simulator 前置，不能假設每台 Mac 都無法連到生產端點。
 
-成功主線仍須實機 LocalDevVPN 驗證。M1、背景能力與後續任務票的驗收不因本次架構核准而完成。
+成功主線仍須實機 LocalDevVPN 驗證；依使用者最新指示，延後至全部實作完成後集中驗收，不阻擋後續實作。M1、背景能力與後續任務票的驗收不因本次架構核准而完成。
 
 ## 實作包裝補充核准
 

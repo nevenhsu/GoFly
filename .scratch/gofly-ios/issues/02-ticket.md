@@ -2,6 +2,12 @@
 
 **Status:** verification-pending
 
+**Implementation:** complete
+
+**Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
+
+**Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
+
 **Blocked by:** 01（已完成）。
 
 **What to build:** 完成歡迎、選用定位與 VPN 確認後進入地圖；拒絕定位仍能繼續。
@@ -20,4 +26,4 @@
 
 2026-10-17：以票 01 結案後 `e1b6c5c` 為本票比對基準。沿用已核可的 public controller／probe／permission／UI 測試界線，依序 red → green 驗證略過、允許／拒絕定位、不自動跨頁、fresh Next、背景／遲到結果、五秒節奏及返回前頁。Core 不含裝置啟動能力；completion flag 只由目前世代的 fresh Next 成功 callback 同步提交。
 
-新增 GoFlyTransport（Advisor 補充核准），與 native reset 共用固定端點／兩秒 timeout；實際 loopback 與可控網路終止測試分開驗證。SwiftUI 三語首次流程與實際 permission-only adapter、已完成地圖測試 fixture、Debug simulator 實際拒絕端點已建立；最終完整 Swift 測試分別為 Core 23 項／3 suites、Transport 9 項／1 suite，全數通過；simulator 4 項 UI 驗證通過，包含實際系統拒絕定位仍到 VPN、實際拒絕端點停用下一步、返回與繁中深色最大字級，以及既有地圖 fixture。build 4 已簽署建置。Standards／Spec 雙軸獨立審查皆無 finding。真機 LocalDevVPN 切換／完成後重啟持久化仍待驗，未標完成。
+新增 GoFlyTransport（Advisor 補充核准），與 native reset 共用固定端點／兩秒 timeout；實際 loopback 與可控網路終止測試分開驗證。SwiftUI 三語首次流程與實際 permission-only adapter、已完成地圖測試 fixture、Debug simulator 實際拒絕端點已建立；最終完整 Swift 測試分別為 Core 23 項／3 suites、Transport 9 項／1 suite，全數通過；simulator 4 項 UI 驗證通過，包含實際系統拒絕定位仍到 VPN、實際拒絕端點停用下一步、返回與繁中深色最大字級，以及既有地圖 fixture。build 4 已簽署建置。Standards／Spec 雙軸獨立審查皆無 finding。真機 LocalDevVPN 切換／完成後重啟持久化仍待驗；依使用者最新指示延後至所有實作完成後集中驗收，不阻擋票 03。
