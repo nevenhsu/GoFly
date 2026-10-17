@@ -90,9 +90,10 @@ struct PreparedOperationTests {
         #expect(authority.install(old, replacing: authority.snapshot))
         #expect(authority.updateHealth(.confirmedHealthy, for: old))
         let original = authority.snapshot
+        let clock = ManualServiceWatchdog()
         let controller = ServiceController(service: device,
             operationTimeout: action == "watchdog" ? .milliseconds(25) : .seconds(30),
-            movementAuthority: authority)
+            movementAuthority: authority, watchdogSleep: clock.sleep)
         let candidate = target()
         #expect(start ? controller.start() : controller.teleport(to: candidate))
         let id = try #require(controller.preparedOperation?.id)
@@ -112,6 +113,8 @@ struct PreparedOperationTests {
             #expect(controller.stop())
             #expect(authority.snapshot.lease == nil)
         default:
+            await wait { clock.requests.count == 1 }
+            clock.fireLatest()
             await wait { controller.error == .operationTimedOut }
             #expect(authority.snapshot == original)
         }
@@ -135,8 +138,10 @@ struct PreparedOperationTests {
         let old = MovementTaskLease()
         #expect(authority.install(old, replacing: authority.snapshot))
         #expect(authority.updateHealth(.confirmedHealthy, for: old))
+        let clock = ManualServiceWatchdog()
         let controller = ServiceController(service: device,
-            operationTimeout: lateAcknowledgement ? .milliseconds(25) : .seconds(30), movementAuthority: authority)
+            operationTimeout: lateAcknowledgement ? .milliseconds(25) : .seconds(30), movementAuthority: authority,
+            watchdogSleep: clock.sleep)
         #expect(controller.teleport(to: target()))
         let id = try #require(controller.preparedOperation?.id)
         await wait { await device.isPreparing }
@@ -146,6 +151,8 @@ struct PreparedOperationTests {
         #expect(new != old)
         #expect(!controller.cancelPreparation(id: id))
         if lateAcknowledgement {
+            await wait { clock.requests.count == 1 }
+            clock.fireLatest()
             await wait { controller.error == .operationTimedOut }
             #expect(controller.nativeBusy)
             await device.finishReply(.acknowledged)
@@ -225,7 +232,8 @@ struct PreparedOperationTests {
 
     @Test func watchdogBeforeHandoffPreservesTheReadyOldTaskAndItsFreshPosition() async throws {
         let device = RetryPointDevice()
-        let controller = ServiceController(service: device, operationTimeout: .milliseconds(40))
+        let clock = ManualServiceWatchdog()
+        let controller = ServiceController(service: device, operationTimeout: .milliseconds(40), watchdogSleep: clock.sleep)
         let candidate = target()
         #expect(controller.teleport(to: candidate))
         await wait { await device.isPreparing }
@@ -238,6 +246,8 @@ struct PreparedOperationTests {
         #expect(controller.phase == .ready)
         #expect(controller.teleport(to: candidate))
         await wait { await device.isPreparing }
+        await wait { clock.requests.count == 2 }
+        clock.fireLatest()
         await wait { controller.error == .operationTimedOut }
         #expect(controller.nativeBusy)
         #expect(controller.phase == .ready)

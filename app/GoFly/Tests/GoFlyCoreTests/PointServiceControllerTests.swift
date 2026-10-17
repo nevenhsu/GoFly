@@ -139,7 +139,8 @@ struct PointServiceControllerTests {
     @Test(arguments: [false, true])
     func watchdogCannotPermitLateDispatchOrLateAcknowledgement(afterDispatch: Bool) async throws {
         let device = ControlledPointDevice()
-        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20))
+        let clock = ManualServiceWatchdog()
+        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20), watchdogSleep: clock.sleep)
         let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
         let candidate = TeleportCandidate(place: MapPlace(id: .coordinate(coordinate), title: "Target", coordinate: coordinate))
         try #require(controller.teleport(to: candidate))
@@ -148,6 +149,8 @@ struct PointServiceControllerTests {
             await device.finishPreparation()
             await wait { await device.waitingForReply }
         }
+        await wait { clock.requests.count == 1 }
+        clock.fireLatest()
         await wait { controller.error == .operationTimedOut }
         #expect(controller.nativeBusy)
         #expect(!controller.canTeleport)

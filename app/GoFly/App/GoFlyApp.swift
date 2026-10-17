@@ -4,7 +4,8 @@ import SwiftUI
 
 @main
 struct GoFlyApp: App {
-    @StateObject private var service = ServiceController(service: NativeDeviceService())
+    @StateObject private var service = ServiceController(service: Self.deviceService())
+    @StateObject private var favorites = Self.favoritePlacesStore()
     @StateObject private var onboarding = OnboardingController(
         probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
     )
@@ -12,13 +13,47 @@ struct GoFlyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if onboardingComplete {
-                GoFlyMapView(service: service)
-            } else {
-                GoFlyOnboardingView(controller: onboarding) {
-                    onboardingComplete = true
+            Group {
+                if onboardingComplete {
+                    GoFlyMapView(service: service)
+                } else {
+                    GoFlyOnboardingView(controller: onboarding) {
+                        onboardingComplete = true
+                    }
                 }
             }
+            .environmentObject(favorites)
+        }
+    }
+
+    private static func deviceService() -> any DeviceService {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-unconfirmed-point") {
+            return UnconfirmedPointUITestService()
+        }
+        #endif
+        return NativeDeviceService()
+    }
+
+    private static func favoritePlacesStore() -> FavoritePlacesStore {
+        do {
+            let support = try FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: true
+            )
+            var directory = support.appendingPathComponent("FavoritePlaces", isDirectory: true)
+            #if DEBUG && targetEnvironment(simulator)
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-gofly-ui-favorites-store"),
+               arguments.indices.contains(index + 1),
+               let namespace = UUID(uuidString: arguments[index + 1]) {
+                directory = support.appendingPathComponent("UITests/FavoritePlaces", isDirectory: true)
+                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
+            }
+            #endif
+            return FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: directory))
+        } catch {
+            return FavoritePlacesStore(persistence: UnavailableFavoritePlacesPersistence())
         }
     }
 
@@ -30,4 +65,9 @@ struct GoFlyApp: App {
         #endif
         return NetworkTunnelProbe()
     }
+}
+
+private struct UnavailableFavoritePlacesPersistence: FavoritePlacesPersistence {
+    func read() throws -> Data? { throw FavoritePlacesFailure.unavailable }
+    func replaceAtomically(with data: Data) throws { throw FavoritePlacesFailure.unavailable }
 }

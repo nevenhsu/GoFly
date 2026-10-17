@@ -4,10 +4,13 @@ import SwiftUI
 struct GoFlySearchPanel: View {
     @ObservedObject var search: CandidateController
     var maximumHeight: CGFloat
+    var focusRequest: UUID?
+    var onFavorites: () -> Void
     @FocusState private var focused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var resultsHeight: CGFloat = 56
     @State private var fixedHeight: CGFloat = 44
+    @State private var favoritesHeight: CGFloat = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -66,46 +69,51 @@ struct GoFlySearchPanel: View {
                 .font(.footnote)
                 .accessibilityIdentifier("search.emptyResults")
             }
+            if !focused {
+                Button {
+                    focused = false
+                    onFavorites()
+                } label: {
+                    Label(goFlyString("favorites.title"), systemImage: "star")
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("favorites.open")
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { favoritesHeight = $0 }
+            }
         }
         .padding(dynamicTypeSize.isAccessibilitySize ? 8 : 16)
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
         }
+        .onChange(of: focusRequest) { _, request in
+            if request != nil { focused = true }
+        }
     }
 
     private var visiblePlaces: [MapPlace] {
         if !search.results.isEmpty { return search.results }
-        return search.candidate.map { [$0.place] } ?? []
+        switch search.queryKind {
+        case .empty, .invalidCoordinate: return search.candidate.map { [$0.place] } ?? []
+        case .name, .coordinate: return []
+        }
     }
 
     private var availableResultsHeight: CGFloat {
-        max(0, min(220, maximumHeight - fixedHeight - (dynamicTypeSize.isAccessibilitySize ? 28 : 44)))
+        max(0, min(220, maximumHeight - fixedHeight - (dynamicTypeSize.isAccessibilitySize ? 28 : 44)
+            - (focused ? 0 : favoritesHeight + 12)))
     }
 
     private func placeRow(_ place: MapPlace) -> some View {
-        let selected = search.candidate?.place.id == place.id
-        return Button {
-            search.select(place)
-            focused = false
-        } label: {
-            HStack {
-                Text(place.title).font(.body).multilineTextAlignment(.leading)
-                Spacer(minLength: 4)
-                if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
+        GoFlyPlaceOptionCard(
+            place: place,
+            selected: search.candidate?.place.id == place.id && search.candidate?.place.coordinate == place.coordinate,
+            selectionIdentifier: "search.result.\(place.coordinate.displayText)",
+            starIdentifier: "search.favorite.\(place.coordinate.displayText)",
+            onSelect: {
+                search.select(place)
+                focused = false
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(selected ? GoFlyStyle.secondarySurface : GoFlyStyle.surface,
-                        in: RoundedRectangle(cornerRadius: 12))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(selected ? GoFlyStyle.primary : GoFlyStyle.border, lineWidth: selected ? 1.5 : 0.5)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("search.result.\(place.coordinate.displayText)")
+        )
     }
 }

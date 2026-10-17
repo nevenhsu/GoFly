@@ -77,3 +77,18 @@ Native adapter 在既有 serial queue 保留同一 location session，acknowledg
 共用 SwiftUI 底面板呈現 O11／O12／O14／O16，沿用實際量測的地圖 viewport；返回未知結果的地圖仍保留 Core 鎖與 Pin 詳情。錯誤使用不透明語意底面，避免地圖內容透出而降低具體原因的可讀性。Debug simulator 的 `-gofly-ui-preparation-delay` 只延遲既有 deviceRequired 失敗，不 claim gate 或偽造成功；明確啟用的 operation metrics 只讀取實際 request／source 身分，供 UI 原來源與新 round 驗證，Release 不包含這些測試入口。
 
 H06 的已停止／GPS 待確認仍可 Start，GPS／clear 不作為準備門檻；O16 未終結的位置命令未知維持原 Go 鎖，由明確 Stop 作廢舊要求後才建立新操作。兩種待確認不能混成同一服務狀態。
+
+
+## 地點最愛與標籤（票 05）
+
+`FavoritePlacesStore` 是 MainActor 上唯一收藏真相；所有搜尋卡片、Pin 詳情、清單及編輯頁共享同一 instance。`FavoritePlaceKey` 由來源身分與精確座標組成，名稱／地址／標籤不作識別。座標來源的 associated coordinate 必須與實際座標一致。MapPlace 新增可選 address，title 仍依名稱→地址→座標備援；直接輸入座標不反查換 title。自訂 label 與原名稱分開。
+
+正式私有檔案是 Application Support/FavoritePlaces/favorites.json，獨立於 prototype 與配對資料。版本 1 的 DTO 保存 schemaVersion／favorites，以及各筆 identity(kind/value)、coordinate(latitude/longitude)、title、可選 address／label；解碼重新經過 GeoCoordinate 與完整筆數／字串／重複 key 驗證，不直接 synthesis runtime 模型。上限 100 筆、1 MiB、label 120／title 512／address 2048 characters、MapKit ID 2048 UTF-8 bytes。
+
+星號／標籤先生成完整 proposed archive，再原子寫入成功，最後才發布 favorites。File adapter 以 no-follow FD 檢查一般檔案、限制讀取量，使用 0700 目錄／0600 檔案與 iOS completeUntilFirstUserAuthentication；保留正常備份資格。相同目錄 staging 完成權限、保護、寫入及 fsync 後，以單次 rename 作最後 commit，不在其後做可能拋錯的必要工作。precommit 失敗保留原 bytes 與 observer 狀態。損壞／未知版本／非一般檔案進 mutation-blocked；已載入後 target 變成非一般檔案也封鎖，不覆蓋原路徑。瞬時寫入失敗則保持舊值並允許明確再操作。
+
+Label editor 保存被長按項目的不可變 key／place 與本地草稿；星號即時提交，remove/re-add 僅取最後成功保存的 label，草稿不進 cache。Save 僅在仍為 favorite 時更新 label；Cancel 只放棄草稿、不回滾星號。移除只依已保存 key，不要求保存新搜尋結果的顯示 metadata。列表短按選點、長按編輯、44pt 星號區各自獨立；一個根 sheet 協調清單與點擊時的 Pin 詳情，呈現 sheet 時底層地圖從 accessibility tree 隱藏，避免操作落到背景。O16 返回後仍保留 Core Go 鎖，收藏沒有裝置命令能力。
+
+App factory 只建立一份 store；無法準備位置時也建立 blocked store，不能退回健康空資料。Debug simulator 可用有效 UUID 選獨立的真實檔案 namespace；明確的 unknown-point fault fixture 只令 Core 進 unconfirmed，不製造 native ACK、GPS 或接收 App 位置證據，Release 不含這些入口。
+
+完整 suite 揭露百筆同步儲存驗證會干擾舊 20–40ms wall-clock 測試；經 Advisor 核准，ServiceController 注入 watchdogSleep（正式仍 Task.sleep），測試以每筆獨立可取消 waiter 在觀察 native 邊界後觸發，保留原 watchdog／nativeBusy／FIFO 語意，不提高正式 timeout 或提前解除忙碌。

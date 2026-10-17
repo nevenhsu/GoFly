@@ -38,6 +38,7 @@ public final class ServiceController: ObservableObject {
     public let movementAuthority: MovementTaskAuthority
     private let service: any DeviceService
     private let operationTimeout: Duration
+    private let watchdogSleep: @MainActor @Sendable (Duration) async throws -> Void
     private let now: @Sendable () -> Date
     private var revision: UInt64 = 0
     private var outstandingWork = 0
@@ -52,11 +53,13 @@ public final class ServiceController: ObservableObject {
     public init(
         service: any DeviceService, operationTimeout: Duration = .seconds(30),
         now: @escaping @Sendable () -> Date = { Date() },
-        movementAuthority: MovementTaskAuthority = MovementTaskAuthority()
+        movementAuthority: MovementTaskAuthority = MovementTaskAuthority(),
+        watchdogSleep: @escaping @MainActor @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.service = service
         self.movementAuthority = movementAuthority
         self.operationTimeout = operationTimeout
+        self.watchdogSleep = watchdogSleep
         self.now = now
     }
     public var statusKey: String {
@@ -292,8 +295,9 @@ public final class ServiceController: ObservableObject {
         outstandingWork += 1
         watchdog?.cancel()
         let timeout = operationTimeout
+        let watchdogSleep = self.watchdogSleep
         watchdog = Task { [weak self] in
-            do { try await Task.sleep(for: timeout) } catch { return }
+            do { try await watchdogSleep(timeout) } catch { return }
             guard let self, self.revision == token, self.nativeBusy else { return }
             self.revision &+= 1
             self.phase = .repairRequired

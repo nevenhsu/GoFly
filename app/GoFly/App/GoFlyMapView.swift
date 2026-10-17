@@ -12,7 +12,9 @@ struct GoFlyMapView: View {
     @State private var projection: GoFlyMapProjection?
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
-    @State private var detailPlace: MapPlace?
+    @State private var presentedSheet: GoFlyMapSheet?
+    @State private var searchFocusRequest: UUID?
+    @State private var focusAfterSheet = false
     @State private var candidateHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
@@ -50,6 +52,9 @@ struct GoFlyMapView: View {
                             if let notice = location.noticeKey {
                                 locationNotice(notice)
                             }
+                            if presentedSheet == nil {
+                                GoFlyFavoriteFailureNotice(maximumHeight: 120)
+                            }
                         }
                         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
                         Spacer(minLength: search.candidate == nil ? 100 : max(100, candidateHeight * 2 - 52 + viewportGap * 2 + 4))
@@ -79,7 +84,11 @@ struct GoFlyMapView: View {
                                     onReturn: { returnedFromUnconfirmed = unconfirmedID }
                                 )
                             } else {
-                                GoFlySearchPanel(search: search, maximumHeight: panelMaximumHeight(in: geometry))
+                                GoFlySearchPanel(
+                                    search: search, maximumHeight: panelMaximumHeight(in: geometry),
+                                    focusRequest: searchFocusRequest,
+                                    onFavorites: { presentedSheet = GoFlyMapSheet(content: .favorites) }
+                                )
                             }
                         }
                         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
@@ -90,6 +99,7 @@ struct GoFlyMapView: View {
                     mapMetrics(origin: geometry.frame(in: .global).origin)
                 }
                 .coordinateSpace(name: "mapRoot")
+                .accessibilityHidden(presentedSheet != nil)
             }
             .background(GoFlyStyle.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -133,25 +143,23 @@ struct GoFlyMapView: View {
                 }
                 dismissKeyboard()
             }
-            .sheet(item: $detailPlace) { place in
-                NavigationStack {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text(place.title).font(.title2.bold())
-                            Text(place.coordinate.displayText).font(.body).textSelection(.enabled)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(24)
-                    }
-                    .navigationTitle(goFlyString("search.placeDetails"))
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button(goFlyString("common.dismiss")) { detailPlace = nil }
-                        }
-                    }
+            .sheet(item: $presentedSheet, onDismiss: {
+                if focusAfterSheet {
+                    focusAfterSheet = false
+                    searchFocusRequest = UUID()
                 }
-                .presentationDetents([.medium, .large])
+            }) { sheet in
+                switch sheet.content {
+                case .favorites:
+                    GoFlyFavoritesView(
+                        candidate: search.candidate?.place,
+                        onSelect: { search.select($0); presentedSheet = nil },
+                        onSearch: { focusAfterSheet = true; presentedSheet = nil },
+                        onDismiss: { presentedSheet = nil }
+                    )
+                case .details(let place):
+                    GoFlyPlaceDetailsView(place: place) { presentedSheet = nil }
+                }
             }
         }
         .tint(GoFlyStyle.primary)
@@ -269,7 +277,7 @@ struct GoFlyMapView: View {
     private func pinButton(_ candidate: TeleportCandidate) -> some View {
         Button {
                 dismissKeyboard()
-                detailPlace = candidate.place
+                presentedSheet = GoFlyMapSheet(content: .details(candidate.place))
             } label: {
                 Image(systemName: "mappin")
                     .font(.system(size: 24, weight: .bold))
@@ -317,6 +325,14 @@ struct GoFlyMapView: View {
                 .frame(width: 1, height: 1)
                 .allowsHitTesting(false)
                 .accessibilityIdentifier("map.viewportMetrics")
+            if let selection = search.candidate?.id {
+                Text(selection.uuidString)
+                    .font(.caption2)
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("map.candidate.selectionID")
+            }
         }
         #endif
     }
@@ -371,4 +387,13 @@ struct GoFlyMapView: View {
         .padding(.trailing, 4)
         .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
     }
+}
+
+private struct GoFlyMapSheet: Identifiable {
+    enum Content {
+        case favorites
+        case details(MapPlace)
+    }
+    let id = UUID()
+    let content: Content
 }

@@ -9,10 +9,13 @@ public struct MapPlace: Identifiable, Equatable, Sendable {
     public let id: PlaceIdentity
     public let title: String
     public let coordinate: GeoCoordinate
+    public let address: String?
 
-    public init(id: PlaceIdentity, title: String, coordinate: GeoCoordinate) {
+    public init(id: PlaceIdentity, title: String, coordinate: GeoCoordinate, address: String? = nil) {
         self.id = id
-        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? coordinate.displayText : title
+        let address = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.address = address?.isEmpty == false ? address : nil
+        self.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (self.address ?? coordinate.displayText) : title
         self.coordinate = coordinate
     }
 }

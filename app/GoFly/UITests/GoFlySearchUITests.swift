@@ -36,7 +36,7 @@ final class GoFlySearchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Place details"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["map.candidate.go"].isHittable)
         XCTAssertFalse(app.staticTexts["map.serviceError.message"].exists)
-        app.buttons["Dismiss"].tap()
+        app.buttons["placeDetails.dismiss"].tap()
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         go.tap()
         let error = app.staticTexts["map.serviceError.message"]

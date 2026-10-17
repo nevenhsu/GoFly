@@ -23,7 +23,7 @@ final class MapKitPlaceSearch: PlaceSearching {
                 let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let address = item.address?.fullAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                 let title = [name, address].compactMap { $0 }.first { !$0.isEmpty } ?? coordinate.displayText
-                return MapPlace(id: identity, title: title, coordinate: coordinate)
+                return MapPlace(id: identity, title: title, coordinate: coordinate, address: address)
             }
         } onCancel: {
             Task { @MainActor in operation.cancel() }

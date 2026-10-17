@@ -42,15 +42,20 @@ struct ServiceControllerTests {
 
     @Test func timeoutCannotUnlockNativeWorkOrSkipMandatoryClear() async throws {
         let device = ControlledDevice()
-        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20))
+        let clock = ManualServiceWatchdog()
+        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20), watchdogSleep: clock.sleep)
         #expect(controller.start())
         await device.waitForPrepare()
+        await wait { clock.requests.count == 1 }
+        clock.fireLatest()
         await wait { controller.phase == .repairRequired }
         #expect(controller.nativeBusy)
         #expect(!controller.start())
         #expect(!controller.restoreGPS())
         #expect(!controller.resetTunnel())
         #expect(controller.stop())
+        await wait { clock.requests.count == 2 }
+        clock.fireLatest()
         await wait { controller.phase == .repairRequired }
         #expect(controller.nativeBusy)
         #expect(!controller.stop())
@@ -184,9 +189,12 @@ struct ServiceControllerTests {
 
     @Test func timedOutRestoreAlreadyOwnsTheOnlySafetyClear() async throws {
         let device = ControlledDevice()
-        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20))
+        let clock = ManualServiceWatchdog()
+        let controller = ServiceController(service: device, operationTimeout: .milliseconds(20), watchdogSleep: clock.sleep)
         #expect(controller.restoreGPS())
         await device.waitForClear()
+        await wait { clock.requests.count == 1 }
+        clock.fireLatest()
         await wait { controller.phase == .repairRequired }
         #expect(!controller.stop())
         #expect(!controller.start())
