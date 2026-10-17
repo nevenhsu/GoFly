@@ -81,3 +81,16 @@
 "teleport.unconfirmed" = "Location unconfirmed";
 "teleport.positionUnconfirmed" = "The location change is unconfirmed. Stop the service before using Go again.";
 "error.operationCancelled" = "The operation was cancelled.";
+"operation.preparingService" = "Preparing service";
+"operation.preparingMove" = "Preparing location change";
+"operation.retrying" = "Retrying preparation";
+"operation.attempt" = "Attempt %ld of 3";
+"operation.cancel" = "Cancel preparation";
+"operation.failed" = "Unable to start this operation";
+"operation.retry" = "Retry";
+"operation.cancelling" = "Cancelling preparation…";
+"operation.waitForReturn" = "Waiting for the current device operation to finish.";
+"operation.settings" = "Go to Settings";
+"operation.return" = "Return to map";
+"operation.destination" = "Destination: %@";
+"operation.startSummary" = "Prepares the service without changing location.";

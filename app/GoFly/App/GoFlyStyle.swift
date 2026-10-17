@@ -9,7 +9,7 @@ enum GoFlyStyle {
     static let disabledForeground = Color(uiColor: .secondaryLabel)
     static let disabledSurface = Color(uiColor: .tertiarySystemFill)
     static let errorForeground = Color(uiColor: .label)
-    static let errorSurface = Color(uiColor: .secondarySystemFill)
+    static let errorSurface = Color(uiColor: .secondarySystemBackground)
     static let border = Color(uiColor: .separator)
     static let cornerRadius: CGFloat = 16
 }

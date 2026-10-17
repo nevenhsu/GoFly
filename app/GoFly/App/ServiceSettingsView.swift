@@ -6,24 +6,40 @@ struct ServiceSettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                serviceCard
-                if let error = service.error {
-                    Label {
-                        Text(goFlyString(error.rawValue))
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle")
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    serviceCard
+                    if let error = service.error, service.preparedOperation == nil {
+                        Label {
+                            Text(goFlyString(error.rawValue))
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle")
+                        }
+                        .font(.body)
+                        .foregroundStyle(GoFlyStyle.errorForeground)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
+                        .accessibilityIdentifier("service.error")
                     }
-                    .font(.body)
-                    .foregroundStyle(GoFlyStyle.errorForeground)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-                    .accessibilityIdentifier("service.error")
+                }
+                .padding(16)
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let operation = service.preparedOperation {
+                    GoFlyOperationPanel(
+                        operation: operation, unconfirmedFailure: nil,
+                        nativeBusy: service.nativeBusy, maximumHeight: geometry.size.height * 0.45,
+                        reasonIdentifier: "service.error",
+                        onCancel: { _ = service.cancelPreparation(id: $0) },
+                        onRetry: { _ = service.retryPreparedOperation(id: $0) },
+                        onReturn: { }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
                 }
             }
-            .padding(16)
         }
         .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("settings.title"))

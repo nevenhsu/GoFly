@@ -81,3 +81,16 @@
 "teleport.unconfirmed" = "位置待確認";
 "teleport.positionUnconfirmed" = "位置變更尚未確認，請先停止服務，再使用 Go。";
 "error.operationCancelled" = "操作已取消。";
+"operation.preparingService" = "準備定位服務";
+"operation.preparingMove" = "準備位置變更";
+"operation.retrying" = "正在重試準備";
+"operation.attempt" = "第 %ld 次，共 3 次";
+"operation.cancel" = "取消準備";
+"operation.failed" = "無法開始這項操作";
+"operation.retry" = "重試";
+"operation.cancelling" = "正在取消準備⋯";
+"operation.waitForReturn" = "等待目前裝置操作結束。";
+"operation.settings" = "前往設定";
+"operation.return" = "返回地圖";
+"operation.destination" = "目的地：%@";
+"operation.startSummary" = "準備定位服務，不變更位置。";

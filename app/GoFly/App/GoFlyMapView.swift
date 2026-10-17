@@ -17,6 +17,7 @@ struct GoFlyMapView: View {
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
     @State private var serviceNoticeDismissed = false
+    @State private var returnedFromUnconfirmed: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var viewportGap: CGFloat { dynamicTypeSize.isAccessibilitySize ? 4 : 8 }
@@ -40,10 +41,10 @@ struct GoFlyMapView: View {
                     VStack(spacing: 0) {
                         VStack(spacing: 8) {
                             statusCard
-                            if let error = service.error, !serviceNoticeDismissed {
+                            if let error = service.error, !serviceNoticeDismissed, !panelPresentsFailure {
                                 serviceFailureNotice(error)
                             }
-                            if case .unconfirmed = service.pointState {
+                            if case .unconfirmed = service.pointState, !showsOperationPanel {
                                 locationNoticeText("teleport.positionUnconfirmed")
                             }
                             if let notice = location.noticeKey {
@@ -63,13 +64,25 @@ struct GoFlyMapView: View {
                             .accessibilityIdentifier("map.recenter")
                         }
                         .padding(.bottom, 8)
-                        GoFlySearchPanel(
-                            search: search,
-                            maximumHeight: max(76, geometry.size.height - topFrame.maxY
-                                - (search.candidate == nil ? 120 : candidateHeight * 2 + 4)
-                                - bottomPadding - viewportGap * 2)
-                        )
-                            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+                        Group {
+                            if showsOperationPanel {
+                                GoFlyOperationPanel(
+                                    operation: service.preparedOperation,
+                                    unconfirmedFailure: unconfirmedFailure,
+                                    nativeBusy: service.nativeBusy,
+                                    maximumHeight: panelMaximumHeight(in: geometry),
+                                    reasonIdentifier: "map.serviceError.message",
+                                    cancelIdentifier: "map.serviceError.dismiss",
+                                    onCancel: cancelPreparation,
+                                    onRetry: { _ = service.retryPreparedOperation(id: $0) },
+                                    onSettings: { showingSettings = true },
+                                    onReturn: { returnedFromUnconfirmed = unconfirmedID }
+                                )
+                            } else {
+                                GoFlySearchPanel(search: search, maximumHeight: panelMaximumHeight(in: geometry))
+                            }
+                        }
+                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 8)
@@ -88,6 +101,9 @@ struct GoFlyMapView: View {
                 if let error {
                     UIAccessibility.post(notification: .announcement, argument: goFlyString(error.rawValue))
                 }
+            }
+            .onChange(of: service.preparedOperation?.id) { _, id in
+                if id != nil { dismissKeyboard() }
             }
             .onReceive(location.$observation) { observation in
                 let explicitlyRequested = pendingGPSRecenter
@@ -187,7 +203,7 @@ struct GoFlyMapView: View {
 
     private var displayStatusKey: String {
         switch service.pointState {
-        case .preparing, .sending: "teleport.moving"
+        case .sending: "teleport.moving"
         case .unconfirmed: "teleport.unconfirmed"
         default: service.statusKey
         }
@@ -197,6 +213,35 @@ struct GoFlyMapView: View {
         let top = max(viewportGap, topFrame.maxY + viewportGap)
         let bottom = panelFrame.height > 0 ? panelFrame.minY - viewportGap : geometry.size.height - 92
         return CGRect(x: 16, y: top, width: max(1, geometry.size.width - 32), height: max(1, bottom - top))
+    }
+
+    private func panelMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
+        max(76, geometry.size.height - topFrame.maxY
+            - (search.candidate == nil ? 120 : candidateHeight * 2 + 4)
+            - bottomPadding - viewportGap * 2)
+    }
+
+    private var unconfirmedID: UUID? {
+        if case .unconfirmed(let intent, _) = service.pointState { return intent.id }
+        return nil
+    }
+
+    private var unconfirmedFailure: DeviceServiceFailure? {
+        if case .unconfirmed(_, let failure) = service.pointState { return failure }
+        return nil
+    }
+
+    private var showsOperationPanel: Bool {
+        service.preparedOperation != nil || (unconfirmedID != nil && returnedFromUnconfirmed != unconfirmedID)
+    }
+
+    private var panelPresentsFailure: Bool {
+        if case .failed = service.preparedOperation?.state { return true }
+        return showsOperationPanel && unconfirmedFailure != nil
+    }
+
+    private func cancelPreparation(_ id: UUID) {
+        if service.cancelPreparation(id: id) { serviceNoticeDismissed = true }
     }
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {

@@ -64,3 +64,16 @@ Native adapter 在既有 serial queue 保留同一 location session，acknowledg
 地圖由獨立 MKMapView canvas 提供實際投影，以量測的頂部／底面板界線作 edgePadding；候選與成功位置、viewport 變更才發出 revisioned camera intent，保持非零 map rect 與現有縮放。拖圖只更新畫面，不反覆拉回或送點。候選 Pin、其上方 Go、詳情各自獨立；圖示下方無 caption，鍵盤已反映在面板位置時不重扣高度。Debug simulator 的投影量測僅在明確測試旗標下供實際 UI 驗證，不製造 native 成功。
 
 鏡頭採最新明確選取優先：一般 GPS callback 不覆蓋仍存在的候選鏡頭。成功 ACK 清除原候選後置中確認模擬位置；若準備期間已瀏覽另一 candidate ID，保留新候選及其鏡頭，仍更新模擬箭頭。明確回中可切到目前位置。
+
+
+## 準備與任務交接（票 04）
+
+`PreparedOperationSnapshot` 將要求 ID、原來源／point intent、有效的 1–3 次嘗試與 preparing／failed／cancelled 狀態分開記錄。Core 在一個 watchdog round 內最多呼叫 adapter 三次，只接受 notSent 且 gate 仍 available 的重試；已 claim、unknown、取消、Stop 或過期世代都不重送。新 retry round 從保存的失敗來源建立新 ID／gate，不能改投目前正在瀏覽的另一候選。Start 仍只準備服務。
+
+取消準備只撤回尚未派送的新要求，不清除位置、不重設健康舊任務。取消輸給最後 claim 時必須回報失敗；成功取消後仍等 native 實際返回才解開忙碌。失敗面板取消只移除該失敗要求。Stop 與取消不同：Stop 即時撤銷要求與目前任務權限，再按原 FIFO 要求 clear。
+
+`MovementTaskAuthority` 以有版本的 snapshot 與 lease 作同步比較及替換；健康證據與 running／paused 狀態分開。新準備失敗不自行判定舊任務中斷；來自該 lease 的實際結果才能變更健康。最後的 gate claim 在 lock 內完成 authority 比較與新舊 lease 替換，authority 不反向呼叫 gate。交接後排隊舊 lease 不得寫入；新 lease 在 ACK 前為 unknown，不允許下一筆任務送點。只有仍有效的新要求之確認 ACK 能發布健康，遲到 ACK／Stop／clear 均不得復活舊 lease。06／11 排程每一筆命令必須使用此權限，不另建繞過路徑。
+
+共用 SwiftUI 底面板呈現 O11／O12／O14／O16，沿用實際量測的地圖 viewport；返回未知結果的地圖仍保留 Core 鎖與 Pin 詳情。錯誤使用不透明語意底面，避免地圖內容透出而降低具體原因的可讀性。Debug simulator 的 `-gofly-ui-preparation-delay` 只延遲既有 deviceRequired 失敗，不 claim gate 或偽造成功；明確啟用的 operation metrics 只讀取實際 request／source 身分，供 UI 原來源與新 round 驗證，Release 不包含這些測試入口。
+
+H06 的已停止／GPS 待確認仍可 Start，GPS／clear 不作為準備門檻；O16 未終結的位置命令未知維持原 Go 鎖，由明確 Stop 作廢舊要求後才建立新操作。兩種待確認不能混成同一服務狀態。
