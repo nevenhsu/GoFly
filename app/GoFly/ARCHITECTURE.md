@@ -173,6 +173,17 @@ Advisor核准獨立FavoriteRoutes manifest／immutable payload，manual有序完
 
 放手／歸零撤銷未claim輸入；已claim則等真實結果，確認後保留最後位置及ready服務，不clear。Pause只對已安裝的健康搖桿任務開放，Resume回置中狀態，下次非零手勢建立新意圖。scene非active釋放輸入，回前景不重播；未知結果、watchdog及Stop generation沿既有隔離，遲到ACK不解除。路線與搖桿共用送點擁有權，不建立第二條native queue。
 
-無起點沿02搜尋／最愛／地圖Pin及明確Go，僅對應實際ACK且沒有新候選時返回搖桿；新候選沿03保留。等待GPS的顯示快取不可當起點。現位置箭頭維持fill加outline、無圓底，等待時50%透明；方向相對地圖旋轉顯示。三個mode在空間足夠時用完整pills，不足時改44pt原生Menu；搖桿下方沒有說明文字。12的漫步尚未啟用。本節記錄App實作，整合測試、雙軸審查與最後手機驗收分開記錄。
+無起點沿02搜尋／最愛／地圖Pin及明確Go，僅對應實際ACK且沒有新候選時返回搖桿；新候選沿03保留。等待GPS的顯示快取不可當起點。現位置箭頭維持fill加outline、無圓底，等待時50%透明；方向相對地圖旋轉顯示。三個mode在空間足夠時用完整pills，不足時改44pt原生Menu；搖桿下方沒有說明文字。漫步擴充見下節（票12）。本節記錄App實作，整合測試、雙軸審查與最後手機驗收分開記錄。
 
 票11正式實作與離線驗證完成：完整Swift269、完整simulator UI38／38（1713.531s）、unsigned iPhoneOS build13、304key三語parser／native verifier／diffcheck及Standards／Spec最後readback零finding。未claim的後續失敗回neutral保留錯誤／最後ACK，新手勢可重試；claimedunknown仍Stop。實際方向手感、接收App與VoiceOver仍集中手機驗收，未以UI fixture捏造GPS或native成功。
+
+
+## 自動漫步（票12）
+
+漫步為搖桿 checkbox 子功能，沿用同一 Controller／intent／lease／FIFO writer。手動舊 API 保持座標 outcome；新增 recipe overload 及獨立 receipt outcome，由同一 private executor 在真正佇列 head 讀取最新有效 origin、計算 target step 並捕獲 gate。receipt 的座標／方向／targetID／arrival 只在該步實際 ACK 後發布，不在 UI 或 Controller 重算已送出的點。
+
+純 selector 最多32個均勻方向樣本，以目前速度十分鐘距離選球面目標，排除目前點、目標及本次 session 最近100個成功目的地1m內重複；不要求道路或 MapKit routing。target geometry 保留跨日界／極點與固定 antipodal 方向，最後一步 clamp 到精確目的地，零距離仍須 set/ACK。自動／手動共用500ms ACK後時脈及 intent-scope sequence；手動優先、放手取消未claim舊輸入，已claim等真實回覆後才自動前進，不另開 writer。
+
+Go／隨機只改 target與input revision，保留速度、接管、暫停及 owner；舊target receipt仍更新實際位置，但不能宣告新target抵達。抵達無下一站則實際 pause installed healthy lease後保留本地 suspended continuation與重試，不留下 running owner空轉。scene非active時健康已安裝 auto暫停，未安裝owner退休後僅保留本地 continuation，前景不自動恢復。實際 Stop或新任務 claim的movementBoundary事件作廢所有舊continuation；admission／failed preparation不是claim證據。
+
+App以獨立CandidateController處理漫步選點，與路線picker／瞬移分開；目前目標空心Pin無Go，候選黑點細線Pin的Go只明確換目標。各44pt詳情固定綁定點擊時place snapshot。選點／抵達／ACK不移鏡頭；明確回中仍可用。路線編輯優先使用自身picker、地圖Pin回填地名／地址／座標且沒有Go。正式實作與離線驗證完成：完整SwiftCore293／36suites＋Transport9／1suite，共302PASS；完整simulator UI39／39 PASS（1767.040s）；未簽署iPhoneOS build14、312key三語parser／native verifier／diffcheck通過，Standards及Spec最後readback零finding。三語AX／keyboard與路線地圖Pin回填無Go回歸通過。不能以source、Core controlled-device或simulator UI宣稱手機／接收App效果；實機驗收仍集中最後進行。

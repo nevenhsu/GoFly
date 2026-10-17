@@ -96,7 +96,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         let sequence: UInt64
         let input: JoystickInputRevision
         var gate: PointDispatchGate?
-        var coordinate: GeoCoordinate?
+        var receipt: JoystickStepReceipt?
         var failure: JoystickFailure?
         var inputCancelled = false
         var timedOut = false
@@ -338,6 +338,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         joystickUnconfirmed = false
         for owner in Array(joystickOwners.values) { cancelJoystickOwner(owner) }
         movementAuthority.revokeAll()
+        joystickSubject.send(.movementBoundary(nil))
         currentPreparation?.dispatch.invalidate()
         currentPreparation = nil
         preparedOperation = nil
@@ -742,6 +743,7 @@ extension ServiceController {
         for owner in Array(joystickOwners.values) where owner.installed && owner.intent.lease != lease {
             cancelJoystickOwner(owner)
         }
+        if let lease { joystickSubject.send(.movementBoundary(lease)) }
     }
     private func completeRouteBeginning(_ owner: RouteOwner, context: PreparationContext, outcome: PointDeliveryOutcome) {
         if context.dispatch.hasDispatched { routeDidDispatch(owner.intent) }
@@ -944,6 +946,22 @@ extension ServiceController {
     }
     public func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
                                  expectedInputRevision: JoystickInputRevision, displacement: JoystickDisplacement) async -> JoystickStepOutcome {
+        switch await executeJoystickStep(executionID: executionID, lease: lease, sequence: sequence,
+                                         expectedInputRevision: expectedInputRevision, recipe: .manual(displacement)) {
+        case .acknowledged(let receipt): return .acknowledged(receipt.actualCoordinate)
+        case .notSent(let failure): return .notSent(failure)
+        case .unconfirmed(let failure): return .unconfirmed(failure)
+        case .inputCancelled: return .inputCancelled
+        case .cancelled: return .cancelled
+        }
+    }
+    public func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
+                                 expectedInputRevision: JoystickInputRevision, recipe: JoystickStepRecipe) async -> JoystickRecipeStepOutcome {
+        await executeJoystickStep(executionID: executionID, lease: lease, sequence: sequence,
+                                  expectedInputRevision: expectedInputRevision, recipe: recipe)
+    }
+    private func executeJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
+                                     expectedInputRevision: JoystickInputRevision, recipe: JoystickStepRecipe) async -> JoystickRecipeStepOutcome {
         guard let owner = joystickOwners[executionID], owner.intent.lease == lease, owner.prepared,
               !owner.ended, !owner.neutral, !owner.paused, owner.disposition == nil,
               owner.unknownFailure == nil, owner.tick == nil, owner.stopGeneration == routeStopGeneration,
@@ -965,12 +983,21 @@ extension ServiceController {
                     tick.failure = .originUnavailable; return .failure(.operationCancelled)
                 }
                 // No suspension between current truth, geometry, fresh CAS snapshot and gate construction.
-                let coordinate = JoystickGeodesy.destination(from: origin, displacement: displacement)
+                let receipt: JoystickStepReceipt
+                switch recipe {
+                case .manual(let displacement):
+                    receipt = JoystickStepReceipt(actualCoordinate: JoystickGeodesy.destination(from: origin, displacement: displacement),
+                        actualBearingDegrees: displacement.bearingDegrees, targetID: nil, arrived: false)
+                case .target(let step):
+                    let resolved = JoystickGeodesy.resolveTarget(from: origin, step: step)
+                    receipt = JoystickStepReceipt(actualCoordinate: resolved.coordinate, actualBearingDegrees: resolved.bearingDegrees,
+                        targetID: step.targetID, arrived: resolved.arrived)
+                }
                 let fresh = self.movementAuthority.snapshot
                 guard fresh.lease == nil || fresh.health == .confirmedHealthy else {
                     tick.failure = .device(.serviceUnavailable); return .failure(.operationCancelled)
                 }
-                tick.coordinate = coordinate
+                tick.receipt = receipt
                 let gate = PointDispatchGate(authority: self.movementAuthority, lease: lease,
                     replacing: owner.installed ? nil : fresh) { [weak self] in
                     Task { @MainActor in self?.joystickDidDispatch(executionID: executionID, sequence: sequence) }
@@ -992,7 +1019,7 @@ extension ServiceController {
                         _ = self.unknownJoystick(owner, failure: .operationTimedOut)
                     }
                 }
-                return .point(await service.movePoint(to: coordinate, dispatch: gate))
+                return .point(await service.movePoint(to: receipt.actualCoordinate, dispatch: gate))
             }) { [weak self] result in
                 guard let self else { continuation.resume(returning: .cancelled); return }
                 let outcome = self.completeJoystickTick(owner, tick, result: result)
@@ -1019,7 +1046,7 @@ extension ServiceController {
         invalidatePositionProof()
         endSupersededRoutes()
     }
-    private func completeJoystickTick(_ owner: JoystickOwner, _ tick: JoystickTick, result: CommandResult) -> JoystickStepOutcome {
+    private func completeJoystickTick(_ owner: JoystickOwner, _ tick: JoystickTick, result: CommandResult) -> JoystickRecipeStepOutcome {
         guard joystickTickIsCurrent(owner, tick) else { return .cancelled }
         if tick.timedOut {
             if tick.gate?.hasDispatched == true { return .unconfirmed(.operationTimedOut) }
@@ -1045,26 +1072,26 @@ extension ServiceController {
         if tick.gate?.hasDispatched == true { joystickDidDispatch(owner, tick) }
         switch outcome {
         case .acknowledged where tick.gate?.hasDispatched == true:
-            guard let coordinate = tick.coordinate, movementAuthority.snapshot.lease == owner.intent.lease else {
+            guard let receipt = tick.receipt, movementAuthority.snapshot.lease == owner.intent.lease else {
                 return unknownJoystick(owner, failure: .serviceUnavailable)
             }
             owner.installed = true; owner.lastSequence = tick.sequence
             movementAuthority.updateHealth(.confirmedHealthy, for: owner.intent.lease)
-            publishSimulation(coordinate)
-            return .acknowledged(coordinate)
+            publishSimulation(receipt.actualCoordinate)
+            return .acknowledged(receipt)
         case .notSent(let failure) where tick.gate?.hasDispatched != true:
             return failJoystickBeforeClaim(owner, failure: .device(failure))
         case .notSent(let failure), .unconfirmed(let failure): return unknownJoystick(owner, failure: failure)
         case .acknowledged: return unknownJoystick(owner, failure: .serviceUnavailable)
         }
     }
-    private func failJoystickBeforeClaim(_ owner: JoystickOwner, failure: JoystickFailure) -> JoystickStepOutcome {
+    private func failJoystickBeforeClaim(_ owner: JoystickOwner, failure: JoystickFailure) -> JoystickRecipeStepOutcome {
         owner.ended = true
         movementAuthority.revoke(owner.intent.lease)
         joystickSubject.send(.interrupted(owner.intent.id, failure))
         return .notSent(failure)
     }
-    private func unknownJoystick(_ owner: JoystickOwner, failure: DeviceServiceFailure) -> JoystickStepOutcome {
+    private func unknownJoystick(_ owner: JoystickOwner, failure: DeviceServiceFailure) -> JoystickRecipeStepOutcome {
         guard owner.stopGeneration == routeStopGeneration else { return .cancelled }
         owner.unknownFailure = failure; joystickUnconfirmed = true
         if movementAuthority.snapshot.lease == owner.intent.lease { movementAuthority.updateHealth(.unknown, for: owner.intent.lease) }
@@ -1112,6 +1139,19 @@ extension ServiceController {
               movementAuthority.updateRunState(.running, for: lease) else { return false }
         owner.inputRevision = JoystickInputRevision()
         owner.paused = false; owner.neutral = true
+        joystickSubject.send(.availabilityChanged)
+        return true
+    }
+    public func resumeJoystickStream(executionID: UUID, lease: MovementTaskLease) -> Bool {
+        guard let owner = joystickOwners[executionID], owner.intent.lease == lease, !owner.ended,
+              owner.installed, owner.paused, owner.pendingCalls == 0, owner.tick == nil,
+              owner.disposition == nil, owner.unknownFailure == nil, owner.stopGeneration == routeStopGeneration,
+              !clearScheduled, !pointUnconfirmed, !routeUnconfirmed, !joystickUnconfirmed,
+              movementAuthority.snapshot.lease == lease, movementAuthority.snapshot.runState == .paused,
+              movementAuthority.snapshot.health == .confirmedHealthy,
+              movementAuthority.updateRunState(.running, for: lease) else { return false }
+        owner.inputRevision = JoystickInputRevision()
+        owner.paused = false; owner.neutral = false
         joystickSubject.send(.availabilityChanged)
         return true
     }

@@ -11,6 +11,7 @@ struct GoFlyMapView: View {
     @State private var modeHeaderHeight: CGFloat = 44
     @StateObject private var location = GoFlyRealLocation()
     @StateObject private var search = CandidateController(search: MapKitPlaceSearch())
+    @StateObject private var wanderSearch = CandidateController(search: MapKitPlaceSearch())
     @State private var cameraIntent: GoFlyCameraIntent?
     private let mapPlaces = MapKitPlaceResolver()
     @State private var pendingGPSRecenter = false
@@ -59,9 +60,13 @@ struct GoFlyMapView: View {
         return MapKitWalkingRoutePlanner()
     }
 
-    private var activeSearch: CandidateController { route.picker?.candidates ?? search }
+    private var isWanderMap: Bool { mode == .joystick && joystick.wanderEnabled && route.picker == nil }
+    private var activeSearch: CandidateController {
+        route.picker?.candidates ?? (isWanderMap ? wanderSearch : search)
+    }
     private var activeCandidate: TeleportCandidate? {
         if let picker = route.picker { return picker.candidates.candidate }
+        if isWanderMap { return wanderSearch.candidate }
         return mode == .teleport && route.canEdit ? search.candidate : nil
     }
     private var canSwitchMode: Bool { route.canEdit && route.picker == nil && !showsOperationPanel }
@@ -79,20 +84,38 @@ struct GoFlyMapView: View {
                         marker: service.positionMarker, candidate: activeCandidate,
                         viewport: viewport, cameraIntent: cameraIntent,
                         route: mode == .route ? route.plannedRoute : nil,
+                        wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
                         markerBearingDegrees: joystickMarkerBearing,
                         adjustsFocusForViewportChanges: mode != .joystick,
                         onMapTap: { coordinate in
                             if let picker = route.picker {
                                 picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
+                            } else if isWanderMap {
+                                wanderSearch.selectMapCoordinate(coordinate, resolver: mapPlaces)
                             } else if mode == .teleport, route.canEdit {
                                 search.selectMapCoordinate(coordinate)
                             }
                         },
                         onProjection: { if projection != $0 { projection = $0 } }
                     )
+                    if isWanderMap, let target = joystick.wanderTarget,
+                       let point = projection?.wanderTargetPoint, viewport.contains(point) {
+                        wanderPinOverlay(at: point, size: CGSize(width: 44, height: 44), viewport: viewport) {
+                            wanderTargetPin(target.place)
+                        }
+                    }
                     if let candidate = activeCandidate, let point = projection?.candidatePoint {
-                        candidatePin(candidate)
-                            .position(x: point.x, y: point.y - candidateHeight / 2)
+                        if isWanderMap {
+                            if viewport.contains(point) {
+                                wanderPinOverlay(at: point, size: CGSize(width: max(84, goWidth), height: candidateHeight),
+                                                 viewport: viewport, avoiding: projection?.wanderTargetPoint) {
+                                    candidatePin(candidate)
+                                }
+                            }
+                        } else {
+                            candidatePin(candidate)
+                                .position(x: point.x, y: point.y - candidateHeight / 2)
+                        }
                     }
                     VStack(spacing: 0) {
                         VStack(spacing: 8) {
@@ -184,6 +207,7 @@ struct GoFlyMapView: View {
             .onChange(of: activeCandidate?.id, initial: true) { _, id in
                 guard let candidate = activeCandidate, candidate.id == id else { return }
                 pendingGPSRecenter = false
+                guard !isWanderMap else { return }
                 cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
             }
             .onChange(of: route.picker?.id) { _, id in
@@ -206,7 +230,11 @@ struct GoFlyMapView: View {
                 }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase != .active { joystick.releaseForInactiveScene() }
+                if phase == .active { joystick.sceneDidBecomeActive() }
+                else { joystick.releaseForInactiveScene() }
+            }
+            .onChange(of: joystick.wanderEnabled) { _, enabled in
+                if !enabled { wanderSearch.resetSelection() }
             }
             .task(id: route.completion?.executionID) {
                 guard let id = route.completion?.executionID else { return }
@@ -261,6 +289,9 @@ struct GoFlyMapView: View {
                         controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                         maximumHeight: contentMaximumHeight(in: geometry),
                         onSetOrigin: beginJoystickOriginSelection,
+                        onRandomDestination: {
+                            if joystick.randomizeWanderTarget() { wanderSearch.resetSelection() }
+                        },
                         onSettings: { showingSettings = true }
                     )
                     // Keep an admitted finger alive through preparation; disappearance releases it.
@@ -436,7 +467,7 @@ struct GoFlyMapView: View {
             .accessibilityHint(goFlyString(route.canPause ? "route.pauseHint" :
                 (route.canResume ? "route.resumeHint" :
                     (joystick.canPause ? "joystick.pauseHint" :
-                        (joystick.canResume ? "joystick.resumeHint" :
+                        (joystick.canResume ? (joystick.wanderEnabled ? "joystick.wanderResumeHint" : "joystick.resumeHint") :
                             (service.canStart ? "map.startServiceHint" : "map.noActiveTask"))))))
             .accessibilityIdentifier("map.serviceControl")
 
@@ -538,8 +569,12 @@ struct GoFlyMapView: View {
     private func goButton(_ candidate: TeleportCandidate) -> some View {
         Button {
                 dismissKeyboard()
-                if service.teleport(to: candidate), settingJoystickOrigin,
-                   case .preparing(let intent) = service.pointState {
+                if isWanderMap {
+                    if joystick.applyWanderTarget(candidate.place) {
+                        wanderSearch.clearCandidate(ifMatching: candidate.id)
+                    }
+                } else if service.teleport(to: candidate), settingJoystickOrigin,
+                          case .preparing(let intent) = service.pointState {
                     joystickOriginIntentID = intent.id
                 }
             } label: {
@@ -547,7 +582,7 @@ struct GoFlyMapView: View {
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .frame(width: goWidth)
-            .disabled(!search.canGo || !service.canTeleport)
+            .disabled(isWanderMap ? (!wanderSearch.canGo || !joystick.canApplyWanderTarget) : (!search.canGo || !service.canTeleport))
             .accessibilityIdentifier("map.candidate.go")
     }
 
@@ -556,16 +591,63 @@ struct GoFlyMapView: View {
                 dismissKeyboard()
                 presentedSheet = GoFlyMapSheet(content: .details(candidate.place))
             } label: {
-                Image(systemName: "mappin")
-                    .font(.system(size: 24, weight: .bold))
-                    .frame(width: 44, height: 44, alignment: .bottom)
-                    .contentShape(Rectangle())
+                Group {
+                    if isWanderMap { GoFlyWanderPinIcon(kind: .candidate) }
+                    else { Image(systemName: "mappin").font(.system(size: 24, weight: .bold)) }
+                }
+                .frame(width: 44, height: 44, alignment: .bottom)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(GoFlyStyle.primary)
             .accessibilityLabel(goFlyString("search.placeDetails"))
             .accessibilityValue(route.picker != nil ? candidate.place.coordinate.displayText : candidate.place.title)
             .accessibilityIdentifier("map.candidate.pin")
+    }
+
+    private func wanderTargetPin(_ place: MapPlace) -> some View {
+        Button {
+            dismissKeyboard()
+            presentedSheet = GoFlyMapSheet(content: .details(place))
+        } label: {
+            GoFlyWanderPinIcon(kind: .destination)
+                .frame(width: 44, height: 44, alignment: .bottom)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(goFlyString("search.placeDetails"))
+        .accessibilityValue(String.localizedStringWithFormat(goFlyString("joystick.currentTarget"), place.title))
+        .accessibilityIdentifier("map.wander.target")
+    }
+
+    /// Move only the callout within the unobscured map. Its leader keeps the exact coordinate visible.
+    private func wanderPinOverlay<Content: View>(at anchor: CGPoint, size: CGSize, viewport: CGRect,
+                                                avoiding other: CGPoint? = nil,
+                                                @ViewBuilder content: () -> Content) -> some View {
+        let width = min(size.width, viewport.width)
+        let height = min(size.height, viewport.height)
+        let centerY = min(max(anchor.y - height / 2, viewport.minY + height / 2), viewport.maxY - height / 2)
+        var centerX = min(max(anchor.x, viewport.minX + width / 2), viewport.maxX - width / 2)
+        if let other, viewport.contains(other) {
+            let otherX = min(max(other.x, viewport.minX + 22), viewport.maxX - 22)
+            let otherY = min(max(other.y - 22, viewport.minY + 22), viewport.maxY - 22)
+            if abs(centerX - otherX) < (width + 44) / 2,
+               abs(centerY - otherY) < (height + 44) / 2 {
+                let right = otherX + (width + 44) / 2 + 8
+                let left = otherX - (width + 44) / 2 - 8
+                centerX = right + width / 2 <= viewport.maxX ? right : max(viewport.minX + width / 2, left)
+            }
+        }
+        let bottom = CGPoint(x: centerX, y: centerY + height / 2)
+        return ZStack(alignment: .topLeading) {
+            if hypot(bottom.x - anchor.x, bottom.y - anchor.y) > 1 {
+                Path { path in path.move(to: anchor); path.addLine(to: bottom) }
+                    .stroke(GoFlyStyle.primary, lineWidth: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            content().position(x: centerX, y: centerY)
+        }
     }
 
     private func recenter() {

@@ -16,6 +16,7 @@ struct GoFlyCameraIntent: Equatable {
 
 struct GoFlyMapProjection: Equatable {
     let candidatePoint: CGPoint?
+    let wanderTargetPoint: CGPoint?
     let viewport: CGRect
     let cameraHeadingDegrees: Double
     #if DEBUG && targetEnvironment(simulator)
@@ -23,8 +24,9 @@ struct GoFlyMapProjection: Equatable {
     private(set) var routeIsVisible = false
     #endif
 
-    @MainActor init(candidatePoint: CGPoint?, viewport: CGRect, map: MKMapView) {
+    @MainActor init(candidatePoint: CGPoint?, wanderTargetPoint: CGPoint? = nil, viewport: CGRect, map: MKMapView) {
         self.candidatePoint = candidatePoint
+        self.wanderTargetPoint = wanderTargetPoint
         self.viewport = viewport
         self.cameraHeadingDegrees = map.camera.heading
         #if DEBUG && targetEnvironment(simulator)
@@ -56,6 +58,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var viewport: CGRect
     var cameraIntent: GoFlyCameraIntent?
     var route: PlannedRoute? = nil
+    var wanderTarget: MapPlace? = nil
     var markerBearingDegrees: Double? = nil
     var adjustsFocusForViewportChanges = true
     var onMapTap: (GeoCoordinate) -> Void
@@ -237,7 +240,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             publication &+= 1
             let revision = publication
             let point = parent.candidate.map { map.convert($0.place.coordinate.clLocationCoordinate, toPointTo: map) }
-            let snapshot = GoFlyMapProjection(candidatePoint: point, viewport: parent.viewport, map: map)
+            let target = parent.wanderTarget.map { map.convert($0.coordinate.clLocationCoordinate, toPointTo: map) }
+            let snapshot = GoFlyMapProjection(candidatePoint: point, wanderTargetPoint: target,
+                                             viewport: parent.viewport, map: map)
             Task { @MainActor [weak self] in
                 guard let self, self.publication == revision else { return }
                 self.parent.onProjection(snapshot)

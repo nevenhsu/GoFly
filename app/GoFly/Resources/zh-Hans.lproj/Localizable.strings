@@ -287,7 +287,7 @@
 // Manual joystick
 "map.go" = "Go";
 "mode.joystick" = "摇杆";
-"operation.joystickSummary" = "手动摇杆移动";
+"operation.joystickSummary" = "摇杆移动";
 "joystick.setOrigin" = "设置起点";
 "joystick.pad" = "手动摇杆";
 "joystick.padHint" = "按住并拖动以移动。松开或回到中心，即停止这次输入。";
@@ -304,3 +304,13 @@
 "joystick.phase.unknown" = "摇杆位置待确认";
 "joystick.pauseHint" = "释放输入并暂停摇杆控制。";
 "joystick.resumeHint" = "恢复居中，重新拖动才移动。";
+
+// Automatic wander
+"joystick.wander" = "漫步";
+"joystick.randomDestination" = "随机目的地";
+"joystick.phase.suspended" = "等待继续";
+"joystick.error.noCandidate" = "找不到新的目的地。请在地图选点或重试。";
+"joystick.currentTarget" = "当前目的地：%@";
+"joystick.wanderPadHint" = "拖动可暂时接管方向。漫步正常运行且未暂停时，松开会继续前往当前目的地。";
+"joystick.wanderResumeHint" = "继续漫步，前往当前目的地。";
+"joystick.wanderRetryHint" = "重试选取目的地，或继续前往已选目的地。";

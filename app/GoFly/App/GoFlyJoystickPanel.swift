@@ -6,6 +6,7 @@ struct GoFlyJoystickPanel: View {
     var cameraHeadingDegrees: Double
     var maximumHeight: CGFloat
     var onSetOrigin: () -> Void
+    var onRandomDestination: () -> Void = { }
     var onSettings: () -> Void = { }
     @State private var contentHeight: CGFloat = 220
 
@@ -22,11 +23,43 @@ struct GoFlyJoystickPanel: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("joystick.error")
                 }
+                if let error = controller.wanderError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Label(goFlyString(error.localizationKey), systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("joystick.wanderError.message")
+                            Button(action: controller.clearWanderError) {
+                                Image(systemName: "xmark")
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(goFlyString("common.dismiss"))
+                            .accessibilityIdentifier("joystick.wanderError.dismiss")
+                        }
+                    }
+                    .foregroundStyle(GoFlyStyle.errorForeground)
+                    .padding(12)
+                    .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
+                }
+                if controller.canRetryWander {
+                    Button { _ = controller.retryWander() } label: {
+                        Text(goFlyString("operation.retry"))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(GoFlyActionStyle())
+                    .accessibilityHint(goFlyString("joystick.wanderRetryHint"))
+                    .accessibilityIdentifier("joystick.wanderRetry")
+                }
+                wanderControls
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("joystick.settings")
-                } else if controller.requiresOrigin {
+                } else if needsOriginEntry {
                     Button(action: onSetOrigin) {
                         Label(goFlyString("joystick.setOrigin"), systemImage: "mappin.and.ellipse")
                             .font(.body)
@@ -77,6 +110,60 @@ struct GoFlyJoystickPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("joystick.panel")
     }
+
+    // Dispatch temporarily invalidates location proof. Keep an existing task's pad mounted.
+    private var needsOriginEntry: Bool {
+        controller.requiresOrigin && controller.intent == nil
+            && [.neutral, .suspended, .interrupted].contains(controller.phase)
+    }
+
+    private var wanderControls: some View {
+        ViewThatFits(in: .horizontal) {
+            wanderRow
+            ScrollView(.horizontal) {
+                wanderRow.fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("joystick.wanderControls")
+    }
+
+    private var wanderRow: some View {
+        HStack(spacing: 12) {
+            Toggle(isOn: Binding(
+                get: { controller.wanderEnabled },
+                set: { _ = controller.setWanderEnabled($0) }
+            )) {
+                Label(goFlyString("joystick.wander"),
+                      systemImage: controller.wanderEnabled ? "checkmark.square.fill" : "square")
+                    .font(.body)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .toggleStyle(.button)
+            .buttonStyle(.plain)
+            .foregroundStyle(controller.canSetWanderEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+            .disabled(!controller.canSetWanderEnabled)
+            .accessibilityValue(controller.wanderEnabled ? "1" : "0")
+            .accessibilityIdentifier("joystick.wander")
+            if controller.wanderEnabled {
+                Spacer(minLength: 0)
+                Button(action: onRandomDestination) {
+                    Text(goFlyString("joystick.randomDestination"))
+                        .font(.body)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 126, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(controller.canRandomizeWanderTarget ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                .disabled(!controller.canRandomizeWanderTarget)
+                .accessibilityIdentifier("joystick.randomDestination")
+            }
+        }
+        .frame(minHeight: 44)
+    }
 }
 
 private struct GoFlyManualJoystickPad: View {
@@ -124,7 +211,7 @@ private struct GoFlyManualJoystickPad: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(goFlyString("joystick.pad"))
         .accessibilityValue(accessibilityValue)
-        .accessibilityHint(goFlyString("joystick.padHint"))
+        .accessibilityHint(goFlyString(controller.wanderEnabled ? "joystick.wanderPadHint" : "joystick.padHint"))
         .accessibilityDirectTouch()
         .accessibilityIdentifier("joystick.pad")
     }
@@ -132,14 +219,14 @@ private struct GoFlyManualJoystickPad: View {
     private var isEnabled: Bool { admitted && !endedWhileHeld || controller.canBeginGesture }
 
     private var thumbOffset: CGSize {
-        guard let input = controller.input, input.strength > 0, cameraHeadingDegrees.isFinite else { return .zero }
+        guard let input = controller.displayInput, input.strength > 0, cameraHeadingDegrees.isFinite else { return .zero }
         let angle = (input.bearingDegrees - cameraHeadingDegrees) * .pi / 180
         let travel = CGFloat(input.strength) * radius
         return CGSize(width: CGFloat(sin(angle)) * travel, height: -CGFloat(cos(angle)) * travel)
     }
 
     private var accessibilityValue: String {
-        guard let input = controller.input, input.strength > 0 else { return goFlyString("joystick.centered") }
+        guard let input = controller.displayInput, input.strength > 0 else { return goFlyString("joystick.centered") }
         return String.localizedStringWithFormat(goFlyString("joystick.inputValue"),
             input.bearingDegrees.formatted(.number.precision(.fractionLength(0))),
             input.strength.formatted(.percent.precision(.fractionLength(0))))

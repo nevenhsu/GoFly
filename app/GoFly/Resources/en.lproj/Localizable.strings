@@ -287,7 +287,7 @@
 // Manual joystick
 "map.go" = "Go";
 "mode.joystick" = "Joystick";
-"operation.joystickSummary" = "Manual joystick movement";
+"operation.joystickSummary" = "Joystick movement";
 "joystick.setOrigin" = "Set starting point";
 "joystick.pad" = "Manual joystick";
 "joystick.padHint" = "Touch and hold, then drag to move. Release or return to the center to stop this input.";
@@ -304,3 +304,13 @@
 "joystick.phase.unknown" = "Joystick position unconfirmed";
 "joystick.pauseHint" = "Release the input and pause joystick control.";
 "joystick.resumeHint" = "Return to the center; drag again to move.";
+
+// Automatic wander
+"joystick.wander" = "Wander";
+"joystick.randomDestination" = "Random destination";
+"joystick.phase.suspended" = "Waiting to continue";
+"joystick.error.noCandidate" = "No new destination is available. Choose a place on the map or try again.";
+"joystick.currentTarget" = "Current destination: %@";
+"joystick.wanderPadHint" = "Drag to take over temporarily. Release to continue toward the destination if wander is running normally and has not been paused.";
+"joystick.wanderResumeHint" = "Continue wandering toward the current destination.";
+"joystick.wanderRetryHint" = "Retry destination selection or continue toward the selected destination.";

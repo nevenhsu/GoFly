@@ -98,7 +98,8 @@ final class GoFlyJoystickUITests: XCTestCase {
             app.selectGoFlyMode("joystick")
             assertMissingOrigin(app)
             assertTarget(app.buttons["joystick.setOrigin"], app)
-            attach(app, "11-no-origin-\(language)-max-dark")
+            XCTAssertEqual(app.switches["joystick.wander"].label, language == "en" ? "Wander" : "漫步")
+            attach(app, "12-no-origin-wander-\(language)-max-dark")
             app.buttons["joystick.setOrigin"].tap()
             let query = app.textFields["search.query"]
             XCTAssertTrue(query.waitForExistence(timeout: 5))
@@ -145,7 +146,15 @@ final class GoFlyJoystickUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["joystick.pad"].exists)
         XCTAssertFalse(app.sliders["joystick.speed"].exists)
         XCTAssertFalse(app.buttons["joystick.randomDestination"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["joystick.wander"].exists)
+        let wander = app.switches["joystick.wander"]
+        XCTAssertTrue(wander.exists)
+        XCTAssertFalse(wander.isEnabled)
+        XCTAssertEqual(wander.value as? String, "0")
+        XCTAssertGreaterThanOrEqual(wander.frame.width, 44 - 0.000001)
+        XCTAssertGreaterThanOrEqual(wander.frame.height, 44 - 0.000001)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(wander.frame))
+        XCTAssertTrue(app.scrollViews["joystick.panel"].frame.contains(wander.frame))
+        XCTAssertLessThanOrEqual(wander.frame.maxY, app.buttons["joystick.setOrigin"].frame.minY)
         XCTAssertEqual(app.alerts.count, 0)
     }
     private func dismissKeyboard(_ app: XCUIApplication) {

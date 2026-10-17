@@ -274,7 +274,8 @@ struct JoystickMovementControllerTests {
     }
 }
 
-@MainActor private final class ControlledJoystickCommands: JoystickCommanding {
+@MainActor final class ControlledJoystickCommands: JoystickCommanding {
+    struct RecipeStep { let sequence: UInt64; let revision: JoystickInputRevision; let recipe: JoystickStepRecipe }
     struct Step { let sequence: UInt64; let revision: JoystickInputRevision; let displacement: JoystickDisplacement }
     var canBeginJoystick = true
     var currentJoystickOrigin: GeoCoordinate? = GeoCoordinate(latitude: 25, longitude: 121)!
@@ -283,6 +284,11 @@ struct JoystickMovementControllerTests {
     var joystickEvents: AnyPublisher<JoystickCommandEvent, Never> { events.eraseToAnyPublisher() }
     private var preparation: CheckedContinuation<JoystickPreparationOutcome, Never>?
     private var step: CheckedContinuation<JoystickStepOutcome, Never>?
+    private var recipeStep: CheckedContinuation<JoystickRecipeStepOutcome, Never>?
+    var recipeSteps: [RecipeStep] = []
+    var recipeStepWaiting: Bool { recipeStep != nil }
+    var streamResumes = 0
+    var resumeAllowed = true
     private var idle: [CheckedContinuation<JoystickIdleSettlement, Never>] = []
     var preparationWaiting: Bool { preparation != nil }
     var stepWaiting: Bool { step != nil }
@@ -308,13 +314,39 @@ struct JoystickMovementControllerTests {
         steps.append(Step(sequence: sequence, revision: expectedInputRevision, displacement: displacement))
         return await withCheckedContinuation { step = $0 }
     }
+    func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
+                          expectedInputRevision: JoystickInputRevision, recipe: JoystickStepRecipe) async -> JoystickRecipeStepOutcome {
+        if case .manual(let displacement) = recipe {
+            let result = await sendJoystickStep(executionID: executionID, lease: lease, sequence: sequence,
+                expectedInputRevision: expectedInputRevision, displacement: displacement)
+            switch result {
+            case .acknowledged(let coordinate): return .acknowledged(JoystickStepReceipt(actualCoordinate: coordinate,
+                actualBearingDegrees: displacement.bearingDegrees, targetID: nil, arrived: false))
+            case .notSent(let failure): return .notSent(failure)
+            case .unconfirmed(let failure): return .unconfirmed(failure)
+            case .inputCancelled: return .inputCancelled
+            case .cancelled: return .cancelled
+            }
+        }
+        recipeSteps.append(RecipeStep(sequence: sequence, revision: expectedInputRevision, recipe: recipe))
+        return await withCheckedContinuation { recipeStep = $0 }
+    }
+    func resumeJoystickStream(executionID: UUID, lease: MovementTaskLease) -> Bool {
+        guard resumeAllowed, intent?.id == executionID, intent?.lease == lease else { return false }
+        streamResumes += 1; inputRevision = JoystickInputRevision()
+        return true
+    }
+    func finishRecipeStep(_ outcome: JoystickRecipeStepOutcome) {
+        if case .acknowledged(let receipt) = outcome { currentJoystickOrigin = receipt.actualCoordinate }
+        let pending = recipeStep; recipeStep = nil; pending?.resume(returning: outcome); finishIdle()
+    }
     func releaseJoystick(executionID: UUID, lease: MovementTaskLease, disposition: JoystickReleaseDisposition) -> Bool { releases.append(disposition); return true }
     func resumeJoystick(executionID: UUID, lease: MovementTaskLease) -> Bool { resumes += 1; inputRevision = JoystickInputRevision(); return true }
     func waitForJoystickIdle(executionID: UUID, lease: MovementTaskLease) async -> JoystickIdleSettlement {
-        if preparation == nil && step == nil { return settlement }
+        if preparation == nil && step == nil && recipeStep == nil { return settlement }
         return await withCheckedContinuation { idle.append($0) }
     }
     func finishPreparation(_ outcome: JoystickPreparationOutcome) { let pending = preparation; preparation = nil; pending?.resume(returning: outcome); finishIdle() }
-    func finishStep(_ outcome: JoystickStepOutcome) { let pending = step; step = nil; pending?.resume(returning: outcome); finishIdle() }
-    private func finishIdle() { if preparation == nil && step == nil { let waiting = idle; idle = []; for value in waiting { value.resume(returning: settlement) } } }
+    func finishStep(_ outcome: JoystickStepOutcome) { if case .acknowledged(let coordinate) = outcome { currentJoystickOrigin = coordinate }; let pending = step; step = nil; pending?.resume(returning: outcome); finishIdle() }
+    private func finishIdle() { if preparation == nil && step == nil && recipeStep == nil { let waiting = idle; idle = []; for value in waiting { value.resume(returning: settlement) } } }
 }

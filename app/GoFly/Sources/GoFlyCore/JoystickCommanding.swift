@@ -41,6 +41,7 @@ public enum JoystickIdleSettlement: Equatable, Sendable {
     case requiresStop(DeviceServiceFailure)
 }
 public enum JoystickCommandEvent: Sendable {
+    case movementBoundary(MovementTaskLease?)
     case ended(UUID)
     case interrupted(UUID, JoystickFailure)
     case unknown(UUID, DeviceServiceFailure)
@@ -58,7 +59,10 @@ public protocol JoystickCommanding: AnyObject {
     func reviseJoystickInput(executionID: UUID, lease: MovementTaskLease) -> JoystickInputRevision?
     func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
                           expectedInputRevision: JoystickInputRevision, displacement: JoystickDisplacement) async -> JoystickStepOutcome
+    func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64,
+                          expectedInputRevision: JoystickInputRevision, recipe: JoystickStepRecipe) async -> JoystickRecipeStepOutcome
     @discardableResult func releaseJoystick(executionID: UUID, lease: MovementTaskLease, disposition: JoystickReleaseDisposition) -> Bool
     func resumeJoystick(executionID: UUID, lease: MovementTaskLease) -> Bool
+    func resumeJoystickStream(executionID: UUID, lease: MovementTaskLease) -> Bool
     func waitForJoystickIdle(executionID: UUID, lease: MovementTaskLease) async -> JoystickIdleSettlement
 }

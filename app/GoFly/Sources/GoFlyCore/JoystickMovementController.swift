@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 public enum JoystickMovementPhase: String, Equatable, Sendable {
-    case neutral, preparing, moving, settling, pausing, paused, interrupted, unknown
+    case neutral, preparing, moving, settling, pausing, paused, suspended, interrupted, unknown
 }
 
 @MainActor
@@ -15,13 +15,34 @@ public final class JoystickMovementController: ObservableObject {
     @Published public private(set) var lastAcknowledgedCoordinate: GeoCoordinate?
     @Published public private(set) var lastAcknowledgedBearingDegrees: Double?
     @Published public private(set) var error: JoystickFailure?
+    @Published public private(set) var wanderEnabled = false
+    @Published public private(set) var wanderTarget: WanderTarget?
+    @Published public private(set) var wanderNeedsTarget = false
+    @Published public private(set) var wanderError: WanderSelectionFailure?
+    @Published public private(set) var suspensionReason: WanderSuspensionReason?
+    public var displayInput: JoystickInput? {
+        if let input { return input }
+        guard wanderEnabled, hasAcknowledgedLease, let bearing = lastAcknowledgedBearingDegrees else { return nil }
+        return JoystickInput(bearingDegrees: bearing, strength: 1)
+    }
     public var displayBearingDegrees: Double? { input?.bearingDegrees ?? lastAcknowledgedBearingDegrees }
-    public var canBeginGesture: Bool { phase == .neutral && commands.canBeginJoystick && !requiresOrigin }
+    public var canBeginGesture: Bool {
+        guard sceneActive else { return false }
+        if wanderEnabled, activeGestureID == nil {
+            if phase == .preparing || phase == .moving { return true }
+            if phase == .suspended && suspensionReason == .targetUnavailable { return true }
+        }
+        return phase == .neutral && commands.canBeginJoystick && !requiresOrigin
+    }
     public var requiresOrigin: Bool { commands.currentJoystickOrigin == nil }
     public var requiresStop: Bool { phase == .unknown }
     public var canPause: Bool { phase == .moving && hasAcknowledgedLease }
-    public var canResume: Bool { phase == .paused }
-    public var canSetSpeed: Bool { [.neutral, .preparing, .moving, .paused, .interrupted].contains(phase) }
+    public var canResume: Bool { sceneActive && (phase == .paused || (wanderEnabled && phase == .suspended && suspensionReason == .sceneInactive)) }
+    public var canSetSpeed: Bool { [.neutral, .preparing, .moving, .paused, .suspended, .interrupted].contains(phase) }
+    private var wanderHistory: [GeoCoordinate] = []
+    private let wanderBearingSamples: @Sendable () -> [Double]
+    private var nextSequence: UInt64 = 1
+    private var sceneActive = true
     private let commands: any JoystickCommanding
     private let clock: any RouteClock
     private var task: Task<Void, Never>?
@@ -33,16 +54,35 @@ public final class JoystickMovementController: ObservableObject {
     private var resumedNeutralIntent: JoystickMovementIntent?
     private static let cadence: Duration = .milliseconds(500)
 
-    public init(commands: any JoystickCommanding, clock: any RouteClock = ContinuousRouteClock(), speed: RouteSpeed = .standard) {
-        self.commands = commands; self.clock = clock; self.speed = speed
+    public init(commands: any JoystickCommanding, clock: any RouteClock = ContinuousRouteClock(), speed: RouteSpeed = .standard,
+                wanderBearingSamples: @escaping @Sendable () -> [Double] = { (0..<32).map { _ in Double.random(in: 0..<360) } }) {
+        self.commands = commands; self.clock = clock; self.speed = speed; self.wanderBearingSamples = wanderBearingSamples
         subscription = commands.joystickEvents.sink { [weak self] event in self?.receive(event) }
     }
 
     @discardableResult public func beginGesture(id: UUID, input: JoystickInput) -> Bool {
-        guard canBeginGesture, input.strength > 0 else { return false }
+        guard sceneActive, input.strength > 0 else { return false }
+        if wanderEnabled, activeGestureID == nil, let intent, phase == .suspended, suspensionReason == .targetUnavailable {
+            guard resumeWanderStream(intent) else { return false }
+            _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease)
+            activeGestureID = id; self.input = input
+            return true
+        }
+        if wanderEnabled, activeGestureID == nil, let intent, phase == .preparing || phase == .moving {
+            _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease)
+            activeGestureID = id; self.input = input
+            return true
+        }
+        guard canBeginGesture else { return false }
+        return startMovement(gestureID: id, input: input)
+    }
+
+    private func startMovement(gestureID: UUID? = nil, input: JoystickInput? = nil) -> Bool {
+        guard sceneActive, commands.canBeginJoystick, !requiresOrigin else { return false }
         generation &+= 1
+        nextSequence = 1
         let token = generation, operation = JoystickMovementIntent(), admission = commands.movementAdmissionRevision
-        intent = operation; activeGestureID = id; self.input = input; error = nil
+        intent = operation; activeGestureID = gestureID; self.input = input; error = nil
         hasAcknowledgedLease = false; phase = .preparing
         task = Task { [weak self] in
             guard let self, self.generation == token, self.phase == .preparing, !Task.isCancelled else { return }
@@ -58,6 +98,95 @@ public final class JoystickMovementController: ObservableObject {
         return true
     }
 
+    public var canSetWanderEnabled: Bool {
+        wanderEnabled || (sceneActive && [.neutral, .preparing, .moving, .paused].contains(phase) && !requiresOrigin && (phase != .neutral || commands.canBeginJoystick))
+    }
+    @discardableResult public func setWanderEnabled(_ enabled: Bool) -> Bool {
+        guard enabled != wanderEnabled else { return true }
+        if !enabled {
+            clearWanderState()
+            if let intent { _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease) }
+            if input == nil, let intent, phase != .unknown { settle(intent, disposition: .endGesture) }
+            else if intent == nil, phase != .unknown { returnToNeutral() }
+            return true
+        }
+        guard canSetWanderEnabled, let origin = commands.currentJoystickOrigin else { error = .originUnavailable; return false }
+        guard let selected = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+        wanderEnabled = true
+        commitTarget(selected)
+        if phase == .neutral { return startMovement() }
+        return true
+    }
+    public var canApplyWanderTarget: Bool {
+        sceneActive && wanderEnabled && [.neutral, .preparing, .moving, .paused, .suspended].contains(phase)
+    }
+    public var canRandomizeWanderTarget: Bool { canApplyWanderTarget && !requiresOrigin }
+    @discardableResult public func applyWanderTarget(_ place: MapPlace) -> Bool {
+        guard canApplyWanderTarget else { return false }
+        commitTarget(WanderTarget(place: place))
+        return true
+    }
+    @discardableResult public func randomizeWanderTarget() -> Bool {
+        guard canRandomizeWanderTarget, let origin = commands.currentJoystickOrigin else { return false }
+        guard let selected = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+        commitTarget(selected)
+        return true
+    }
+    public func clearWanderError() { wanderError = nil }
+
+    public var canRetryWander: Bool {
+        sceneActive && wanderEnabled && !requiresOrigin && (phase == .neutral || (phase == .suspended && suspensionReason == .targetUnavailable))
+    }
+    @discardableResult public func retryWander() -> Bool {
+        guard canRetryWander else { return false }
+        if phase == .neutral { return startMovement() }
+        guard let intent else { return false }
+        let selected: WanderTarget?
+        if wanderNeedsTarget {
+            guard let origin = commands.currentJoystickOrigin, let candidate = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+            selected = candidate
+        } else { selected = nil }
+        return resumeWanderStream(intent, selected: selected)
+    }
+    private func resumeWanderStream(_ operation: JoystickMovementIntent, selected: WanderTarget? = nil) -> Bool {
+        guard commands.resumeJoystickStream(executionID: operation.id, lease: operation.lease) else { error = .device(.serviceUnavailable); return false }
+        if let selected { commitTarget(selected) }
+        generation &+= 1
+        let token = generation
+        phase = .moving; suspensionReason = nil; input = nil; activeGestureID = nil; error = nil
+        task = Task { [weak self] in await self?.run(operation, token: token) }
+        return true
+    }
+    private func suspendForUnavailableTarget() {
+        guard let intent, hasAcknowledgedLease,
+              commands.releaseJoystick(executionID: intent.id, lease: intent.lease, disposition: .pause) else {
+            markUnknown(.serviceUnavailable); return
+        }
+        settle(intent, disposition: .pause, alreadyReleased: true, finalPhase: .suspended, reason: .targetUnavailable)
+    }
+    private func advanceTarget(from coordinate: GeoCoordinate) {
+        if let selected = selectTarget(origin: coordinate) { commitTarget(selected) }
+        else {
+            wanderNeedsTarget = true; wanderError = .noCandidate
+            if input == nil, phase == .moving { suspendForUnavailableTarget() }
+        }
+    }
+
+    private func selectTarget(origin: GeoCoordinate) -> WanderTarget? {
+        WanderTargetSelector.select(origin: origin, speed: speed, currentTarget: wanderTarget,
+            history: wanderHistory, bearingSamples: wanderBearingSamples())
+    }
+    private func commitTarget(_ target: WanderTarget) {
+        if let intent { _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease) }
+        wanderTarget = target; wanderNeedsTarget = false; wanderError = nil
+        wanderHistory.append(target.coordinate)
+        if wanderHistory.count > 100 { wanderHistory.removeFirst(wanderHistory.count - 100) }
+    }
+    private func clearWanderState() {
+        wanderEnabled = false; wanderTarget = nil; wanderNeedsTarget = false; wanderError = nil
+        wanderHistory = []; suspensionReason = nil
+    }
+
     @discardableResult public func updateGesture(id: UUID, input: JoystickInput) -> Bool {
         guard activeGestureID == id, let intent, phase == .preparing || phase == .moving else { return false }
         guard input.strength > 0 else { return endGesture(id: id) }
@@ -69,14 +198,18 @@ public final class JoystickMovementController: ObservableObject {
     @discardableResult public func setSpeed(_ speed: RouteSpeed) -> Bool {
         guard canSetSpeed else { return false }
         guard self.speed != speed else { return true }
-        if input != nil, let intent { _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease) }
+        if (input != nil || wanderEnabled), let intent { _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease) }
         self.speed = speed
         return true
     }
 
     @discardableResult public func endGesture(id: UUID) -> Bool {
         guard activeGestureID == id, let intent, phase == .preparing || phase == .moving else { return false }
-        settle(intent, disposition: .endGesture)
+        if wanderEnabled {
+            _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease)
+            input = nil; activeGestureID = nil
+            if wanderNeedsTarget { suspendForUnavailableTarget() }
+        } else { settle(intent, disposition: .endGesture) }
         return true
     }
 
@@ -87,25 +220,55 @@ public final class JoystickMovementController: ObservableObject {
         return true
     }
     @discardableResult public func resume() -> Bool {
-        guard canResume, let intent, commands.resumeJoystick(executionID: intent.id, lease: intent.lease) else { return false }
+        guard canResume else { return false }
+        if wanderEnabled, phase == .suspended, suspensionReason == .sceneInactive {
+            guard commands.canBeginJoystick, !requiresOrigin else { error = .originUnavailable; return false }
+            suspensionReason = nil
+            return startMovement()
+        }
+        guard let intent else { return false }
+        if wanderEnabled {
+            if wanderNeedsTarget {
+                guard let origin = commands.currentJoystickOrigin, let selected = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+                return resumeWanderStream(intent, selected: selected)
+            }
+            return resumeWanderStream(intent)
+        }
+        guard commands.resumeJoystick(executionID: intent.id, lease: intent.lease) else { return false }
         generation &+= 1
         resumedNeutralIntent = intent
         phase = .neutral; input = nil; activeGestureID = nil
         return true
     }
     public func releaseForInactiveScene() {
+        sceneActive = false
         // A new preclaim gesture has not replaced the resumed healthy owner yet.
         if let neutral = resumedNeutralIntent, neutral.id != intent?.id {
             if commands.releaseJoystick(executionID: neutral.id, lease: neutral.lease, disposition: .endGesture) {
                 resumedNeutralIntent = nil
             }
         }
+        if wanderEnabled {
+            if phase == .paused || phase == .suspended || phase == .pausing || phase == .unknown { return }
+            guard let intent else { phase = .suspended; suspensionReason = .sceneInactive; return }
+            if hasAcknowledgedLease {
+                guard commands.releaseJoystick(executionID: intent.id, lease: intent.lease, disposition: .pause) else { markUnknown(.serviceUnavailable); return }
+                settle(intent, disposition: .pause, alreadyReleased: true,
+                    finalPhase: wanderNeedsTarget ? .suspended : .paused,
+                    reason: wanderNeedsTarget ? .targetUnavailable : .sceneInactive)
+            } else {
+                settle(intent, disposition: .endGesture, finalPhase: .suspended, reason: .sceneInactive)
+            }
+            return
+        }
         guard let intent, phase != .unknown, phase != .settling else { return }
         settle(intent, disposition: .endGesture)
     }
+    public func sceneDidBecomeActive() { sceneActive = true; objectWillChange.send() }
     public func clearError() { if !requiresStop { error = nil } }
 
-    private func settle(_ operation: JoystickMovementIntent, disposition: JoystickReleaseDisposition, alreadyReleased: Bool = false) {
+    private func settle(_ operation: JoystickMovementIntent, disposition: JoystickReleaseDisposition, alreadyReleased: Bool = false,
+                        finalPhase: JoystickMovementPhase? = nil, reason: WanderSuspensionReason? = nil) {
         input = nil; activeGestureID = nil
         phase = disposition == .pause ? .pausing : .settling
         settlementRevision &+= 1
@@ -122,28 +285,44 @@ public final class JoystickMovementController: ObservableObject {
             case .requiresStop(let failure): self.markUnknown(failure)
             case .settled:
                 guard self.phase != .unknown else { return }
-                if disposition == .pause { self.phase = .paused }
-                else { self.returnToNeutral() }
+                if disposition == .pause { self.phase = finalPhase ?? .paused; self.suspensionReason = reason }
+                else {
+                    self.returnToNeutral()
+                    if let finalPhase { self.phase = finalPhase; self.suspensionReason = reason }
+                }
             }
         }
     }
 
     private func run(_ operation: JoystickMovementIntent, token: UInt64) async {
-        var sequence: UInt64 = 1
         while generation == token, phase == .moving, !Task.isCancelled {
             do { try await clock.sleep(for: Self.cadence) } catch { return }
             guard generation == token, phase == .moving, !Task.isCancelled,
-                  let input, let displacement = input.displacement(speed: speed),
                   let revision = commands.joystickInputRevision(executionID: operation.id, lease: operation.lease) else { return }
+            let recipe: JoystickStepRecipe
+            if let input, let displacement = input.displacement(speed: speed) { recipe = .manual(displacement) }
+            else if wanderEnabled, !wanderNeedsTarget, let target = wanderTarget,
+                    let step = JoystickTargetStep(targetID: target.id, coordinate: target.coordinate,
+                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) { recipe = .target(step) }
+            else { return }
+            let capturedTargetID = wanderTarget?.id, capturedNeedsTarget = wanderNeedsTarget
             let outcome = await commands.sendJoystickStep(executionID: operation.id, lease: operation.lease,
-                sequence: sequence, expectedInputRevision: revision, displacement: displacement)
+                sequence: nextSequence, expectedInputRevision: revision, recipe: recipe)
             guard generation == token, intent?.id == operation.id, phase != .unknown else { return }
             switch outcome {
-            case .acknowledged(let coordinate):
-                sequence &+= 1
-                lastAcknowledgedCoordinate = coordinate
-                lastAcknowledgedBearingDegrees = displacement.bearingDegrees
+            case .acknowledged(let receipt):
+                nextSequence &+= 1
+                lastAcknowledgedCoordinate = receipt.actualCoordinate
+                if let bearing = receipt.actualBearingDegrees { lastAcknowledgedBearingDegrees = bearing }
                 hasAcknowledgedLease = true
+                if wanderEnabled, !capturedNeedsTarget, let target = wanderTarget, target.id == capturedTargetID {
+                    let arrived: Bool
+                    switch recipe {
+                    case .manual: arrived = JoystickGeodesy.distanceMeters(from: receipt.actualCoordinate, to: target.coordinate) <= 1
+                    case .target: arrived = receipt.targetID == target.id && receipt.arrived
+                    }
+                    if arrived { advanceTarget(from: receipt.actualCoordinate) }
+                }
             case .inputCancelled: break
             case .cancelled:
                 if phase == .moving { returnToNeutral() }
@@ -169,6 +348,12 @@ public final class JoystickMovementController: ObservableObject {
     private func receive(_ event: JoystickCommandEvent) {
         switch event {
         case .availabilityChanged: objectWillChange.send()
+        case .movementBoundary(let lease):
+            if let lease, lease == intent?.lease { return }
+            generation &+= 1; settlementRevision &+= 1
+            task?.cancel(); transition?.cancel()
+            clearWanderState(); error = nil; resumedNeutralIntent = nil
+            returnToNeutral()
         case .ended(let id):
             if resumedNeutralIntent?.id == id { resumedNeutralIntent = nil }
             guard intent?.id == id else { return }
