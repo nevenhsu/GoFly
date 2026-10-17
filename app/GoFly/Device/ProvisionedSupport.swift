@@ -1,7 +1,7 @@
 import Foundation
 import GoFlyCore
 
-#if canImport(idevice) && !targetEnvironment(simulator)
+#if !targetEnvironment(simulator)
 
 enum SupportMountMethod: String { case personalized, cryptex }
 

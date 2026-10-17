@@ -1,7 +1,7 @@
 import Foundation
 import GoFlyCore
 
-#if canImport(idevice) && !targetEnvironment(simulator)
+#if !targetEnvironment(simulator)
 import Darwin
 import idevice
 
@@ -24,9 +24,9 @@ final class NativeDeviceSession: DeviceSession {
             var address = localTunnelAddress()
             try throwIfFFIError(withUnsafePointer(to: &address) {
                 $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    tunnel_create_rppairing(
+                    tunnel_create_rppairing_verify_only(
                         $0, socklen_t(MemoryLayout<sockaddr_in>.stride),
-                        "GoFlyService", pairing, nil, nil, &adapter, &handshake
+                        "GoFlyService", pairing, &adapter, &handshake
                     )
                 }
             }, .tunnelUnavailable)
@@ -177,10 +177,12 @@ final class NativeDeviceSession: DeviceSession {
 
 private func throwIfFFIError(_ error: UnsafeMutablePointer<IdeviceFfiError>?, _ fallback: DeviceServiceFailure) throws {
     guard let error else { return }
-    let timedOut = error.pointee.code == 109
+    let failure = NativeErrorMapping.failure(
+        code: error.pointee.code, subcode: error.pointee.sub_code, fallback: fallback
+    )
     idevice_error_free(error)
     // Raw FFI messages can contain identifiers and paths; never retain them.
-    throw timedOut ? DeviceServiceFailure.operationTimedOut : fallback
+    throw failure
 }
 
 #endif

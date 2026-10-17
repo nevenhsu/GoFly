@@ -2,7 +2,10 @@ import XCTest
 
 @MainActor
 final class GoFlyServiceUITests: XCTestCase {
-    func testServiceFailureKeepsRepairAvailableWithoutGPSPrompt() {
+    func testServiceFailureKeepsRepairAvailableWithoutGPSPrompt() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("This failure-path test requires the simulator deviceRequired adapter; device clear is verified separately.")
+        #else
         let app = XCUIApplication()
         app.launchArguments = ["-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"]
         app.launch()
@@ -24,6 +27,7 @@ final class GoFlyServiceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["service.primary"].isEnabled)
         XCTAssertTrue(app.buttons["service.resetTunnel"].isEnabled)
         XCTAssertEqual(app.alerts.count, 0)
+        #endif
     }
 
     func testLargeEnglishDarkSettingsKeepActionsReachable() {

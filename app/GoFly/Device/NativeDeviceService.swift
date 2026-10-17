@@ -1,7 +1,7 @@
 import Foundation
 import GoFlyCore
 
-#if canImport(idevice) && !targetEnvironment(simulator)
+#if !targetEnvironment(simulator)
 import idevice
 
 /// The only native device boundary in the production app. Every handle is

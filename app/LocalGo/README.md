@@ -1,8 +1,10 @@
 # LocalGo
 
+2026-10-17：正式開發已依 implement 開始票 01，採獨立 [GoFly target](../GoFly/README.md)；本目錄維持 prototype。正式功能、原生重建與裝置待驗的狀態以 GoFly README／票單為準，不把下列歷史成功紀錄當作新 App 通過。
+
 GoFly 三語使用者文件：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文是較早 prototype 與設計歷程，不作為新版 GoFly 正式安裝指南。AI 代理請先讀 [AI-INSTALL.md](../../docs/AI-INSTALL.md)，確認使用者是否選擇 LocalGo 實驗。既有 AGPL 授權保留，新文件 0BSD 範圍見[授權說明](../../docs/LICENSING.md)。
 
-2026-10-17 開發定位確認：**現有 iOS 程式僅為 prototype，不計入正式 GoFly 的功能完成度。** 歷史編譯、測試與裝置實驗保留為技術參考；正式 App 須依核可流程重新建立實作與驗收。視覺採使用者指定的 [Uber design.md](https://getdesign.md/uber/design-md)，原生適配見 [GoFly 視覺方向](../../DESIGN.md)；開發拆分見 [步驟草案](../../work/gofly-planning/IOS-DEVELOPMENT-PLAN-DRAFT.md)。Figma 繼續定義流程／布局／互動，本次只更新規格與計畫，未修改 App 或 Figma。
+2026-10-17 開發定位確認：**現有 iOS 程式僅為 prototype，不計入正式 GoFly 的功能完成度。** 歷史編譯、測試與裝置實驗保留為技術參考；正式 App 須依核可流程重新建立實作與驗收。視覺採使用者指定的 [Uber design.md](https://getdesign.md/uber/design-md)，原生適配見 [GoFly 視覺方向](../../DESIGN.md)；開發拆分見 [步驟草案](../../work/gofly-planning/IOS-DEVELOPMENT-PLAN-DRAFT.md)。Figma 繼續定義流程／布局／互動；設計確認階段只更新規格與計畫，後續正式 App 實作進度見上方說明，未改動 Figma。
 
 **iOS wireframe 規格已定稿，App 待實作／真機驗收。** 使用者已核可 [全模組審查](../../work/gofly-planning/IOS-FINAL-UX-REVIEW.md) 的 #1–10 與 C1–C6；現行規格、詞彙與 [單一開發交接](../../work/gofly-planning/IOS-DEVELOPMENT-HANDOFF.md) 已同步。服務待命不移動；新任務準備成功決定交接時先停舊送點再啟新；指定起點在開始路線時才先移至起點；關閉來回維持當下方向到下一端點、原位置 % 不歸零；GPX 用摘要與完整軌跡；位置回覆未知跨返回仍鎖原 Go；背景／冷啟動依原模式且不重播；還原中不開始任務；路線／GPX 刪除可復原。路線各地點 input 只開 search mode，同一張路線清單，角色小字在名稱上方、右側垃圾桶可刪任意節點；選定確認才回填，取消保留。手動路線只保留有效已確認節點，既有值清空確認等於刪除、取消保留；搜尋關鍵字清空不刪節點，非空無效輸入不覆寫，少於兩點停用開始／儲存。真實 GPS 缺少仍只小提示，H06 GPS 待確認仍可啟動準備服務。只做繁中靜態 wireframe，不做 prototype，不改 App 或 Mac docs；App 三語要求維持。Figma 本輪已透過 Desktop Bridge 套用本機並完成靜態讀回（雲端同步未另驗證），最新實際數量以 [定稿交付](../../work/design-localgo-v2/oct17-ios-finalized/README.md) 為準，以下較早交付數量屬當輪記錄。
 

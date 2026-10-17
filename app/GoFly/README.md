@@ -11,11 +11,14 @@
 從專案根目錄執行：
 
 ```sh
-python3 app/GoFly/scripts/verify-native.py
 bash app/GoFly/scripts/check.sh
 ```
 
-`check.sh` 把衍生輸出放到根目錄 `work/gofly-ios`，執行正式核心測試與 unsigned simulator／device build，不簽署、不安裝到手機、不動 prototype。Xcode 預設使用 `/Applications/Xcode.app/Contents/Developer`，可由 `DEVELOPER_DIR` 指定。
+`check.sh` 把衍生輸出放到根目錄 `work/gofly-ios`，執行正式核心測試、固定來源的原生測試／重建、輸入雜湊核對與 unsigned simulator／device build，不簽署、不安裝到手機、不動 prototype。Xcode 預設使用 `/Applications/Xcode.app/Contents/Developer`，可由 `DEVELOPER_DIR` 指定。
+
+首次原生建置需要 Apple Silicon、可用的固定 idevice 來源 checkout，以及下載 Rust 工具鏈與鎖定依賴的網路。來源位置、工具鏈隔離與建置步驟見 [NativeBridge](NativeBridge/README.md)。不使用 prototype 的舊 archive；缺少新產物或雜湊不符時，device 驗證直接失敗。
+
+只檢查來源邊界可執行 `python3 app/GoFly/scripts/verify-native.py --source-only`；原生建置完成後，去掉此參數才會連同 archive 與建置 manifest 核對。來源檢查通過不能代替 device build 或真機驗收。
 
 ## 裝置準備與驗收界線
 
@@ -27,4 +30,4 @@ bash app/GoFly/scripts/check.sh
 
 ## 來源
 
-連結的 idevice header／archive 及三個精確沿用的 setup 來源，見 `NativeSources.json`。保留 StikDebug／idevice 的來源註記與 AGPL-3.0，授權全文隨 App 放入 Legal。原生 archive 的生成 commit 與全部傳遞授權尚未獨立重現；本次不宣告已具發行資格。
+三個精確沿用的 StikDebug setup 來源及 AGPL-3.0 授權雜湊見 `NativeSources.json`。原生 idevice 採 MIT 授權，固定 upstream commit、鎖定依賴及 GoFly verify-only 修改見 `NativeBridge`；Swift 僅匯入經審查的窄 header。AGPL-3.0、idevice MIT 與來源註記隨 App 放入 Legal。完整傳遞依賴授權清單及裝置驗收仍待完成，本次不宣告已具發行資格。

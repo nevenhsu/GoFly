@@ -1,5 +1,7 @@
 # LocalGo 功能與驗收狀態
 
+2026-10-17 正式開發進度：使用者已指示以 implement 依票單順序開發。獨立正式 target 位於 [GoFly](../GoFly/README.md)，票 01 正在實作服務啟停與修復；核心與模擬器證據、verify-only 原生重建及真機待驗分開記錄。下列既有 LocalGo 程式與裝置紀錄仍屬 prototype，不轉算正式功能完成；本節不宣告票 01 已驗收。
+
 ## GoFly 發行與文件要求（2026-10-17）
 
 主要用途為研究，使用設備為 Mac 與 iPhone；正式安裝路徑為下載 Mac DMG → 啟動 GoFly → USB 連接手機 → 由 Mac 安裝手機 App，安裝完成仍須符合 App／配對／必要裝置準備的既有驗證門檻。DMG、可攜式環境與正式安裝能力尚待交付，不以現有唯讀 Mac App 或 LocalGo prototype 代替。

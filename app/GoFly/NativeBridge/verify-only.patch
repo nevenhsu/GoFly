@@ -1,0 +1,249 @@
+--- a/ffi/build.rs
++++ b/ffi/build.rs
+@@ -25,7 +25,9 @@
+     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+ 
+     cbindgen::Builder::new()
+-        .with_crate(crate_dir)
++        // Parse the local FFI module tree directly. with_crate performs an
++        // unnecessary unlocked, all-features cargo metadata resolution.
++        .with_src(format!("{crate_dir}/src/lib.rs"))
+         .with_header(HEADER)
+         .with_language(cbindgen::Language::C)
+         .with_include_guard("IDEVICE_H")
+--- a/ffi/src/tunnel_provider.rs
++++ b/ffi/src/tunnel_provider.rs
+@@ -346,6 +346,68 @@
+     }
+ }
+ 
++/// Verifies an existing remote-pairing credential without pair-setup fallback.
++/// This helper deliberately never calls `connect` or accepts a PIN callback.
++async fn verify_existing_pairing<R: idevice::remote_pairing::RpPairingSocketProvider>(
++    rpc: &mut RemotePairingClient<R>,
++    pairing_file: &mut idevice::remote_pairing::RpPairingFile,
++) -> Result<(), IdeviceError> {
++    rpc.attempt_pair_verify().await?;
++    rpc.validate_pairing(pairing_file).await?;
++    Ok(())
++}
++
++/// Opens a raw RPPairing tunnel using only an existing credential.
++/// Authentication failure is terminal: no pairing request or credential update.
++///
++/// # Safety
++/// Input pointers must be valid and non-null. Each non-null output pointer must
++/// be writable; output handles are set to NULL before any fallible work and are
++/// published together only after the complete TLS/RSD tunnel succeeds.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn tunnel_create_rppairing_verify_only(
++    addr: *const idevice_sockaddr,
++    addr_len: idevice_socklen_t,
++    hostname: *const c_char,
++    pairing_file: *mut RpPairingFileHandle,
++    out_adapter: *mut *mut AdapterHandle,
++    out_handshake: *mut *mut RsdHandshakeHandle,
++) -> *mut IdeviceFfiError {
++    unsafe {
++        if !out_adapter.is_null() { *out_adapter = null_mut(); }
++        if !out_handshake.is_null() { *out_handshake = null_mut(); }
++    }
++    if addr.is_null() || hostname.is_null() || pairing_file.is_null()
++        || out_adapter.is_null() || out_handshake.is_null()
++    {
++        return ffi_err!(IdeviceError::FfiInvalidArg);
++    }
++    let socket_addr = match crate::util::c_socket_to_rust(addr as *const SockAddr, addr_len) {
++        Ok(a) => a,
++        Err(e) => return ffi_err!(e),
++    };
++    let host = match unsafe { CStr::from_ptr(hostname) }.to_str() {
++        Ok(s) => s.to_string(),
++        Err(_) => return ffi_err!(IdeviceError::FfiInvalidString),
++    };
++    let rpf = unsafe { &mut (*pairing_file).0 };
++    let res = run_sync_local(async {
++        let stream = run_global_timeout(|| tokio::net::TcpStream::connect(socket_addr))
++            .await
++            .map_err(|e| IdeviceError::InternalError(format!("connect: {e}")))?;
++        let mut rpc = RemotePairingClient::new(RpPairingSocket::new(stream), &host);
++        verify_existing_pairing(&mut rpc, rpf).await?;
++        finish_tunnel(&mut rpc, socket_addr).await
++    });
++    match res {
++        Ok((adapter, handshake)) => {
++            write_result(adapter, handshake, out_adapter, out_handshake);
++            null_mut()
++        }
++        Err(e) => ffi_err!(e),
++    }
++}
++
+ /// Pairs with a device over the network via raw RPPairing, without creating a tunnel.
+ ///
+ /// This is for tvOS.
+@@ -434,3 +496,7 @@
+     }
+     "000000".to_string()
+ }
++
++#[cfg(test)]
++#[path = "gofly_verify_only_tests.rs"]
++mod gofly_verify_only_tests;
+--- /dev/null
++++ b/ffi/src/gofly_verify_only_tests.rs
+@@ -0,0 +1,154 @@
++//! GoFly regression tests: execute real RemotePairingClient framing and crypto,
++//! with a local scripted peer. No device, credentials or network beyond loopback.
++use super::*;
++use idevice::remote_pairing::RpPairingFile;
++use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
++
++const HANDSHAKE: &str = r#"{"response":{"_1":{"handshake":{"_0":{}}}}}"#;
++const REJECTED: &str = r#"{"event":{"_0":{"pairingData":{"_0":{"data":"BwEC"}}}}}"#;
++// TLV state=2 + X25519 public key [9;32]; the real client performs its crypto.
++const VERIFIED_KEY: &str = r#"{"event":{"_0":{"pairingData":{"_0":{"data":"BgECAyAJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQ=="}}}}}"#;
++const VERIFIED_FINISH: &str = r#"{"event":{"_0":{"pairingData":{"_0":{"data":"BgEE"}}}}}"#;
++
++async fn frame_read<S: AsyncRead + Unpin>(socket: &mut S) -> Option<String> {
++    let mut prefix = [0; 11];
++    if socket.read_exact(&mut prefix).await.is_err() { return None; }
++    assert_eq!(&prefix[..9], b"RPPairing");
++    let count = u16::from_be_bytes([prefix[9], prefix[10]]) as usize;
++    let mut body = vec![0; count];
++    socket.read_exact(&mut body).await.unwrap();
++    Some(String::from_utf8(body).unwrap())
++}
++
++async fn frame_write<S: AsyncWrite + Unpin>(socket: &mut S, plain: &str) {
++    let body = format!(r#"{{"message":{{"plain":{{"_0":{plain}}}}},"originatedBy":"device","sequenceNumber":0}}"#);
++    socket.write_all(b"RPPairing").await.unwrap();
++    socket.write_all(&(body.len() as u16).to_be_bytes()).await.unwrap();
++    socket.write_all(body.as_bytes()).await.unwrap();
++    socket.flush().await.unwrap();
++}
++
++async fn scripted_peer<S: AsyncRead + AsyncWrite + Unpin>(mut socket: S, accepted: bool, reject_after_signing: bool) -> Vec<String> {
++    let mut sent = Vec::new();
++    sent.push(frame_read(&mut socket).await.unwrap());
++    frame_write(&mut socket, HANDSHAKE).await;
++    sent.push(frame_read(&mut socket).await.unwrap());
++    frame_write(&mut socket, if accepted { VERIFIED_KEY } else { REJECTED }).await;
++    if accepted {
++        sent.push(frame_read(&mut socket).await.unwrap());
++        frame_write(&mut socket, if reject_after_signing { REJECTED } else { VERIFIED_FINISH }).await;
++    }
++    while let Some(message) = frame_read(&mut socket).await { sent.push(message); }
++    sent
++}
++
++fn assert_verify_only(messages: &[String]) {
++    assert!(messages[0].contains("attemptPairVerify"));
++    assert!(messages[1].contains("verifyManualPairing"));
++    for message in messages {
++        assert!(!message.contains("setupManualPairing"), "unexpected setup: {message}");
++        assert!(!message.contains("pairingConsent"), "unexpected consent: {message}");
++        assert!(!message.contains("000000"), "unexpected PIN: {message}");
++    }
++}
++
++#[test]
++fn gofly_verify_only_preserves_credentials_on_success_and_rejection() {
++    for (accepted, reject_after_signing) in [(false, false), (true, false), (true, true)] {
++        run_sync_local(async {
++            let (client, peer) = tokio::io::duplex(16384);
++            let peer = tokio::spawn(scripted_peer(peer, accepted, reject_after_signing));
++            let mut credential = RpPairingFile::generate("GoFlyTest");
++            credential.alt_irk = Some(vec![7; 16]);
++            let before = credential.to_bytes();
++            let mut rpc = RemotePairingClient::new(RpPairingSocket::new(client), "GoFlyTest");
++            let result = verify_existing_pairing(&mut rpc, &mut credential).await;
++            assert_eq!(result.is_ok(), accepted && !reject_after_signing);
++            assert_eq!(credential.to_bytes(), before);
++            drop(rpc);
++            let messages = peer.await.unwrap();
++            assert_verify_only(&messages);
++            if !accepted { assert_eq!(messages.len(), 3); assert!(messages[2].contains("pairVerifyFailed")); }
++        });
++    }
++}
++
++#[test]
++fn gofly_verify_only_export_rejection_has_null_outputs_and_unchanged_credential() {
++    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
++    let port = listener.local_addr().unwrap().port();
++    listener.set_nonblocking(true).unwrap();
++    let peer = std::thread::spawn(move || {
++        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
++        runtime.block_on(async {
++            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
++            let (stream, _) = listener.accept().await.unwrap();
++            tokio::time::timeout(std::time::Duration::from_secs(5), scripted_peer(stream, false, false)).await.unwrap()
++        })
++    });
++    let mut credential = RpPairingFileHandle(RpPairingFile::generate("GoFlyTest"));
++    let before = credential.0.to_bytes();
++    let mut address: libc::sockaddr_in = unsafe { std::mem::zeroed() };
++    address.sin_family = libc::AF_INET as _;
++    address.sin_port = port.to_be();
++    address.sin_addr.s_addr = u32::from_ne_bytes([127, 0, 0, 1]);
++    let mut adapter = std::ptr::dangling_mut();
++    let mut handshake = std::ptr::dangling_mut();
++    let error = unsafe { tunnel_create_rppairing_verify_only(
++        &address as *const _ as *const idevice_sockaddr,
++        std::mem::size_of_val(&address) as _, c"GoFlyTest".as_ptr(), &mut credential,
++        &mut adapter, &mut handshake,
++    ) };
++    assert!(!error.is_null());
++    assert_eq!(unsafe { (*error).code }, 103);
++    assert_eq!(unsafe { (*error).sub_code }, 5);
++    unsafe { crate::idevice_error_free(error) };
++    assert!(adapter.is_null());
++    assert!(handshake.is_null());
++    assert_eq!(credential.0.to_bytes(), before);
++    assert_verify_only(&peer.join().unwrap());
++}
++
++#[test]
++fn gofly_verify_only_export_invalid_arguments_clear_valid_outputs() {
++    let mut adapter = std::ptr::dangling_mut();
++    let mut handshake = std::ptr::dangling_mut();
++    let error = unsafe { tunnel_create_rppairing_verify_only(
++        std::ptr::null(), 0, std::ptr::null(), std::ptr::null_mut(), &mut adapter, &mut handshake,
++    ) };
++    assert!(!error.is_null());
++    unsafe { crate::idevice_error_free(error) };
++    assert!(adapter.is_null());
++    assert!(handshake.is_null());
++    let error = unsafe { tunnel_create_rppairing_verify_only(
++        std::ptr::null(), 0, std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut(), &mut handshake,
++    ) };
++    assert!(!error.is_null());
++    unsafe { crate::idevice_error_free(error) };
++    assert!(handshake.is_null());
++}
++
++#[test]
++fn gofly_verify_only_export_decoding_errors_leave_outputs_null() {
++    let mut credential = RpPairingFileHandle(RpPairingFile::generate("GoFlyTest"));
++    let before = credential.0.to_bytes();
++    let mut address: libc::sockaddr_in = unsafe { std::mem::zeroed() };
++    address.sin_family = libc::AF_INET as _;
++    let invalid_utf8 = [0xff_u8, 0];
++    for (length, host) in [
++        (0, c"GoFlyTest".as_ptr()),
++        (std::mem::size_of_val(&address) as _, invalid_utf8.as_ptr().cast()),
++    ] {
++        let mut adapter = std::ptr::dangling_mut();
++        let mut handshake = std::ptr::dangling_mut();
++        let error = unsafe { tunnel_create_rppairing_verify_only(
++            &address as *const _ as *const idevice_sockaddr,
++            length, host, &mut credential, &mut adapter, &mut handshake,
++        ) };
++        assert!(!error.is_null());
++        unsafe { crate::idevice_error_free(error) };
++        assert!(adapter.is_null());
++        assert!(handshake.is_null());
++        assert_eq!(credential.0.to_bytes(), before);
++    }
++}

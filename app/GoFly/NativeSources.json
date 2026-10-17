@@ -1,14 +1,16 @@
 {
-  "schemaVersion": 1,
-  "sourceCommit": "734361bb9d03817ed8dd82cb27cf8b2b3792b458",
+  "schemaVersion": 2,
+  "setupSourceCommit": "734361bb9d03817ed8dd82cb27cf8b2b3792b458",
   "files": {
-    "app/LocalGo/StikDebug/idevice/idevice.h": "696286794e8cf1c18a91d4dab5046cef4d9bae352f5e7a1ad33fbc0ba30d7ab4",
-    "app/LocalGo/StikDebug/idevice/libidevice_ffi.a": "4db23fe1d342927b9480bb9a8577f219994365621dc28aa0018e23ea1990ecc8",
-    "app/LocalGo/StikDebug/idevice/module.modulemap": "d98e25796e1135d892d81e6922a61e78e82b3d6c33322112e9eca1e089c7a300",
     "app/LocalGo/StikDebug/Support/PairingFileStore.swift": "d1826f9de1edfbac0a4a77ead3e546708bd98b0d557e1e33a4955c2bd9c59713",
     "app/LocalGo/StikDebug/LocalGo/LocalGoSetupProtocol.swift": "a1d35000c64ea376152d656866621c60601341d407663788426da11d0224853c",
     "app/LocalGo/StikDebug/LocalGo/LocalGoSetupHandoff.swift": "a2ca6105959439863739c2fb909f0dc98712d1b2a6ddc285e90cd5196cad442a",
     "app/LocalGo/LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
   },
-  "limitation": "Native archive generator commit and full transitive license inventory are not independently reproducible; no release claim."
+  "nativeBuild": {
+    "pin": "app/GoFly/NativeBridge/upstream.json",
+    "manifest": "work/gofly-ios/native/manifest.json",
+    "validation": "app/GoFly/scripts/verify-native.py"
+  },
+  "limitation": "Full transitive dependency license inventory and device acceptance remain pending; no release claim."
 }

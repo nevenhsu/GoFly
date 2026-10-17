@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/jkcoxson/idevice.git",
+  "commit": "3854a5df4a5a6dee71ffce4d8befc2ea356a8065",
+  "cargoLockSHA256": "3c1a7710f0cd02f9100e91b97c9f8abc6546f115f7f3255551c990628aea0e16",
+  "rustVersion": "1.94.0",
+  "rustReleaseDate": "2026-03-05",
+  "rustManifestURL": "https://static.rust-lang.org/dist/channel-rust-1.94.0.toml",
+  "rustManifestSHA256": "aaa177def36e01d539bee6bde95295230b9ce378f81057845db8d0ebe97898ee",
+  "host": "aarch64-apple-darwin",
+  "target": "aarch64-apple-ios",
+  "features": [
+    "ring",
+    "tunnel_tcp_stack",
+    "tcp",
+    "dvt",
+    "location_simulation",
+    "mobile_image_mounter",
+    "cryptexd"
+  ],
+  "components": [
+    {
+      "name": "rustc",
+      "target": "aarch64-apple-darwin",
+      "url": "https://static.rust-lang.org/dist/2026-03-05/rustc-1.94.0-aarch64-apple-darwin.tar.xz",
+      "sha256": "6ba00a4f486af11826335cd7fe405592d959f50afb9489176fc1463cbe75dbf2"
+    },
+    {
+      "name": "cargo",
+      "target": "aarch64-apple-darwin",
+      "url": "https://static.rust-lang.org/dist/2026-03-05/cargo-1.94.0-aarch64-apple-darwin.tar.xz",
+      "sha256": "7497ab873993cf38b806548c85bf818ffd71d1c3cf77b5bb4c3d3f1769588a08"
+    },
+    {
+      "name": "rust-std",
+      "target": "aarch64-apple-darwin",
+      "url": "https://static.rust-lang.org/dist/2026-03-05/rust-std-1.94.0-aarch64-apple-darwin.tar.xz",
+      "sha256": "d3293668128b0a7838ef2544ae341eadd4437460ca22098af723349885a10ba2"
+    },
+    {
+      "name": "rust-std",
+      "target": "aarch64-apple-ios",
+      "url": "https://static.rust-lang.org/dist/2026-03-05/rust-std-1.94.0-aarch64-apple-ios.tar.xz",
+      "sha256": "41ec1d18f4762f85231a19cf8aba3385da78fece2ff900a435c62881a3a3b44b"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import Foundation
 import GoFlyCore
 
-#if canImport(idevice) && !targetEnvironment(simulator)
+#if !targetEnvironment(simulator)
 import Darwin
 
 /// A fresh TCP probe for the fixed LocalDevVPN endpoint.

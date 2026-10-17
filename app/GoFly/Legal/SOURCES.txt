@@ -3,14 +3,17 @@ https://github.com/StikDebug/StikDebug
 Source commit: 734361bb9d03817ed8dd82cb27cf8b2b3792b458
 
 Native library upstream: https://github.com/jkcoxson/idevice
-The exact generator commit and full native transitive dependency license
-inventory have not been independently reconstructed. Do not infer that this
-development build has completed a release/distribution audit.
+Pinned commit: 3854a5df4a5a6dee71ffce4d8befc2ea356a8065
+License: MIT, Jackson Coxson (see idevice-MIT.txt).
+GoFly adds a verification-only tunnel entry point with no pair-setup fallback.
+Patch and reproducible build inputs: app/GoFly/NativeBridge in the source tree.
+Full native transitive dependency license inventory and device acceptance are
+pending. This development build has not completed a release/distribution audit.
 
 Selected setup codec, protected pairing store and private handoff sources
 retain their original author notices. The production native session adapts
 only tunnel, identity, DDI and location ownership logic; prototype UI,
 debug/JIT wrappers, and phone-side DDI downloader are not compiled in.
 
-See AGPL-3.0.txt for the license. Source and audited input hashes are kept in
+See AGPL-3.0.txt for the StikDebug license. Source and audited input hashes are kept in
 the development repository at app/GoFly and app/GoFly/NativeSources.json.
