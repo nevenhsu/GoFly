@@ -94,7 +94,7 @@ struct GoFlyOperationPanel: View {
     private func preparationTitle(_ source: PreparedOperationSource) -> String {
         switch source {
         case .start: "operation.preparingService"
-        case .point, .route: "operation.preparingMove"
+        case .point, .route, .joystick: "operation.preparingMove"
         }
     }
 
@@ -109,6 +109,7 @@ struct GoFlyOperationPanel: View {
             if case .place(let place) = intent.draft.destination?.value { destination = place.title }
             else { destination = intent.route.end.displayText }
             text = String.localizedStringWithFormat(goFlyString("operation.destination"), destination)
+        case .joystick: text = goFlyString("operation.joystickSummary")
         }
         return Text(text)
             .font(.subheadline)
@@ -138,6 +139,8 @@ struct GoFlyOperationPanel: View {
             source = "point|\(intent.id)|\(intent.candidate.id)|\(intent.candidate.place.coordinate.displayText)"
         case .route(let intent):
             source = "route|\(intent.id)|\(intent.lease.id)|\(intent.route.start.displayText)|\(intent.route.end.displayText)"
+        case .joystick(let intent):
+            source = "joystick|\(intent.id)|\(intent.lease.id)"
         }
         return "\(operation.id)|\(source)|\(operation.attempt.value)"
     }

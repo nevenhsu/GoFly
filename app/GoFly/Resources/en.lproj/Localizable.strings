@@ -283,3 +283,24 @@
 "favoriteRoutes.error.noSelection" = "Select a favorite route first.";
 "favoriteRoutes.error.busy" = "Wait for the current favorite-route operation to finish.";
 "favoriteRoutes.error.nothingToUndo" = "There is no deleted route to restore.";
+
+// Manual joystick
+"map.go" = "Go";
+"mode.joystick" = "Joystick";
+"operation.joystickSummary" = "Manual joystick movement";
+"joystick.setOrigin" = "Set starting point";
+"joystick.pad" = "Manual joystick";
+"joystick.padHint" = "Touch and hold, then drag to move. Release or return to the center to stop this input.";
+"joystick.centered" = "Centered";
+"joystick.inputValue" = "Direction %@ degrees · Strength %@";
+"joystick.error.originUnavailable" = "A confirmed starting location is unavailable. Set a starting point to use the joystick.";
+"joystick.phase.neutral" = "Joystick ready";
+"joystick.phase.preparing" = "Preparing joystick";
+"joystick.phase.moving" = "Joystick active";
+"joystick.phase.settling" = "Finishing joystick input";
+"joystick.phase.pausing" = "Pausing joystick";
+"joystick.phase.paused" = "Joystick paused";
+"joystick.phase.interrupted" = "Joystick interrupted";
+"joystick.phase.unknown" = "Joystick position unconfirmed";
+"joystick.pauseHint" = "Release the input and pause joystick control.";
+"joystick.resumeHint" = "Return to the center; drag again to move.";

@@ -457,3 +457,11 @@ iOS 26、27 各自在 iPhone 測試：首次設定、拔 USB 並停止 Mac、兩
 正式App以獨立紀錄保存手動路線完整有序MapPlace或GPX完整來源及檔名，保留名稱／地址／精確座標；每次Save新增UUID，允許重複。標籤只改指定原筆manifest，不重寫來源或新增；刪除／Undo不連動原匯入紀錄、其他重複筆、目前草稿或定位任務。短按明確載入完整來源，長按只改標籤；驗證中的遲到Load不得覆寫新編輯。
 
 Save只取按下當下的有效Current快照；無法解析時只從最愛副本排除，至少兩點才可存，實際成功結果明示排除並以Done關閉，不改live draft。Start仍嚴格拒絕無法解析的Current。上述已完成正式實作與離線驗證（完整Swift231、完整simulator UI35／35（1537.711s）、未簽署iPhoneOS build12、285key三語parser／native verifier／diffcheck及Standards／Spec零finding），含27點及GPX10k完整重開讀回與三語最大字級；手機GPS、接收App、Files與VoiceOver仍待集中驗收。沒有Figma回寫，prototype程式未因本票修改。
+
+### 手動搖桿開發補充（票11）
+
+正式App新增第三個搖桿mode，11先實作手動方向／力度／速度；漫步checkbox及目的地留待12，不放無效開關。畫面方向依地圖camera heading換算，滑塊與目前箭頭一致；不請求手機朝向、不自動移鏡頭，底部沒有說明文字。空間不足時三mode改用44pt原生Menu，完整文字與鍵盤下的選點空間仍可用。
+
+起點只用已確認模擬位置或有效新GPS；無位置提供小型設定起點，沿02明確Go並收到對應ACK才回搖桿，不自動開始送點。Go後另選新候選則保留新選取。手勢放開／歸零停止該次送點並保留最後實際ACK位置，與Stop／clear分開；暫停後繼續回置中，重新拖動才移動。進背景釋放，回前景不重播；首次未claim失敗保留原健康任務並允許新手勢，已claim未知仍需明確Stop。本節是正式App開發規則，離線結果及手機驗收另記；沒有Figma回寫或手機操作。
+
+票11正式實作及離線驗證完成（完整Swift269、完整simulator UI38／38／1713.531s、unsigned build13、304key三語、native verifier與兩軸零finding）。準備或後續步驟未送出可用新手勢重試，未知仍需Stop；只有真正ACK更新位置。實際搖桿／回中／接收App及VoiceOver由最後手機驗收補齊，未回寫Figma或操作手機。

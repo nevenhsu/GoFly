@@ -186,8 +186,7 @@ final class GoFlyWaypointUITests: XCTestCase {
         return app
     }
     private func openRoute(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["mode.route"].waitForExistence(timeout: 10))
-        app.buttons["mode.route"].tap()
+        app.selectGoFlyMode("route")
         XCTAssertTrue(app.descendants(matching: .any)["route.panel"].waitForExistence(timeout: 5))
     }
     private func nodeIDs(_ app: XCUIApplication) -> [String] {

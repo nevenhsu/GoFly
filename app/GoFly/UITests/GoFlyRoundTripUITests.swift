@@ -105,9 +105,7 @@ final class GoFlyRoundTripUITests: XCTestCase {
     }
 
     private func openRoute(_ app: XCUIApplication) {
-        let route = app.buttons["mode.route"]
-        XCTAssertTrue(route.waitForExistence(timeout: 10))
-        route.tap()
+        app.selectGoFlyMode("route")
         XCTAssertTrue(app.buttons["route.details"].waitForExistence(timeout: 5))
     }
 

@@ -283,3 +283,24 @@
 "favoriteRoutes.error.noSelection" = "请先选择收藏路线。";
 "favoriteRoutes.error.busy" = "请等待当前收藏路线操作完成。";
 "favoriteRoutes.error.nothingToUndo" = "当前没有可恢复的已删除路线。";
+
+// Manual joystick
+"map.go" = "Go";
+"mode.joystick" = "摇杆";
+"operation.joystickSummary" = "手动摇杆移动";
+"joystick.setOrigin" = "设置起点";
+"joystick.pad" = "手动摇杆";
+"joystick.padHint" = "按住并拖动以移动。松开或回到中心，即停止这次输入。";
+"joystick.centered" = "已回中心";
+"joystick.inputValue" = "方向 %@ 度・力度 %@";
+"joystick.error.originUnavailable" = "目前没有已确认的可用位置。请设置起点后使用摇杆。";
+"joystick.phase.neutral" = "摇杆已就绪";
+"joystick.phase.preparing" = "摇杆准备中";
+"joystick.phase.moving" = "摇杆控制中";
+"joystick.phase.settling" = "摇杆输入结束中";
+"joystick.phase.pausing" = "摇杆暂停中";
+"joystick.phase.paused" = "摇杆已暂停";
+"joystick.phase.interrupted" = "摇杆已中断";
+"joystick.phase.unknown" = "摇杆位置待确认";
+"joystick.pauseHint" = "释放输入并暂停摇杆控制。";
+"joystick.resumeHint" = "恢复居中，重新拖动才移动。";

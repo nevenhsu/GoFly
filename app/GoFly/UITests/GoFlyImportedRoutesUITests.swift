@@ -243,8 +243,7 @@ final class GoFlyImportedRoutesUITests: XCTestCase {
         return app
     }
     private func openRoute(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["mode.route"].waitForExistence(timeout: 10))
-        app.buttons["mode.route"].tap()
+        app.selectGoFlyMode("route")
         XCTAssertTrue(app.buttons["route.details"].waitForExistence(timeout: 5))
         assertTarget(app.buttons["route.details"], in: app)
     }

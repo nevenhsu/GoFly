@@ -4,6 +4,7 @@ public enum PreparedOperationSource: Equatable, Sendable {
     case start
     case point(PointMoveIntent)
     case route(RouteExecutionIntent)
+    case joystick(JoystickMovementIntent)
 }
 
 public struct PreparationAttempt: Equatable, Sendable {

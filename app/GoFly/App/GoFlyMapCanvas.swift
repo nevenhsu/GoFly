@@ -17,6 +17,7 @@ struct GoFlyCameraIntent: Equatable {
 struct GoFlyMapProjection: Equatable {
     let candidatePoint: CGPoint?
     let viewport: CGRect
+    let cameraHeadingDegrees: Double
     #if DEBUG && targetEnvironment(simulator)
     private(set) var routePointCount = 0
     private(set) var routeIsVisible = false
@@ -25,6 +26,7 @@ struct GoFlyMapProjection: Equatable {
     @MainActor init(candidatePoint: CGPoint?, viewport: CGRect, map: MKMapView) {
         self.candidatePoint = candidatePoint
         self.viewport = viewport
+        self.cameraHeadingDegrees = map.camera.heading
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
             let lines = map.overlays.compactMap { $0 as? MKPolyline }
@@ -54,6 +56,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var viewport: CGRect
     var cameraIntent: GoFlyCameraIntent?
     var route: PlannedRoute? = nil
+    var markerBearingDegrees: Double? = nil
+    var adjustsFocusForViewportChanges = true
     var onMapTap: (GeoCoordinate) -> Void
     var onProjection: (GoFlyMapProjection) -> Void
 
@@ -146,9 +150,13 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 positionAnnotation = annotation
                 map.addAnnotation(annotation)
             }
-            if let annotation = positionAnnotation, let view = map.view(for: annotation) as? PositionAnnotationView {
-                view.apply(marker)
-            }
+            updateMarkerAppearance(on: map)
+        }
+
+        private func updateMarkerAppearance(on map: MKMapView) {
+            guard let marker = parent.marker, let annotation = positionAnnotation,
+                  let view = map.view(for: annotation) as? PositionAnnotationView else { return }
+            view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: map.camera.heading)
         }
 
         func updateRoute(on map: MKMapView) {
@@ -169,8 +177,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                   map.bounds.width > 0, map.bounds.height > 0 else { return }
             let visible = parent.viewport.intersection(map.bounds)
             guard visible.width > 1, visible.height > 1,
-                  intent.id != appliedIntent || visible != appliedViewport
-                    || map.bounds != appliedBounds || map.safeAreaInsets != appliedSafeArea else { return }
+                  intent.id != appliedIntent || (parent.adjustsFocusForViewportChanges
+                    && (visible != appliedViewport || map.bounds != appliedBounds
+                        || map.safeAreaInsets != appliedSafeArea)) else { return }
             appliedIntent = intent.id
             appliedViewport = visible
             appliedBounds = map.bounds
@@ -237,6 +246,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             correctFocusIfNeeded(on: mapView)
+            updateMarkerAppearance(on: mapView)
             publishProjection(on: mapView)
         }
 
@@ -247,6 +257,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            updateMarkerAppearance(on: mapView)
             publishProjection(on: mapView)
         }
 
@@ -255,7 +266,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "position") as? PositionAnnotationView
                 ?? PositionAnnotationView(annotation: annotation, reuseIdentifier: "position")
             view.annotation = annotation
-            view.apply(marker)
+            view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: mapView.camera.heading)
             return view
         }
 
@@ -309,8 +320,12 @@ private final class PositionAnnotationView: MKAnnotationView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    func apply(_ marker: PositionMarker) {
+    func apply(_ marker: PositionMarker, bearingDegrees: Double?, cameraHeadingDegrees: Double) {
         alpha = marker.freshness == .waiting ? 0.5 : 1
+        let angle = bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0
+        for image in [fill, edge] {
+            image.transform = CGAffineTransform(rotationAngle: CGFloat(angle))
+        }
         let key: String
         switch (marker.source, marker.freshness) {
         case (.gps, .fresh): key = "map.realLocation"

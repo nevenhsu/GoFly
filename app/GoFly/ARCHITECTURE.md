@@ -166,3 +166,13 @@ Advisor核准獨立FavoriteRoutes manifest／immutable payload，manual有序完
 最愛Save純builder捕捉tap-time draft與service.currentRouteOrigin單一值，無效Current只在副本排除，≥2有效點才存；實際commit receipt攜帶omittedUnavailableCurrent，UI明確結果後Done，不能以過期eligibility假稱已保存Current或再讀service。Start仍拒絕未解析Current。FavoriteLoad用controller新發出的token，在async validation後同步檢查、消耗，編輯／picker／Start／Load／Clear或dismiss失效，遲到結果不能覆寫新草稿；speed／roundtrip保留最新值。
 
 正式實作與離線驗證完成：完整Swift231、完整simulator UI35／35（1537.711s）、未簽署iPhoneOS build12、285key三語parser／native verifier／diffcheck及Standards／Spec零finding。完整GPX10k與27點重開讀回、精確標籤及三語最大字級皆通過；實際GPS／接收App／Files與VoiceOver仍集中手機驗收。沒有Figma回寫或手機操作。
+
+## 手動搖桿（票11）
+
+第三個mode沿用唯一ServiceController／native FIFO與PointDispatchGate。Core將畫面向量和實際map camera heading轉為世界方向，按速度、力度及500ms cadence計算球面位移；FIFO head在前序真實回覆後才讀最新有效origin，最後claim才交接owner。純prepare最多三次，成功只代表prepared，不安裝lease或宣稱位置已確認。ACK才更新座標與方向，不追補等待時間、不自動追蹤鏡頭。
+
+放手／歸零撤銷未claim輸入；已claim則等真實結果，確認後保留最後位置及ready服務，不clear。Pause只對已安裝的健康搖桿任務開放，Resume回置中狀態，下次非零手勢建立新意圖。scene非active釋放輸入，回前景不重播；未知結果、watchdog及Stop generation沿既有隔離，遲到ACK不解除。路線與搖桿共用送點擁有權，不建立第二條native queue。
+
+無起點沿02搜尋／最愛／地圖Pin及明確Go，僅對應實際ACK且沒有新候選時返回搖桿；新候選沿03保留。等待GPS的顯示快取不可當起點。現位置箭頭維持fill加outline、無圓底，等待時50%透明；方向相對地圖旋轉顯示。三個mode在空間足夠時用完整pills，不足時改44pt原生Menu；搖桿下方沒有說明文字。12的漫步尚未啟用。本節記錄App實作，整合測試、雙軸審查與最後手機驗收分開記錄。
+
+票11正式實作與離線驗證完成：完整Swift269、完整simulator UI38／38（1713.531s）、unsigned iPhoneOS build13、304key三語parser／native verifier／diffcheck及Standards／Spec最後readback零finding。未claim的後續失敗回neutral保留錯誤／最後ACK，新手勢可重試；claimedunknown仍Stop。實際方向手感、接收App與VoiceOver仍集中手機驗收，未以UI fixture捏造GPS或native成功。

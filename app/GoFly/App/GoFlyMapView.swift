@@ -6,6 +6,7 @@ import UIKit
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
     @StateObject private var route: RouteExecutionController
+    @StateObject private var joystick: JoystickMovementController
     @State private var mode: GoFlyMapMode = .teleport
     @State private var modeHeaderHeight: CGFloat = 44
     @StateObject private var location = GoFlyRealLocation()
@@ -28,13 +29,17 @@ struct GoFlyMapView: View {
     @State private var showingSettings = false
     @State private var serviceNoticeDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
+    @State private var settingJoystickOrigin = false
+    @State private var joystickOriginIntentID: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
 
     init(service: ServiceController) {
         _service = ObservedObject(wrappedValue: service)
         _route = StateObject(wrappedValue: RouteExecutionController(
             draft: Self.routeDraft(), planner: Self.routePlanner(), commands: service, search: MapKitPlaceSearch()
         ))
+        _joystick = StateObject(wrappedValue: JoystickMovementController(commands: service))
     }
 
     private static func routeDraft() -> RouteDraft {
@@ -74,6 +79,8 @@ struct GoFlyMapView: View {
                         marker: service.positionMarker, candidate: activeCandidate,
                         viewport: viewport, cameraIntent: cameraIntent,
                         route: mode == .route ? route.plannedRoute : nil,
+                        markerBearingDegrees: joystickMarkerBearing,
+                        adjustsFocusForViewportChanges: mode != .joystick,
                         onMapTap: { coordinate in
                             if let picker = route.picker {
                                 picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
@@ -168,6 +175,7 @@ struct GoFlyMapView: View {
                 }
                 location.acceptedFix()
                 guard service.confirmedSimulatedLocation == nil,
+                      mode != .joystick || explicitlyRequested,
                       mode == .teleport || route.plannedRoute == nil || explicitlyRequested,
                       (route.picker == nil ? activeCandidate == nil : activeSearch.candidate == nil) || explicitlyRequested,
                       let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else { return }
@@ -197,6 +205,9 @@ struct GoFlyMapView: View {
                     cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
                 }
             }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { joystick.releaseForInactiveScene() }
+            }
             .task(id: route.completion?.executionID) {
                 guard let id = route.completion?.executionID else { return }
                 do { try await Task.sleep(for: .seconds(3)) } catch { return }
@@ -209,6 +220,13 @@ struct GoFlyMapView: View {
                     cameraIntent = GoFlyCameraIntent(coordinate: intent.candidate.place.coordinate)
                 }
                 dismissKeyboard()
+                if settingJoystickOrigin, mode == .teleport, joystickOriginIntentID == intent.id {
+                    joystickOriginIntentID = nil
+                    if search.candidate == nil {
+                        settingJoystickOrigin = false
+                        mode = .joystick
+                    }
+                }
             }
             .sheet(item: $presentedSheet, onDismiss: {
                 if focusAfterSheet {
@@ -235,30 +253,23 @@ struct GoFlyMapView: View {
     private func bottomPanel(in geometry: GeometryProxy) -> some View {
         VStack(spacing: 8) {
             if canSwitchMode {
-                HStack(spacing: 8) {
-                    modeButton(.teleport, key: "mode.teleport")
-                    modeButton(.route, key: "mode.route")
-                }
-                .padding(4)
-                .background(GoFlyStyle.surface, in: Capsule())
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(goFlyString("mode.title"))
-                .accessibilityIdentifier("map.mode")
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { modeHeaderHeight = $0 }
+                modeSelector
             }
-            if showsOperationPanel {
-                GoFlyOperationPanel(
-                    operation: service.preparedOperation,
-                    unconfirmedFailure: unconfirmedFailure,
-                    nativeBusy: service.nativeBusy,
-                    maximumHeight: panelMaximumHeight(in: geometry),
-                    reasonIdentifier: "map.serviceError.message",
-                    cancelIdentifier: "map.serviceError.dismiss",
-                    onCancel: cancelPreparation,
-                    onRetry: { _ = service.retryPreparedOperation(id: $0) },
-                    onSettings: { showingSettings = true },
-                    onReturn: { returnedFromUnconfirmed = unconfirmedID }
-                )
+            if mode == .joystick, route.canEdit, route.picker == nil {
+                ZStack(alignment: .bottom) {
+                    GoFlyJoystickPanel(
+                        controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
+                        maximumHeight: contentMaximumHeight(in: geometry),
+                        onSetOrigin: beginJoystickOriginSelection,
+                        onSettings: { showingSettings = true }
+                    )
+                    // Keep an admitted finger alive through preparation; disappearance releases it.
+                    .opacity(showsOperationPanel ? 0 : 1)
+                    .accessibilityHidden(showsOperationPanel)
+                    if showsOperationPanel { operationPanel(in: geometry) }
+                }
+            } else if showsOperationPanel {
+                operationPanel(in: geometry)
             } else if let picker = route.picker {
                 GoFlyRoutePickerView(
                     session: picker, maximumHeight: contentMaximumHeight(in: geometry),
@@ -294,12 +305,85 @@ struct GoFlyMapView: View {
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
     }
 
+    private func operationPanel(in geometry: GeometryProxy) -> some View {
+        GoFlyOperationPanel(
+            operation: service.preparedOperation,
+            unconfirmedFailure: unconfirmedFailure,
+            nativeBusy: service.nativeBusy,
+            maximumHeight: panelMaximumHeight(in: geometry),
+            reasonIdentifier: "map.serviceError.message",
+            cancelIdentifier: "map.serviceError.dismiss",
+            onCancel: cancelPreparation,
+            onRetry: { _ = service.retryPreparedOperation(id: $0) },
+            onSettings: { showingSettings = true },
+            onReturn: { returnedFromUnconfirmed = unconfirmedID }
+        )
+    }
+
+    private var modeSelector: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                modeButton(.teleport, key: "mode.teleport")
+                modeButton(.route, key: "mode.route")
+                modeButton(.joystick, key: "mode.joystick")
+            }
+            .padding(4)
+            .background(GoFlyStyle.surface, in: Capsule())
+            Menu {
+                ForEach(GoFlyMapMode.allCases, id: \.self) { value in
+                    Button { selectMode(value) } label: {
+                        if mode == value { Label(goFlyString(value.localizationKey), systemImage: "checkmark") }
+                        else { Text(goFlyString(value.localizationKey)) }
+                    }
+                    .accessibilityIdentifier(value.localizationKey)
+                }
+            } label: {
+                HStack {
+                    Text(goFlyString(mode.localizationKey))
+                    Spacer(minLength: 12)
+                    Image(systemName: "chevron.down")
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(4)
+            .background(GoFlyStyle.surface, in: Capsule())
+            .accessibilityLabel(goFlyString("mode.title"))
+            .accessibilityValue(goFlyString(mode.localizationKey))
+            .accessibilityIdentifier("map.mode.menu")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(goFlyString("mode.title"))
+        .accessibilityIdentifier("map.mode")
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { modeHeaderHeight = $0 }
+    }
+
+    private func selectMode(_ value: GoFlyMapMode) {
+        settingJoystickOrigin = false
+        joystickOriginIntentID = nil
+        mode = value
+    }
+
+    private func beginJoystickOriginSelection() {
+        settingJoystickOrigin = true
+        joystickOriginIntentID = nil
+        mode = .teleport
+    }
+
+    private var joystickMarkerBearing: Double? {
+        guard let marker = service.positionMarker, marker.source == .simulation,
+              marker.coordinate == joystick.lastAcknowledgedCoordinate else { return nil }
+        return joystick.lastAcknowledgedBearingDegrees
+    }
+
     private func modeButton(_ value: GoFlyMapMode, key: String) -> some View {
-        Button { mode = value } label: {
+        Button { selectMode(value) } label: {
             Text(goFlyString(key))
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .padding(.horizontal, 8)
                 .foregroundStyle(mode == value ? GoFlyStyle.surface : GoFlyStyle.primary)
@@ -332,21 +416,28 @@ struct GoFlyMapView: View {
             Button {
                 if route.canPause { _ = route.pause() }
                 else if route.canResume { _ = route.resume() }
+                else if joystick.canPause { _ = joystick.pause() }
+                else if joystick.canResume { _ = joystick.resume() }
                 else { _ = service.start() }
             } label: {
-                if route.phase == .pausing || service.phase == .preparing {
+                if route.phase == .pausing || joystick.phase == .pausing || service.phase == .preparing {
                     ProgressView()
                 } else {
-                    Image(systemName: route.canPause ? "pause.fill" : "play.fill")
+                    Image(systemName: route.canPause || joystick.canPause ? "pause.fill" : "play.fill")
                 }
             }
-            .disabled(!route.canPause && !route.canResume && (!route.canEdit || !service.canStart))
+            .disabled(!route.canPause && !route.canResume && !joystick.canPause && !joystick.canResume
+                      && (!route.canEdit || !service.canStart))
             .buttonStyle(GoFlyIconStyle())
             .accessibilityLabel(goFlyString(
-                route.canPause ? "map.pause" : (route.canResume ? "route.resume" : (service.nativeBusy ? service.statusKey : "service.start"))
+                route.canPause || joystick.canPause ? "map.pause" :
+                    (route.canResume || joystick.canResume ? "route.resume" : (service.nativeBusy ? service.statusKey : "service.start"))
             ))
             .accessibilityHint(goFlyString(route.canPause ? "route.pauseHint" :
-                (route.canResume ? "route.resumeHint" : (service.canStart ? "map.startServiceHint" : "map.noActiveTask"))))
+                (route.canResume ? "route.resumeHint" :
+                    (joystick.canPause ? "joystick.pauseHint" :
+                        (joystick.canResume ? "joystick.resumeHint" :
+                            (service.canStart ? "map.startServiceHint" : "map.noActiveTask"))))))
             .accessibilityIdentifier("map.serviceControl")
 
             Button {
@@ -384,6 +475,7 @@ struct GoFlyMapView: View {
             }
             return "route.phase.\(route.phase.rawValue)"
         }
+        if joystick.phase != .neutral { return "joystick.phase.\(joystick.phase.rawValue)" }
         switch service.pointState {
         case .sending: return "teleport.moving"
         case .unconfirmed: return "teleport.unconfirmed"
@@ -446,9 +538,12 @@ struct GoFlyMapView: View {
     private func goButton(_ candidate: TeleportCandidate) -> some View {
         Button {
                 dismissKeyboard()
-                _ = service.teleport(to: candidate)
+                if service.teleport(to: candidate), settingJoystickOrigin,
+                   case .preparing(let intent) = service.pointState {
+                    joystickOriginIntentID = intent.id
+                }
             } label: {
-                Text("Go")
+                Text(goFlyString("map.go"))
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .frame(width: goWidth)
@@ -588,4 +683,7 @@ private struct GoFlyMapSheet: Identifiable {
     let content: Content
 }
 
-private enum GoFlyMapMode: Hashable { case teleport, route }
+private enum GoFlyMapMode: String, CaseIterable {
+    case teleport, route, joystick
+    var localizationKey: String { "mode.\(rawValue)" }
+}

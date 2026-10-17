@@ -245,16 +245,7 @@ final class GoFlyRouteUITests: XCTestCase {
         return app
     }
     private func openRoute(_ app: XCUIApplication) {
-        let mode = app.descendants(matching: .any)["map.mode"]
-        XCTAssertTrue(mode.waitForExistence(timeout: 10))
-        for id in ["mode.teleport", "mode.route"] {
-            let segment = app.buttons[id]
-            XCTAssertGreaterThanOrEqual(segment.frame.height, 44, "Actual \(id) hit frame: \(segment.frame)")
-            XCTAssertGreaterThanOrEqual(segment.frame.width, 44)
-        }
-        XCTAssertTrue(app.buttons["mode.teleport"].isSelected)
-        app.buttons["mode.route"].tap()
-        XCTAssertTrue(app.buttons["mode.route"].isSelected)
+        app.selectGoFlyMode("route")
         XCTAssertTrue(app.descendants(matching: .any)["route.panel"].waitForExistence(timeout: 5))
     }
     private func setNode(_ app: XCUIApplication, _ id: String, _ coordinate: String) {

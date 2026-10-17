@@ -283,3 +283,24 @@
 "favoriteRoutes.error.noSelection" = "請先選擇最愛路線。";
 "favoriteRoutes.error.busy" = "請等待目前最愛路線操作完成。";
 "favoriteRoutes.error.nothingToUndo" = "目前沒有可復原的刪除路線。";
+
+// Manual joystick
+"map.go" = "Go";
+"mode.joystick" = "搖桿";
+"operation.joystickSummary" = "手動搖桿移動";
+"joystick.setOrigin" = "設定起點";
+"joystick.pad" = "手動搖桿";
+"joystick.padHint" = "按住並拖動以移動。放開或回到中心，即停止這次輸入。";
+"joystick.centered" = "已回中心";
+"joystick.inputValue" = "方向 %@ 度・力度 %@";
+"joystick.error.originUnavailable" = "目前沒有已確認的可用位置。請設定起點後使用搖桿。";
+"joystick.phase.neutral" = "搖桿已就緒";
+"joystick.phase.preparing" = "搖桿準備中";
+"joystick.phase.moving" = "搖桿控制中";
+"joystick.phase.settling" = "搖桿輸入結束中";
+"joystick.phase.pausing" = "搖桿暫停中";
+"joystick.phase.paused" = "搖桿已暫停";
+"joystick.phase.interrupted" = "搖桿已中斷";
+"joystick.phase.unknown" = "搖桿位置待確認";
+"joystick.pauseHint" = "釋放輸入並暫停搖桿控制。";
+"joystick.resumeHint" = "恢復置中，重新拖動才移動。";
