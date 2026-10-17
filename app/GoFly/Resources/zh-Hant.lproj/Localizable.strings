@@ -4,6 +4,7 @@
 "settings.title" = "設定";
 "map.currentLocation" = "目前位置";
 "map.realLocation" = "已觀測 GPS 位置";
+"map.realLocationWaiting" = "上次觀測的 GPS 位置，等待新的定位。";
 "map.pause" = "暫停";
 "map.noActiveTask" = "目前沒有移動任務。";
 "map.startServiceHint" = "準備裝置服務，不會移動裝置位置。";

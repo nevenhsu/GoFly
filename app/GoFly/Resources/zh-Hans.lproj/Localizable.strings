@@ -4,6 +4,7 @@
 "settings.title" = "设置";
 "map.currentLocation" = "当前位置";
 "map.realLocation" = "已观测 GPS 位置";
+"map.realLocationWaiting" = "上次观测的 GPS 位置，等待新的定位。";
 "map.pause" = "暂停";
 "map.noActiveTask" = "当前没有移动任务。";
 "map.startServiceHint" = "准备设备服务，不会移动设备位置。";

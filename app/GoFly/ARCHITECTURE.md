@@ -20,6 +20,7 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 ## 狀態與命令不變量
 
 - 服務狀態、本機送點終止、裝置清除確認、有效實際位置是獨立結果。沒有 clear 回覆，不宣稱解除模擬；沒有有效新位置，不宣稱取得 GPS；不以此推導其他接收 App 已恢復。
+- `realLocation` 僅保存目前接受的 GPS 證據；Stop／Restore 或拒絕讀值仍將其設為 nil。最後一次有效座標另外保存在 controller 私有記憶體，僅透過唯讀 `locationMarker` 投影供地圖顯示：等待時 50% 透明、有效時 100%，無圓底；未曾取得有效位置時不畫箭頭。快取不持久化、不供路線起點或 clear 判斷，鏡頭只追蹤新接受的 `realLocation`。Reset 本身不清除位置；clear 前有效位置可顯示，但只有 clear 後的有效觀察才證明恢復序列。
 - Stop 立即作廢舊結果的發布權，但它排定的安全 clear 必須執行。準備工作先返回，再執行 clear；新 Start／Restore／Reset 不越過尚未返回的清理。
 - 原生全域網路 timeout 在任何 FFI 前設為 10 秒；controller 另有 watchdog。watchdog 逾時只回報未知，**不算原生完成**，不釋放還在使用的 handle、不平行另開操作，也不解除 `nativeBusy`。
 - repairRequired 且底層未返回時，只能冪等 Stop，確保恰一筆 clear 排隊；其他副作用命令拒絕。真正返回且安全清理已執行後才解鎖。遲到成功不能覆寫逾時／Stop 的未知結果。

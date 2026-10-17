@@ -4,6 +4,7 @@
 "settings.title" = "Settings";
 "map.currentLocation" = "Current location";
 "map.realLocation" = "Observed GPS location";
+"map.realLocationWaiting" = "Last observed GPS location. Waiting for a fresh location.";
 "map.pause" = "Pause";
 "map.noActiveTask" = "No movement task is active.";
 "map.startServiceHint" = "Prepare the device service without moving its location.";

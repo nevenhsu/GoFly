@@ -89,6 +89,99 @@ struct ServiceControllerTests {
         #expect(await device.operations == ["reset"])
     }
 
+    @Test(arguments: ["stop", "restore", "reset"])
+    func confirmedGPSMarkerSurvivesServiceRepairCommands(command: String) async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let controller = ServiceController(service: TestDevice(), now: { now })
+        if command == "stop" {
+            #expect(controller.start())
+            await settle(controller)
+        }
+        let fix = RealLocationObservation(latitude: 25, longitude: 121,
+            horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
+        controller.observeRealLocation(fix)
+        #expect(controller.locationMarker?.observation == fix)
+        #expect(controller.locationMarker?.freshness == .fresh)
+        switch command {
+        case "stop": #expect(controller.stop())
+        case "restore": #expect(controller.restoreGPS())
+        default: #expect(controller.resetTunnel())
+        }
+        #expect(controller.locationMarker?.observation == fix, "A service command must not remove the last confirmed map marker")
+        #expect(controller.locationMarker?.freshness == (command == "reset" ? .fresh : .waiting))
+        await settle(controller)
+        #expect(controller.locationMarker?.observation == fix)
+        #expect(controller.realLocation == (command == "reset" ? fix : nil))
+        #expect(controller.gpsStatusKey == (command == "reset" ? "gps.unknown" : "gps.clearedWaiting"))
+    }
+
+    @Test func invalidGPSPreservesWaitingMarkerUntilNewValidObservation() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let controller = ServiceController(service: TestDevice(), now: { now })
+        controller.observeRealLocation(nil)
+        #expect(controller.locationMarker == nil)
+        let fix = RealLocationObservation(latitude: 25, longitude: 121,
+            horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
+        controller.observeRealLocation(fix)
+        let rejected: [RealLocationObservation?] = [
+            nil,
+            RealLocationObservation(latitude: 26, longitude: 122, horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-30)),
+            RealLocationObservation(latitude: 26, longitude: 122, horizontalAccuracy: 5, observedAt: now.addingTimeInterval(1)),
+            RealLocationObservation(latitude: 26, longitude: 122, horizontalAccuracy: -1, observedAt: now),
+            RealLocationObservation(latitude: 26, longitude: 122, horizontalAccuracy: 5, observedAt: now, isSoftwareSimulated: true),
+        ]
+        for sample in rejected {
+            controller.observeRealLocation(sample)
+            #expect(controller.realLocation == nil)
+            #expect(controller.locationMarker?.observation == fix)
+            #expect(controller.locationMarker?.freshness == .waiting)
+        }
+        #expect(controller.restoreGPS())
+        await settle(controller)
+        #expect(controller.gpsStatusKey == "gps.clearedWaiting")
+        let current = RealLocationObservation(latitude: 26, longitude: 122,
+            horizontalAccuracy: 5, observedAt: now)
+        controller.observeRealLocation(current)
+        #expect(controller.locationMarker?.observation == current)
+        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.gpsStatusKey == "gps.observed")
+    }
+
+    @Test func failedRestorePreservesOnlyWaitingDisplayMarker() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let controller = ServiceController(service: TestDevice(failure: .tunnelUnavailable), now: { now })
+        let fix = RealLocationObservation(latitude: 25, longitude: 121, horizontalAccuracy: 5, observedAt: now)
+        controller.observeRealLocation(fix)
+        #expect(controller.restoreGPS())
+        await settle(controller)
+        #expect(controller.locationMarker?.observation == fix)
+        #expect(controller.locationMarker?.freshness == .waiting)
+        #expect(controller.realLocation == nil)
+        #expect(controller.clearState == .unknown)
+        #expect(controller.gpsStatusKey == "gps.unknown")
+    }
+
+    @Test func freshMarkerBeforeClearAcknowledgementDoesNotProveRecovery() async throws {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let device = ControlledDevice()
+        let controller = ServiceController(service: device, now: { now })
+        #expect(controller.restoreGPS())
+        await device.waitForClear()
+        let beforeClear = RealLocationObservation(latitude: 25, longitude: 121,
+            horizontalAccuracy: 5, observedAt: now.addingTimeInterval(-1))
+        controller.observeRealLocation(beforeClear)
+        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.gpsStatusKey == "gps.clearing")
+        await device.finishClear()
+        await settle(controller)
+        #expect(controller.locationMarker?.observation == beforeClear)
+        #expect(controller.gpsStatusKey == "gps.clearedWaiting")
+        controller.observeRealLocation(RealLocationObservation(latitude: 26, longitude: 122,
+            horizontalAccuracy: 5, observedAt: now))
+        #expect(controller.locationMarker?.freshness == .fresh)
+        #expect(controller.gpsStatusKey == "gps.observed")
+    }
+
     @Test func timedOutRestoreAlreadyOwnsTheOnlySafetyClear() async throws {
         let device = ControlledDevice()
         let controller = ServiceController(service: device, operationTimeout: .milliseconds(20))

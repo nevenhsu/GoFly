@@ -17,6 +17,7 @@ public final class ServiceController: ObservableObject {
     private var outstandingWork = 0
     private var clearScheduled = false
     private var clearAttempted = false
+    private var lastKnownRealLocation: RealLocationObservation?
     private var tail: Task<Void, Never>?
     private var watchdog: Task<Void, Never>?
 
@@ -50,6 +51,12 @@ public final class ServiceController: ObservableObject {
     }
     public var canRestoreGPS: Bool { !nativeBusy && phase == .stopped }
     public var canResetTunnel: Bool { canRestoreGPS }
+
+    public var locationMarker: RealLocationMarker? {
+        lastKnownRealLocation.map {
+            RealLocationMarker(observation: $0, freshness: realLocation == nil ? .waiting : .fresh)
+        }
+    }
 
     @discardableResult public func start() -> Bool {
         guard canStart else { return false }
@@ -96,6 +103,7 @@ public final class ServiceController: ObservableObject {
             realLocation = nil
             return
         }
+        lastKnownRealLocation = observation
         realLocation = observation
     }
 

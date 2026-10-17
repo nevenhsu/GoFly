@@ -13,12 +13,12 @@ struct GoFlyMapView: View {
     var body: some View {
         NavigationStack {
             Map(position: $camera) {
-                if let position = service.realLocation {
+                if let marker = service.locationMarker {
                     Annotation(
-                        goFlyString("map.realLocation"),
+                        goFlyString(marker.freshness == .waiting ? "map.realLocationWaiting" : "map.realLocation"),
                         coordinate: CLLocationCoordinate2D(
-                            latitude: position.latitude,
-                            longitude: position.longitude
+                            latitude: marker.observation.latitude,
+                            longitude: marker.observation.longitude
                         )
                     ) {
                         Image(systemName: "location.north.fill")
@@ -29,7 +29,10 @@ struct GoFlyMapView: View {
                                     .accessibilityHidden(true)
                             }
                             .font(.title2.weight(.semibold))
-                            .accessibilityLabel(goFlyString("map.realLocation"))
+                            .opacity(marker.freshness == .waiting ? 0.5 : 1)
+                            .accessibilityLabel(goFlyString(
+                                marker.freshness == .waiting ? "map.realLocationWaiting" : "map.realLocation"
+                            ))
                     }
                     .annotationTitles(.hidden)
                 }
