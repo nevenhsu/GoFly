@@ -286,6 +286,7 @@ class ReinstallProducer:
                 journal = self._remove_source(journal, request)
                 journal = self._install_target(journal, request)
                 journal = self._restore_target(journal, request)
+                journal = self._confirm_final_support(journal, request)
                 journal["outcome"] = "confirmed"
                 journal["stages"]["complete"] = {"state": "confirmed"}
                 journal = self.store.update(journal)
@@ -341,6 +342,7 @@ class ReinstallProducer:
                     journal = self._install_target(journal, request)
                 if journal["stages"]["restoreReceipt"]["state"] != "confirmed":
                     journal = self._restore_target(journal, request)
+                journal = self._confirm_final_support(journal, request)
                 journal["stages"]["complete"] = {"state": "confirmed"}
                 journal["outcome"] = "confirmed"
                 journal = self.store.update(journal)
@@ -499,6 +501,39 @@ class ReinstallProducer:
             ).encode("utf-8")
         except (TypeError, ValueError, UnicodeError):
             raise ReinstallBridgeError("storage-unavailable") from None
+
+    @classmethod
+    def _validate_restore_receipt(
+        cls,
+        value: Any,
+        *,
+        expected_intent: Mapping[str, Any],
+        selected: Sequence[str],
+        expected_counts: Mapping[str, int],
+    ) -> Mapping[str, Any]:
+        required = {"version", "intent", "categoryReceipts", "sessionSeedSHA256", "counts", "receiptSHA256"}
+        if not isinstance(value, Mapping) or set(value) != required or value.get("version") != 1:
+            raise ReinstallBridgeError("restore-unknown")
+        if value.get("intent") != expected_intent:
+            raise ReinstallBridgeError("restore-unknown")
+        if not isinstance(value.get("sessionSeedSHA256"), str) or not _HEX64.fullmatch(value["sessionSeedSHA256"]):
+            raise ReinstallBridgeError("restore-unknown")
+        receipt_sha = value.get("receiptSHA256")
+        if not isinstance(receipt_sha, str) or not _HEX64.fullmatch(receipt_sha):
+            raise ReinstallBridgeError("restore-unknown")
+        categories = value.get("categoryReceipts")
+        if not isinstance(categories, list) or len(categories) != len(selected) or [item.get("category") for item in categories if isinstance(item, Mapping)] != list(selected):
+            raise ReinstallBridgeError("restore-unknown")
+        for category, item in zip(selected, categories):
+            if not isinstance(item, Mapping) or set(item) != {"category", "receiptSHA256"} or item.get("category") != category or not isinstance(item.get("receiptSHA256"), str) or not _HEX64.fullmatch(item["receiptSHA256"]):
+                raise ReinstallBridgeError("restore-unknown")
+        counts = value.get("counts")
+        if not isinstance(counts, Mapping) or set(counts) != set(_COUNT_LIMITS) or any(type(counts[key]) is not int or counts[key] < 0 or counts[key] > _COUNT_LIMITS[key] for key in _COUNT_LIMITS) or dict(counts) != dict(expected_counts):
+            raise ReinstallBridgeError("restore-unknown")
+        canonical = {key: value[key] for key in value if key != "receiptSHA256"}
+        if _hash_bytes(cls._canonical_bytes(canonical)) != receipt_sha:
+            raise ReinstallBridgeError("restore-unknown")
+        return dict(value)
 
     def _prepare_control(
         self,
@@ -660,6 +695,81 @@ class ReinstallProducer:
         journal["stages"]["sourceReady"] = {"state": "confirmed" if readback.phase == "ready" else "inflight"}
         return self.store.update(journal)
 
+    def _validate_backup_result(
+        self,
+        journal: Mapping[str, Any],
+        result: Any,
+        *,
+        require_stored: bool,
+    ) -> Mapping[str, Any]:
+        """Validate a complete immutable validator result against the journal.
+
+        The Swift validator is the only source of package evidence.  A later
+        boundary revalidates the same private package and compares every
+        immutable field to the already checkpointed result; it never refreshes
+        counts or adopts a changed package.
+        """
+        if not isinstance(result, Mapping) or result.get("version") != 1:
+            raise ReinstallBridgeError("backup-invalid")
+        expected_source = journal.get("sourceApp")
+        expected_target = self._target_app_from_journal(journal)
+        expected_categories = list(journal["options"]["categories"])
+        immutable = (
+            ("transferID", journal.get("transferID")),
+            ("dataSetID", journal.get("dataSetID")),
+            ("nonce", journal.get("nonce")),
+            ("sourceDeviceUDID", journal.get("deviceID")),
+            ("destinationDeviceUDID", journal.get("deviceID")),
+            ("sourceApp", expected_source),
+            ("targetApp", expected_target),
+            ("setupID", journal.get("setupID")),
+            ("categories", expected_categories),
+            ("rawManifestSHA256", journal.get("rawManifestSHA256")),
+        )
+        if any(result.get(key) != expected for key, expected in immutable):
+            raise ReinstallBridgeError("backup-invalid")
+        counts = result.get("counts")
+        if (
+            not isinstance(counts, Mapping)
+            or set(counts) != set(_COUNT_LIMITS)
+            or any(type(counts[key]) is not int or counts[key] < 0 or counts[key] > _COUNT_LIMITS[key] for key in _COUNT_LIMITS)
+            or ("favorites" not in expected_categories and counts["favorites"] != 0)
+            or ("routes" not in expected_categories and any(counts[key] != 0 for key in ("importedRoutes", "favoriteRoutes", "draftNodes", "gpxPoints")))
+        ):
+            raise ReinstallBridgeError("backup-invalid")
+        if require_stored:
+            stored_counts = journal.get("counts")
+            stored_backup = journal.get("backup")
+            if not isinstance(stored_counts, Mapping) or dict(counts) != dict(stored_counts):
+                raise ReinstallBridgeError("backup-invalid")
+            if (
+                not isinstance(stored_backup, Mapping)
+                or set(stored_backup) != {"dataSetID", "rawManifestSHA256", "inventory", "counts"}
+                or stored_backup.get("dataSetID") != result.get("dataSetID")
+                or stored_backup.get("rawManifestSHA256") != result.get("rawManifestSHA256")
+                or stored_backup.get("counts") != dict(counts)
+            ):
+                raise ReinstallBridgeError("backup-invalid")
+            inventory = stored_backup.get("inventory")
+            if not isinstance(inventory, Mapping) or inventory.get("categories") != expected_categories:
+                raise ReinstallBridgeError("backup-invalid")
+        return result
+
+    def _revalidate_backup(self, journal: Mapping[str, Any], request: ReinstallRequest) -> dict[str, Any]:
+        """Reopen and revalidate the private package before a physical boundary."""
+        current = self._reload_bound(journal, request)
+        if current["stages"]["backup"]["state"] != "confirmed" or current.get("proof", {}).get("backupValidated") is not True:
+            raise ReinstallBridgeError("backup-invalid")
+        backup = self.store.transaction_root(current["transferID"]) / "backup"
+        try:
+            result = self.validator.validate(backup)
+        except ReinstallBridgeError:
+            raise ReinstallBridgeError("backup-invalid") from None
+        except Exception:
+            raise ReinstallBridgeError("backup-invalid") from None
+        self._validate_backup_result(current, result, require_stored=True)
+        return current
+
     def _backup(self, journal: dict[str, Any], request: ReinstallRequest) -> dict[str, Any]:
         journal = self._reload_bound(journal, request)
         if journal["stages"]["sourceReady"]["state"] != "confirmed":
@@ -687,31 +797,14 @@ class ReinstallProducer:
             raise
         except Exception:
             raise ReinstallBridgeError("backup-invalid") from None
-        result = self.validator.validate(backup)
-        if not isinstance(result, Mapping):
-            raise ReinstallBridgeError("backup-invalid")
-        if result.get("transferID") != journal["transferID"] or result.get("dataSetID") != journal["dataSetID"] or result.get("nonce") != journal["nonce"] or result.get("sourceDeviceUDID") != journal["deviceID"] or result.get("destinationDeviceUDID") != journal["deviceID"]:
-            raise ReinstallBridgeError("backup-invalid")
-        expected_source = journal.get("sourceApp")
-        expected_target = self._target_app_from_journal(journal)
-        expected_categories = list(journal["options"]["categories"])
-        if (
-            result.get("sourceApp") != expected_source
-            or result.get("targetApp") != expected_target
-            or result.get("setupID") != journal["setupID"]
-            or result.get("categories") != expected_categories
-            or result.get("rawManifestSHA256") != journal.get("rawManifestSHA256")
-        ):
-            raise ReinstallBridgeError("backup-invalid")
-        counts = result.get("counts")
-        if (
-            not isinstance(counts, Mapping)
-            or set(counts) != set(_COUNT_LIMITS)
-            or any(type(counts[key]) is not int or counts[key] < 0 or counts[key] > _COUNT_LIMITS[key] for key in _COUNT_LIMITS)
-            or ("favorites" not in expected_categories and counts["favorites"] != 0)
-            or ("routes" not in expected_categories and any(counts[key] != 0 for key in ("importedRoutes", "favoriteRoutes", "draftNodes", "gpxPoints")))
-        ):
-            raise ReinstallBridgeError("backup-invalid")
+        try:
+            validated = self.validator.validate(backup)
+        except ReinstallBridgeError:
+            raise
+        except Exception:
+            raise ReinstallBridgeError("backup-invalid") from None
+        result = self._validate_backup_result(journal, validated, require_stored=False)
+        counts = result["counts"]
         journal["counts"] = dict(counts)
         journal["backup"] = {
             "dataSetID": result["dataSetID"],
@@ -728,6 +821,10 @@ class ReinstallProducer:
         journal = self._reload_bound(journal, request)
         if journal["stages"]["backup"]["state"] != "confirmed":
             raise ReinstallBridgeError("backup-invalid")
+        # Reopen and validate before any source removal boundary.  This also
+        # covers a resume where destructiveIntent was checkpointed previously
+        # but the sealed-source operation has not completed yet.
+        journal = self._revalidate_backup(journal, request)
         if journal["stages"]["destructiveIntent"]["state"] == "pending":
             journal["stages"]["destructiveIntent"] = {"state": "confirmed"}
             journal = self.store.update(journal)
@@ -755,6 +852,8 @@ class ReinstallProducer:
                 raise ReinstallBridgeError("removal-unknown")
             if receipt.raw_manifest_sha256 != manifest or receipt.source_app is None or receipt.source_app.as_dict() != dict(source):
                 raise ReinstallBridgeError("export-conflict")
+            if type(receipt.pid) is not int or receipt.pid <= 0:
+                raise ReinstallBridgeError("removal-unknown")
             journal["commands"]["seal"]["sourcePID"] = receipt.pid
             journal["stages"]["sourceSeal"] = {"state": "confirmed", "evidence": {"receipt": {"phase": receipt.phase, "receiptSHA256": receipt.receipt_sha256}}}
             journal["proof"] = {**journal.get("proof", {}), "sourceSealed": True}
@@ -764,7 +863,10 @@ class ReinstallProducer:
             journal = self.store.update(journal)
             journal = self._reload_bound(journal, request)
             pid = self._call("source_pid", request.device_id)
-            if not isinstance(pid, int) or pid < 0:
+            sealed_pid = journal.get("commands", {}).get("seal", {}).get("sourcePID")
+            if type(pid) is not int or pid < 0 or type(sealed_pid) is not int or sealed_pid <= 0:
+                raise ReinstallBridgeError("removal-unknown")
+            if pid != 0 and pid != sealed_pid:
                 raise ReinstallBridgeError("removal-unknown")
             if pid:
                 self._call("stop_source", request.device_id, pid)
@@ -795,6 +897,7 @@ class ReinstallProducer:
             journal["stages"]["uninstall"] = {"state": "inflight"}
             journal = self.store.update(journal)
             journal = self._reload_bound(journal, request)
+            journal = self._revalidate_backup(journal, request)
             self._call("uninstall", request.device_id, TARGET_BUNDLE_ID)
             try:
                 present = self.device.installed(request.device_id).present
@@ -902,9 +1005,11 @@ class ReinstallProducer:
             # The restore lock is durable before any target-side M1 input,
             # readback, or launch boundary.  A lost publish remains an
             # unknown delivery and is resumed from this exact intent.
+            journal = self._revalidate_backup(journal, request)
             self._call("publish_restore_intent", request.device_id, intent)
             package = self.store.transaction_root(journal["transferID"]) / "backup"
             journal = self._reload_bound(journal, request)
+            journal = self._revalidate_backup(journal, request)
             self._call("deliver_restore", request.device_id, request.transfer_id, package)
             journal["stages"]["restoreDelivery"] = {"state": "confirmed"}
             journal = self.store.update(journal)
@@ -923,19 +1028,20 @@ class ReinstallProducer:
             if hasattr(result, "phase"):
                 phase = result.phase
                 categories = list(getattr(result, "categories", ()))
-                receipt = getattr(result, "receipt_sha256", None)
                 counts = getattr(result, "counts", None)
+                result_intent = getattr(result, "intent", None)
+                full_receipt = getattr(result, "receipt", None)
             elif isinstance(result, Mapping):
-                phase, categories, receipt, counts = result.get("phase"), result.get("categories", []), result.get("receiptSHA256"), result.get("counts")
-                binding = result.get("intent")
-                if binding is not None and binding != journal.get("restoreIntent"):
+                if set(result) != {"phase", "categories", "counts", "intent", "receipt"}:
                     raise ReinstallBridgeError("restore-unknown")
-                for key in ("transferID", "dataSetID", "nonce"):
-                    if key in result and result.get(key) != journal.get(key):
-                        raise ReinstallBridgeError("restore-unknown")
+                phase, categories, counts = result.get("phase"), result.get("categories"), result.get("counts")
+                result_intent = result.get("intent")
+                full_receipt = result.get("receipt")
             else:
                 raise ReinstallBridgeError("restore-unknown")
-            if phase not in {"committed", "complete"} or not isinstance(receipt, str) or not _HEX64.fullmatch(receipt):
+            expected_intent = journal.get("restoreIntent")
+            expected_counts = journal.get("counts")
+            if phase != "committed" or not isinstance(result_intent, Mapping) or not isinstance(expected_intent, Mapping) or result_intent != expected_intent or not isinstance(counts, Mapping) or not isinstance(expected_counts, Mapping):
                 raise ReinstallBridgeError("restore-unknown")
             selected = set(options["categories"])
             if not isinstance(categories, list) or len(categories) != len(options["categories"]):
@@ -949,9 +1055,17 @@ class ReinstallProducer:
                 committed.append(item.get("category"))
             if committed != options["categories"] or set(committed) != selected:
                 raise ReinstallBridgeError("restore-unknown")
-            journal["restoreReceipt"] = {"categories": categories, "receiptSHA256": receipt}
-            if counts is not None:
-                journal["counts"] = dict(counts)
+            receipt = self._validate_restore_receipt(
+                full_receipt,
+                expected_intent=expected_intent,
+                selected=options["categories"],
+                expected_counts=expected_counts,
+            )
+            receipt_categories = receipt["categoryReceipts"]
+            if dict(counts) != dict(expected_counts) or [item["category"] for item in receipt_categories] != committed or [item["receiptSHA256"] for item in receipt_categories] != [item["receiptSHA256"] for item in categories]:
+                raise ReinstallBridgeError("restore-unknown")
+            journal["restoreReceipt"] = dict(receipt)
+            journal["counts"] = dict(counts)
             journal["stages"]["restoreReceipt"] = {"state": "confirmed"}
             journal["proof"] = {**journal.get("proof", {}), "restoreCommitted": True}
             journal = self.store.update(journal)
@@ -961,8 +1075,59 @@ class ReinstallProducer:
         setup_proof = setup.get("proof", {})
         if setup_proof.get("pairingImported") is not True or setup_proof.get("supportObserved") is not True:
             raise ReinstallBridgeError("support-unavailable")
+        return journal
+
+    def _confirm_final_support(self, journal: dict[str, Any], request: ReinstallRequest) -> dict[str, Any]:
+        """Bind final support proof to a fresh same-device observation."""
+        journal = self._reload_bound(journal, request)
+        if journal["stages"]["restoreReceipt"]["state"] != "confirmed":
+            raise ReinstallBridgeError("restore-unknown")
+        setup = journal.get("setup")
+        if not isinstance(setup, Mapping) or setup.get("stages", {}).get("complete", {}).get("state") != "confirmed":
+            raise ReinstallBridgeError("support-unavailable")
+        setup_proof = setup.get("proof", {})
+        if setup_proof.get("pairingImported") is not True or setup_proof.get("supportObserved") is not True:
+            raise ReinstallBridgeError("support-unavailable")
+        planned = setup.get("support")
+        if not isinstance(planned, Mapping):
+            raise ReinstallBridgeError("support-unavailable")
+        journal["stages"]["finalSupport"] = {"state": "inflight"}
+        journal = self.store.update(journal)
+        observed = self._observe(request.device_id)
+        actual = self._call("support", request.device_id)
+        if not isinstance(actual, Mapping) or set(actual) != {"observed", "method", "osVersion", "generationID", "identifier", "version"}:
+            raise ReinstallBridgeError("support-unavailable")
+        if (
+            actual.get("observed") is not True
+            or not isinstance(actual.get("method"), str)
+            or not isinstance(planned.get("method"), str)
+            or actual.get("method") != planned.get("method")
+            or actual.get("method") == ""
+            or not isinstance(actual.get("osVersion"), str)
+            or not isinstance(planned.get("osVersion"), str)
+            or actual.get("osVersion") != observed.os_version
+            or actual.get("osVersion") != planned.get("osVersion")
+            or not isinstance(actual.get("generationID"), str)
+            or not isinstance(planned.get("generationID"), str)
+            or not actual["generationID"]
+            or actual["generationID"].lower() != planned["generationID"].lower()
+            or actual.get("generationID", "").lower() != journal["setupID"].lower()
+            or not isinstance(actual.get("identifier"), str)
+            or not isinstance(planned.get("identifier"), str)
+            or not actual["identifier"]
+            or actual.get("identifier") != planned.get("identifier")
+            or not isinstance(actual.get("version"), str)
+            or not isinstance(planned.get("version"), str)
+            or not actual["version"]
+            or actual.get("version") != planned.get("version")
+        ):
+            raise ReinstallBridgeError("support-unavailable")
+        journal = self._reload_bound(journal, request)
         journal["stages"]["setup"] = {"state": "confirmed", "evidence": {"pairingImported": True, "supportObserved": True}}
-        journal["stages"]["finalSupport"] = {"state": "confirmed", "evidence": {"pairingImported": True, "supportObserved": True}}
+        journal["stages"]["finalSupport"] = {
+            "state": "confirmed",
+            "evidence": {"pairingImported": True, "supportObserved": True},
+        }
         journal["proof"] = {**journal.get("proof", {}), "supportObserved": True, "pairingImported": True}
         return self.store.update(journal)
 
@@ -1038,6 +1203,10 @@ class ReinstallProducer:
 
     def _run_embedded_setup(self, journal: dict[str, Any], request: ReinstallRequest) -> dict[str, Any]:
         """Run M1 private stages against the parent-owned embedded record."""
+        # This method owns the target-side M1 handoff and launch boundary.
+        # Revalidate the private source package immediately before entering it
+        # so a changed package cannot reach restore input or launch.
+        journal = self._revalidate_backup(journal, request)
         journal = self._ensure_embedded_setup(journal, request)
         setup = journal.get("setup")
         if not isinstance(setup, Mapping):
@@ -1178,9 +1347,9 @@ class ReinstallProducer:
         proof = journal.get("proof", {})
         selected = journal["options"]["categories"]
         receipts = _mapping(journal.get("restoreReceipt")) or {}
-        by_category = {item.get("category"): item for item in receipts.get("categories", []) if isinstance(item, Mapping)}
+        by_category = {item.get("category"): item for item in receipts.get("categoryReceipts", []) if isinstance(item, Mapping)}
         categories = tuple(
-            {"category": name, "state": "committed" if isinstance(by_category.get(name), Mapping) and by_category[name].get("state") == "committed" else "waiting", "receiptSHA256": by_category[name].get("receiptSHA256") if name in by_category else None}
+            {"category": name, "state": "committed" if isinstance(by_category.get(name), Mapping) else "waiting", "receiptSHA256": by_category[name].get("receiptSHA256") if name in by_category else None}
             for name in selected
         )
         artifact = _mapping(journal.get("targetArtifact"))

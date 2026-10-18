@@ -45,6 +45,8 @@ USB = "USB"
 NETWORK = "Network"
 DEFAULT_BUNDLE_ID = "com.neven.localgo"
 DEFAULT_TARGET_NAME = "LocalGo 開發版"
+# Apple lookup for App Store ID 6755608044, verified 2026-10-18.
+LOCALDEVVPN_BUNDLE_ID = "com.jkcoxson.LocalDevVPN"
 UDID_RE = re.compile(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{16}|[0-9a-fA-F]{40})\Z")
 TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 UUID_RE = re.compile(
@@ -615,7 +617,8 @@ class Bridge:
             "supportedOS": _version_supported(version),
         }
 
-    def _installed_info(self, client: Any) -> tuple[bool | None, Mapping[str, Any] | None]:
+    def _installed_info(self, client: Any, *, bundle_id: str | None = None) -> tuple[bool | None, Mapping[str, Any] | None]:
+        bundle_id = bundle_id or self.config.target_bundle_id
         try:
             from pymobiledevice3.services.installation_proxy import InstallationProxyService
         except Exception:
@@ -624,7 +627,7 @@ class Bridge:
         try:
             with quiet_dependencies():
                 service = InstallationProxyService(client)
-                apps = _await(service.get_apps(bundle_identifiers=[self.config.target_bundle_id]))
+                apps = _await(service.get_apps(bundle_identifiers=[bundle_id]))
         except Exception:
             return None, None
         finally:
@@ -633,9 +636,9 @@ class Bridge:
                     _await(service.close())
         if not isinstance(apps, Mapping):
             raise BridgeError("operation-failed")
-        target = apps.get(self.config.target_bundle_id)
-        if target is None:
+        if bundle_id not in apps:
             return False, None
+        target = apps[bundle_id]
         if not isinstance(target, Mapping):
             raise BridgeError("operation-failed")
         return True, target
@@ -652,6 +655,7 @@ class Bridge:
                 if not values["supportedOS"]:
                     raise BridgeError("unsupported-os")
                 installed, info = self._installed_info(client)
+                vpn_installed, _ = self._installed_info(client, bundle_id=LOCALDEVVPN_BUNDLE_ID)
             finally:
                 with contextlib.suppress(Exception):
                     _await(getattr(client, "close")())
@@ -672,9 +676,7 @@ class Bridge:
             },
             "developerMode": values["developerMode"],
             "installed": installed,
-            # No bundle identifier is present in project sources for
-            # LocalDevVPN; do not infer one from the App Store numeric ID.
-            "vpnInstalled": None,
+            "vpnInstalled": vpn_installed,
             "appVersion": version,
             "teamID": None,
             "expiresAt": None,

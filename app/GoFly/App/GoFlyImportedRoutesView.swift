@@ -249,6 +249,10 @@ struct GoFlyImportedRoutesView: View {
 
     private func loadSelected() {
         guard !isBusy, controller.canEdit, executionFailureKey == nil, let id = imports.selectedID else { return }
+        // The admission revision must be captured before the async selection
+        // revalidation. A late validation result cannot overwrite a newer
+        // draft or a transfer hold.
+        guard let admission = controller.beginImportedLoad() else { return }
         fileOperationInProgress = true
         loadFailureKey = nil
         fileTask = Task {
@@ -256,7 +260,7 @@ struct GoFlyImportedRoutesView: View {
             await imports.select(id)
             guard !Task.isCancelled, let snapshot = imports.selectedSnapshot,
                   imports.selectedID == id, snapshot.record.id == id, controller.canEdit else { return }
-            if controller.loadImportedRoute(snapshot) { onLoaded() }
+            if controller.loadImportedRoute(snapshot, expectedAdmissionRevision: admission) { onLoaded() }
             else { loadFailureKey = controller.error?.localizationKey }
         }
     }

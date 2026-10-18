@@ -32,7 +32,11 @@ extension MacRootView {
             }
         case .install:
             if !model.isPreview, let setup = model.setup {
-                MacSetupPage(setup: setup, deviceID: model.selectedID)
+                MacSetupPage(setup: setup, deviceID: model.selectedID,
+                             vpnInstalled: model.inspection?.vpnInstalled,
+                             vpnConfirmed: model.setupVPNConfirmed,
+                             checkingDevice: model.isChecking,
+                             verifyDevice: { model.verifySetupDevice() })
                     .disabled(model.isChecking)
             } else {
             StatusCard {
@@ -114,11 +118,17 @@ extension MacRootView {
             }
             }
         case .backups:
+            if !model.isPreview, let backups = model.backups {
+                MacBackupsPage(backup: backups) { model.openBackup($0) }
+                    .disabled(model.isChecking)
+                    .task { if !model.busy { backups.list() } }
+            } else {
             StatusCard {
                 StatusRow(title: model.isPreview ? "我的 iPhone · 最愛、路線、設定（預覽）" : "沒有讀取手機備份",
                           detail: model.isPreview ? "已成功匯入 · 七天後可刪除（示意）" : "本版不建立備份、不讀取既有備份，也不刪除任何備份。")
                 Rule()
                 StatusRow(title: "尚未完成匯入", detail: model.isPreview ? "測試 iPhone · 上次未完成（預覽）\n保留備份，重新確認原裝置後再由使用者繼續。" : "正式資料格式、原裝置綁定與手機回報協定，待 iOS flow 確認後再接入。")
+            }
             }
         case .home: EmptyView()
         }
@@ -193,7 +203,7 @@ extension MacRootView {
                 Spacer()
                 if !model.isPreview, let setup = model.setup {
                     PillButton(title: setup.snapshot?.isComplete == true ? "前往裝置管理" : "返回裝置清單",
-                               enabled: !setup.locksDevice) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
+                               enabled: !model.busy && !setup.locksDevice && (setup.snapshot?.isComplete != true || model.setupVPNConfirmed)) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
                 } else {
                     PillButton(title: "返回裝置清單") { model.openDevices(firstInstall: true) }
                     PillButton(title: "預覽簽名與安裝", primary: true,
@@ -223,7 +233,9 @@ extension MacRootView {
             case .backups:
                 PillButton(title: "返回裝置狀態") { model.navigate(.device) }
                 Spacer(minLength: 0)
-                PillButton(title: "預覽待匯入資料", primary: true, enabled: model.isPreview) { model.previewAdvance() }
+                if model.isPreview {
+                    PillButton(title: "預覽待匯入資料", primary: true) { model.previewAdvance() }
+                }
             case .home: EmptyView()
             }
         }

@@ -5,6 +5,8 @@ import unittest
 import uuid
 import plistlib
 import shutil
+import hashlib
+import json
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +86,7 @@ class Device:
         self.uninstall_calls = 0
         self.calls = []
         self.copy_calls = []
+        self.restore_intent = None
 
     def observe(self, device_id):
         return DeviceObservation(device_id, "26.3", "USB", True, True)
@@ -146,8 +149,9 @@ class Device:
         self.installed_target = True
         return InstallObservation("confirmed")
 
-    def publish_restore_intent(self, *_args):
+    def publish_restore_intent(self, _device_id, intent):
         self.calls.append("publish_restore_intent")
+        self.restore_intent = dict(intent)
         return None
 
     def deliver_restore(self, *_args):
@@ -155,7 +159,22 @@ class Device:
         return None
 
     def restore_readback(self, _device_id, _transfer_id):
-        return {"phase": "committed", "categories": [{"category": "favorites", "state": "committed", "receiptSHA256": "f" * 64}], "receiptSHA256": "f" * 64}
+        counts = {"favorites": 1, "importedRoutes": 0, "favoriteRoutes": 0, "draftNodes": 0, "gpxPoints": 0}
+        receipt = {
+            "version": 1,
+            "intent": self.restore_intent,
+            "categoryReceipts": [{"category": "favorites", "receiptSHA256": "f" * 64}],
+            "sessionSeedSHA256": "e" * 64,
+            "counts": counts,
+        }
+        receipt["receiptSHA256"] = hashlib.sha256(json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        return {
+            "phase": "committed",
+            "categories": [{"category": "favorites", "state": "committed", "receiptSHA256": "f" * 64}],
+            "counts": counts,
+            "intent": self.restore_intent,
+            "receipt": receipt,
+        }
 
     # The producer now reuses the private M1 stages through actual adapter
     # seams.  These methods are deliberately protocol-shaped fakes rather
@@ -200,6 +219,17 @@ class Device:
     def query_support(self, _device, method):
         self.calls.append("query_support")
         return SupportObservation(True, method, "26.3", self.setup_id, "com.apple.MobileAsset.DDI", "1")
+
+    def support(self, _device_id):
+        self.calls.append("support")
+        return {
+            "observed": True,
+            "method": "personalized",
+            "osVersion": "26.3",
+            "generationID": self.setup_id,
+            "identifier": "com.apple.MobileAsset.DDI",
+            "version": "1",
+        }
 
     def install_support(self, *_args):
         raise AssertionError("query should prove support in this controlled flow")
@@ -304,6 +334,110 @@ class ReinstallB2Tests(unittest.TestCase):
             self.assertEqual(device.copy_calls, [config.state_root / "reinstall-transactions" / transfer / "backup"])
             self.assertLess(device.calls.index("publish_restore_intent"), device.calls.index("launch"))
             self.assertLess(device.calls.index("deliver_restore"), device.calls.index("launch"))
+
+    def test_backup_is_revalidated_before_destructive_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package"
+            package.mkdir()
+            (package / "manifest.json").write_text("{}", encoding="utf-8")
+            config = Config(root / "state", root / "validator")
+            artifact = ArtifactIdentity(str(root / "GoFly.app"), "com.neven.gofly", "GoFly", "ABCDEFGHIJ", "1" * 64, "2" * 64, "3" * 64, "2030-01-01T00:00:00Z", {}, "20")
+            device = Device(package)
+
+            class ChangedBackup(Validator):
+                def __init__(self, **kwargs):
+                    super().__init__(**kwargs)
+                    self.calls = 0
+
+                def validate(self, backup):
+                    self.calls += 1
+                    if self.calls == 2:
+                        raise ReinstallBridgeError("backup-invalid")
+                    return super().validate(backup)
+
+            options = ReinstallOptions("signedApp", str(root / "GoFly.app"), "ABCDEFGHIJ", False, ("favorites",))
+            with self.assertRaisesRegex(Exception, "backup-invalid"):
+                ReinstallProducer(
+                    config,
+                    device=device,
+                    artifact_validator=ArtifactValidator(artifact),
+                    validator=ChangedBackup(device=device),
+                ).apply(request(str(uuid.uuid4()), options))
+            self.assertEqual(device.uninstall_calls, 0)
+            journal = ReinstallJournalStore(config.state_root).read()
+            self.assertEqual(journal["stages"]["destructiveIntent"]["state"], "pending")
+
+    def test_changed_sealed_pid_blocks_source_stop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package"
+            package.mkdir()
+            (package / "manifest.json").write_text("{}", encoding="utf-8")
+            config = Config(root / "state", root / "validator")
+            artifact = ArtifactIdentity(str(root / "GoFly.app"), "com.neven.gofly", "GoFly", "ABCDEFGHIJ", "1" * 64, "2" * 64, "3" * 64, "2030-01-01T00:00:00Z", {}, "20")
+
+            class ChangedPID(Device):
+                def source_pid(self, *_args):
+                    return 4321
+
+            device = ChangedPID(package)
+            options = ReinstallOptions("signedApp", str(root / "GoFly.app"), "ABCDEFGHIJ", False, ("favorites",))
+            with self.assertRaisesRegex(Exception, "removal-unknown"):
+                ReinstallProducer(
+                    config,
+                    device=device,
+                    artifact_validator=ArtifactValidator(artifact),
+                    validator=Validator(device=device),
+                ).apply(request(str(uuid.uuid4()), options))
+            self.assertEqual(device.uninstall_calls, 0)
+            self.assertNotIn("stop", device.calls)
+
+    def test_final_support_failure_keeps_bound_restore_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "package"
+            package.mkdir()
+            (package / "manifest.json").write_text("{}", encoding="utf-8")
+            config = Config(root / "state", root / "validator")
+            artifact = ArtifactIdentity(str(root / "GoFly.app"), "com.neven.gofly", "GoFly", "ABCDEFGHIJ", "1" * 64, "2" * 64, "3" * 64, "2030-01-01T00:00:00Z", {}, "20")
+
+            class BadSupport(Device):
+                def __init__(self, package_root):
+                    super().__init__(package_root)
+                    self.bad = True
+
+                def support(self, device_id):
+                    value = dict(super().support(device_id))
+                    if self.bad:
+                        value["identifier"] = "unexpected"
+                    return value
+
+            device = BadSupport(package)
+            options = ReinstallOptions("signedApp", str(root / "GoFly.app"), "ABCDEFGHIJ", False, ("favorites",))
+            transfer = str(uuid.uuid4())
+            apply_request = request(transfer, options)
+            with self.assertRaisesRegex(Exception, "support-unavailable"):
+                ReinstallProducer(
+                    config,
+                    device=device,
+                    artifact_validator=ArtifactValidator(artifact),
+                    validator=Validator(device=device),
+                ).apply(apply_request)
+            journal = ReinstallJournalStore(config.state_root).read()
+            self.assertIsInstance(journal["restoreReceipt"], dict)
+            self.assertEqual(journal["stages"]["restoreReceipt"]["state"], "confirmed")
+            self.assertEqual(journal["stages"]["finalSupport"]["state"], "unknown")
+            device.bad = False
+            resumed = ReinstallProducer(
+                config,
+                device=device,
+                artifact_validator=ArtifactValidator(artifact),
+                validator=Validator(device=device),
+            ).resume(ReinstallRequest(apply_request.request_id, "resume", transfer, DEVICE, options))
+            self.assertEqual(resumed.stage, "complete")
+            self.assertEqual(device.calls.count("publish_restore_intent"), 1)
+            self.assertEqual(device.calls.count("deliver_restore"), 1)
 
     def test_install_readback_unknown_never_enters_embedded_m1(self):
         with tempfile.TemporaryDirectory() as directory:

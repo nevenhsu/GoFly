@@ -6,11 +6,15 @@
 
 原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。M1 已實作正式 `com.neven.gofly` 首次安裝；裝置管理、重新簽名、重裝與備份頁的預覽不代表這些功能已交付。自動續簽與 Wi-Fi 重裝仍不在 M1 範圍。
 
+M2 正式同機重裝已接入 Mac 介面、交易與驗證器，iOS 匯出／還原整合仍在進行；尚不宣稱跨端完成。開發以 MVP 主要流程為優先，沿用既有檢查，只補阻斷流程與資料遺失風險的必要驗證。
+
 ## 正式首次安裝（M1）
 
 選取同一支 USB iPhone、10 碼 Team ID，以及本機固定 GoFly 專案或已簽署的 `GoFly.app`，先做唯讀檢查，再明確開始安裝。專案來源的「允許 Xcode 連線 Apple 更新開發簽署資料」預設關閉；勾選只授權本次操作。預檢不建立配對、不安裝 App、不下載支援資料。
 
 開始後會將選項與裝置綁定在私密交易：驗證並固定 App、準備本次配對、安裝、按實際 OS 準備必要裝置支援，最後取得 iOS 的精確資料提交回報。只有安裝、本次配對匯入與新觀察的裝置支援均已確認，才顯示「Mac 安裝完成」並於 U18 結束。沒有 H12／U19 額外下載或中途 VPN 成功畫面，手機不自行下載支援檔案。VPN、GPS 與移動仍依 iPhone 內的正常流程確認。
+
+最後的產品交接另以原 USB iPhone 的實際 App 查詢核對 LocalDevVPN 已安裝，再開放前往裝置管理；缺少或無法確認時保留核對入口，不重做已完成的安裝。正式 bundle ID `com.jkcoxson.LocalDevVPN` 已由 [Apple 公開 metadata](https://itunes.apple.com/lookup?id=6755608044&country=us) 核對，並非以名稱猜測。這個唯讀查詢不控制 VPN，也不代表 VPN 已連線。
 
 重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [protocol 2](Bridge/Setup/README.md)。
 

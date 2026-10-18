@@ -6,6 +6,7 @@ import SwiftUI
 /// setup bootstrap admits ordinary or completed startup.
 @MainActor
 final class GoFlyRuntimeAssembly: ObservableObject {
+    let projection: TransferRuntimeProjection
     let service: ServiceController
     let sessionRecovery: SessionRecoveryStore
     let movement: GoFlyMovementModel
@@ -14,8 +15,11 @@ final class GoFlyRuntimeAssembly: ObservableObject {
     let favoriteRoutes: FavoriteRoutesStore
     let onboarding: OnboardingController
 
-    init() {
-        let recovery = goFlySessionRecoveryStore()
+    init(projection: TransferRuntimeProjection) {
+        self.projection = projection
+        let useUITestNamespaces = projection.transferID == nil
+        let recovery = goFlySessionRecoveryStore(directory: projection.sessionDirectory,
+                                                  allowUITestNamespace: useUITestNamespaces)
         let service = ServiceController(service: Self.deviceService())
         let snapshot = recovery.initialSnapshot
         _ = service.restoreColdRecovery(
@@ -27,12 +31,21 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         self.service = service
         self.sessionRecovery = recovery
         self.movement = GoFlyMovementModel(service: service, recoveryStore: recovery)
-        self.favorites = Self.favoritePlacesStore()
-        self.importedRoutes = Self.importedRoutesStore()
-        self.favoriteRoutes = Self.favoriteRoutesStore()
+        self.favorites = Self.favoritePlacesStore(directory: projection.favoritesDirectory,
+                                                  allowUITestNamespace: useUITestNamespaces)
+        self.importedRoutes = Self.importedRoutesStore(directory: projection.importedRoutesDirectory,
+                                                       allowUITestNamespace: useUITestNamespaces)
+        self.favoriteRoutes = Self.favoriteRoutesStore(directory: projection.favoriteRoutesDirectory,
+                                                        allowUITestNamespace: useUITestNamespaces)
         self.onboarding = OnboardingController(
             probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
         )
+    }
+
+    func captureCurrentRecoverySnapshotAndFlush() async -> Bool {
+        let snapshot = movement.recovery.snapshot(mode: movement.presentationMode)
+        guard sessionRecovery.capture(snapshot) else { return false }
+        return await sessionRecovery.flush()
     }
 
     private static func deviceService() -> any DeviceService {
@@ -44,68 +57,49 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         return NativeDeviceService()
     }
 
-    private static func favoritePlacesStore() -> FavoritePlacesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("FavoritePlaces", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-favorites-store"),
-               arguments.indices.contains(index + 1),
-               let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/FavoritePlaces", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: directory))
-        } catch {
-            return FavoritePlacesStore(persistence: UnavailableFavoritePlacesPersistence())
+    private static func favoritePlacesStore(directory: URL, allowUITestNamespace: Bool) -> FavoritePlacesStore {
+        var resolved = directory
+        #if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace,
+           let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-gofly-ui-favorites-store"),
+           ProcessInfo.processInfo.arguments.indices.contains(index + 1),
+           let namespace = UUID(uuidString: ProcessInfo.processInfo.arguments[index + 1]) {
+            let support = directory.deletingLastPathComponent()
+            resolved = support.appendingPathComponent("UITests/FavoritePlaces", isDirectory: true)
+                .appendingPathComponent(namespace.uuidString, isDirectory: true)
         }
+        #endif
+        return FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: resolved))
     }
 
-    private static func importedRoutesStore() -> ImportedRoutesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("ImportedRoutes", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-imports-store"),
-               arguments.indices.contains(index + 1), let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/ImportedRoutes", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: directory))
-        } catch {
-            return ImportedRoutesStore(persistence: UnavailableImportedRoutesPersistence())
+    private static func importedRoutesStore(directory: URL, allowUITestNamespace: Bool) -> ImportedRoutesStore {
+        var resolved = directory
+        #if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace,
+           let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-gofly-ui-imports-store"),
+           ProcessInfo.processInfo.arguments.indices.contains(index + 1),
+           let namespace = UUID(uuidString: ProcessInfo.processInfo.arguments[index + 1]) {
+            let support = directory.deletingLastPathComponent()
+            resolved = support.appendingPathComponent("UITests/ImportedRoutes", isDirectory: true)
+                .appendingPathComponent(namespace.uuidString, isDirectory: true)
         }
+        #endif
+        return ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: resolved))
     }
 
-    private static func favoriteRoutesStore() -> FavoriteRoutesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("FavoriteRoutes", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-favorite-routes-store"),
-               arguments.indices.contains(index + 1), let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/FavoriteRoutes", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: directory))
-        } catch {
-            return FavoriteRoutesStore(persistence: UnavailableFavoriteRoutesPersistence())
+    private static func favoriteRoutesStore(directory: URL, allowUITestNamespace: Bool) -> FavoriteRoutesStore {
+        var resolved = directory
+        #if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace,
+           let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-gofly-ui-favorite-routes-store"),
+           ProcessInfo.processInfo.arguments.indices.contains(index + 1),
+           let namespace = UUID(uuidString: ProcessInfo.processInfo.arguments[index + 1]) {
+            let support = directory.deletingLastPathComponent()
+            resolved = support.appendingPathComponent("UITests/FavoriteRoutes", isDirectory: true)
+                .appendingPathComponent(namespace.uuidString, isDirectory: true)
         }
+        #endif
+        return FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: resolved))
     }
 
     private static func onboardingProbe() -> any TunnelProbing {

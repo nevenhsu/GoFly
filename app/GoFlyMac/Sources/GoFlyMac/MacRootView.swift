@@ -157,7 +157,7 @@ struct MacRootView: View {
         VStack(spacing: 20) {
             Rule()
             HStack(spacing: 24) {
-                if !model.isPreview && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil)) {
+                if !model.isPreview && !model.isChecking && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) || (model.page == .backups && model.backups != nil)) {
                     pageActions
                 } else if model.busy {
                     ProgressView().controlSize(.small)

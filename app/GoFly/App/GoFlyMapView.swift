@@ -8,13 +8,16 @@ import UIKit
 /// View reconstruction reuses these exact domain owners and cannot fence live work.
 @MainActor
 final class GoFlyMovementModel: ObservableObject {
+    @Published private(set) var presentationMode: SessionMapMode
     let route: RouteExecutionController
     let joystick: JoystickMovementController
     let recovery: MovementRecoveryController
     let continuation: MovementContinuationController
+    private var mapAdmission: (@MainActor () -> Bool)?
 
     init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
         let snapshot = recoveryStore.initialSnapshot
+        presentationMode = snapshot.mode
         route = RouteExecutionController(
             draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
             commands: service, search: MapKitPlaceSearch()
@@ -34,6 +37,34 @@ final class GoFlyMovementModel: ObservableObject {
                     goFlyString("background.activity.progress"), progress.acknowledgedWrites))
             }
         )
+    }
+
+    func setPresentationMode(_ mode: SessionMapMode) {
+        guard route.canEdit else { return }
+        presentationMode = mode
+    }
+
+    func attachMapAdmission(_ admission: @escaping @MainActor () -> Bool) {
+        mapAdmission = admission
+    }
+
+    func detachMapAdmission() { mapAdmission = nil }
+
+    var canExportFromMap: Bool {
+        guard mapAdmission?() == true, UIApplication.shared.applicationState == .active,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+              let root = scene.windows.first(where: { $0.isKeyWindow && !$0.isHidden })?.rootViewController else { return false }
+        // Read the actual presentation tree, including sheets and importers
+        // owned by child views. Export must not dismiss an unfinished editor.
+        var pending = [root]
+        var visited = 0
+        while let controller = pending.popLast() {
+            visited += 1
+            guard visited <= 128, controller.presentedViewController == nil else { return false }
+            pending.append(contentsOf: controller.children)
+        }
+        return true
     }
 
     private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
@@ -56,6 +87,7 @@ final class GoFlyMovementModel: ObservableObject {
 }
 
 struct GoFlyMapView: View {
+    @ObservedObject private var movement: GoFlyMovementModel
     @ObservedObject var service: ServiceController
     @ObservedObject var recoveryStore: SessionRecoveryStore
     let setupMetadata: GoFlySetupMetadata?
@@ -63,7 +95,10 @@ struct GoFlyMapView: View {
     @ObservedObject private var joystick: JoystickMovementController
     @ObservedObject private var recovery: MovementRecoveryController
     @ObservedObject private var continuation: MovementContinuationController
-    @State private var mode: GoFlyMapMode
+    private var mode: GoFlyMapMode {
+        get { movement.presentationMode }
+        nonmutating set { movement.setPresentationMode(newValue) }
+    }
     @State private var lastCapturedSnapshot: SessionRecoverySnapshot
     @State private var checkpointWindowStarted = false
     @State private var checkpointWindowID: UUID?
@@ -104,6 +139,7 @@ struct GoFlyMapView: View {
         setupMetadata: GoFlySetupMetadata? = nil
     ) {
         let snapshot = recoveryStore.initialSnapshot
+        self.movement = movement
         _service = ObservedObject(wrappedValue: service)
         _recoveryStore = ObservedObject(wrappedValue: recoveryStore)
         self.setupMetadata = setupMetadata
@@ -111,7 +147,6 @@ struct GoFlyMapView: View {
         _joystick = ObservedObject(wrappedValue: movement.joystick)
         _recovery = ObservedObject(wrappedValue: movement.recovery)
         _continuation = ObservedObject(wrappedValue: movement.continuation)
-        _mode = State(initialValue: snapshot.mode)
         _lastCapturedSnapshot = State(initialValue: snapshot)
     }
 
@@ -240,6 +275,9 @@ struct GoFlyMapView: View {
                 )
             }
             .onAppear {
+                movement.attachMapAdmission {
+                    !showingSettings && presentedSheet == nil && route.picker == nil
+                }
                 if cameraIntent == nil {
                     if mode == .route, let planned = route.plannedRoute {
                         cameraIntent = GoFlyCameraIntent(route: planned)
@@ -249,6 +287,7 @@ struct GoFlyMapView: View {
                 }
                 if scenePhase == .active { continuation.sceneDidBecomeActive() }
             }
+            .onDisappear { movement.detachMapAdmission() }
             .onReceive(service.$error) { error in
                 serviceNoticeDismissed = false
                 if let error {

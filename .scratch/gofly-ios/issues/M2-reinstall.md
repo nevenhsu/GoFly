@@ -18,8 +18,8 @@
 - [ ] 舊 App 沒有接收器時顯示需要先更新，保留原 App／資料；不宣稱有替代無損更新能力。未決 M1 阻擋 M2，不改寫未知安裝擁有權。
 - [ ] 本分段先完成 USB 同機重裝；自動續簽、Wi-Fi、配對修復、備份管理及可攜 Mac 發佈包接續於完整 Mac 開發範圍，不因本分段排除而取消。跨裝置移轉、prototype 搬遷與 iOS 下載／U19 仍不在範圍。
 
-**Implementation record:** 資料格式、唯讀來源快照、公開協定及八個 owner 鎖定分段已實作，原始審查問題已修正並完成獨立讀回。Root 對停止變動的來源執行 Core XCTest65＋Swift Testing412＋Transport9，共486項通過；Mac47及 Python Reinstall25項通過，M1 Python57項回歸通過，跨語言原始回覆 bytes 一致。這些是分段資料／協定／鎖定證據，不代表來源 App、移除、安裝或裝置結果。Mac 正式重裝頁、交易讀回與程序生命週期已接入工作樹，完整 Mac58項及新增設定綁定1項離線測試通過；共用驗證器實際程序5項通過。持久化與 producer 的整合缺口仍在修正，App 整合尚未放行，沒有新的 M2 App 完整建置／安裝成果，不宣稱跨端重裝完成。分段變更保留工作樹待整合。
+**Implementation record:** 基礎資料格式、來源快照、協定及八個 owner 鎖定已完成分段檢查。Mac 正式重裝頁、私密交易、共用驗證器與實際裝置 adapter 已接入；checkpoint `36a51e6` 保存當時所有變更，既有 Mac67、Python Reinstall47及 M1 Python57項通過。其後修正 Swift 完整還原收據與 Python 接收格式差異，Reinstall48項通過。iOS 啟動／匯出／還原串接與持久化續傳修正正並行完成；跨語言實際收據、最終 App 建置及端到端整合仍待核對。以上均為本機與受控邊界證據，不代表手機上的移除、安裝或還原結果。
 
-**Verification:** 公開生產介面失敗斷言、真實暫存檔／故障注入、跨語言原始 bytes、受控系統邊界、完整套件與未簽署建置、O10 負向／不完整資料模擬器、雙軸審查；最終軟體結果另記，真實同機重裝與接收 App 效果留集中驗收。
+**Verification:** 依使用者最新指示，先完成 MVP，沿用現有檢查驗證主要流程；僅針對阻斷流程或資料遺失風險補必要檢查，不擴大測試矩陣。核對跨語言實際資料、受控流程與未簽署建置；最終軟體結果另記，真實同機重裝與接收 App 效果留集中驗收。
 
 **Architecture review:** 第五輪 v5 回覆 PLAN_REVISE：備份失敗後若解除鎖定，後續取消可能以舊 cutline 覆寫新草稿／Session checkpoint。使用者已明確授權重新審查，新流程第3／5輪核准完整 v8：先原子提交 preparing 鎖；備份失敗保持鎖定；孤立 cutline 沒有回復／seed 權限。Root 已放行持久化與 producer 實作，App 整合接續。具體修正與原始 finding 見[未核准報告](../../../work/gofly-ios/research/m2-17-v5-nonapproval.md)。原 v5 未核准歷史不變；v8 設計核准不代表 M2 實作或實機驗收完成。

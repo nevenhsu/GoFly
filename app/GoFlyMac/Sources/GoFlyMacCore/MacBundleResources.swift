@@ -27,6 +27,10 @@ public enum MacBundleResourceEntry: String, CaseIterable, Sendable {
     case reinstallProducer = "Contents/Resources/Bridge/Reinstall/reinstall_producer.py"
     case reinstallProtocol = "Contents/Resources/Bridge/Reinstall/reinstall_protocol.py"
     case reinstallConfiguration = "Contents/Resources/ReinstallConfiguration.json"
+    case backupScript = "Contents/Resources/Bridge/Backup/bridge.py"
+    case backupCatalog = "Contents/Resources/Bridge/Backup/catalog.py"
+    case backupProtocol = "Contents/Resources/Bridge/Backup/protocol.py"
+    case backupInit = "Contents/Resources/Bridge/Backup/__init__.py"
     case legacyDeviceAdapter = "Contents/Resources/Bridge/Legacy/localgo_device.py"
     case transferValidator = "Contents/MacOS/GoFlyTransferValidator"
 }

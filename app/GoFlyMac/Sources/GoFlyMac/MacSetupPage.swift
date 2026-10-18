@@ -6,6 +6,10 @@ import GoFlyMacCore
 struct MacSetupPage: View {
     @Bindable var setup: MacSetupModel
     let deviceID: String?
+    let vpnInstalled: Bool?
+    let vpnConfirmed: Bool
+    let checkingDevice: Bool
+    let verifyDevice: () -> Void
     @State private var source = MacSetupSource.project
     @State private var teamID = ""
     @State private var artifactPath = ""
@@ -15,15 +19,24 @@ struct MacSetupPage: View {
     var body: some View {
         ScrollView {
             StatusCard {
-                StatusRow(title: setup.snapshot?.isComplete == true ? "Mac 安裝完成" : "首次安裝 GoFly",
+                StatusRow(title: setup.snapshot?.isComplete == true ? (vpnConfirmed ? "Mac 安裝完成" : "確認 LocalDevVPN") : "首次安裝 GoFly",
                           detail: "裝置識別：…\((setup.continuation?.deviceID ?? deviceID ?? "未選擇").suffix(6))")
                 Rule()
                 if setup.snapshot?.isComplete == true, let result = setup.snapshot {
                     StatusRow(title: "GoFly build \(result.appBuild ?? "")", detail: "App 安裝、本次配對資料匯入及裝置支援狀態均已確認。")
                     Rule()
                     StatusRow(title: "簽名", detail: "Team \(result.teamID ?? "")\n到期：\(result.expiresAt ?? "")")
-                    Text("首次安裝已完成。iPhone 內的 VPN 與定位操作請依手機提示完成。")
-                        .foregroundStyle(GoFlyStyle.muted)
+                    Rule()
+                    StatusRow(title: "LocalDevVPN", detail: vpnConfirmed ? "已確認安裝。開啟 iPhone 內的 LocalDevVPN 連線，再回 GoFly 依正常流程操作。" : vpnInstalled == false ? "尚未安裝。請先在 iPhone 的 App Store 安裝 LocalDevVPN，再重新核對。" : "正在等待原 iPhone 的安裝狀態核對。")
+                    if !vpnConfirmed {
+                        HStack {
+                            Link("在 App Store 查看 LocalDevVPN", destination: URL(string: "https://apps.apple.com/app/id6755608044")!)
+                            Spacer()
+                            PillButton(title: "重新核對", enabled: !checkingDevice, action: verifyDevice)
+                        }
+                    }
+                    Text("安裝完成不代表 VPN 已連線、GPS 已取得或定位服務已啟動。")
+                        .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
                 } else if setup.hasRecordedTransaction {
                     StatusRow(title: "繼續原交易", detail: "使用原本的 iPhone。查詢不會重新安裝；不確定的步驟會保留待確認狀態。")
                     progress
@@ -45,6 +58,9 @@ struct MacSetupPage: View {
             }
         }
         .accessibilityIdentifier("setup.page")
+        .task(id: setup.snapshot?.isComplete == true && !setup.isBusy) {
+            if setup.snapshot?.isComplete == true && !setup.isBusy { verifyDevice() }
+        }
     }
 
     private var form: some View {

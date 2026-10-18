@@ -27,6 +27,28 @@ func goFlySessionRecoveryStore() -> SessionRecoveryStore {
     }
 }
 
+/// Creates a recovery store from the already verified runtime projection.
+/// Transfer projections are opaque to the App; this factory only consumes the
+/// fixed directory supplied by Core and never resolves a path from wire data.
+@MainActor
+func goFlySessionRecoveryStore(directory: URL, allowUITestNamespace: Bool = false) -> SessionRecoveryStore {
+    var resolved = directory
+    #if DEBUG && targetEnvironment(simulator)
+    if allowUITestNamespace,
+       let namespace = recoveryUITestArgument("-gofly-ui-session-store", in: ProcessInfo.processInfo.arguments)
+           .flatMap(UUID.init(uuidString:)) {
+        let support = directory.deletingLastPathComponent()
+        resolved = support.appendingPathComponent("UITests/SessionRecovery", isDirectory: true)
+            .appendingPathComponent(namespace.uuidString, isDirectory: true)
+        let persistence = FileSessionRecoveryPersistence(directory: resolved)
+        if let fixture = recoveryUITestArgument("-gofly-ui-session-fixture", in: ProcessInfo.processInfo.arguments) {
+            try? seedRecoveryUITestArchiveIfMissing(fixture, persistence: persistence)
+        }
+    }
+    #endif
+    return SessionRecoveryStore(persistence: FileSessionRecoveryPersistence(directory: resolved))
+}
+
 private struct UnavailableSessionRecoveryPersistence: SessionRecoveryPersistence {
     func read() throws -> Data? { throw SessionRecoveryFailure.unavailable }
     func replaceAtomically(with data: Data) throws { throw SessionRecoveryFailure.unavailable }

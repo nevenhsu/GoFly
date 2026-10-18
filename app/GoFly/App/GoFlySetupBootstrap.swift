@@ -11,6 +11,16 @@ enum GoFlySetupBootstrapPhase: Equatable {
     case waitingForMac(SetupReadbackRequest)
     case completed(SetupReceipt)
     case blocked(SetupFailure)
+    case exportLocked(TransferExportReceipt)
+    case restoreLocked(TransferRestoreStatus)
+    case transferWaiting(GoFlyTransferWaitReason)
+    case transferBlocked(TransferFailure)
+}
+
+enum GoFlyTransferWaitReason: String, Equatable, Sendable {
+    case setup
+    case restore
+    case export
 }
 
 struct GoFlySetupMetadata: Equatable, Sendable {
@@ -33,6 +43,9 @@ final class GoFlySetupBootstrap: ObservableObject {
     private(set) var metadata: GoFlySetupMetadata?
 
     private var task: Task<Void, Never>?
+    var transferTask: Task<Void, Never>?
+    var transferTaskID: UUID?
+    var activeTransferLease: GoFlyTransferLease?
 
     init() {
         start()
@@ -40,6 +53,7 @@ final class GoFlySetupBootstrap: ObservableObject {
 
     deinit {
         task?.cancel()
+        transferTask?.cancel()
     }
 
     func retry() {
@@ -49,13 +63,36 @@ final class GoFlySetupBootstrap: ObservableObject {
 
     private func start() {
         task?.cancel()
-        runtime = nil
-        metadata = nil
+        // A retry is only available from a blocked state, which cannot have
+        // constructed normal owners. Keeping these references here also makes
+        // an in-flight export lock independent of SwiftUI view reconstruction.
+        if case .blocked = phase {
+            runtime = nil
+            metadata = nil
+        }
         phase = .preparing
 
+        #if targetEnvironment(simulator)
+        let requiresMacSetup = false
+        #else
+        let requiresMacSetup = (Bundle.main.object(forInfoDictionaryKey: "GoFlyRequiresMacSetup") as? Bool) == true
+        #endif
+
+        let preferencesStore = GoFlyPreferences.shared.transferStore()
         task = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
                 do {
+                    guard let support = FileManager.default.urls(
+                        for: .applicationSupportDirectory, in: .userDomainMask
+                    ).first else { return GoFlyBootstrapOutcome.transferBlocked(.storageUnavailable) }
+                    let exportStore = TransferExportStore(applicationSupport: support)
+                    let restoreStore = TransferRestoreStore(applicationSupport: support)
+                    try exportStore.prepareIncomingFiles()
+                    try restoreStore.prepareIncomingFiles()
+                    if let receipt = try exportStore.readExport(),
+                       [.preparing, .ready, .removalSealed].contains(receipt.phase) {
+                        return GoFlyBootstrapOutcome.exportLocked(receipt)
+                    }
                     let directory = try GoFlySetupPaths.directory()
                     let store = SetupActivationStore(directory: directory)
                     try store.prepareIncomingFiles()
@@ -63,11 +100,53 @@ final class GoFlySetupBootstrap: ObservableObject {
                         store: store,
                         pairing: GoFlySetupPairingAdapter()
                     )
-                    return try coordinator.prepare(identity: GoFlySetupIdentityReader.read)
+                    let setup = try coordinator.prepare(identity: GoFlySetupIdentityReader.read)
+                    let intent = try restoreStore.readIntent()
+                    if requiresMacSetup, case .ordinaryStartup = setup {
+                        return GoFlyBootstrapOutcome.transferWaiting(.setup)
+                    }
+                    if intent != nil, case .ordinaryStartup = setup {
+                        return GoFlyBootstrapOutcome.transferWaiting(.setup)
+                    }
+                    switch setup {
+                    case .ordinaryStartup:
+                        let projection = try restoreStore.currentProjection()
+                        return GoFlyBootstrapOutcome.ordinary(projection)
+                    case .waitingForMac(let request):
+                        return GoFlyBootstrapOutcome.waitingForMac(request)
+                    case .blocked(let failure):
+                        return GoFlyBootstrapOutcome.blocked(failure)
+                    case .completed(let receipt):
+                        guard intent != nil else {
+                            let projection = try restoreStore.currentProjection()
+                            return GoFlyBootstrapOutcome.completed(receipt, projection)
+                        }
+                        do {
+                            let status = try restoreStore.restore(
+                                currentApp: receipt.app, setupStore: store, preferences: preferencesStore
+                            )
+                            guard status.phase == .committed,
+                                  let projection = status.projection else {
+                                return GoFlyBootstrapOutcome.transferWaiting(.restore)
+                            }
+                            return GoFlyBootstrapOutcome.restoreLocked(receipt, status, projection)
+                        } catch let failure as TransferFailure {
+                            switch failure {
+                            case .unavailable:
+                                if let status = try? restoreStore.status() {
+                                    return GoFlyBootstrapOutcome.restoreWaiting(status)
+                                }
+                                return GoFlyBootstrapOutcome.transferWaiting(.restore)
+                            default: return GoFlyBootstrapOutcome.transferBlocked(failure)
+                            }
+                        }
+                    }
                 } catch let failure as SetupFailure {
-                    return SetupBootstrapResult.blocked(failure)
+                    return GoFlyBootstrapOutcome.blocked(failure)
+                } catch let failure as TransferFailure {
+                    return GoFlyBootstrapOutcome.transferBlocked(failure)
                 } catch {
-                    return SetupBootstrapResult.blocked(.storageUnavailable)
+                    return GoFlyBootstrapOutcome.blocked(.storageUnavailable)
                 }
             }.value
 
@@ -76,24 +155,72 @@ final class GoFlySetupBootstrap: ObservableObject {
         }
     }
 
-    private func apply(_ result: SetupBootstrapResult) {
+    private func apply(_ result: GoFlyBootstrapOutcome) {
         switch result {
-        case .ordinaryStartup:
-            runtime = GoFlyRuntimeAssembly()
+        case .ordinary(let projection):
+            runtime = GoFlyRuntimeAssembly(projection: projection)
             phase = .ordinaryStartup
-        case .completed(let receipt):
-            runtime = GoFlyRuntimeAssembly()
+        case .completed(let receipt, let projection):
+            runtime = GoFlyRuntimeAssembly(projection: projection)
             metadata = GoFlySetupMetadata(receipt: receipt)
             phase = .completed(receipt)
         case .waitingForMac(let request):
             phase = .waitingForMac(request)
         case .blocked(let failure):
             phase = .blocked(failure)
+        case .exportLocked(let receipt):
+            phase = .exportLocked(receipt)
+        case .restoreLocked(let receipt, _, let projection):
+            GoFlyPreferences.shared.refreshPersistedValues()
+            runtime = GoFlyRuntimeAssembly(projection: projection)
+            metadata = GoFlySetupMetadata(receipt: receipt)
+            phase = .completed(receipt)
+        case .restoreWaiting(let status):
+            phase = .restoreLocked(status)
+        case .transferWaiting(let reason):
+            phase = .transferWaiting(reason)
+        case .transferBlocked(let failure):
+            phase = .transferBlocked(failure)
+        }
+    }
+
+    func setTransferPhase(_ value: GoFlySetupBootstrapPhase) {
+        phase = value
+    }
+
+    func transferDidFinish(_ id: UUID) {
+        guard transferTaskID == id else { return }
+        transferTask = nil
+        transferTaskID = nil
+    }
+
+    func restartAfterTransfer() {
+        start()
+    }
+}
+
+extension GoFlySetupBootstrapPhase {
+    var isTransferLocked: Bool {
+        switch self {
+        case .exportLocked, .restoreLocked, .transferWaiting, .transferBlocked: return true
+        default: return false
         }
     }
 }
 
-private enum GoFlySetupIdentityReader {
+private enum GoFlyBootstrapOutcome: Sendable {
+    case ordinary(TransferRuntimeProjection)
+    case completed(SetupReceipt, TransferRuntimeProjection)
+    case waitingForMac(SetupReadbackRequest)
+    case blocked(SetupFailure)
+    case exportLocked(TransferExportReceipt)
+    case restoreLocked(SetupReceipt, TransferRestoreStatus, TransferRuntimeProjection)
+    case restoreWaiting(TransferRestoreStatus)
+    case transferWaiting(GoFlyTransferWaitReason)
+    case transferBlocked(TransferFailure)
+}
+
+enum GoFlySetupIdentityReader {
     static func read() throws -> SetupAppIdentity {
         guard let bundleID = Bundle.main.bundleIdentifier,
               bundleID == SetupAppIdentity.formalBundleID,
@@ -439,6 +566,8 @@ struct GoFlySetupLockView: View {
         case .waitingForMac: return "setup.waiting.title"
         case .completed: return "setup.completed.title"
         case .blocked: return "setup.blocked.title"
+        case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer.title"
+        case .transferBlocked: return "setup.blocked.title"
         }
     }
 
@@ -449,6 +578,8 @@ struct GoFlySetupLockView: View {
         case .waitingForMac: return "setup.waiting.message"
         case .completed: return "setup.completed.message"
         case .blocked(let failure): return failure.messageKey
+        case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer.message"
+        case .transferBlocked: return "setup.blocked.storage"
         }
     }
 
@@ -456,6 +587,7 @@ struct GoFlySetupLockView: View {
         switch phase {
         case .blocked: return "lock.shield"
         case .waitingForMac: return "desktopcomputer"
+        case .exportLocked, .restoreLocked, .transferWaiting: return "lock.shield"
         default: return "checkmark.shield"
         }
     }
@@ -466,6 +598,8 @@ struct GoFlySetupLockView: View {
         case .ordinaryStartup, .completed: return "setup.ready"
         case .waitingForMac: return "setup.waiting"
         case .blocked: return "setup.blocked"
+        case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer"
+        case .transferBlocked: return "setup.blocked"
         }
     }
 }

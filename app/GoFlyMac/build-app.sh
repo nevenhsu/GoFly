@@ -26,7 +26,8 @@ VALIDATOR_PRODUCTS="$(/usr/bin/xcrun swift build --disable-sandbox --package-pat
   --scratch-path "$BUILD_ROOT/validator-build" --cache-path "$BUILD_ROOT/cache" \
   --config-path "$BUILD_ROOT/config" --security-path "$BUILD_ROOT/security" --show-bin-path)"
 mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy" \
-  "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup" "$STAGING_BUNDLE/Contents/Resources/Bridge/Reinstall"
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup" "$STAGING_BUNDLE/Contents/Resources/Bridge/Reinstall" \
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/Backup"
 cp "$PRODUCTS/GoFlyMac" "$STAGING_BUNDLE/Contents/MacOS/GoFlyMac"
 cp "$VALIDATOR_PRODUCTS/GoFlyTransferValidator" "$STAGING_BUNDLE/Contents/MacOS/GoFlyTransferValidator"
 # SwiftPM resolves the resource bundle alongside the executable in this local development app.
@@ -36,6 +37,9 @@ cp "$APP_SOURCE/Bridge/Setup/__init__.py" "$APP_SOURCE"/Bridge/Setup/setup_*.py 
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup/"
 cp "$APP_SOURCE/Bridge/Reinstall/__init__.py" "$APP_SOURCE"/Bridge/Reinstall/reinstall_*.py \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Reinstall/"
+cp "$APP_SOURCE/Bridge/Backup/__init__.py" "$APP_SOURCE/Bridge/Backup/bridge.py" \
+  "$APP_SOURCE/Bridge/Backup/catalog.py" "$APP_SOURCE/Bridge/Backup/protocol.py" \
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/Backup/"
 cp "$WORKSPACE_ROOT/app/LocalGo/MacSetup/localgo_device.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy/"
 cp "$WORKSPACE_ROOT/app/LocalGo/LICENSE" "$STAGING_BUNDLE/Contents/Resources/LocalGo-LICENSE.txt"
 
@@ -89,10 +93,13 @@ reinstall_names = [
     "reinstall_config.py", "reinstall_journal.py", "reinstall_producer.py",
     "reinstall_protocol.py",
 ]
+backup_names = ["__init__.py", "bridge.py", "catalog.py", "protocol.py"]
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Setup").glob("*.py")) != sorted(setup_names):
     raise SystemExit("unexpected Setup bridge Python inventory")
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Reinstall").glob("*.py")) != sorted(reinstall_names):
     raise SystemExit("unexpected Reinstall bridge Python inventory")
+if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Backup").glob("*.py")) != sorted(backup_names):
+    raise SystemExit("unexpected Backup bridge Python inventory")
 source_files = {
     "Contents/Resources/Bridge/bridge.py": root / "app/GoFlyMac/Bridge/bridge.py",
     "Contents/Resources/Bridge/Legacy/localgo_device.py": root / "app/LocalGo/MacSetup/localgo_device.py",
@@ -102,6 +109,8 @@ for name in setup_names:
     source_files[f"Contents/Resources/Bridge/Setup/{name}"] = root / "app/GoFlyMac/Bridge/Setup" / name
 for name in reinstall_names:
     source_files[f"Contents/Resources/Bridge/Reinstall/{name}"] = root / "app/GoFlyMac/Bridge/Reinstall" / name
+for name in backup_names:
+    source_files[f"Contents/Resources/Bridge/Backup/{name}"] = root / "app/GoFlyMac/Bridge/Backup" / name
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()

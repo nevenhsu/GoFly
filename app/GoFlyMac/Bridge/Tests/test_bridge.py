@@ -119,6 +119,28 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(response["status"], "ok")
         self.assertEqual(len(client.loop_ids), 1)
 
+    def test_vpn_installation_uses_the_actual_bundle_lookup(self):
+        for apps, expected in [({}, False), ({bridge.LOCALDEVVPN_BUNDLE_ID: {}}, True), (None, None)]:
+            with self.subTest(expected=expected):
+                queried = []
+                class Service:
+                    def __init__(self, client):
+                        pass
+                    async def get_apps(self, *, bundle_identifiers):
+                        queried.append(bundle_identifiers)
+                        if apps is None:
+                            raise OSError("unavailable")
+                        return apps
+                    async def close(self):
+                        pass
+                client = FakeClient({"UniqueDeviceID": UDID, "ProductVersion": "27.0"})
+                device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
+                module = SimpleNamespace(InstallationProxyService=Service)
+                with mock.patch.dict(sys.modules, {"pymobiledevice3.services.installation_proxy": module}):
+                    result = bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).inspect(UDID)
+                self.assertIs(result["vpnInstalled"], expected)
+                self.assertIn([bridge.LOCALDEVVPN_BUNDLE_ID], queried)
+
     def test_configured_venv_python_symlink_is_accepted(self):
         configured = Path.cwd() / "work/mac-setup-env/bin/python"
         if not configured.is_file() or not (configured.parent.parent / "pyvenv.cfg").is_file():

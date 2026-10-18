@@ -122,6 +122,8 @@ class RestoreObservation:
     categories: tuple[Mapping[str, Any], ...] = ()
     counts: Mapping[str, int] | None = None
     receipt_sha256: str | None = None
+    intent: Mapping[str, Any] | None = None
+    receipt: Mapping[str, Any] | None = None
 
 
 class ReinstallDeviceAdapter(Protocol):
@@ -1587,7 +1589,7 @@ class PinnedReinstallDeviceAdapter:
         except SetupBridgeError:
             raise SetupBridgeError("restore-unknown") from None
         phase = value.get("phase")
-        if phase not in {"waiting", "validating", "committed", "failed"}:
+        if not isinstance(phase, str) or phase not in {"waiting", "validating", "committed", "failed"}:
             raise SetupBridgeError("restore-unknown")
         selected = tuple(intent["categories"])
         categories = value.get("categories")
@@ -1619,15 +1621,45 @@ class PinnedReinstallDeviceAdapter:
             if not isinstance(counts, Mapping) or set(counts) != set(COUNT_LIMITS) or any(type(counts[key]) is not int or counts[key] < 0 or counts[key] > COUNT_LIMITS[key] for key in counts):
                 raise SetupBridgeError("restore-unknown")
             count_values = {key: int(counts[key]) for key in COUNT_LIMITS}
-        receipt = self._hash(value.get("receipt"), nullable=True, error="restore-unknown")
-        if phase == "committed" and receipt is None:
+        full_receipt: Mapping[str, Any] | None = None
+        receipt_sha: str | None = None
+        receipt_value = value.get("receipt")
+        if phase == "committed":
+            if not isinstance(receipt_value, Mapping) or set(receipt_value) != {"version", "intent", "categoryReceipts", "sessionSeedSHA256", "counts", "receiptSHA256"} or receipt_value.get("version") != 1:
+                raise SetupBridgeError("restore-unknown")
+            if receipt_value.get("intent") != intent:
+                raise SetupBridgeError("restore-unknown")
+            receipt_sha = self._hash(receipt_value.get("receiptSHA256"), error="restore-unknown")
+            session_seed = self._hash(receipt_value.get("sessionSeedSHA256"), error="restore-unknown")
+            assert isinstance(receipt_sha, str) and isinstance(session_seed, str)
+            canonical_receipt = {key: receipt_value[key] for key in receipt_value if key != "receiptSHA256"}
+            if hashlib.sha256(self._json_bytes(canonical_receipt, maximum=self._MAX_RESPONSE_BYTES)).hexdigest() != receipt_sha:
+                raise SetupBridgeError("restore-unknown")
+            receipt_categories = receipt_value.get("categoryReceipts")
+            if not isinstance(receipt_categories, list) or len(receipt_categories) != len(selected):
+                raise SetupBridgeError("restore-unknown")
+            if [item.get("category") for item in receipt_categories if isinstance(item, Mapping)] != list(selected):
+                raise SetupBridgeError("restore-unknown")
+            for category, item in zip(selected, receipt_categories):
+                if not isinstance(item, Mapping) or set(item) != {"category", "receiptSHA256"} or item.get("category") != category or not self._hash(item.get("receiptSHA256"), error="restore-unknown"):
+                    raise SetupBridgeError("restore-unknown")
+            receipt_counts = receipt_value.get("counts")
+            if not isinstance(receipt_counts, Mapping) or set(receipt_counts) != set(COUNT_LIMITS) or any(type(receipt_counts[key]) is not int or receipt_counts[key] < 0 or receipt_counts[key] > COUNT_LIMITS[key] for key in COUNT_LIMITS):
+                raise SetupBridgeError("restore-unknown")
+            if count_values is None or dict(receipt_counts) != dict(count_values):
+                raise SetupBridgeError("restore-unknown")
+            for category_value, receipt_category in zip(category_values, receipt_categories):
+                if category_value["state"] != "committed" or category_value["receiptSHA256"] != receipt_category.get("receiptSHA256"):
+                    raise SetupBridgeError("restore-unknown")
+            full_receipt = dict(receipt_value)
+        elif receipt_value is not None:
             raise SetupBridgeError("restore-unknown")
         if phase == "committed":
-            if count_values is None or any(item["state"] != "committed" for item in category_values):
+            if count_values is None or full_receipt is None or any(item["state"] != "committed" for item in category_values):
                 raise SetupBridgeError("restore-unknown")
-        elif phase in {"waiting", "validating"} and (count_values is not None or receipt is not None):
+        elif phase in {"waiting", "validating"} and count_values is not None:
             raise SetupBridgeError("restore-unknown")
-        return RestoreObservation(phase, tuple(category_values), count_values, receipt)
+        return RestoreObservation(phase, tuple(category_values), count_values, receipt_sha, dict(intent), full_receipt)
 
     def support(self, device_id: str) -> Mapping[str, Any]:
         observed = self.observe(device_id)

@@ -47,8 +47,9 @@ final class TransferStorageTests: XCTestCase {
         XCTAssertThrowsError(try TransferControlCodec.decodeExportRequest(Data("{\"version\":1,\"version\":1}".utf8)))
     }
 
-    func testPreferencesActivationKeepsOnlyTheCanonicalRestoreMarker() throws {
+    func testPreferencesActivationKeepsTheCanonicalPairAndRestoreMarker() throws {
         let defaults = UserDefaults(suiteName: "gofly-transfer-storage-\(UUID().uuidString)")!
+        defaults.set(["otherPreference": "retained"], forKey: "gofly.preferences.v1")
         let store = TransferPreferencesStore(defaults: defaults)
         let settings = try TransferSettings(language: "zh-Hant", appearance: "dark", mode: .joystick,
                                              roundTripEnabled: true, joystickSpeed: .standard)
@@ -58,6 +59,7 @@ final class TransferStorageTests: XCTestCase {
         XCTAssertEqual(values.language, "zh-Hant")
         XCTAssertEqual(values.appearance, "dark")
         XCTAssertEqual(values.marker, transferID)
+        XCTAssertEqual(defaults.dictionary(forKey: "gofly.preferences.v1")?["otherPreference"] as? String, "retained")
     }
 
     func testNoRestoreUsesOrdinaryProjectionAndIncompleteRootNeverFabricatesStatus() throws {
@@ -181,7 +183,13 @@ final class TransferStorageTests: XCTestCase {
             XCTAssertEqual(status.phase, .committed, "mask=\(mask)")
             XCTAssertEqual(status.categories.map(\.category), selected, "mask=\(mask)")
             XCTAssertNoThrow(try restoreStore.currentProjection())
+            let projection = try restoreStore.currentProjection()
+            let recoverySeed = try SessionRecoveryCodec.decode(Data(contentsOf: projection.sessionDirectory.appendingPathComponent("session.json")))
+            XCTAssertEqual(recoverySeed.uncertainty?.source, .unverifiedPreviousMovement)
+            XCTAssertNil(recoverySeed.activeMovement)
+            XCTAssertNil(recoverySeed.position)
             try restoreStore.writeReadback(currentApp: app, pid: Int32(getpid()))
+            XCTAssertNoThrow(try restoreStore.prepareIncomingFiles(), "cold restore startup mask=\(mask)")
             let responseURL = root.appendingPathComponent("GoFlyTransfer/restore-response.json")
             let response = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: responseURL)) as? [String: Any])
             let finalReceipt = try XCTUnwrap(response["receipt"] as? [String: Any], "mask=\(mask)")

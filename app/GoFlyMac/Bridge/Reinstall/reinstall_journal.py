@@ -263,6 +263,46 @@ def _validate_optional_identity(value: Any, *, allow_none: bool = True) -> None:
         raise SetupBridgeError("storage-unavailable")
 
 
+def _validate_restore_receipt(value: Any, journal: Mapping[str, Any], selected: Sequence[str]) -> None:
+    """Validate the immutable Core final receipt kept in the parent journal."""
+    if not isinstance(selected, (list, tuple)):
+        raise SetupBridgeError("storage-unavailable")
+    required = {"version", "intent", "categoryReceipts", "sessionSeedSHA256", "counts", "receiptSHA256"}
+    if not isinstance(value, Mapping) or set(value) != required or value.get("version") != 1:
+        raise SetupBridgeError("storage-unavailable")
+    intent = value.get("intent")
+    if not isinstance(intent, Mapping) or intent != journal.get("restoreIntent"):
+        raise SetupBridgeError("storage-unavailable")
+    if not _sha(value.get("sessionSeedSHA256")) or not _sha(value.get("receiptSHA256")):
+        raise SetupBridgeError("storage-unavailable")
+    categories = value.get("categoryReceipts")
+    if not isinstance(categories, list) or len(categories) != len(selected):
+        raise SetupBridgeError("storage-unavailable")
+    seen: set[str] = set()
+    for item in categories:
+        if not isinstance(item, Mapping) or set(item) != {"category", "receiptSHA256"}:
+            raise SetupBridgeError("storage-unavailable")
+        category = item.get("category")
+        if category not in selected or category in seen or not _sha(item.get("receiptSHA256")):
+            raise SetupBridgeError("storage-unavailable")
+        seen.add(category)
+    if [item["category"] for item in categories] != list(selected):
+        raise SetupBridgeError("storage-unavailable")
+    _validate_counts(value.get("counts"), categories=selected)
+    if value.get("counts") != journal.get("counts"):
+        raise SetupBridgeError("storage-unavailable")
+    backup = journal.get("backup")
+    if not isinstance(backup, Mapping) or value.get("counts") != backup.get("counts"):
+        raise SetupBridgeError("storage-unavailable")
+    canonical = {key: value[key] for key in value if key != "receiptSHA256"}
+    try:
+        digest = hashlib.sha256(_json(canonical)).hexdigest()
+    except SetupBridgeError:
+        raise SetupBridgeError("storage-unavailable") from None
+    if digest != value.get("receiptSHA256"):
+        raise SetupBridgeError("storage-unavailable")
+
+
 def validate_journal(value: Any) -> None:
     """Validate a complete journal before returning it to a producer."""
     if not isinstance(value, Mapping) or set(value) - _TOP_LEVEL or not _REQUIRED.issubset(value):
@@ -380,15 +420,8 @@ def validate_journal(value: Any) -> None:
             raise SetupBridgeError("storage-unavailable") from None
     receipt = value.get("restoreReceipt")
     if receipt is not None:
-        if not isinstance(receipt, Mapping) or set(receipt) != {"categories", "receiptSHA256"} or not _sha(receipt.get("receiptSHA256")) or not isinstance(receipt.get("categories"), list):
-            raise SetupBridgeError("storage-unavailable")
-        for item in receipt["categories"]:
-            if not isinstance(item, Mapping) or set(item) != {"category", "state", "receiptSHA256"} or item.get("category") not in CATEGORY_ORDER or item.get("state") != "committed" or not _sha(item.get("receiptSHA256")):
-                raise SetupBridgeError("storage-unavailable")
         selected = value["options"].get("categories") if isinstance(value.get("options"), Mapping) else []
-        receipt_categories = [item["category"] for item in receipt["categories"]]
-        if len(receipt_categories) != len(set(receipt_categories)) or tuple(receipt_categories) != tuple(item for item in CATEGORY_ORDER if item in receipt_categories) or receipt_categories != list(selected):
-            raise SetupBridgeError("storage-unavailable")
+        _validate_restore_receipt(receipt, value, selected)
     if value.get("errorCode") is not None and (not isinstance(value["errorCode"], str) or not re.fullmatch(r"[a-z][a-z0-9-]{1,80}", value["errorCode"])):
         raise SetupBridgeError("storage-unavailable")
     if value.get("outcome") not in {"inProgress", "confirmed", "unknown", "failed"}:

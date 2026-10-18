@@ -195,13 +195,15 @@ public struct TransferExportCutline: Sendable, Equatable {
 
 public final class TransferPreparation: @unchecked Sendable {
     let request: TransferExportRequest
+    let requestData: Data
     let transferID: UUID; let dataSetID: UUID; let nonce: UUID; let requestSHA256: String
     let sourceApp: SetupAppIdentity; let cutline: TransferExportCutline; let cutlineSHA256: String
     let packageDirectory: URL
-    init(request: TransferExportRequest, transferID: UUID, dataSetID: UUID, nonce: UUID, requestSHA256: String,
+    init(request: TransferExportRequest, requestData: Data, transferID: UUID, dataSetID: UUID, nonce: UUID, requestSHA256: String,
          sourceApp: SetupAppIdentity, cutline: TransferExportCutline, cutlineSHA256: String,
          packageDirectory: URL) {
         self.request = request
+        self.requestData = requestData
         self.transferID = transferID; self.dataSetID = dataSetID; self.nonce = nonce
         self.requestSHA256 = requestSHA256; self.sourceApp = sourceApp; self.cutline = cutline
         self.cutlineSHA256 = cutlineSHA256; self.packageDirectory = packageDirectory
@@ -276,13 +278,19 @@ public final class TransferRestoreStatus: @unchecked Sendable, Equatable {
     // the opaque receipt digest while storage retains the seed digest for
     // replay/readback validation.
     let sessionSeedSHA256: String?
+    // Every authoritative active/history record also keeps the complete
+    // immutable intent. This remains internal so callers cannot manufacture
+    // a status with a different transaction binding.
+    let originalIntent: TransferRestoreIntent?
     init(transferID: UUID, dataSetID: UUID, rawManifestSHA256: String,
          categories: [TransferCategoryStatus], counts: TransferCounts?, phase: TransferRestorePhase,
-         receiptSHA256: String?, projection: TransferRuntimeProjection?, sessionSeedSHA256: String? = nil) {
+         receiptSHA256: String?, projection: TransferRuntimeProjection?, sessionSeedSHA256: String? = nil,
+         originalIntent: TransferRestoreIntent? = nil) {
         self.transferID = transferID; self.dataSetID = dataSetID; self.rawManifestSHA256 = rawManifestSHA256
         self.categories = categories; self.counts = counts; self.phase = phase
         self.receiptSHA256 = receiptSHA256; self.projection = projection
         self.sessionSeedSHA256 = sessionSeedSHA256
+        self.originalIntent = originalIntent
     }
     public static func == (lhs: TransferRestoreStatus, rhs: TransferRestoreStatus) -> Bool {
         lhs.receiptSHA256 == rhs.receiptSHA256 && lhs.phase == rhs.phase && lhs.transferID == rhs.transferID
@@ -410,9 +418,14 @@ public final class TransferPreferencesStore: @unchecked Sendable {
         self.defaults = defaults; self.storageKey = storageKey
     }
     public func activate(settings: TransferSettings, transferID: UUID) throws {
-        let dictionary: [String: Any] = ["language": settings.language, "appearance": settings.appearance,
-            "transferRestoreID": transferID.uuidString.lowercased()]
+        var dictionary = defaults.dictionary(forKey: storageKey) ?? [:]
+        dictionary["language"] = settings.language
+        dictionary["appearance"] = settings.appearance
+        dictionary["transferRestoreID"] = transferID.uuidString.lowercased()
         defaults.set(dictionary, forKey: storageKey)
+        let applied = try currentValues()
+        guard applied.language == settings.language, applied.appearance == settings.appearance,
+              applied.marker == transferID else { throw TransferFailure.storageUnavailable }
     }
     public func currentValues() throws -> (language: String, appearance: String, marker: UUID?) {
         guard let dictionary = defaults.dictionary(forKey: storageKey),
@@ -484,6 +497,11 @@ public final class TransferExportStore: @unchecked Sendable {
                     throw TransferFailure.busy
                 }
             }
+            if let root = try readExportRootUnlocked(), root.history.contains(where: { $0.request.transferID == input.request.transferID }) {
+                // A transaction UUID is a replay key. It may not be reused
+                // after the original receipt moved to history.
+                throw TransferFailure.busy
+            }
             if try TransferStorageDisk.orphanExists(transferRoot, dataSetID: input.request.dataSetID) { throw TransferFailure.busy }
             let cutlineData = try TransferStorageJSON.encode(["version": 1,
                 "draft": try JSONSerialization.jsonObject(with: TransferCodec.encodeDraft(cutline.draft)),
@@ -499,7 +517,7 @@ public final class TransferExportStore: @unchecked Sendable {
             let receipt = try TransferExportReceipt(phase: .preparing, request: input.request,
                 requestSHA256: input.rawSHA256, sourceApp: currentApp, manifestSHA256: nil, cutlineSHA256: cutlineSHA)
             try writeActive(receipt)
-            return TransferPreparation(request: input.request, transferID: input.request.transferID, dataSetID: input.request.dataSetID,
+            return TransferPreparation(request: input.request, requestData: input.rawData, transferID: input.request.transferID, dataSetID: input.request.dataSetID,
                 nonce: input.request.nonce, requestSHA256: input.rawSHA256, sourceApp: currentApp,
                 cutline: cutline, cutlineSHA256: cutlineSHA, packageDirectory: package)
         }
@@ -521,6 +539,7 @@ public final class TransferExportStore: @unchecked Sendable {
                   receipt.request.transferID == preparation.transferID,
                   receipt.request.dataSetID == preparation.dataSetID,
                   receipt.cutlineSHA256 == preparation.cutlineSHA256 else { throw TransferFailure.busy }
+            let persisted = try reloadPreparation(preparation, current: receipt)
             let categories = receipt.request.categories
             var files: [String: Data] = [:]
             if categories.contains(.favorites) {
@@ -534,12 +553,12 @@ public final class TransferExportStore: @unchecked Sendable {
                 _ = try TransferArchiveCodec.favoriteRoutes(favoriteRoutes)
                 files["routes/imported/manifest.json"] = importedRoutes.manifest
                 files["routes/favorites/manifest.json"] = favoriteRoutes.manifest
-                files["routes/draft.json"] = try TransferCodec.encodeDraft(preparation.cutline.draft)
+                files["routes/draft.json"] = try TransferCodec.encodeDraft(persisted.cutline.draft)
                 for (name, data) in importedRoutes.payloads { files["routes/imported/\(name)"] = data }
                 for (name, data) in favoriteRoutes.payloads { files["routes/favorites/\(name)"] = data }
             }
-            if categories.contains(.settings) { files["settings/preferences.json"] = try TransferCodec.encodeSettings(preparation.cutline.settings) }
-            let package = preparation.packageDirectory
+            if categories.contains(.settings) { files["settings/preferences.json"] = try TransferCodec.encodeSettings(persisted.cutline.settings) }
+            let package = persisted.packageDirectory
             for (path, data) in files {
                 let target = package.appendingPathComponent(path)
                 try TransferStorageDisk.ensureDirectory(target.deletingLastPathComponent())
@@ -556,8 +575,9 @@ public final class TransferExportStore: @unchecked Sendable {
                 categories: receipt.request.categories, artifacts: artifacts)
             let manifestData = try TransferCodec.encodeManifest(manifest)
             try TransferStorageDisk.writeStable(manifestData, to: package.appendingPathComponent("manifest.json"))
-            _ = try TransferPackageValidator.validate(directory: package)
-            return TransferPreparedExport(preparation: preparation)
+            let validated = try TransferPackageValidator.validate(directory: package)
+            try validatePackageBinding(validated.input.manifest, request: receipt.request, sourceApp: receipt.sourceApp)
+            return TransferPreparedExport(preparation: persisted)
         }
     }
 
@@ -567,13 +587,63 @@ public final class TransferExportStore: @unchecked Sendable {
                   current.request == prepared.preparation.request,
                   current.requestSHA256 == prepared.preparation.requestSHA256,
                   current.sourceApp == prepared.preparation.sourceApp,
-                  current.cutlineSHA256 == prepared.preparation.cutlineSHA256,
-                  let package = try? TransferPackageValidator.validate(directory: prepared.preparation.packageDirectory) else { throw TransferFailure.artifactMismatch }
+                  current.cutlineSHA256 == prepared.preparation.cutlineSHA256 else { throw TransferFailure.artifactMismatch }
+            let persisted = try reloadPreparation(prepared.preparation, current: current)
+            let package = try TransferPackageValidator.validate(directory: persisted.packageDirectory)
+            try validatePackageBinding(package.input.manifest, request: current.request, sourceApp: current.sourceApp)
             let receipt = try TransferExportReceipt(phase: .ready, request: current.request, requestSHA256: current.requestSHA256,
                 sourceApp: current.sourceApp, manifestSHA256: package.input.rawManifestSHA256, cutlineSHA256: current.cutlineSHA256)
             try writeActive(receipt)
             return receipt
         }
+    }
+
+    /// Re-open every immutable input that was committed before staging. The
+    /// in-memory preparation is only a handle; it cannot authorize copying if
+    /// the original request, cutline bytes, projection or source identity no
+    /// longer agree with the authoritative root.
+    private func reloadPreparation(_ preparation: TransferPreparation,
+                                   current: TransferExportReceipt) throws -> TransferPreparation {
+        let generation = transferRoot.appendingPathComponent("exports", isDirectory: true)
+            .appendingPathComponent(preparation.dataSetID.uuidString.lowercased(), isDirectory: true)
+        guard let generationRequestData = try TransferStorageDisk.read(generation.appendingPathComponent("request.json"), maximum: TransferLimits.requestBytes),
+              let ingressData = try TransferStorageDisk.read(transferRoot.appendingPathComponent("export-request.json"), maximum: TransferLimits.requestBytes) else {
+            throw TransferFailure.artifactMismatch
+        }
+        let persistedInput = try TransferExportInput(data: generationRequestData)
+        _ = try TransferExportInput(data: ingressData)
+        guard generationRequestData == preparation.requestData,
+              ingressData == generationRequestData,
+              persistedInput.request == preparation.request,
+              persistedInput.request == current.request,
+              persistedInput.rawSHA256 == preparation.requestSHA256,
+              persistedInput.rawSHA256 == current.requestSHA256,
+              persistedInput.request.sourceBundleID == current.sourceApp.bundleID,
+              persistedInput.request.sourceBuild == current.sourceApp.build else {
+            throw TransferFailure.artifactMismatch
+        }
+        let persisted = try loadCutline(input: persistedInput, sourceApp: current.sourceApp)
+        guard persisted.cutlineSHA256 == current.cutlineSHA256,
+              persisted.cutlineSHA256 == preparation.cutlineSHA256,
+              persisted.cutline == preparation.cutline,
+              persisted.cutline.projection == preparation.cutline.projection,
+              persisted.sourceApp == preparation.sourceApp,
+              persisted.sourceApp == current.sourceApp else { throw TransferFailure.artifactMismatch }
+        return persisted
+    }
+
+    private func validatePackageBinding(_ manifest: TransferManifest,
+                                        request: TransferExportRequest,
+                                        sourceApp: SetupAppIdentity) throws {
+        guard manifest.transferID == request.transferID,
+              manifest.dataSetID == request.dataSetID,
+              manifest.nonce == request.nonce,
+              manifest.sourceDeviceUDID == request.sourceDeviceUDID,
+              manifest.destinationDeviceUDID == request.destinationDeviceUDID,
+              manifest.sourceApp == sourceApp,
+              manifest.targetApp == request.targetApp,
+              manifest.setupID == request.setupID,
+              manifest.categories == request.categories else { throw TransferFailure.artifactMismatch }
     }
 
     public func seal(_ control: TransferControlRequest, currentApp: SetupAppIdentity) throws -> TransferExportReceipt {
@@ -709,7 +779,7 @@ public final class TransferExportStore: @unchecked Sendable {
         if let current = try readExportUnlocked(), current.request.dataSetID == input.request.dataSetID {
             guard current.cutlineSHA256 == cutlineSHA else { throw TransferFailure.artifactMismatch }
         }
-        return TransferPreparation(request: input.request, transferID: input.request.transferID, dataSetID: input.request.dataSetID,
+        return TransferPreparation(request: input.request, requestData: input.rawData, transferID: input.request.transferID, dataSetID: input.request.dataSetID,
             nonce: input.request.nonce, requestSHA256: input.rawSHA256, sourceApp: sourceApp,
             cutline: TransferExportCutline(draft: draft, settings: settings, projection: projection),
             cutlineSHA256: cutlineSHA, packageDirectory: generation.appendingPathComponent("package", isDirectory: true))
@@ -720,6 +790,9 @@ public final class TransferExportStore: @unchecked Sendable {
         let existing = try TransferStorageDisk.read(transferRoot.appendingPathComponent("active-export.json"), maximum: 1_048_576)
         let prior = try existing.map(TransferStorageJSON.decodeActiveExportRoot)
         var history = prior?.history ?? []
+        guard !history.contains(where: { $0.request.transferID == receipt.request.transferID }) else {
+            throw TransferFailure.busy
+        }
         if let old = prior?.current, old.request.transferID != receipt.request.transferID,
            [.released, .releasedNoSnapshot].contains(old.phase), receipt.phase == .preparing {
             guard history.count < TransferLimits.historyCount else { throw TransferFailure.receiptCapacity }
@@ -793,10 +866,36 @@ public final class TransferRestoreStore: @unchecked Sendable {
             guard let activation = try setupStore.activation(), activation.activeSetupID == intent.setupID,
                   let receipt = activation.receipts.first(where: { $0.setupID == intent.setupID }), receipt.app == currentApp else { throw TransferFailure.identityMismatch }
             _ = try setupStore.activeSupportDirectory(method: receipt.method)
+            if let historical = try historicalStatus(for: intent) {
+                guard let rootData = try TransferStorageDisk.read(transferRoot.appendingPathComponent("restore-root.json"), maximum: 1_048_576),
+                      let root = try? TransferStorageJSON.decodeRestoreRoot(rootData, applicationSupport: applicationSupport),
+                      let currentProjection = root.current?.projection else { throw TransferFailure.busy }
+                try validateProjection(currentProjection)
+                try rehydratePreferences(for: currentProjection,
+                                         transferID: currentProjection.transferID ?? intent.transferID,
+                                         preferences: preferences)
+                return historical
+            }
             if let existing = try statusUnlocked() {
                 if existing.transferID == intent.transferID, existing.rawManifestSHA256 == intent.rawManifestSHA256 {
-                    if existing.phase == .committed { return existing }
-                } else if existing.phase == .committed, let historical = try historicalStatus(for: intent) {
+                    guard existing.originalIntent == intent else { throw TransferFailure.identityMismatch }
+                    if existing.phase == .committed, let projection = existing.projection {
+                        try validateProjection(projection)
+                        try rehydratePreferences(for: projection, transferID: projection.transferID ?? intent.transferID,
+                                                 preferences: preferences)
+                        return TransferRestoreStatus(transferID: existing.transferID, dataSetID: existing.dataSetID,
+                            rawManifestSHA256: existing.rawManifestSHA256, categories: existing.categories,
+                            counts: existing.counts, phase: existing.phase, receiptSHA256: existing.receiptSHA256,
+                            projection: projection, sessionSeedSHA256: existing.sessionSeedSHA256,
+                            originalIntent: existing.originalIntent)
+                    }
+                } else if existing.phase == .committed {
+                    guard let historical = try historicalStatus(for: intent),
+                          let currentProjection = existing.projection else { throw TransferFailure.identityMismatch }
+                    try validateProjection(currentProjection)
+                    try rehydratePreferences(for: currentProjection,
+                                             transferID: currentProjection.transferID ?? existing.transferID,
+                                             preferences: preferences)
                     return historical
                 } else if existing.phase != .committed && existing.phase != .failed {
                     throw TransferFailure.busy
@@ -808,12 +907,14 @@ public final class TransferRestoreStore: @unchecked Sendable {
             } ?? TransferRestoreStatus(transferID: intent.transferID, dataSetID: intent.dataSetID,
                 rawManifestSHA256: intent.rawManifestSHA256,
                 categories: intent.categories.map { TransferCategoryStatus(category: $0, state: .waiting, receiptSHA256: nil) },
-                counts: nil, phase: .validating, receiptSHA256: nil, projection: nil)
+                counts: nil, phase: .validating, receiptSHA256: nil, projection: nil,
+                originalIntent: intent)
             let package = incomingPackage(intent)
             guard TransferStorageDisk.pathExists(package) else {
                 let waiting = TransferRestoreStatus(transferID: pending.transferID, dataSetID: pending.dataSetID,
                     rawManifestSHA256: pending.rawManifestSHA256, categories: pending.categories,
-                    counts: pending.counts, phase: .waiting, receiptSHA256: nil, projection: nil)
+                    counts: pending.counts, phase: .waiting, receiptSHA256: nil, projection: nil,
+                    originalIntent: intent)
                 try writeRestorePending(waiting, intent: intent)
                 throw TransferFailure.unavailable
             }
@@ -887,14 +988,15 @@ public final class TransferRestoreStore: @unchecked Sendable {
                     }
                     pending = TransferRestoreStatus(transferID: pending.transferID, dataSetID: pending.dataSetID,
                         rawManifestSHA256: pending.rawManifestSHA256, categories: completed, counts: validated.counts,
-                        phase: .validating, receiptSHA256: nil, projection: nil)
+                        phase: .validating, receiptSHA256: nil, projection: nil,
+                        originalIntent: intent)
                     try writeRestorePending(pending, intent: intent)
                 }
             }
             let sessionDirectory = active.appendingPathComponent("session", isDirectory: true); try TransferStorageDisk.ensureDirectory(sessionDirectory)
             let draft: RouteDraft = validated.draft ?? RouteDraft()
             let settings = try validated.settings ?? TransferSettings(language: "system", appearance: "system", mode: .teleport, roundTripEnabled: false, joystickSpeed: .standard)
-            let sessionData = try SessionRecoveryCodec.encode(SessionRecoverySnapshot(mode: settings.mode, draft: intent.categories.contains(.routes) ? draft : RouteDraft(), roundTripEnabled: settings.roundTripEnabled, joystickSpeed: settings.joystickSpeed, position: nil, activeMovement: nil, uncertainty: nil))
+            let sessionData = try SessionRecoveryCodec.encode(SessionRecoverySnapshot(mode: settings.mode, draft: intent.categories.contains(.routes) ? draft : RouteDraft(), roundTripEnabled: settings.roundTripEnabled, joystickSpeed: settings.joystickSpeed, position: nil, activeMovement: nil, uncertainty: SessionMovementUncertainty(source: .unverifiedPreviousMovement)))
             try TransferStorageDisk.writeStable(sessionData, to: sessionDirectory.appendingPathComponent("session.json"))
             let projection = TransferRuntimeProjection(transferID: intent.transferID,
                 favoritesDirectory: active.appendingPathComponent("favorites", isDirectory: true),
@@ -908,7 +1010,7 @@ public final class TransferRestoreStore: @unchecked Sendable {
             let receiptObject = try TransferStorageJSON.restoreFinalReceiptObject(intent: intent,
                 categories: categories, sessionSeedSHA256: SetupValidation.sha256(sessionData), counts: validated.counts)
             let receiptSHA = try TransferStorageJSON.hash(receiptObject, maximum: 1_048_576)
-            let status = TransferRestoreStatus(transferID: intent.transferID, dataSetID: intent.dataSetID, rawManifestSHA256: intent.rawManifestSHA256, categories: categories, counts: validated.counts, phase: .committed, receiptSHA256: receiptSHA, projection: projection, sessionSeedSHA256: SetupValidation.sha256(sessionData))
+            let status = TransferRestoreStatus(transferID: intent.transferID, dataSetID: intent.dataSetID, rawManifestSHA256: intent.rawManifestSHA256, categories: categories, counts: validated.counts, phase: .committed, receiptSHA256: receiptSHA, projection: projection, sessionSeedSHA256: SetupValidation.sha256(sessionData), originalIntent: intent)
             try writeRestoreRoot(status)
             return status
             } catch {
@@ -954,7 +1056,8 @@ public final class TransferRestoreStore: @unchecked Sendable {
         return TransferRestoreStatus(transferID: status.transferID, dataSetID: status.dataSetID,
             rawManifestSHA256: status.rawManifestSHA256, categories: categories,
             counts: counts ?? status.counts, phase: .failed, receiptSHA256: nil,
-            projection: nil, sessionSeedSHA256: status.sessionSeedSHA256)
+            projection: nil, sessionSeedSHA256: status.sessionSeedSHA256,
+            originalIntent: status.originalIntent)
     }
     private func validateCommittedCategory(_ category: TransferCategory, active: URL) throws {
         switch category {
@@ -969,11 +1072,11 @@ public final class TransferRestoreStore: @unchecked Sendable {
             let favoriteRecords = try TransferArchiveCodec.decodeFavoriteRouteManifest(favorite)
             _ = try TransferCodec.decodeDraft(draft)
             for record in importedRecords {
-                guard let data = try TransferStorageDisk.read(active.appendingPathComponent("routes/imported/(record.id.uuidString).gpx"), maximum: GPXLimits.fileBytes) else { throw TransferFailure.artifactMismatch }
+                guard let data = try TransferStorageDisk.read(active.appendingPathComponent("routes/imported/\(record.id.uuidString).gpx"), maximum: GPXLimits.fileBytes) else { throw TransferFailure.artifactMismatch }
                 try TransferArchiveCodec.validateImportedPayload(data, record: record)
             }
             for record in favoriteRecords {
-                guard let data = try TransferStorageDisk.read(active.appendingPathComponent("routes/favorites/(record.id.uuidString).route"), maximum: FavoriteRoutesLimits.fileBytes) else { throw TransferFailure.artifactMismatch }
+                guard let data = try TransferStorageDisk.read(active.appendingPathComponent("routes/favorites/\(record.id.uuidString).route"), maximum: FavoriteRoutesLimits.fileBytes) else { throw TransferFailure.artifactMismatch }
                 try TransferArchiveCodec.validateFavoriteRoutePayload(data, record: record)
             }
         case .settings:
@@ -986,6 +1089,23 @@ public final class TransferRestoreStore: @unchecked Sendable {
     private func historicalStatus(for intent: TransferRestoreIntent) throws -> TransferRestoreStatus? {
         guard let data = try TransferStorageDisk.read(transferRoot.appendingPathComponent("restore-root.json"), maximum: 1_048_576) else { return nil }
         return try TransferStorageJSON.decodeRestoreHistory(data, matching: intent, applicationSupport: applicationSupport)
+    }
+    private func rehydratePreferences(for projection: TransferRuntimeProjection,
+                                      transferID: UUID,
+                                      preferences: TransferPreferencesStore) throws {
+        let settingsURL = projection.sessionDirectory.deletingLastPathComponent()
+            .appendingPathComponent("settings/preferences.json")
+        guard let data = try TransferStorageDisk.read(settingsURL, maximum: TransferLimits.settingsBytes) else {
+            throw TransferFailure.artifactMismatch
+        }
+        let settings = try TransferCodec.decodeSettings(data)
+        let current = try preferences.currentValues()
+        // A matching marker means the user may have changed the pair after
+        // restore; retain that explicit pair. Otherwise repair defaults from
+        // the current authoritative active settings namespace.
+        if current.marker != transferID {
+            try preferences.activate(settings: settings, transferID: transferID)
+        }
     }
     private func validateProjection(_ projection: TransferRuntimeProjection) throws {
         guard let favorites = try TransferStorageDisk.read(projection.favoritesDirectory.appendingPathComponent("favorites.json"), maximum: FavoritePlacesLimits.fileBytes),
@@ -1022,10 +1142,12 @@ public final class TransferRestoreStore: @unchecked Sendable {
         ], maximum: 1_048_576)
     }
     private func writeRestorePending(_ status: TransferRestoreStatus, intent: TransferRestoreIntent) throws {
+        guard status.originalIntent == intent else { throw TransferFailure.identityMismatch }
         let existing = try TransferStorageDisk.read(transferRoot.appendingPathComponent("restore-root.json"), maximum: 1_048_576)
         let prior: (current: TransferRestoreStatus?, pending: (status: TransferRestoreStatus, intent: TransferRestoreIntent)?, history: [TransferRestoreStatus])?
         prior = try existing.map { try TransferStorageJSON.decodeRestoreRoot($0, applicationSupport: applicationSupport) }
         var history = prior?.history ?? []
+        guard !history.contains(where: { $0.transferID == status.transferID }) else { throw TransferFailure.busy }
         if let old = prior?.current, old.transferID != status.transferID {
             guard history.count < TransferLimits.historyCount else { throw TransferFailure.receiptCapacity }
             history.append(old)
@@ -1034,9 +1156,11 @@ public final class TransferRestoreStore: @unchecked Sendable {
             pending: (status, intent), history: history), to: transferRoot.appendingPathComponent("restore-root.json"), checkpoint: checkpoint)
     }
     private func writeRestoreRoot(_ status: TransferRestoreStatus) throws {
+        guard status.originalIntent != nil else { throw TransferFailure.identityMismatch }
         let existing = try TransferStorageDisk.read(transferRoot.appendingPathComponent("restore-root.json"), maximum: 1_048_576)
         let prior = try existing.map { try TransferStorageJSON.decodeRestoreRoot($0, applicationSupport: applicationSupport) }
         var history = prior?.history ?? []
+        guard !history.contains(where: { $0.transferID == status.transferID }) else { throw TransferFailure.busy }
         if let old = prior?.current, old.transferID != status.transferID {
             guard history.count < TransferLimits.historyCount else { throw TransferFailure.receiptCapacity }
             history.append(old)
@@ -1089,6 +1213,7 @@ private enum TransferStorageJSON {
     }
     static func decodeReceipt(_ data: Data) throws -> TransferExportReceipt {
         let value = try parse(data, maximum: 1_048_576); try value.requireObjectKeys(["version", "phase", "request", "requestSHA256", "sourceApp", "manifestSHA256", "cutlineSHA256", "receiptSHA256"])
+        guard try int(value.object("version")) == 1 else { throw TransferFailure.unsupportedVersion }
         let request = try TransferControlCodec.decodeExportRequest(try JSONSerialization.data(withJSONObject: try foundation(value.object("request"))))
         let phase = try TransferExportPhase(rawValue: string(value.object("phase"))).unwrap(or: TransferFailure.invalidInput)
         let manifestValue = try value.object("manifestSHA256"); let cutlineValue = try value.object("cutlineSHA256")
@@ -1108,6 +1233,7 @@ private enum TransferStorageJSON {
     static func decodeActiveExportRoot(_ data: Data) throws -> (current: TransferExportReceipt?, history: [TransferExportReceipt]) {
         let value = try parse(data, maximum: 1_048_576)
         try value.requireObjectKeys(["version", "current", "history"])
+        guard try int(value.object("version")) == 1 else { throw TransferFailure.unsupportedVersion }
         let currentValue = try value.object("current")
         let current: TransferExportReceipt?
         if currentValue.isNull { current = nil }
@@ -1142,10 +1268,10 @@ private enum TransferStorageJSON {
                            "gpxPoints": counts.gpxPoints]]
     }
     static func restoreRootObject(active: TransferRestoreStatus?, pending: (status: TransferRestoreStatus, intent: TransferRestoreIntent)?, history: [TransferRestoreStatus]) throws -> Data {
-        func object(_ value: TransferRestoreStatus) -> [String: Any] {
-            ["transferID": value.transferID.uuidString.lowercased(), "dataSetID": value.dataSetID.uuidString.lowercased(), "rawManifestSHA256": value.rawManifestSHA256, "phase": value.phase.rawValue, "receiptSHA256": value.receiptSHA256 as Any, "sessionSeedSHA256": value.sessionSeedSHA256 as Any, "categories": value.categories.map { ["category": $0.category.rawValue, "state": $0.state.rawValue, "receiptSHA256": $0.receiptSHA256 as Any] }, "counts": value.counts.map { ["favorites": $0.favorites, "importedRoutes": $0.importedRoutes, "favoriteRoutes": $0.favoriteRoutes, "draftNodes": $0.draftNodes, "gpxPoints": $0.gpxPoints] } as Any]
+        func object(_ value: TransferRestoreStatus) throws -> [String: Any] {
+            ["transferID": value.transferID.uuidString.lowercased(), "dataSetID": value.dataSetID.uuidString.lowercased(), "rawManifestSHA256": value.rawManifestSHA256, "phase": value.phase.rawValue, "receiptSHA256": value.receiptSHA256 as Any, "sessionSeedSHA256": value.sessionSeedSHA256 as Any, "intent": try value.originalIntent.map { try JSONSerialization.jsonObject(with: TransferControlCodec.encodeRestoreIntent($0)) } as Any, "categories": value.categories.map { ["category": $0.category.rawValue, "state": $0.state.rawValue, "receiptSHA256": $0.receiptSHA256 as Any] }, "counts": value.counts.map { ["favorites": $0.favorites, "importedRoutes": $0.importedRoutes, "favoriteRoutes": $0.favoriteRoutes, "draftNodes": $0.draftNodes, "gpxPoints": $0.gpxPoints] } as Any]
         }
-        let activeObject: Any = active.map(object) ?? NSNull()
+        let activeObject: Any = try active.map(object) ?? NSNull()
         let pendingObject: Any
         if let pending {
             let pointers: [[String: Any]] = pending.status.categories.map { category in
@@ -1160,15 +1286,16 @@ private enum TransferStorageJSON {
             }
             let seed: [String: Any] = ["state": pending.status.sessionSeedSHA256 == nil ? "waiting" : "committed",
                                         "sessionSeedSHA256": pending.status.sessionSeedSHA256 as Any]
-            pendingObject = ["intent": try JSONSerialization.jsonObject(with: TransferControlCodec.encodeRestoreIntent(pending.intent)), "status": object(pending.status), "pointers": pointers, "seed": seed]
+            pendingObject = ["intent": try JSONSerialization.jsonObject(with: TransferControlCodec.encodeRestoreIntent(pending.intent)), "status": try object(pending.status), "pointers": pointers, "seed": seed]
         } else {
             pendingObject = NSNull()
         }
-        return try encode(["version": 1, "active": activeObject, "pending": pendingObject, "history": history.map { object($0) }], maximum: 1_048_576)
+        return try encode(["version": 1, "active": activeObject, "pending": pendingObject, "history": try history.map { try object($0) }], maximum: 1_048_576)
     }
     static func decodeRestoreRoot(_ data: Data, applicationSupport: URL) throws -> (current: TransferRestoreStatus?, pending: (status: TransferRestoreStatus, intent: TransferRestoreIntent)?, history: [TransferRestoreStatus]) {
         let value = try parse(data, maximum: 1_048_576)
         try value.requireObjectKeys(["version", "active", "pending", "history"])
+        guard try int(value.object("version")) == 1 else { throw TransferFailure.unsupportedVersion }
         let active = try value.object("active")
         let current = active.isNull ? nil : try decodeRestoreStatusObject(active, applicationSupport: applicationSupport)
         let pendingValue = try value.object("pending")
@@ -1217,36 +1344,52 @@ private enum TransferStorageJSON {
         guard values.count <= TransferLimits.historyCount else { throw TransferFailure.receiptCapacity }
         let history = try values.map { try decodeRestoreStatusObject($0, applicationSupport: applicationSupport) }
         guard Set(history.map(\.transferID)).count == history.count else { throw TransferFailure.artifactMismatch }
+        if let current, history.allSatisfy({ $0.transferID != current.transferID }) == false {
+            throw TransferFailure.artifactMismatch
+        }
         return (current, pending, history)
     }
     static func decodeRestoreHistory(_ data: Data, matching intent: TransferRestoreIntent, applicationSupport: URL) throws -> TransferRestoreStatus? {
         let root = try decodeRestoreRoot(data, applicationSupport: applicationSupport)
         guard let historical = root.history.first(where: { $0.transferID == intent.transferID && $0.dataSetID == intent.dataSetID && $0.rawManifestSHA256 == intent.rawManifestSHA256 }) else { return nil }
-        return TransferRestoreStatus(transferID: historical.transferID, dataSetID: historical.dataSetID, rawManifestSHA256: historical.rawManifestSHA256, categories: historical.categories, counts: historical.counts, phase: historical.phase, receiptSHA256: historical.receiptSHA256, projection: root.current?.projection, sessionSeedSHA256: historical.sessionSeedSHA256)
+        guard historical.originalIntent == intent else { throw TransferFailure.identityMismatch }
+        return TransferRestoreStatus(transferID: historical.transferID, dataSetID: historical.dataSetID, rawManifestSHA256: historical.rawManifestSHA256, categories: historical.categories, counts: historical.counts, phase: historical.phase, receiptSHA256: historical.receiptSHA256, projection: root.current?.projection, sessionSeedSHA256: historical.sessionSeedSHA256, originalIntent: historical.originalIntent)
     }
     static func decodeRestoreStatus(_ data: Data, applicationSupport: URL) throws -> TransferRestoreStatus? {
         let root = try decodeRestoreRoot(data, applicationSupport: applicationSupport)
         return root.current ?? root.pending?.status
     }
     private static func decodeRestoreStatusObject(_ active: _SetupJSON, applicationSupport: URL) throws -> TransferRestoreStatus {
-        try active.requireObjectKeys(["transferID", "dataSetID", "rawManifestSHA256", "phase", "receiptSHA256", "sessionSeedSHA256", "categories", "counts"])
+        var requiredKeys: Set<String> = ["transferID", "dataSetID", "rawManifestSHA256", "phase", "receiptSHA256", "sessionSeedSHA256", "categories", "counts"]
+        if case .object(let pairs) = active, pairs.contains(where: { $0.0 == "intent" }) {
+            requiredKeys.insert("intent")
+        }
+        try active.requireObjectKeys(requiredKeys)
         let transferID = try uuid(active.object("transferID")); let dataSetID = try uuid(active.object("dataSetID")); guard let phase = TransferRestorePhase(rawValue: try string(active.object("phase"))) else { throw TransferFailure.invalidInput }
+        let rawManifestSHA256 = try string(active.object("rawManifestSHA256"))
+        guard SetupValidation.isLowerHex(rawManifestSHA256, count: 64) else { throw TransferFailure.artifactMismatch }
         let receiptValue = try active.object("receiptSHA256")
         let receipt = receiptValue.isNull ? nil : try string(receiptValue)
         let seedValue = try active.object("sessionSeedSHA256")
         let seed = seedValue.isNull ? nil : try string(seedValue)
         guard receipt.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true,
               seed.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true else { throw TransferFailure.artifactMismatch }
-        let categoryValues = try active.object("categories").array()
-        let categories = try categoryValues.map { item -> TransferCategoryStatus in
+        let categoryObjects = try active.object("categories").array()
+        let categories = try categoryObjects.map { item -> TransferCategoryStatus in
             try item.requireObjectKeys(["category", "state", "receiptSHA256"])
             guard let category = TransferCategory(rawValue: try string(item.object("category"))),
                   let state = TransferCategoryState(rawValue: try string(item.object("state"))) else { throw TransferFailure.invalidInput }
             let receiptValue = try item.object("receiptSHA256")
             let receipt = receiptValue.isNull ? nil : try string(receiptValue)
             guard receipt.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true else { throw TransferFailure.artifactMismatch }
+            guard (state == .committed) == (receipt != nil) else { throw TransferFailure.artifactMismatch }
             return TransferCategoryStatus(category: category, state: state, receiptSHA256: receipt)
         }
+        let categoryValues = categories.map { $0.category }
+        guard categoryValues == TransferCategory.allCases.filter({ categoryValues.contains($0) }) else {
+            throw TransferFailure.artifactMismatch
+        }
+        guard Set(categoryValues).count == categories.count else { throw TransferFailure.artifactMismatch }
         let countsValue = try active.object("counts")
         let counts: TransferCounts?
         if countsValue.isNull { counts = nil }
@@ -1257,10 +1400,26 @@ private enum TransferStorageJSON {
                                     favoriteRoutes: try int(countsValue.object("favoriteRoutes")),
                                     draftNodes: try int(countsValue.object("draftNodes")),
                                     gpxPoints: try int(countsValue.object("gpxPoints")))
+            guard counts!.favorites >= 0, counts!.importedRoutes >= 0, counts!.favoriteRoutes >= 0,
+                  counts!.draftNodes >= 0, counts!.gpxPoints >= 0 else { throw TransferFailure.artifactMismatch }
         }
         let root = applicationSupport.appendingPathComponent("GoFlyTransfer/active/\(transferID.uuidString.lowercased())", isDirectory: true)
         let projection = phase == .committed ? TransferRuntimeProjection(transferID: transferID, favoritesDirectory: root.appendingPathComponent("favorites", isDirectory: true), importedRoutesDirectory: root.appendingPathComponent("routes/imported", isDirectory: true), favoriteRoutesDirectory: root.appendingPathComponent("routes/favorites", isDirectory: true), sessionDirectory: root.appendingPathComponent("session", isDirectory: true)) : nil
-        return TransferRestoreStatus(transferID: transferID, dataSetID: dataSetID, rawManifestSHA256: try string(active.object("rawManifestSHA256")), categories: categories, counts: counts, phase: phase, receiptSHA256: receipt, projection: projection, sessionSeedSHA256: seed)
+        let originalIntent: TransferRestoreIntent?
+        if let intentValue = try? active.object("intent") {
+            if intentValue.isNull {
+                originalIntent = nil
+            } else {
+                let intent = try TransferControlCodec.decodeRestoreIntent(JSONSerialization.data(withJSONObject: try foundation(intentValue)))
+                guard intent.transferID == transferID, intent.dataSetID == dataSetID,
+                      intent.rawManifestSHA256 == rawManifestSHA256,
+                      intent.categories == categoryValues else { throw TransferFailure.artifactMismatch }
+                originalIntent = intent
+            }
+        } else {
+            originalIntent = nil
+        }
+        return TransferRestoreStatus(transferID: transferID, dataSetID: dataSetID, rawManifestSHA256: rawManifestSHA256, categories: categories, counts: counts, phase: phase, receiptSHA256: receipt, projection: projection, sessionSeedSHA256: seed, originalIntent: originalIntent)
     }
 }
 
@@ -1286,27 +1445,59 @@ private enum TransferStorageDisk {
         return standardized
     }
     static func ensureDirectory(_ url: URL) throws {
-        if FileManager.default.fileExists(atPath: url.path) {
-            var info = stat()
-            guard lstat(url.path, &info) == 0,
-                  info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
-                  info.st_uid == getuid(), info.st_mode & 0o7777 == 0o700 else { throw TransferFailure.unsafeFile }
-            return
+        // The initializer canonicalizes the trusted Application Support base
+        // once. Preserve that spelling here; `standardizedFileURL` may turn
+        // `/private/var` back into the `/var` compatibility symlink before
+        // the descriptor walk reaches it.
+        let path = url.absoluteURL.path
+        guard path.hasPrefix("/") else { throw TransferFailure.unsafeFile }
+        let components = path.split(separator: "/").map(String.init)
+        guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw TransferFailure.unsafeFile
         }
-        var ancestor = url
-        var created: [URL] = []
-        while !FileManager.default.fileExists(atPath: ancestor.path) {
-            created.append(ancestor)
-            ancestor.deleteLastPathComponent()
-            guard ancestor.path != "/" else { break }
-        }
-        do {
-            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: NSNumber(value: 0o700)])
-            for directory in created.reversed() {
-                try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o700)], ofItemAtPath: directory.path)
+        var current = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard current >= 0 else { throw TransferFailure.storageUnavailable }
+        defer { Darwin.close(current) }
+        guard !components.isEmpty else { return }
+
+        for (index, component) in components.enumerated() {
+            let nextFlags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+            var next = openat(current, component, nextFlags, 0)
+            if next < 0 {
+                let openError = errno
+                guard openError == ENOENT else {
+                    if openError == ELOOP || openError == ENOTDIR { throw TransferFailure.unsafeFile }
+                    throw TransferFailure.storageUnavailable
+                }
+                guard mkdirat(current, component, 0o700) == 0 || errno == EEXIST else {
+                    throw TransferFailure.storageUnavailable
+                }
+                next = openat(current, component, nextFlags, 0)
+                guard next >= 0 else {
+                    if errno == ELOOP || errno == ENOTDIR { throw TransferFailure.unsafeFile }
+                    throw TransferFailure.storageUnavailable
+                }
+                guard fsync(next) == 0 else {
+                    Darwin.close(next)
+                    throw TransferFailure.storageUnavailable
+                }
             }
-        } catch { throw TransferFailure.storageUnavailable }
+
+            var info = stat()
+            guard fstat(next, &info) == 0,
+                  info.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) else {
+                Darwin.close(next)
+                throw TransferFailure.unsafeFile
+            }
+            if index == components.count - 1 {
+                guard info.st_uid == getuid(), info.st_mode & 0o7777 == 0o700 else {
+                    Darwin.close(next)
+                    throw TransferFailure.unsafeFile
+                }
+            }
+            Darwin.close(current)
+            current = next
+        }
     }
     static func isDirectory(_ url: URL) throws -> Bool { var value = stat(); guard lstat(url.path, &value) == 0 else { throw TransferFailure.storageUnavailable }; return value.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR) && value.st_uid == getuid() && value.st_mode & 0o7777 == 0o700 }
     static func openExistingDirectory(_ url: URL, requirePrivate: Bool) throws -> Int32? { var value = stat(); guard lstat(url.path, &value) == 0 else { if errno == ENOENT { return nil }; throw TransferFailure.unsafeFile }; guard value.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR), value.st_uid == getuid(), !requirePrivate || value.st_mode & 0o7777 == 0o700 else { throw TransferFailure.unsafeFile }; let fd = Darwin.open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC); guard fd >= 0 else { throw TransferFailure.unavailable }; return fd }
@@ -1317,7 +1508,7 @@ private enum TransferStorageDisk {
         let mode = info.st_mode & 0o7777
         let initialIngress = mode == 0o755
         guard mode == 0o700 || initialIngress else { throw TransferFailure.unsafeFile }
-        let allowed = Set(["export-request.json", "control-request.json", "control-response.json", "restore-intent.json", "incoming.json", "active-export.json", "restore-root.json", "exports", "incoming", "active"])
+        let allowed = Set(["export-request.json", "control-request.json", "control-response.json", "restore-response.json", "restore-intent.json", "incoming.json", "active-export.json", "restore-root.json", "exports", "incoming", "active"])
         // Inventory every existing component while the descriptor chain is
         // retained.  No chmod occurs until this complete closed inventory has
         // succeeded, so a malformed ingress cannot be partially sealed.
@@ -1331,7 +1522,10 @@ private enum TransferStorageDisk {
     }
 
     private static func rootContainsAppOwnedEntry(_ fd: Int32) throws -> Bool {
-        for name in ["active-export.json", "restore-root.json", "active", "exports", "incoming"] {
+        // `incoming` is producer ingress and may legitimately be the only
+        // content in an AFC-created 0755 root.  It becomes App-owned only
+        // after the closed ingress inventory has been validated and sealed.
+        for name in ["active-export.json", "restore-root.json", "control-response.json", "restore-response.json", "active", "exports"] {
             var value = stat()
             if fstatat(fd, name, &value, AT_SYMLINK_NOFOLLOW) == 0 { return true }
             if errno != ENOENT { throw TransferFailure.unsafeFile }
@@ -1353,7 +1547,7 @@ private enum TransferStorageDisk {
             entries += 1; guard entries <= 4_096 else { throw TransferFailure.limitExceeded }
             var value = stat()
             guard fstatat(fd, name, &value, AT_SYMLINK_NOFOLLOW) == 0,
-                  value.st_uid == getuid(), value.st_nlink == 1 else { throw TransferFailure.unsafeFile }
+                  value.st_uid == getuid() else { throw TransferFailure.unsafeFile }
             let type = value.st_mode & mode_t(S_IFMT)
             let childPath = prefix.isEmpty ? name : prefix + "/" + name
             let incomingIngress = childPath == "incoming" || childPath.hasPrefix("incoming/")
@@ -1365,6 +1559,7 @@ private enum TransferStorageDisk {
                 defer { Darwin.close(child) }
                 try inventoryRoot(child, allowed: allowed, initialIngress: initialIngress, prefix: childPath, depth: depth + 1, entries: &entries)
             } else if type == mode_t(S_IFREG) {
+                guard value.st_nlink == 1 else { throw TransferFailure.unsafeFile }
                 let fileMode = value.st_mode & 0o7777
                 guard fileMode == 0o600 || (incomingIngress && fileMode == 0o644) || (initialIngress && depth == 0 && fileMode == 0o644),
                       value.st_size >= 0, value.st_size <= off_t(TransferLimits.aggregateBytes) else { throw TransferFailure.unsafeFile }
@@ -1395,6 +1590,7 @@ private enum TransferStorageDisk {
         guard let handle = try TransferFileIO.openDirectory(root, requirePrivate: false) else { throw TransferFailure.unavailable }
         var entries = 0
         var nodes: [(fd: Int32, directory: Bool, mode: mode_t)] = []
+        defer { for node in nodes { Darwin.close(node.fd) } }
         try inventoryIncomingDirectory(handle.fd, depth: 0, entries: &entries, nodes: &nodes)
         // Only after the complete descriptor inventory succeeds may ingress
         // permissions be transitioned.  The open descriptors also close the
@@ -1406,7 +1602,6 @@ private enum TransferStorageDisk {
             } else if node.mode == 0o644 {
                 guard fchmod(node.fd, 0o600) == 0, fsync(node.fd) == 0 else { throw TransferFailure.storageUnavailable }
             }
-            Darwin.close(node.fd)
         }
     }
 
@@ -1415,7 +1610,7 @@ private enum TransferStorageDisk {
         guard depth <= 4 else { throw TransferFailure.limitExceeded }
         var rootInfo = stat(); guard fstat(fd, &rootInfo) == 0 else { throw TransferFailure.unavailable }
         let rootMode = rootInfo.st_mode & 0o7777
-        guard rootInfo.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR), rootInfo.st_uid == getuid(), rootInfo.st_nlink == 1,
+        guard rootInfo.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR), rootInfo.st_uid == getuid(),
               rootMode == 0o700 || rootMode == 0o755 else { throw TransferFailure.unsafeFile }
         let retained = Darwin.dup(fd); guard retained >= 0 else { throw TransferFailure.unavailable }
         nodes.append((fd: retained, directory: true, mode: rootMode))
@@ -1427,15 +1622,16 @@ private enum TransferStorageDisk {
             if name == "." || name == ".." { continue }
             entries += 1; guard entries <= 512 else { throw TransferFailure.limitExceeded }
             var value = stat(); guard fstatat(fd, name, &value, AT_SYMLINK_NOFOLLOW) == 0,
-                value.st_uid == getuid(), value.st_nlink == 1 else { throw TransferFailure.unsafeFile }
+                value.st_uid == getuid() else { throw TransferFailure.unsafeFile }
             let type = value.st_mode & mode_t(S_IFMT); let mode = value.st_mode & 0o7777
             if type == mode_t(S_IFDIR) {
                 guard mode == 0o700 || mode == 0o755 else { throw TransferFailure.unsafeFile }
                 let child = openat(fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC, 0)
                 guard child >= 0 else { throw TransferFailure.unsafeFile }
+                defer { Darwin.close(child) }
                 try inventoryIncomingDirectory(child, depth: depth + 1, entries: &entries, nodes: &nodes)
-                Darwin.close(child)
             } else if type == mode_t(S_IFREG) {
+                guard value.st_nlink == 1 else { throw TransferFailure.unsafeFile }
                 guard mode == 0o600 || mode == 0o644 else { throw TransferFailure.unsafeFile }
                 let child = openat(fd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC, 0)
                 guard child >= 0 else { throw TransferFailure.unsafeFile }

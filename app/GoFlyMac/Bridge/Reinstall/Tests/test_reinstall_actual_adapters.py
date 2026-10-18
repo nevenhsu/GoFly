@@ -269,6 +269,60 @@ class ActualAdapterBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ReinstallBridgeError, "backup-invalid|restore-unknown"):
                 adapter.restore_readback(DEVICE, TRANSFER)
 
+    def test_restore_response_binds_full_core_receipt_and_digest(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
+            root = Path(directory)
+            adapter = PinnedReinstallDeviceAdapter(Config(root / "state"))
+            intent = {
+                "version": 1,
+                "transferID": TRANSFER,
+                "dataSetID": DATASET,
+                "nonce": NONCE,
+                "rawManifestSHA256": HASH_A,
+                "sourceDeviceUDID": DEVICE,
+                "destinationDeviceUDID": DEVICE,
+                "sourceApp": {"bundleID": "com.neven.gofly", "build": "19", "profileSHA256": HASH_B, "executableSHA256": HASH_C},
+                "targetApp": {"bundleID": "com.neven.gofly", "build": "20", "profileSHA256": HASH_B, "executableSHA256": HASH_C},
+                "setupID": SETUP,
+                "categories": [],
+            }
+            counts = {"favorites": 0, "importedRoutes": 0, "favoriteRoutes": 0, "draftNodes": 0, "gpxPoints": 0}
+            receipt = {
+                "version": 1,
+                "intent": intent,
+                "categoryReceipts": [],
+                "sessionSeedSHA256": HASH_C,
+                "counts": counts,
+            }
+            receipt["receiptSHA256"] = hashlib.sha256(json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+            response = {
+                "version": 1,
+                "intent": intent,
+                "pid": 1234,
+                "app": intent["targetApp"],
+                "phase": "committed",
+                "categories": [],
+                "counts": counts,
+                "receipt": receipt,
+            }
+            remote = {adapter._RESTORE_RESPONSE: adapter._json_bytes(response, maximum=256 * 1024)}
+
+            @contextlib.contextmanager
+            def fake_house(_device: str):
+                yield object()
+
+            adapter._house_arrest = fake_house  # type: ignore[method-assign]
+            adapter._base._remote_exists = lambda _service, path: path in remote  # type: ignore[method-assign]
+            adapter._base._read_remote_bounded = lambda _service, path, *, max_bytes: remote[path]  # type: ignore[method-assign]
+            adapter._current_pid = lambda _device: 1234  # type: ignore[method-assign]
+
+            observed = adapter.restore_readback(DEVICE, TRANSFER)
+            self.assertIsNotNone(observed)
+            assert observed is not None
+            self.assertEqual(observed.intent, intent)
+            self.assertEqual(observed.receipt, receipt)
+            self.assertEqual(observed.receipt_sha256, receipt["receiptSHA256"])
+
     def test_source_control_reuses_producer_command_and_original_request_digest(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
             root = Path(directory)

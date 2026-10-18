@@ -13,20 +13,20 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 if __package__ in {None, ""}:
-    _PACKAGE_DIR = str(Path(__file__).resolve().parent)
-    if _PACKAGE_DIR not in sys.path:
-        sys.path.insert(0, _PACKAGE_DIR)
+    _BRIDGE_ROOT = str(Path(__file__).resolve().parents[1])
+    if _BRIDGE_ROOT not in sys.path:
+        sys.path.insert(0, _BRIDGE_ROOT)
 
 try:
     from .reinstall_adapters import PinnedReinstallDeviceAdapter
     from .reinstall_config import ReinstallConfiguration
     from .reinstall_producer import ReinstallProducer
-    from .reinstall_protocol import MAX_REQUEST_BYTES, ReinstallBridgeError, decode_request, error_response, encode_response
+    from .reinstall_protocol import MAX_REQUEST_BYTES, SAFE_ERROR_CODES, ReinstallBridgeError, decode_request, error_response, encode_response
 except ImportError:  # direct execution from packaged Reinstall directory
-    from reinstall_adapters import PinnedReinstallDeviceAdapter
-    from reinstall_config import ReinstallConfiguration
-    from reinstall_producer import ReinstallProducer
-    from reinstall_protocol import MAX_REQUEST_BYTES, ReinstallBridgeError, decode_request, error_response, encode_response
+    from Reinstall.reinstall_adapters import PinnedReinstallDeviceAdapter
+    from Reinstall.reinstall_config import ReinstallConfiguration
+    from Reinstall.reinstall_producer import ReinstallProducer
+    from Reinstall.reinstall_protocol import MAX_REQUEST_BYTES, SAFE_ERROR_CODES, ReinstallBridgeError, decode_request, error_response, encode_response
 
 
 def establish_process_group() -> None:
@@ -111,8 +111,11 @@ def run_stdio(
         return json.loads(encode_response(request, status="ok", payload=payload.as_dict()).decode("utf-8"))
     except ReinstallBridgeError as error:
         return error_response(request.as_dict(), error.code, _error_payload(request, config))
-    except Exception:
-        return error_response(request.as_dict(), "operation-failed", _error_payload(request, config))
+    except Exception as error:
+        code = getattr(error, "code", None)
+        if not isinstance(code, str) or code not in SAFE_ERROR_CODES:
+            code = "operation-failed"
+        return error_response(request.as_dict(), code, _error_payload(request, config))
 
 
 def emit(response: Mapping[str, Any], stream: Any = None) -> None:

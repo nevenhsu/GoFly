@@ -30,10 +30,12 @@ public final class MacAppModel {
     public private(set) var inspection: DeviceInspection?
     public private(set) var selectedID: String?
     private var checkingBusy = false
+    private var verifiedSetupID: UUID?
     public private(set) var isCancellingCheck = false
     public var isChecking: Bool { checkingBusy }
     public let setup: MacSetupModel?
     public let reinstall: MacReinstallModel?
+    public let backups: MacBackupModel?
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
     public private(set) var previewStage = 0
@@ -48,14 +50,17 @@ public final class MacAppModel {
     @ObservationIgnored private var activeCheckID: UUID?
     private enum PendingCheckAction { case mode(Bool), scenario }
     @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
+    @ObservationIgnored private var backupMaintenanceStarted = false
 
-    public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil) {
+    public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil,
+                backups: MacBackupModel? = nil) {
         self.live = live
         self.setup = setup
         self.reinstall = reinstall
+        self.backups = backups
     }
     public var busy: Bool {
-        checkingBusy || (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true))
+        checkingBusy || backups?.isBusy == true || (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true))
     }
     public var setupLocksDevice: Bool {
         !isPreview && (setup?.locksDevice == true || reinstall?.locksDevice == true)
@@ -90,6 +95,7 @@ public final class MacAppModel {
     public func finishReinstall() async {
         guard !busy, reinstall?.snapshot?.isComplete == true || reinstall?.snapshot?.isAbandoned == true else { return }
         reinstall?.resetSelection()
+        backupMaintenanceStarted = false
         // When M2 was restored first, M1 has not reopened the predecessor
         // which M2 may archive. Read its actual current journal only now.
         await setup?.restore()
@@ -110,6 +116,27 @@ public final class MacAppModel {
     }
     public var visibleDevices: [ConnectedDevice] { ConnectedDevice.unique(devices, usbOnly: firstInstall) }
     public var mayInspect: Bool { ready && selected != nil }
+    public var setupVPNConfirmed: Bool {
+        guard setup?.snapshot?.isComplete == true, let identity = setup?.continuation,
+              verifiedSetupID == identity.setupID,
+              inspection?.device.id.lowercased() == identity.deviceID.lowercased() else { return false }
+        return inspection?.vpnInstalled == true
+    }
+
+    public func verifySetupDevice() {
+        guard !busy, setup?.snapshot?.isComplete == true,
+              let identity = setup?.continuation else { return }
+        verifiedSetupID = nil
+        inspection = nil
+        perform(.inspect, deviceID: identity.deviceID) { data, request in
+            let result = try ResponseDecoder.decode(data, for: request, as: DeviceInspection.self)
+            guard result.device.id.lowercased() == identity.deviceID.lowercased(),
+                  result.device.transport == .usb, result.installed == true else { throw CheckFailure.invalidResponse }
+            self.selectedID = identity.deviceID
+            self.inspection = result
+            self.verifiedSetupID = identity.setupID
+        }
+    }
     public var installStatus: String {
         guard let inspection else { return "尚未檢查" }
         switch inspection.installed { case true: return "已偵測到 App"; case false: return "未偵測到 App"; default: return "安裝狀態待確認" }
@@ -117,10 +144,10 @@ public final class MacAppModel {
 
     public func navigate(_ destination: MacPage) {
         guard !busy else { return }
-        if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment {
+        if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment && destination != .backups {
             page = activeOperationPage; return
         }
-        if !isPreview && destination != .home && destination != .environment &&
+        if !isPreview && destination != .home && destination != .environment && destination != .backups &&
             !(destination == activeOperationPage && setupLocksDevice) &&
             !(destination == .install && setup?.hasRecordedTransaction == true) &&
             !(destination == .reinstall && reinstall?.hasRecordedTransaction == true) && environment?.ready != true {
@@ -130,7 +157,7 @@ public final class MacAppModel {
     }
 
     public func switchMode(preview: Bool) {
-        guard !setupLocksDevice else { return }
+        guard !setupLocksDevice, backups?.isBusy != true else { return }
         if checkingBusy {
             pendingCheckAction = .mode(preview)
             cancel()
@@ -209,6 +236,23 @@ public final class MacAppModel {
         }
         cancel(); failure = nil; inspection = nil; selectedID = nil; devices = []
         page = .home; checkEnvironment()
+    }
+
+    public func maintainBackupsIfIdle() {
+        guard !isPreview, !busy, !setupLocksDevice, !backupMaintenanceStarted,
+              let backups else { return }
+        backupMaintenanceStarted = true
+        backups.maintain()
+    }
+
+    public func openBackup(_ entry: MacBackupEntry) {
+        guard !isPreview, !busy, entry.canContinue,
+              let identity = reinstall?.continuation,
+              identity.transferID == entry.transferID,
+              identity.deviceID.lowercased() == entry.deviceID.lowercased() else { return }
+        selectedID = identity.deviceID
+        firstInstall = false
+        page = .reinstall
     }
 
     /// These transitions are presentation only and never call the live checker.

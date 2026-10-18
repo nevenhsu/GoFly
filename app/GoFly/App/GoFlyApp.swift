@@ -18,7 +18,9 @@ struct GoFlyApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let runtime = bootstrap.runtime {
+                if bootstrap.phase.isTransferLocked {
+                    GoFlyTransferLockView(phase: bootstrap.phase)
+                } else if let runtime = bootstrap.runtime {
                     normalRuntimeView(runtime)
                 } else {
                     GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
@@ -31,6 +33,9 @@ struct GoFlyApp: App {
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()
+            }
+            .onOpenURL { url in
+                bootstrap.handle(url: url)
             }
         }
     }

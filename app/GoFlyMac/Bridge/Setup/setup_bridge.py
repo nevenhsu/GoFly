@@ -21,6 +21,10 @@ if __package__ in {None, ""}:
     _PACKAGE_DIR = str(Path(__file__).resolve().parent)
     if _PACKAGE_DIR not in sys.path:
         sys.path.insert(0, _PACKAGE_DIR)
+    # M1 and M2 share the operation lease and inspect each other's journal.
+    _BRIDGE_ROOT = str(Path(__file__).resolve().parents[1])
+    if _BRIDGE_ROOT not in sys.path:
+        sys.path.insert(0, _BRIDGE_ROOT)
 
 try:
     from .setup_adapters import PinnedPymobiledeviceAdapter, PinnedXcodeProcessAdapter, close_async_runtime
