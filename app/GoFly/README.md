@@ -2,7 +2,7 @@
 
 正式 GoFly 的獨立 iOS 專案，部署目標 iOS 26，App bundle `com.neven.gofly`。現有 `../LocalGo` 是 prototype；本專案逐票實作及驗收，不直接繼承其完成度。
 
-目前實作票 01：MapKit 地圖、服務啟動待命、停止／clear、恢復 GPS、GoFly 端 VPN 修復，以及三語與 Uber 風格的最小可操作主線。後續搜尋／路線／搖桿入口依各票接入，不提供假功能。
+目前已依序完成票 01–16 的軟體實作與對應檢查，涵蓋地圖、搜尋、路線、搖桿、漫步、資料保留、背景資格與三語設定。硬體／接收 App 結果另行驗收，不由模擬器或 prototype 推定。正式 Mac 首次安裝與 iOS 資料交接（M1）已完成軟體實作與本機驗證；重裝還原（M2／17）及最終整合（18）接續開發。
 
 開啟 `GoFly.xcodeproj` 的 GoFly scheme。原生裝置庫只有 arm64 iPhone slice；模擬器可驗介面，裝置操作如實回報需要實機，不能用來驗證定位服務。
 
@@ -31,3 +31,12 @@ bash app/GoFly/scripts/check.sh
 ## 來源
 
 三個精確沿用的 StikDebug setup 來源及 AGPL-3.0 授權雜湊見 `NativeSources.json`。原生 idevice 採 MIT 授權，固定 upstream commit、鎖定依賴及 GoFly verify-only 修改見 `NativeBridge`；Swift 僅匯入經審查的窄 header。AGPL-3.0、idevice MIT 與來源註記隨 App 放入 Legal。完整傳遞依賴授權清單及裝置驗收仍待完成，本次不宣告已具發行資格。
+
+
+## Mac 正式首次安裝與啟動交接（M1）
+
+Mac 使用正式 `com.neven.gofly` 交易完成首次安裝、一次性配對匯入與必要裝置支援。iOS 在交接有效並原子提交前保留準備畫面，不建立正常服務、任務及資料商店；完成後才進既有首次流程。沒有正式交接狀態仍可一般啟動，缺少／錯誤的正式資料不回退到舊支援。
+
+交接資料不代表 VPN、GPS、clear 或移動已成功。正式 activation 存在時不再消耗無關的舊 v1 輸入；消耗本次 v1 時在實際解碼後核對交易 ID，不因相同配對 bytes 接受另一筆交易。設定頁以背景唯讀觀察的快取顯示配對狀態，畫面求值不讀配對檔。共享 v1 API 只增加可選交易核對，舊呼叫格式相容，沒有新增 native FFI 或重建原生程式庫。
+
+M1 的最終軟體驗證與限制見[首次安裝票](../../.scratch/gofly-ios/issues/M1-first-install.md)；所有手機步驟見[集中驗收](../../.scratch/gofly-ios/DEVICE-ACCEPTANCE.md)。安裝完成不解除冷啟動待確認，也不自動送點；支援資料由 Mac 準備，手機不另行下載。

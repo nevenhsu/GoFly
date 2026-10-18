@@ -16,7 +16,13 @@ struct GoFlyApp: App {
         let checker: any MacChecking = (try? ProcessBridge(
             configurationURL: resources.appendingPathComponent("LocalConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/bridge.py"))) ?? UnavailableChecker()
-        _model = State(initialValue: MacAppModel(live: checker))
+        let setupRunner: any MacSetupRunning = (try? SetupProcessBridge(
+            configurationURL: resources.appendingPathComponent("SetupConfiguration.json"),
+            scriptURL: resources.appendingPathComponent("Bridge/Setup/setup_bridge.py"))) ?? UnavailableSetupRunner()
+        let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("GoFlySetup")
+        let setup = MacSetupModel(runner: setupRunner, journal: MacSetupJournalReader(stateRoot: stateRoot))
+        _model = State(initialValue: MacAppModel(live: checker, setup: setup))
     }
 
     var body: some Scene {
@@ -24,17 +30,17 @@ struct GoFlyApp: App {
             MacRootView(model: model)
                 .frame(minWidth: 1000, minHeight: 700)
                 .preferredColorScheme(.light)
-                .task { model.checkEnvironment() }
+                .task { await model.restoreSetup(); model.checkEnvironment() }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {
                         Menu {
-                            Button("唯讀檢查", action: { model.switchMode(preview: false) })
+                            Button("實際操作", action: { model.switchMode(preview: false) })
                             Button("介面預覽", action: { model.switchMode(preview: true) })
                         } label: {
-                            Text(model.isPreview ? "介面預覽 · 示意資料" : "唯讀檢查")
+                            Text(model.isPreview ? "介面預覽 · 示意資料" : "實際操作")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .help("唯讀檢查不會安裝、簽名或寫入手機；介面預覽使用示意資料。")
+                        .help("唯讀檢查不會變更手機；按開始安裝才會簽署、配對與安裝。介面預覽使用示意資料。")
                         .accessibilityIdentifier("mode-menu")
                     }
                 }
@@ -43,7 +49,7 @@ struct GoFlyApp: App {
         .windowToolbarStyle(.unifiedCompact)
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("切換到唯讀檢查") { model.switchMode(preview: false) }
+                Button("切換到實際操作") { model.switchMode(preview: false) }
                 Button("切換到介面預覽") { model.switchMode(preview: true) }
             }
             CommandGroup(replacing: .newItem) {}

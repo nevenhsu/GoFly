@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 public enum MacPage: String, CaseIterable, Sendable {
-    case home, environment, devices, device, signing, repair, channel, install, vpn, handoff, reinstall, backups
+    case home, environment, devices, device, signing, repair, channel, install, handoff, reinstall, backups
 }
 
 public enum PreviewScenario: String, CaseIterable, Identifiable, Sendable {
@@ -29,7 +29,8 @@ public final class MacAppModel {
     public private(set) var devices: [ConnectedDevice] = []
     public private(set) var inspection: DeviceInspection?
     public private(set) var selectedID: String?
-    public private(set) var busy = false
+    private var checkingBusy = false
+    public let setup: MacSetupModel?
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
     public private(set) var previewStage = 0
@@ -42,7 +43,21 @@ public final class MacAppModel {
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
 
-    public init(live: any MacChecking) { self.live = live }
+    public init(live: any MacChecking, setup: MacSetupModel? = nil) { self.live = live; self.setup = setup }
+    public var busy: Bool { checkingBusy || (!isPreview && setup?.isBusy == true) }
+    public var setupLocksDevice: Bool { !isPreview && setup?.locksDevice == true }
+
+    public func restoreSetup() async {
+        await setup?.restore()
+        if let identity = setup?.continuation {
+            selectedID = identity.deviceID
+            firstInstall = true
+            page = .install
+        } else if setup?.failure != nil {
+            firstInstall = true
+            page = .install
+        }
+    }
     public var ready: Bool { environment?.ready == true && !busy }
     public var selected: ConnectedDevice? {
         if let inspection, inspection.device.id.lowercased() == selectedID?.lowercased() { return inspection.device }
@@ -57,13 +72,19 @@ public final class MacAppModel {
 
     public func navigate(_ destination: MacPage) {
         guard !busy else { return }
-        if !isPreview && destination != .home && destination != .environment && environment?.ready != true {
+        if setupLocksDevice && destination != .home && destination != .install && destination != .environment {
+            page = .install; return
+        }
+        if !isPreview && destination != .home && destination != .environment &&
+            !(destination == .install && (setup?.hasRecordedTransaction == true || setupLocksDevice)) && environment?.ready != true {
             page = .environment; return
         }
         page = destination; failure = nil; previewMessage = nil
     }
 
     public func switchMode(preview: Bool) {
+        guard !setupLocksDevice else { return }
+        setup?.resetSelection()
         cancel()
         isPreview = preview; environment = nil; devices = []; inspection = nil
         selectedID = nil; page = .home; previewStage = 0; previewMessage = nil; failure = nil
@@ -71,12 +92,14 @@ public final class MacAppModel {
     }
 
     public func select(_ id: String) {
-        guard !busy, visibleDevices.contains(where: { $0.id == id }) else { return }
+        guard !busy, !setupLocksDevice, visibleDevices.contains(where: { $0.id == id }) else { return }
+        if selectedID?.lowercased() != id.lowercased() { setup?.resetSelection() }
         selectedID = id; inspection = nil; failure = nil
     }
 
     public func openDevices(firstInstall: Bool) {
-        guard ready else { return }
+        guard ready, !setupLocksDevice else { return }
+        setup?.resetSelection()
         self.firstInstall = firstInstall; selectedID = nil; inspection = nil
         page = .devices; refreshDevices()
     }
@@ -89,6 +112,8 @@ public final class MacAppModel {
     }
 
     public func refreshDevices() {
+        guard !setupLocksDevice else { return }
+        setup?.resetSelection()
         devices = []; selectedID = nil; inspection = nil
         perform(.devices) { data, request in
             self.devices = ConnectedDevice.unique(try ResponseDecoder.decode(data, for: request, as: DeviceList.self).devices,
@@ -97,7 +122,7 @@ public final class MacAppModel {
     }
 
     public func inspectSelected() {
-        guard let device = selected, ready else { return }
+        guard let device = selected, ready, !setupLocksDevice else { return }
         inspection = nil
         perform(.inspect, deviceID: device.id) { data, request in
             let result = try ResponseDecoder.decode(data, for: request, as: DeviceInspection.self)
@@ -109,7 +134,7 @@ public final class MacAppModel {
     }
 
     public func cancel() {
-        generation = UUID(); task?.cancel(); task = nil; busy = false
+        generation = UUID(); task?.cancel(); task = nil; checkingBusy = false
         // A cancelled refresh cannot leave apparently current device evidence.
         inspection = nil
     }
@@ -126,8 +151,9 @@ public final class MacAppModel {
         failure = nil
         switch page {
         case .install:
-            previewStage = 1; previewMessage = "預覽：簽名、安裝與本次配對資料匯入完成。"; page = .vpn
-        case .vpn: previewStage = 2; page = .handoff
+            previewStage = 1
+            previewMessage = "預覽：App 安裝、本次配對匯入與必要裝置支援均已確認。"
+            page = .handoff
         case .signing:
             previewMessage = "預覽：重新簽名完成。資料與手機設定保留。"
         case .repair:
@@ -144,7 +170,7 @@ public final class MacAppModel {
     private func perform(_ action: CheckAction, deviceID: String? = nil,
                          apply: @escaping @MainActor (Data, CheckRequest) throws -> Void) {
         guard !busy else { return }
-        busy = true; failure = nil
+        checkingBusy = true; failure = nil
         let token = UUID(); generation = token
         let request = CheckRequest(action: action, deviceID: deviceID)
         let checker: any MacChecking = isPreview ? PreviewChecker(scenario: previewScenario) : live
@@ -159,7 +185,7 @@ public final class MacAppModel {
                 self.failure = error as? CheckFailure ?? .invalidResponse
             }
             guard self.generation == token else { return }
-            self.busy = false; self.task = nil
+            self.checkingBusy = false; self.task = nil
         }
     }
 }

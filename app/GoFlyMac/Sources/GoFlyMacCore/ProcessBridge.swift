@@ -16,11 +16,43 @@ public struct ProcessBridge: MacChecking {
     private let configuration: BridgeConfiguration
 
     public init(configurationURL: URL, scriptURL: URL) throws {
-        let configuration = try JSONDecoder().decode(BridgeConfiguration.self, from: Data(contentsOf: configurationURL))
+        guard let resources = Bundle.main.resourceURL,
+              configurationURL.isFileURL, scriptURL.isFileURL,
+              configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL,
+              scriptURL.standardizedFileURL == resources.appendingPathComponent("Bridge/bridge.py").standardizedFileURL,
+              (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
+                  $0.isRegularFile == true && $0.isSymbolicLink != true
+              }) == true else { throw CheckFailure.unavailable }
+        let file = open(configurationURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard file >= 0 else { throw CheckFailure.unavailable }
+        defer { close(file) }
+        var info = stat()
+        guard fstat(file, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+              info.st_size > 0, info.st_size <= 32_768 else { throw CheckFailure.unavailable }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
+            if count < 0, errno == EINTR { continue }
+            guard count >= 0, data.count + count <= 32_768 else { throw CheckFailure.unavailable }
+            if count == 0 { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        guard data.count == info.st_size else { throw CheckFailure.unavailable }
+        let object = try SetupWireJSON.object(data)
+        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath", "targetBundleID", "targetName"] else {
+            throw CheckFailure.unavailable
+        }
+        let configuration = try JSONDecoder().decode(BridgeConfiguration.self, from: data)
         let expected = URL(fileURLWithPath: configuration.workspaceRoot)
             .appendingPathComponent("work/mac-setup-env/bin/python").standardizedFileURL.path
-        guard configuration.pythonPath == expected,
-              configuration.targetBundleID == "com.neven.localgo",
+        let root = URL(fileURLWithPath: configuration.workspaceRoot).standardizedFileURL
+        let formal = configuration.targetBundleID == "com.neven.gofly" && configuration.targetName == "GoFly" &&
+            configuration.projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
+        let legacy = configuration.targetBundleID == "com.neven.localgo" &&
+            configuration.projectPath == root.appendingPathComponent("app/LocalGo/StikDebug.xcodeproj").path
+        guard configuration.pythonPath == expected, formal || legacy,
+              configuration.developerDirectory == "/Applications/Xcode.app/Contents/Developer",
               scriptURL.isFileURL, FileManager.default.fileExists(atPath: scriptURL.path),
               FileManager.default.isExecutableFile(atPath: expected) else { throw CheckFailure.unavailable }
         self.configurationURL = configurationURL; self.scriptURL = scriptURL; self.configuration = configuration

@@ -230,15 +230,18 @@ struct GoFlyVPNSettingsPage: View {
 
 struct GoFlyDeviceSettingsPage: View {
     @ObservedObject var service: ServiceController
+    let setupMetadata: GoFlySetupMetadata?
     @StateObject private var status = GoFlySystemStatus()
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.device", rootIdentifier: "settings.device.page") {
-            let snapshot = status.deviceSnapshot(service: service)
+            let snapshot = status.deviceSnapshot(service: service, setupMetadata: setupMetadata)
             VStack(alignment: .leading, spacing: 0) {
                 deviceField("settings.device.pairing", value: snapshot.pairingStatus, identifier: "settings.device.pairing")
                 Divider()
                 deviceField("settings.device.signingExpiry", value: snapshot.signingExpiryStatus, identifier: "settings.device.signingExpiry")
+                Divider()
+                deviceField("settings.device.teamID", value: snapshot.teamIDStatus, identifier: "settings.device.teamID")
                 Divider()
                 deviceField("settings.device.service", value: snapshot.serviceStatus, identifier: "settings.device.service")
                 Divider()

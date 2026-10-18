@@ -58,6 +58,7 @@ final class GoFlyMovementModel: ObservableObject {
 struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
     @ObservedObject var recoveryStore: SessionRecoveryStore
+    let setupMetadata: GoFlySetupMetadata?
     @ObservedObject private var route: RouteExecutionController
     @ObservedObject private var joystick: JoystickMovementController
     @ObservedObject private var recovery: MovementRecoveryController
@@ -96,10 +97,16 @@ struct GoFlyMapView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
 
-    init(service: ServiceController, recoveryStore: SessionRecoveryStore, movement: GoFlyMovementModel) {
+    init(
+        service: ServiceController,
+        recoveryStore: SessionRecoveryStore,
+        movement: GoFlyMovementModel,
+        setupMetadata: GoFlySetupMetadata? = nil
+    ) {
         let snapshot = recoveryStore.initialSnapshot
         _service = ObservedObject(wrappedValue: service)
         _recoveryStore = ObservedObject(wrappedValue: recoveryStore)
+        self.setupMetadata = setupMetadata
         _route = ObservedObject(wrappedValue: movement.route)
         _joystick = ObservedObject(wrappedValue: movement.joystick)
         _recovery = ObservedObject(wrappedValue: movement.recovery)
@@ -225,7 +232,12 @@ struct GoFlyMapView: View {
             .goFlyNativeBackTitle()
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showingSettings) {
-                ServiceSettingsView(service: service, continuation: continuation, recovery: recovery)
+                ServiceSettingsView(
+                    service: service,
+                    continuation: continuation,
+                    recovery: recovery,
+                    setupMetadata: setupMetadata
+                )
             }
             .onAppear {
                 if cameraIntent == nil {

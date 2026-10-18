@@ -419,3 +419,17 @@
 "settings.help.favorites" = "收藏星号会保存地点身份，并保留名称、地址和坐标，不会更改当前任务。";
 "settings.help.waitingTitle" = "等待位置";
 "settings.help.waiting" = "半透明箭头表示 GoFly 正在等待新的位置。回中会按实际定位状态处理，不会捏造位置。";
+"settings.device.teamID" = "签名团队";
+"setup.preparing.title" = "检查 GoFly 设置";
+"setup.preparing.message" = "GoFly 正在检查 App 与设备设置。";
+"setup.waiting.title" = "在 Mac 上继续设置";
+"setup.waiting.message" = "请在 GoFly Mac App 完成设置，再返回这部 iPhone。";
+"setup.completed.title" = "设置完成";
+"setup.completed.message" = "GoFly 已准备就绪。";
+"setup.blocked.title" = "需要完成设置";
+"setup.blocked.identity" = "这个 GoFly App 与设置套件不符。请将这部 iPhone 连接 GoFly Mac App 修复设置。";
+"setup.blocked.pairing" = "配对资料缺失或与这次设置不符。请将这部 iPhone 连接 GoFly Mac App 修复设置。";
+"setup.blocked.artifact" = "设备支持套件不完整或与设置不符。请将这部 iPhone 连接 GoFly Mac App 修复设置。";
+"setup.blocked.input" = "设置套件无效。请将这部 iPhone 连接 GoFly Mac App 重试设置。";
+"setup.blocked.storage" = "GoFly 无法安全读取设置。请将这部 iPhone 连接 GoFly Mac App 重试设置。";
+"setup.retry" = "重试设置";

@@ -1,16 +1,18 @@
 # GoFly for Mac
 
+**M1 軟體完成、手機待驗：** 正式 GoFly 首次安裝、私密交易紀錄及明確繼續流程已完成本機實作、檢查與雙軸審查。驗證與限制見 [首次安裝票](../../.scratch/gofly-ios/issues/M1-first-install.md)及[決策](../../.scratch/gofly-ios/decisions/M1-first-install.md)。開發期間不要求連接 iPhone，全部軟體完成後才集中實機驗收；本機開發 bundle 不是發行用 DMG。
+
 使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
 
-原生 SwiftUI macOS app，依 GoFly 的 Mac 線框製作。目前交付範圍是 **介面與唯讀檢查**。不安裝手機 App，不簽署、不建立或交付配對、不重新安裝，也不備份／刪除手機資料；既有 iOS 程式沒有變更。
+原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。M1 已實作正式 `com.neven.gofly` 首次安裝；裝置管理、重新簽名、重裝與備份頁的預覽不代表這些功能已交付。自動續簽與 Wi-Fi 重裝仍不在 M1 範圍。
 
-## 最新開發需求：安裝完成前自動準備裝置
+## 正式首次安裝（M1）
 
-Mac 安裝 iOS App 時，依裝置實際需要自動準備及驗證 DDI 等必要項目，已就緒則重用／略過；UI 僅「準備裝置」。App、配對與必要裝置準備均通過後才顯示安裝完成，不讓 iOS 額外下載或手動設定；H12／U19 撤下，Mac 以 U18 結束。現有 GUI 仍為唯讀／預覽，這些是待實作要求，見 [DEVELOPMENT.md](DEVELOPMENT.md)。
+選取同一支 USB iPhone、10 碼 Team ID，以及本機固定 GoFly 專案或已簽署的 `GoFly.app`，先做唯讀檢查，再明確開始安裝。專案來源的「允許 Xcode 連線 Apple 更新開發簽署資料」預設關閉；勾選只授權本次操作。預檢不建立配對、不安裝 App、不下載支援資料。
 
-## 最新開發需求：裝置管理自動重新簽名
+開始後會將選項與裝置綁定在私密交易：驗證並固定 App、準備本次配對、安裝、按實際 OS 準備必要裝置支援，最後取得 iOS 的精確資料提交回報。只有安裝、本次配對匯入與新觀察的裝置支援均已確認，才顯示「Mac 安裝完成」並於 U18 結束。沒有 H12／U19 額外下載或中途 VPN 成功畫面，手機不自行下載支援檔案。VPN、GPS 與移動仍依 iPhone 內的正常流程確認。
 
-使用者選擇裝置並成功連線後，無論 USB 或 Wi-Fi，Mac 裝置管理自動重新簽名 GoFly App，保留既有資料；目前的手動「簽名與重新簽名」flow 及入口保留。自動與手動共用同一操作／進度，避免列表刷新或同機傳輸切換重複觸發。此為待實作規格，**不改變下方現有唯讀／預覽版本的能力**；完整觸發條件、中斷與驗收見 [DEVELOPMENT.md](DEVELOPMENT.md)。
+重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [protocol 2](Bridge/Setup/README.md)。
 
 ## 開啟
 
@@ -23,22 +25,13 @@ open work/gofly-mac/GoFly.app
 
 需要 Xcode 與 macOS 15 以上。本機開發產物放在 `work/gofly-mac/GoFly.app`，未做發行簽署或 notarization。這個開發版綁定目前工作目錄與現有 `work/mac-setup-env/bin/python`，不是可攜式安裝包。缺少檢查環境時仍可開啟介面預覽；不會自行安裝依賴。
 
-## 兩種模式
+## 真實流程與預覽
 
-- **唯讀檢查**：啟動後檢查 Xcode、必要元件、既有 Python 工具與裝置偵測介面。通過後可查看 USB 首次安裝介面、USB／Wi-Fi 裝置管理與指定手機的身分、開發者模式及可讀取的 App 安裝資訊。沒有手機不等於環境失敗；裝置偵測服務無法讀取時會顯示失敗原因。
-- **介面預覽**：右上模式選單或首頁「預覽操作流程」進入。全部使用示意資料，頁面上持續顯示預覽標示。可操作首次安裝 → LocalDevVPN → 手機交接、裝置管理、續簽、連接修復、保留資料重裝與備份管理。可切換環境未就緒、沒有裝置、等待信任、開發者模式關閉、簽名過期與裝置中斷等情境。
+真實環境檢查沿用 protocol 1 的唯讀裝置邊界，僅利用既有信任，優先選取 USB 並去重。正式 `com.neven.gofly` 的安裝使用分離的 protocol 2；protocol 1 仍拒絕安裝請求。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
-真實檢查只利用既有信任，不自動配對。相同裝置以 USB 優先去重；首次安裝介面排除 Wi-Fi 裝置。切換裝置、取消或檢查失敗會作廢先前的檢查證據，不自動重試或沿用舊成功狀態。安裝、續簽、配對修復與重裝操作在唯讀模式停用，Python 邊界也拒絕寫入要求。
+介面預覽持續顯示預覽標示，使用示意裝置與日期，可討論安裝、管理、續簽、修復、保留資料等畫面；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
 
-沒有讀到的資料會顯示「待確認」。例如現有讀取介面未提供可驗證的簽名有效期及 LocalDevVPN bundle ID，因此不會根據過往紀錄、固定日期或使用者按下按鈕來宣告有效或已安裝。預覽日期只存在預覽後端。
-
-## 之後銜接正式 iOS app
-
-`GoFlyMacCore` 定義裝置狀態與唯讀檢查契約，`ProcessBridge` 執行隨 app 附帶的 `Bridge/bridge.py`，SwiftUI 頁面只使用這個邊界。目標 App 名稱、bundle ID、專案與本機 runtime 在建置時寫入 `LocalConfiguration.json`，不追蹤生成的絕對路徑設定。
-
-目前 profile 指向既有 `com.neven.localgo`，用途只有讀取安裝資訊。正式 iOS app 確定後，更新 profile 與橋接 adapter，再加入明確的寫入交易協定；不需要重做 Mac 導覽。安裝回報、選擇性備份／匯入、簽名相容性與資料還原仍需正式實作與實機驗證；目前預覽不代表這些能力已完成。
-
-橋接格式與邊界見 [Bridge/PROTOCOL.md](Bridge/PROTOCOL.md)。隨 app 只複製既有 `localgo_device.py` 作為唯讀依賴邊界，不包含舊的安裝 CLI；保留來源授權。
+建置腳本產生固定 `LocalConfiguration.json` 與 `SetupConfiguration.json`，綁定此工作目錄、既有 Python 與正式 GoFly 專案；生成的絕對路徑設定不追蹤進版控。實際程序入口只接受隨 Mac App 附帶的固定 Bridge 腳本與設定。沒有手機不等於環境檢查失敗；本輪開發不偵測或操作實體手機。
 
 ## 驗證
 
@@ -56,7 +49,7 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
   -s app/LocalGo/MacSetup/Tests
 ```
 
-Swift 測試涵蓋環境門檻、USB 去重、裝置身分核對、過期／錯誤回覆、取消與程序逾時、過量輸出、預覽／真實隔離。Python 測試核對唯讀 allowlist、既有 venv、非配對式身分檢查及依賴失敗。測試假資料不代表真機驗收。
+M1 的 Mac Swift 37 項通過，最終 Python 交易／支援檢查數量見 M1 票。Swift 測試涵蓋環境門檻、USB 去重、裝置身分核對、過期／錯誤回覆、取消與程序逾時、過量輸出、預覽／真實隔離。Python 測試核對唯讀 allowlist、既有 venv、非配對式身分檢查及依賴失敗。測試假資料不代表真機驗收。
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 

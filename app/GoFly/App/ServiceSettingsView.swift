@@ -7,6 +7,7 @@ struct ServiceSettingsView: View {
     @ObservedObject var service: ServiceController
     @ObservedObject var continuation: MovementContinuationController
     @ObservedObject var recovery: MovementRecoveryController
+    let setupMetadata: GoFlySetupMetadata?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var systemStatus = GoFlySystemStatus()
 
@@ -95,8 +96,8 @@ struct ServiceSettingsView: View {
                 )
                 settingsLink(
                     title: "settings.device",
-                    value: systemStatus.deviceSnapshot(service: service).pairingStatus,
-                    destination: { GoFlyDeviceSettingsPage(service: service) }
+                    value: systemStatus.deviceSnapshot(service: service, setupMetadata: setupMetadata).pairingStatus,
+                    destination: { GoFlyDeviceSettingsPage(service: service, setupMetadata: setupMetadata) }
                 )
             }
 

@@ -105,6 +105,34 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
 
     private static func consumeSetupHandoff() throws {
         // Only called without an owned location session.
+        do {
+            let store = SetupActivationStore(directory: try GoFlySetupPaths.directory())
+            guard let activation = try store.activation() else {
+                // Ordinary installations retain the legacy LocalGo handoff.
+                try consumeLegacySetupHandoff()
+                return
+            }
+
+            // A formal activation owns pairing and support resolution. Validate
+            // the pointer and its bounded receipt history through Core before
+            // deciding that legacy setup is unavailable. Never consume or
+            // prepare the unrelated LocalGo file on this path.
+            guard let activeSetupID = activation.activeSetupID,
+                  let activeReceipt = activation.receipts.first(where: { $0.setupID == activeSetupID }),
+                  try store.activeSupportDirectory(method: activeReceipt.method) != nil else {
+                throw DeviceServiceFailure.devicePreparationRequired
+            }
+            return
+        } catch let failure as DeviceServiceFailure {
+            throw failure
+        } catch {
+            // Once formal state exists, malformed, unsafe, or incomplete
+            // activation must block setup rather than fall through to legacy.
+            throw DeviceServiceFailure.devicePreparationRequired
+        }
+    }
+
+    private static func consumeLegacySetupHandoff() throws {
         let handoff = LocalGoSetupHandoff(importSetupData: {
             try PairingFileStore.importSetupData($0, expectedDeviceUDID: $1)
         })

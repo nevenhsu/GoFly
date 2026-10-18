@@ -23,7 +23,7 @@ struct MacRootView: View {
                     sidebar
                     VStack(alignment: .leading, spacing: 0) {
                         header.padding(.bottom, 36)
-                        if let failure = model.failure { errorCard(failure) }
+                        if let failure = pageCheckFailure { errorCard(failure) }
                         else { pageContent }
                         if let message = model.previewMessage {
                             Text(message).font(GoFlyStyle.font(13, bold: true)).padding(.top, 12)
@@ -53,6 +53,9 @@ struct MacRootView: View {
             }.padding(.top, 16).padding(.bottom, 24)
             PillButton(title: "首次安裝", primary: true, width: 400, height: 56, enabled: model.ready) { model.openDevices(firstInstall: true) }
                 .accessibilityIdentifier("first-install")
+            if !model.isPreview, model.setup?.hasRecordedTransaction == true || model.setupLocksDevice {
+                Button("查看安裝狀態") { model.navigate(.install) }.padding(.top, 12).disabled(model.busy)
+            }
             PillButton(title: "裝置管理", width: 400, height: 56, enabled: model.ready) { model.openDevices(firstInstall: false) }
                 .padding(.top, 20).accessibilityIdentifier("manage-devices")
             Button("查看 Mac 環境") { model.navigate(.environment) }
@@ -62,10 +65,11 @@ struct MacRootView: View {
             }
             Spacer(minLength: 60)
             HStack {
-                Text(model.isPreview ? "GoFly Mac · 介面預覽" : "GoFly Mac · 唯讀檢查，不安裝手機 App")
+                Text(model.isPreview ? "GoFly Mac · 介面預覽" : "GoFly Mac · 本機開發版")
                 Spacer()
-                Button(model.isPreview ? "返回唯讀檢查" : "預覽操作流程") { model.switchMode(preview: !model.isPreview) }
+                Button(model.isPreview ? "返回實際操作" : "預覽操作流程") { model.switchMode(preview: !model.isPreview) }
                     .buttonStyle(.plain).underline().accessibilityIdentifier("switch-mode")
+                    .disabled(model.setupLocksDevice)
             }.font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted).padding(30)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -77,7 +81,7 @@ struct MacRootView: View {
                 Text("GoFly").font(GoFlyStyle.font(24, bold: true))
             }.padding(.horizontal, 24).padding(.top, 24)
             if model.selected != nil {
-                PillButton(title: "切換裝置", width: 176, height: 28, enabled: !model.busy) { model.openDevices(firstInstall: model.firstInstall) }
+                PillButton(title: "切換裝置", width: 176, height: 28, enabled: !model.busy && !model.setupLocksDevice) { model.openDevices(firstInstall: model.firstInstall) }
                     .padding(.horizontal, 24).padding(.top, 4)
             }
             Text(model.page == .environment ? "開始前準備" : model.firstInstall ? "首次安裝" : "裝置管理")
@@ -100,7 +104,7 @@ struct MacRootView: View {
                 }.buttonStyle(.plain).disabled(model.busy).padding(.horizontal, 12).padding(.bottom, 12)
             }
             Spacer()
-            Text(model.isPreview ? "操作流程使用示意資料\n不會安裝或變更手機" : "目前版本僅提供唯讀檢查\n安裝與修復操作尚未開放")
+            Text(model.isPreview ? "操作流程使用示意資料\n不會安裝或變更手機" : "唯讀檢查後明確開始安裝\n中斷時繼續原裝置交易")
                 .font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted).lineSpacing(4)
                 .padding(.horizontal, 24).padding(.bottom, 40)
         }.frame(width: 224).frame(maxHeight: .infinity).background(GoFlyStyle.sidebar)
@@ -108,7 +112,10 @@ struct MacRootView: View {
 
     private var sidebarItems: [(String, MacPage)] {
         if model.page == .environment { return [("Mac 環境", .environment)] }
-        if model.firstInstall { return [("連接 iPhone", .devices), ("安裝 GoFly", .install), ("LocalDevVPN", .vpn), ("手機內完成設定", .handoff)] }
+        if model.firstInstall {
+            if !model.isPreview { return [("連接 iPhone", .devices), ("安裝 GoFly", .install)] }
+            return [("連接 iPhone", .devices), ("安裝 GoFly", .install), ("Mac 安裝完成", .handoff)]
+        }
         return [(model.selected?.displayName ?? "我的 iPhone", .device), ("簽名與重新簽名", .signing), ("連接與修復", .repair)]
     }
     private var selectedSidebar: MacPage {
@@ -127,8 +134,8 @@ struct MacRootView: View {
                 Spacer()
                 PillButton(title: "首頁", width: 86, height: 36, enabled: !model.busy) { model.navigate(.home) }
             }
-            Text(model.failure?.title ?? pageTitle).font(GoFlyStyle.font(30, bold: true)).padding(.top, 6)
-            Text(model.failure?.detail ?? pageSubtitle).font(GoFlyStyle.font(14)).foregroundStyle(GoFlyStyle.muted)
+            Text(pageCheckFailure?.title ?? pageTitle).font(GoFlyStyle.font(30, bold: true)).padding(.top, 6)
+            Text(pageCheckFailure?.detail ?? pageSubtitle).font(GoFlyStyle.font(14)).foregroundStyle(GoFlyStyle.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -147,7 +154,9 @@ struct MacRootView: View {
         VStack(spacing: 20) {
             Rule()
             HStack(spacing: 24) {
-                if model.busy {
+                if model.page == .install && !model.isPreview && model.setup != nil {
+                    pageActions
+                } else if model.busy {
                     ProgressView().controlSize(.small)
                     Text("正在檢查，請保持手機連接…").font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
                     Spacer()
@@ -155,11 +164,12 @@ struct MacRootView: View {
                 } else { pageActions }
             }
             HStack {
-                Text(model.isPreview ? "GoFly Mac · 介面預覽，操作不會套用至裝置" : "GoFly Mac · 唯讀檢查")
+                Text(model.isPreview ? "GoFly Mac · 介面預覽，操作不會套用至裝置" : "GoFly Mac · 本機開發版")
                 Spacer()
                 if !model.isPreview {
                     Button("預覽此流程") { model.switchMode(preview: true) }
                         .buttonStyle(.plain).underline()
+                        .disabled(model.setupLocksDevice)
                 }
             }.font(GoFlyStyle.font(11)).foregroundStyle(Color(white: 0.55))
         }
@@ -175,8 +185,7 @@ struct MacRootView: View {
         case .repair: "連接與修復"
         case .channel: "在 iPhone 修復本機通道"
         case .install: "確認 GoFly 簽名與安裝"
-        case .vpn: "在 iPhone 安裝 LocalDevVPN"
-        case .handoff: "在 iPhone 完成最後設定"
+        case .handoff: "Mac 安裝完成"
         case .reinstall: "選擇重新安裝後保留的資料"
         case .backups: "備份管理"
         }
@@ -190,11 +199,14 @@ struct MacRootView: View {
         case .signing: "簽名狀態須有可核對的實際證據；未取得時保留為待確認。"
         case .repair: "查看這部 iPhone 的連接狀態與需要手動完成的設定。"
         case .channel: "裝置連接與配對正常時，依手機提示確認 LocalDevVPN 與服務。"
-        case .install: model.isPreview ? "使用 Xcode 中已設定的開發團隊（介面預覽）。" : "本版僅檢查，不會簽名或安裝手機 App。"
-        case .vpn: "GoFly 安裝完成後，接著在手機 App Store 安裝 LocalDevVPN。"
-        case .handoff: "Mac 安裝與配對資料匯入完成後，才可拔除 USB，接著在手機操作。"
+        case .install: model.isPreview ? "使用 Xcode 中已設定的開發團隊（介面預覽）。" : "先檢查原裝置與簽名來源，再明確開始本次安裝。"
+        case .handoff: "App、配對匯入及必要裝置支援均已確認；可拔除 USB。"
         case .reinstall: "備份完成 → 重新安裝 → 自動匯入；目前為介面預覽。"
         case .backups: "成功匯入後保留七天；未完成匯入的備份不自動刪除。"
         }
+    }
+
+    private var pageCheckFailure: CheckFailure? {
+        model.page == .install && !model.isPreview && model.setup != nil ? nil : model.failure
     }
 }

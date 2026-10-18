@@ -1,0 +1,360 @@
+import Foundation
+import Testing
+import GoFlyMacCore
+
+@Suite @MainActor struct MacSetupModelTests {
+    private let device = "00008110-001234567890abcd"
+
+    @Test func reopenRetainsOriginalIdentityWithoutCallingTheDevice() async throws {
+        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let journal = ModelJournal(original)
+        let runner = HeldSetupRunner()
+        let model = MacSetupModel(runner: runner, journal: journal)
+        #expect(!model.isRestored)
+        await model.restore()
+        #expect(model.isRestored)
+        #expect(model.continuation == original)
+        #expect(await runner.requests.isEmpty)
+        #expect(!model.canApply)
+        #expect(throws: MacSetupFailure.service("transaction-conflict")) {
+            try model.configure(deviceID: "00008110-ffffffffffffffff",
+                                options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        }
+        #expect(model.continuation == original)
+    }
+
+    @Test func corruptJournalBlocksNewAuthority() async throws {
+        let model = MacSetupModel(runner: HeldSetupRunner(), journal: ModelJournal(nil, corrupt: true))
+        await model.restore()
+        #expect(model.failure == .invalidResponse)
+        #expect(throws: MacSetupFailure.invalidResponse) {
+            try model.configure(deviceID: device,
+                                options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        }
+        #expect(!model.canApply)
+    }
+
+    @Test func onlyAProvenPreJournalApplyErrorCanRetryWithoutAStoredTransaction() async throws {
+        for (code, stage, blocked) in [("device-disconnected" as String?, "preflight", false),
+                                       ("device-disconnected" as String?, "install", true),
+                                       (nil as String?, "preflight", true)] {
+            let runner = HeldSetupRunner()
+            let model = MacSetupModel(runner: runner, journal: ModelJournal(nil))
+            await model.restore()
+            let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+            try model.configure(deviceID: device, options: options)
+            let identity = model.continuation
+            model.preflight()
+            #expect(await waitForRequests(1, runner))
+            let preflight = try #require(await runner.requests.last)
+            await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"))
+            #expect(await waitUntilIdle(model))
+            model.apply()
+            #expect(await waitForRequests(2, runner))
+            let apply = try #require(await runner.requests.last)
+            await runner.returnData(try response(apply, stage: stage, outcome: code == nil ? "ready" : "unknown", code: code))
+            #expect(await waitUntilIdle(model))
+            #expect(model.continuation == identity)
+            #expect(!model.hasRecordedTransaction && !model.canApply && !model.canResume)
+            if blocked {
+                #expect(model.failure == .invalidResponse)
+                #expect(model.locksDevice)
+            } else {
+                #expect(model.failure == .service("device-disconnected"))
+                #expect(!model.locksDevice)
+                #expect(model.options == options)
+                try model.configure(deviceID: device, options: options)
+                model.preflight()
+                #expect(await waitForRequests(3, runner))
+                await runner.fail(.unavailable)
+                #expect(await waitUntilIdle(model))
+            }
+        }
+    }
+
+    @Test func cancellationKeepsPhysicalApplyUntilReturnAndRestoresItsJournal() async throws {
+        let runner = HeldSetupRunner()
+        let journal = ModelJournal(nil)
+        let model = MacSetupModel(runner: runner, journal: journal)
+        await model.restore()
+        let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+        try model.configure(deviceID: device, options: options)
+        let original = try #require(model.continuation)
+        model.apply()
+        #expect(await runner.requests.isEmpty, "Apply requires an actual ready preflight for these options.")
+        model.preflight()
+        guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
+        let preflight = try #require(await runner.requests.first)
+        #expect(preflight.setupID == original.setupID)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"))
+        #expect(await waitUntilIdle(model))
+        #expect(model.canApply)
+        model.apply()
+        guard await waitForRequests(2, runner) else { Issue.record("Apply did not reach the runner"); return }
+        let applying = try #require(await runner.requests.last)
+        #expect(applying.options == options)
+        #expect(applying.setupID == original.setupID)
+        await journal.set(original)
+        model.cancel()
+        #expect(model.isBusy, "Cancellation cannot release a still-running external operation.")
+        #expect(model.cancellationRequested)
+        #expect(!model.canApply && !model.canResume)
+        model.apply()
+        model.resume()
+        #expect(await runner.requests.count == 2)
+        await runner.fail(.cancelled)
+        #expect(await waitUntilIdle(model))
+        #expect(model.continuation == original)
+        #expect(model.failure == .cancelled)
+        #expect(!model.canApply)
+        #expect(model.snapshot == nil)
+        model.status()
+        guard await waitForRequests(3, runner) else { Issue.record("Explicit status did not reach the runner"); return }
+        let status = try #require(await runner.requests.last)
+        #expect(status.action == .status && status.setupID == original.setupID && status.options == nil)
+        await runner.fail(.unavailable)
+        #expect(await waitUntilIdle(model))
+    }
+
+    @Test func actualUnknownResponseRetainsStageAndRequiresExplicitResume() async throws {
+        let runner = HeldSetupRunner()
+        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let model = MacSetupModel(runner: runner, journal: ModelJournal(original))
+        await model.restore()
+        model.status()
+        guard await waitForRequests(1, runner) else { Issue.record("Explicit status did not reach the runner"); return }
+        let request = try #require(await runner.requests.last)
+        await runner.returnData(try response(request, stage: "install", outcome: "unknown", code: "transaction-unknown"))
+        #expect(await waitUntilIdle(model))
+        #expect(model.snapshot?.stage == .install)
+        #expect(model.snapshot?.outcome == .unknown)
+        #expect(model.failure == .service("transaction-unknown"))
+        #expect(!model.canApply && model.canResume)
+        #expect(await runner.requests.count == 1)
+        model.resume()
+        guard await waitForRequests(2, runner) else { Issue.record("Explicit resume did not reach the runner"); return }
+        let resumed = try #require(await runner.requests.last)
+        #expect(resumed.action == .resume && resumed.setupID == original.setupID && resumed.options == nil)
+        await runner.fail(.unavailable)
+        #expect(await waitUntilIdle(model))
+        #expect(model.continuation == original)
+        #expect(model.snapshot == nil, "A failed observation cannot leave apparently current progress evidence.")
+    }
+
+    @Test func restoredSetupCannotBeHiddenByDeviceSelectionOrPreview() async throws {
+        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let runner = HeldSetupRunner()
+        let setup = MacSetupModel(runner: runner, journal: ModelJournal(original))
+        let app = MacAppModel(live: SetupReadOnlyChecker(), setup: setup)
+        await app.restoreSetup()
+        app.checkEnvironment()
+        for _ in 0..<200 where app.busy { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(app.ready)
+        #expect(app.page == .install && app.selectedID == original.deviceID)
+        app.openDevices(firstInstall: false)
+        app.select("00008110-ffffffffffffffff")
+        app.refreshDevices()
+        app.navigate(.reinstall)
+        app.switchMode(preview: true)
+        #expect(!app.isPreview)
+        #expect(app.page == .install && app.selectedID == original.deviceID)
+        #expect(await runner.requests.isEmpty)
+        setup.status()
+        guard await waitForRequests(1, runner) else { Issue.record("Status did not reach the runner"); return }
+        #expect(app.busy)
+        app.cancel()
+        #expect(app.busy, "Cancelling a read-only check cannot release setup's physical operation.")
+        await runner.fail(.unavailable)
+        #expect(await waitUntilIdle(setup))
+        #expect(app.selectedID == original.deviceID)
+    }
+
+    @Test func corruptJournalOpensTheBlockedSetupPage() async {
+        let setup = MacSetupModel(runner: HeldSetupRunner(), journal: ModelJournal(nil, corrupt: true))
+        let app = MacAppModel(live: SetupReadOnlyChecker(), setup: setup)
+        await app.restoreSetup()
+        #expect(app.page == .install)
+        #expect(setup.locksDevice)
+        app.navigate(.home)
+        #expect(app.page == .home)
+        app.navigate(.install)
+        #expect(app.page == .install, "A corrupt transaction must remain reachable without environment readiness.")
+        app.switchMode(preview: true)
+        #expect(!app.isPreview)
+    }
+
+    @Test func devicePickerRetiresUnappliedPreflight() async throws {
+        let runner = HeldSetupRunner()
+        let setup = MacSetupModel(runner: runner, journal: ModelJournal(nil))
+        let app = MacAppModel(live: SetupReadOnlyChecker(), setup: setup)
+        await app.restoreSetup()
+        app.checkEnvironment()
+        for _ in 0..<200 where app.busy { try await Task.sleep(for: .milliseconds(5)) }
+        try setup.configure(deviceID: device, options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        setup.preflight()
+        guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
+        let request = try #require(await runner.requests.last)
+        await runner.returnData(try response(request, stage: "preflight", outcome: "ready"))
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.canApply)
+        app.openDevices(firstInstall: true)
+        #expect(setup.continuation == nil && setup.options == nil && setup.snapshot == nil)
+        setup.apply()
+        #expect(await runner.requests.count == 1, "A preflight for the prior selection cannot install after switching devices.")
+    }
+
+    @Test func onlyObservedCompleteJournalCanReleaseTheLocalSelection() async throws {
+        let runner = HeldSetupRunner()
+        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let journal = ModelJournal(original)
+        let setup = MacSetupModel(runner: runner, journal: journal)
+        await setup.restore()
+        setup.resetSelection()
+        #expect(setup.continuation == original, "The header alone cannot retire an unresolved transaction.")
+        setup.status()
+        guard await waitForRequests(1, runner) else { Issue.record("Status did not reach the runner"); return }
+        let request = try #require(await runner.requests.last)
+        var wire = try #require(JSONSerialization.jsonObject(with: response(request, stage: "complete", outcome: "confirmed")) as? [String: Any])
+        // This is a protocol projection test, never a runtime/App/native success adapter.
+        wire["payload"] = ["stage": "complete", "outcome": "confirmed", "canResume": false,
+                           "proof": ["installationConfirmed": true, "pairingImported": true, "supportObserved": true],
+                           "app": ["bundleID": "com.neven.gofly", "build": "19",
+                                   "profileSHA256": String(repeating: "1", count: 64),
+                                   "executableSHA256": String(repeating: "2", count: 64)],
+                           "teamID": "ABCDE12345", "expiresAt": "2030-01-01T00:00:00Z",
+                           "receiptSHA256": String(repeating: "3", count: 64)]
+        await runner.returnData(try JSONSerialization.data(withJSONObject: wire))
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.snapshot?.isComplete == true)
+        setup.resetSelection()
+        #expect(setup.continuation == nil && !setup.hasRecordedTransaction)
+        #expect(try await journal.readContinuation() == original, "UI retirement must not archive or erase the authoritative journal.")
+        try setup.configure(deviceID: "00008110-ffffffffffffffff",
+                            options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        #expect(setup.continuation?.deviceID == "00008110-ffffffffffffffff")
+        #expect(!setup.canApply, "The new choice still requires its own actual preflight.")
+        setup.preflight()
+        guard await waitForRequests(2, runner) else { Issue.record("New preflight did not reach the runner"); return }
+        let next = try #require(await runner.requests.last)
+        await runner.returnData(try response(next, stage: "preflight", outcome: "ready"))
+        #expect(await waitUntilIdle(setup))
+        setup.apply()
+        guard await waitForRequests(3, runner) else { Issue.record("New apply did not reach the runner"); return }
+        await runner.fail(.unavailable)
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.continuation == original && setup.hasRecordedTransaction)
+        #expect(setup.failure == .service("transaction-conflict"))
+        #expect(setup.snapshot == nil && !setup.canApply && !setup.canResume)
+        #expect(await runner.requests.count == 3, "Rebinding an unchanged header does not automatically query either device.")
+    }
+
+    @Test func inFlightProgressReadsTheActualJournalWithoutCompletingTheApply() async throws {
+        let runner = HeldSetupRunner()
+        let journal = ModelJournal(nil)
+        let setup = MacSetupModel(runner: runner, journal: journal)
+        await setup.restore()
+        try setup.configure(deviceID: device, options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        let original = try #require(setup.continuation)
+        setup.preflight()
+        guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
+        let preflight = try #require(await runner.requests.last)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"))
+        #expect(await waitUntilIdle(setup))
+        await journal.set(original)
+        setup.apply()
+        guard await waitForRequests(2, runner) else { Issue.record("Apply did not reach the runner"); return }
+        guard await waitForRequests(3, runner, attempts: 800) else {
+            await runner.fail(.cancelled)
+            _ = await waitUntilIdle(setup)
+            Issue.record("No read-only progress observation reached the runner while apply was held")
+            return
+        }
+        let status = try #require(await runner.requests.last)
+        #expect(status.action == .status && status.setupID == original.setupID && status.options == nil)
+        await runner.returnData(try response(status, stage: "install", outcome: "unknown"), action: .status)
+        for _ in 0..<100 where setup.progressStage == nil { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(setup.progressStage == .install)
+        #expect(setup.isBusy && setup.snapshot == nil && !setup.canResume && !setup.canApply)
+        guard await waitForRequests(4, runner, attempts: 800) else {
+            setup.cancel()
+            await runner.fail(.cancelled)
+            _ = await waitUntilIdle(setup)
+            Issue.record("Second progress observation did not reach the runner")
+            return
+        }
+        let heldStatus = try #require(await runner.requests.last)
+        setup.cancel()
+        #expect(setup.isBusy)
+        await runner.fail(.cancelled)
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(setup.isBusy, "The read-only observer must also physically return before releasing the fence.")
+        await runner.returnData(try response(heldStatus, stage: "handoff", outcome: "unknown"), action: .status)
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.continuation == original && setup.failure == .cancelled)
+        #expect(setup.progressStage == nil, "A late cancelled observer cannot publish new progress.")
+    }
+
+    private func waitForRequests(_ count: Int, _ runner: HeldSetupRunner, attempts: Int = 200) async -> Bool {
+        for _ in 0..<attempts {
+            if await runner.requests.count >= count { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return false
+    }
+
+    private func waitUntilIdle(_ model: MacSetupModel) async -> Bool {
+        for _ in 0..<200 {
+            if !model.isBusy { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return false
+    }
+
+    private func response(_ request: MacSetupRequest, stage: String, outcome: String, code: String? = nil) throws -> Data {
+        var value: [String: Any] = [
+            "protocol": 2, "operation": "setup", "action": request.action.rawValue,
+            "requestID": request.requestID.uuidString, "setupID": request.setupID.uuidString,
+            "deviceID": request.deviceID, "status": code == nil ? "ok" : "error",
+            "payload": ["stage": stage, "outcome": outcome, "canResume": outcome == "unknown",
+                        "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]]
+        ]
+        if let code { value["code"] = code }
+        return try JSONSerialization.data(withJSONObject: value)
+    }
+}
+
+private struct SetupReadOnlyChecker: MacChecking {
+    func check(_ request: CheckRequest) async throws -> Data {
+        guard request.action == .environment else { throw CheckFailure.unavailable }
+        return try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": request.requestID,
+            "status": "ok", "payload": ["ready": true, "checks": [], "teamID": NSNull()]])
+    }
+}
+
+private actor ModelJournal: MacSetupJournalReading {
+    var value: MacSetupContinuation?
+    let corrupt: Bool
+    init(_ value: MacSetupContinuation?, corrupt: Bool = false) { self.value = value; self.corrupt = corrupt }
+    func set(_ value: MacSetupContinuation?) { self.value = value }
+    func readContinuation() async throws -> MacSetupContinuation? {
+        if corrupt { throw MacSetupFailure.invalidResponse }
+        return value
+    }
+}
+
+private actor HeldSetupRunner: MacSetupRunning {
+    private(set) var requests: [MacSetupRequest] = []
+    private var pending: [(MacSetupRequest, CheckedContinuation<Data, any Error>)] = []
+    func run(_ request: MacSetupRequest) async throws -> Data {
+        requests.append(request)
+        return try await withCheckedThrowingContinuation { pending.append((request, $0)) }
+    }
+    func fail(_ error: MacSetupFailure) {
+        guard !pending.isEmpty else { return }
+        pending.removeFirst().1.resume(throwing: error)
+    }
+    func returnData(_ data: Data, action: MacSetupAction? = nil) {
+        guard let index = pending.firstIndex(where: { action == nil || $0.0.action == action }) else { return }
+        pending.remove(at: index).1.resume(returning: data)
+    }
+}

@@ -9,10 +9,23 @@ struct ProvisionedSupport {
     let directory: URL
 
     init(method: SupportMountMethod) throws {
-        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+        let formalDirectory: URL?
+        do {
+            let setupMethod: SetupSupportMethod = method == .cryptex ? .cryptex : .personalized
+            formalDirectory = try SetupActivationStore(directory: try GoFlySetupPaths.directory())
+                .activeSupportDirectory(method: setupMethod)
+        } catch {
             throw DeviceServiceFailure.devicePreparationRequired
         }
-        directory = documents.appendingPathComponent("DDI", isDirectory: true)
+
+        if let formalDirectory {
+            directory = formalDirectory
+        } else {
+            guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                throw DeviceServiceFailure.devicePreparationRequired
+            }
+            directory = documents.appendingPathComponent("DDI", isDirectory: true)
+        }
         let files = ["MountMethod", "BuildManifest.plist", "Image.dmg", "Image.dmg.trustcache"]
             + (method == .cryptex ? ["Image.dmg.cryptex_info", "Image.dmg.root_hash"] : [])
         let directoryValues = try? directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])

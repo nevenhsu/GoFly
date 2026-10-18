@@ -419,3 +419,17 @@
 "settings.help.favorites" = "The favorite star saves the place identity and keeps its name, address, and coordinates together. It does not change the current task.";
 "settings.help.waitingTitle" = "Waiting for location";
 "settings.help.waiting" = "A faded arrow means GoFly is waiting for a fresh location. Recenter follows the actual location status and does not invent a position.";
+"settings.device.teamID" = "Signing team";
+"setup.preparing.title" = "Checking GoFly setup";
+"setup.preparing.message" = "GoFly is checking the app and device setup.";
+"setup.waiting.title" = "Continue setup on Mac";
+"setup.waiting.message" = "Finish setup in the GoFly Mac app, then return to this iPhone.";
+"setup.completed.title" = "Setup complete";
+"setup.completed.message" = "GoFly is ready.";
+"setup.blocked.title" = "Setup is required";
+"setup.blocked.identity" = "This GoFly app does not match the setup package. Connect this iPhone to the GoFly Mac app to repair setup.";
+"setup.blocked.pairing" = "Pairing data is missing or does not match this setup. Connect this iPhone to the GoFly Mac app to repair setup.";
+"setup.blocked.artifact" = "The device support package is incomplete or does not match setup. Connect this iPhone to the GoFly Mac app to repair setup.";
+"setup.blocked.input" = "The setup package is invalid. Connect this iPhone to the GoFly Mac app to retry setup.";
+"setup.blocked.storage" = "GoFly could not safely read setup. Connect this iPhone to the GoFly Mac app to retry setup.";
+"setup.retry" = "Retry setup";

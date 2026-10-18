@@ -105,6 +105,58 @@ final class SetupHandoffTests: XCTestCase {
         XCTAssertEqual(receipt.status, .rejected)
     }
 
+    func testExpectedTransactionMismatchPreservesForeignPayloadAndReceipts() throws {
+        var imports = 0
+        let handoff = makeHandoff { _, _ in imports += 1 }
+        try handoff.prepare()
+        let payload = try makePayload()
+        let priorTransactionID = UUID()
+        try LocalGoSetupProtocol.encodeReceipt(
+            .init(transactionID: priorTransactionID, status: .success)
+        ).write(to: receiptURL(for: priorTransactionID))
+        try writeIncoming(payload)
+
+        XCTAssertEqual(
+            handoff.consume(expectedTransactionID: UUID()),
+            .rejected
+        )
+        XCTAssertEqual(imports, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: incomingURL.path))
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                at: root.appendingPathComponent(LocalGoSetupHandoff.receiptsDirectoryName),
+                includingPropertiesForKeys: nil
+            ).count,
+            1
+        )
+        XCTAssertEqual(
+            try LocalGoSetupProtocol.decodeReceipt(
+                Data(contentsOf: receiptURL(for: priorTransactionID))
+            ).status,
+            .success
+        )
+    }
+
+    func testExpectedTransactionMatchImportsAndLegacyCallRemainsCompatible() throws {
+        var imports = 0
+        let handoff = makeHandoff { _, _ in imports += 1 }
+        try handoff.prepare()
+        let payload = try makePayload()
+        try writeIncoming(payload)
+
+        XCTAssertEqual(
+            handoff.consume(expectedTransactionID: payload.transactionID),
+            .imported
+        )
+        XCTAssertEqual(imports, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: receiptURL(for: payload.transactionID).path))
+
+        let legacyPayload = try makePayload()
+        try writeIncoming(legacyPayload)
+        XCTAssertEqual(handoff.consume(), .imported)
+        XCTAssertEqual(imports, 2)
+    }
+
     func testInterruptedReceiptTempIsRecoveredBeforeStrictReceiptScan() throws {
         var imports = 0
         let handoff = makeHandoff { _, _ in imports += 1 }

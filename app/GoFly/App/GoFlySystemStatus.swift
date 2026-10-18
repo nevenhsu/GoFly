@@ -11,10 +11,12 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var locationServicesEnabled: Bool?
     @Published private(set) var accuracyAuthorization: CLAccuracyAuthorization
     @Published private(set) var backgroundRefreshStatus: UIBackgroundRefreshStatus
+    @Published private(set) var pairingReady: Bool?
     @Published private(set) var externalOpenFailed = false
 
     private let locationManager: CLLocationManager
     private var servicesQueryTask: Task<Void, Never>?
+    private var pairingReadyQueryTask: Task<Void, Never>?
 
     override init() {
         locationManager = CLLocationManager()
@@ -22,9 +24,15 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
         locationServicesEnabled = nil
         accuracyAuthorization = locationManager.accuracyAuthorization
         backgroundRefreshStatus = UIApplication.shared.backgroundRefreshStatus
+        pairingReady = nil
         super.init()
         locationManager.delegate = self
         refresh()
+    }
+
+    deinit {
+        servicesQueryTask?.cancel()
+        pairingReadyQueryTask?.cancel()
     }
 
     var locationStatusKey: String {
@@ -60,6 +68,16 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
                 guard let self else { return }
                 self.locationServicesEnabled = enabled
                 self.servicesQueryTask = nil
+            }
+        }
+        if pairingReadyQueryTask == nil {
+            pairingReadyQueryTask = Task { @MainActor [weak self] in
+                let ready = await Task.detached(priority: .utility) {
+                    PairingFileStore.isReady
+                }.value
+                guard let self else { return }
+                self.pairingReady = ready
+                self.pairingReadyQueryTask = nil
             }
         }
         accuracyAuthorization = locationManager.accuracyAuthorization
@@ -98,10 +116,11 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
         Task { @MainActor [weak self] in self?.refresh() }
     }
 
-    func deviceSnapshot(service: ServiceController) -> GoFlyDeviceSnapshot {
+    func deviceSnapshot(service: ServiceController, setupMetadata: GoFlySetupMetadata? = nil) -> GoFlyDeviceSnapshot {
         GoFlyDeviceSnapshot(
-            pairingReady: PairingFileStore.isReady,
-            signingExpiry: nil,
+            pairingReady: pairingReady,
+            signingExpiry: setupMetadata?.signingExpiry,
+            teamID: setupMetadata?.teamID,
             serviceStatus: goFlyString(service.statusKey),
             appVersion: Self.appVersion,
             deviceName: UIDevice.current.name,
@@ -130,8 +149,9 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
 
 @MainActor
 struct GoFlyDeviceSnapshot {
-    let pairingReady: Bool
+    let pairingReady: Bool?
     let signingExpiry: String?
+    let teamID: String?
     let serviceStatus: String
     let appVersion: String
     let deviceName: String
@@ -140,11 +160,16 @@ struct GoFlyDeviceSnapshot {
     let systemVersion: String
 
     var pairingStatus: String {
-        goFlyString(pairingReady ? "settings.device.pairingReady" : "settings.notObtained")
+        guard let pairingReady else { return goFlyString("settings.status.unknown") }
+        return goFlyString(pairingReady ? "settings.device.pairingReady" : "settings.notObtained")
     }
 
     var signingExpiryStatus: String {
         signingExpiry ?? goFlyString("settings.notObtained")
+    }
+
+    var teamIDStatus: String {
+        teamID ?? goFlyString("settings.notObtained")
     }
 }
 

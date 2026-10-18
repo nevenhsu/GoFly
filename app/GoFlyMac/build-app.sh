@@ -19,11 +19,14 @@ trap 'rm -rf "$STAGING_ROOT"' EXIT
 PRODUCTS="$(/usr/bin/xcrun swift build --disable-sandbox --package-path "$APP_SOURCE" \
   --scratch-path "$BUILD_ROOT/build" --cache-path "$BUILD_ROOT/cache" \
   --config-path "$BUILD_ROOT/config" --security-path "$BUILD_ROOT/security" --show-bin-path)"
-mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy"
+mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy" \
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup"
 cp "$PRODUCTS/GoFlyMac" "$STAGING_BUNDLE/Contents/MacOS/GoFlyMac"
 # SwiftPM resolves the resource bundle alongside the executable in this local development app.
 cp -R "$PRODUCTS/GoFlyMac_GoFlyMac.bundle" "$STAGING_BUNDLE/Contents/Resources/"
 cp "$APP_SOURCE/Bridge/bridge.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/"
+cp "$APP_SOURCE/Bridge/Setup/__init__.py" "$APP_SOURCE"/Bridge/Setup/setup_*.py \
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup/"
 cp "$WORKSPACE_ROOT/app/LocalGo/MacSetup/localgo_device.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy/"
 cp "$WORKSPACE_ROOT/app/LocalGo/LICENSE" "$STAGING_BUNDLE/Contents/Resources/LocalGo-LICENSE.txt"
 
@@ -38,19 +41,21 @@ config = {
     "workspaceRoot": str(root),
     "pythonPath": str(root / "work/mac-setup-env/bin/python"),
     "developerDirectory": "/Applications/Xcode.app/Contents/Developer",
-    "projectPath": str(root / "app/LocalGo/StikDebug.xcodeproj"),
-    "targetBundleID": "com.neven.localgo",
-    "targetName": "LocalGo 開發版",
+    "projectPath": str(root / "app/GoFly/GoFly.xcodeproj"),
+    "targetBundleID": "com.neven.gofly",
+    "targetName": "GoFly",
 }
 (bundle / "Contents/Resources/LocalConfiguration.json").write_text(json.dumps(config, indent=2) + "\n")
+setup_config = dict(config, stateRoot=str(Path.home() / "Library/Application Support/GoFlySetup"))
+(bundle / "Contents/Resources/SetupConfiguration.json").write_text(json.dumps(setup_config, indent=2) + "\n")
 info = {
-    "CFBundleIdentifier": "com.neven.gofly.mac.preview",
+    "CFBundleIdentifier": "com.neven.gofly.mac.development",
     "CFBundleName": "GoFly",
     "CFBundleDisplayName": "GoFly",
     "CFBundleExecutable": "GoFlyMac",
     "CFBundlePackageType": "APPL",
-    "CFBundleShortVersionString": "0.1.0",
-    "CFBundleVersion": "1",
+    "CFBundleShortVersionString": "0.2.0",
+    "CFBundleVersion": "2",
     "LSMinimumSystemVersion": "15.0",
     "NSHighResolutionCapable": True,
     "NSPrincipalClass": "NSApplication",

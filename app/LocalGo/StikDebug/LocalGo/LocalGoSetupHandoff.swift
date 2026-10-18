@@ -84,7 +84,11 @@ public final class LocalGoSetupHandoff {
     /// Consumes one incoming payload. Callers pass the live engine state so a
     /// handoff cannot replace a pairing record while a device command is in
     /// flight or another setup operation is running.
-    public func consume(commandsIdle: Bool = true, isPreparing: Bool = false) -> Outcome {
+    public func consume(
+        commandsIdle: Bool = true,
+        isPreparing: Bool = false,
+        expectedTransactionID: UUID? = nil
+    ) -> Outcome {
         guard commandsIdle, !isPreparing else { return .storageFailure }
 
         let incoming = directory.appendingPathComponent(Self.incomingFileName, isDirectory: false)
@@ -112,6 +116,15 @@ public final class LocalGoSetupHandoff {
             payload = try LocalGoSetupProtocol.decodeIncoming(incomingData)
         } catch {
             return finish(.rejected, incoming: incoming)
+        }
+
+        // A caller that already owns a formal setup transaction must reject a
+        // payload from any other transaction before touching receipts, the
+        // importer, or the one-shot file. The optional argument preserves the
+        // legacy consumer's existing behavior.
+        if let expectedTransactionID,
+           payload.transactionID != expectedTransactionID {
+            return .rejected
         }
 
         do {
@@ -235,6 +248,7 @@ public final class LocalGoSetupHandoff {
         directory: URL,
         commandsIdle: Bool = true,
         isPreparing: Bool = false,
+        expectedTransactionID: UUID? = nil,
         fileManager: FileManager = .default,
         importSetupData: @escaping Importer
     ) -> Outcome {
@@ -243,13 +257,18 @@ public final class LocalGoSetupHandoff {
             fileManager: fileManager,
             importSetupData: importSetupData
         )
-        return handoff.consume(commandsIdle: commandsIdle, isPreparing: isPreparing)
+        return handoff.consume(
+            commandsIdle: commandsIdle,
+            isPreparing: isPreparing,
+            expectedTransactionID: expectedTransactionID
+        )
     }
 
     public static func consume(
         directory: URL,
         commandsIdle: Bool = true,
         isPreparing: Bool = false,
+        expectedTransactionID: UUID? = nil,
         fileManager: FileManager = .default,
         importer: @escaping Importer
     ) -> Outcome {
@@ -257,6 +276,7 @@ public final class LocalGoSetupHandoff {
             directory: directory,
             commandsIdle: commandsIdle,
             isPreparing: isPreparing,
+            expectedTransactionID: expectedTransactionID,
             fileManager: fileManager,
             importSetupData: importer
         )
@@ -266,22 +286,29 @@ public final class LocalGoSetupHandoff {
     public static func consume(
         commandsIdle: Bool = true,
         isPreparing: Bool = false,
+        expectedTransactionID: UUID? = nil,
         fileManager: FileManager = .default,
         importSetupData: @escaping Importer
     ) -> Outcome {
         let handoff = Self(fileManager: fileManager, importSetupData: importSetupData)
-        return handoff.consume(commandsIdle: commandsIdle, isPreparing: isPreparing)
+        return handoff.consume(
+            commandsIdle: commandsIdle,
+            isPreparing: isPreparing,
+            expectedTransactionID: expectedTransactionID
+        )
     }
 
     public static func consume(
         commandsIdle: Bool = true,
         isPreparing: Bool = false,
+        expectedTransactionID: UUID? = nil,
         fileManager: FileManager = .default,
         importer: @escaping Importer
     ) -> Outcome {
         consume(
             commandsIdle: commandsIdle,
             isPreparing: isPreparing,
+            expectedTransactionID: expectedTransactionID,
             fileManager: fileManager,
             importSetupData: importer
         )

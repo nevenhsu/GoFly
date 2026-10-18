@@ -7,7 +7,7 @@
 - `GoFlyCore`：Swift 6 純 Swift 服務 protocol、狀態及驗證邊界，可在 macOS 執行測試，不連結原生 archive。
 - `GoFly`：iOS 26+ SwiftUI App，獨立 `com.neven.gofly` sandbox。App／Device／Resources 為正式來源；只明列沿用配對 store、setup codec、handoff 三個來源，不編入 prototype UI、JIT、診斷或 DDI 下載服務。
 - `iphoneos` 才匯入／連結 arm64 device FFI；模擬器使用明確失敗的 device-required adapter，不用假成功掩蓋原生能力限制。
-- 首次配對交付沿用既有版本化的私密 Mac handoff，位於新 App 自己的 Application Support。Mac 的目標 bundle profile 必須改為正式 App；M1 尚待實作／裝置驗證，不能讀取另一 App 的 sandbox 當作資料移轉。
+- 首次配對交付沿用既有版本化的私密 Mac handoff，位於新 App 自己的 Application Support。Mac 的目標 bundle profile 固定正式 App；M1 已完成軟體實作，裝置驗證仍待集中執行，不能讀取另一 App 的 sandbox 當作資料移轉。
 
 ## 身分與原生生命週期
 
@@ -225,3 +225,18 @@ C01／C03／C04／C05／C06／C07 共用實際狀態與原生導覽。定位服�
 Service 的 `TunnelResetState` 以真實 UUID 同步發布 running：准入先關閉實際連線 fence／開始 lifecycle，再發布 incoming 值，最後排入 native reset。Recovery 直接消費 incoming publisher，撤銷舊 probe generation，保留實體 Task 到真正返回；C01／C05 共用 reset 等舊探測排空後才送出。明確同意與實體 Task 身分分開，自身 running 不撤銷自身；直接 Service reset 則作廢等待中的舊同意。Restore／Stop／離開場景撤銷尚未送出的 reset。只有同一 revision、同一仍 running UUID 的實際完成能發布結果；watchdog／取消後遲到回覆只清理實體 bookkeeping。TCP 恢復不提高 native 健康、不解除 cold hold、不恢復 GPS 或自動 Resume。
 
 目前完整 Swift406（Core397／46 suites＋Transport9）、雙 SDK27.1 未簽署 build18、414key三語／格式／實際bundle、native verifier及最後兩軸審查通過；新設定 focused UI、兩種實際系統外觀、三語最大字級巡覽及資料保留檢查已通過，完整UI依來源51b8fb8成功覆蓋60個不同case：原run24PASS／1helper競態FAIL／1取消；throwing單一快照helper修正後1PASS，其餘35／35PASS，零skip／runtime warning。Root讀回精確案例集合及source／binary雜湊，原run結果不改稱全通過，M1未編譯來源不混入。實際權限變更、外部 VPN 成功、背景與接收 App 以及 VoiceOver 留最後集中手機驗收。
+
+
+## 正式首次安裝資料啟動（M1，軟體完成；手機未驗）
+
+正式首次安裝使用獨立版本化交易，Mac 的實際安裝擁有權、App 的本機資料提交、實際同機支援狀態是三份不同證據。遺失的安裝成功結果保持不明；後來相同 Bundle／nonce 不能反推擁有權，也不能授權啟動、終止、重送或移除。原 protocol1 唯讀及 install 拒絕維持；protocol2 僅 preflight／apply／status／resume。正式產物、Team、裝置、選項及單次 v1 配對交易在私密 journal 綁定，所有寫入前持久化意圖，取消不宣稱回滾。
+
+App 先保留單一 `GoFlySetupBootstrap`，以背景工作讀真實固定交接檔與當前 Bundle 摘要。沒有正式狀態時不讀不存在的描述檔，維持一般啟動；有 request／input／activation 時失敗就鎖在準備畫面。只有 ordinary／completed 決策後才一次建立並保留 `GoFlyRuntimeAssembly` 的服務、任務、商店與首次流程，偏好仍由穩定外層持有。真實輸入及全部支援檔先驗，現有 v1 importer 是唯一配對寫入者；匯入 closure 再綁定實際傳入 bytes／裝置以防檢查後替換。已完成重播不重新匯入或切回舊 generation。
+
+AFC 傳輸權限與正式私密儲存分開：App 對固定 Mac 交接檔執行明確 descriptor 檢查與權限收緊，再交給嚴格 reader；不改 bytes、摘要或身份，不建立成功回報。只接受安全擁有者、regular／directory、單一檔案 link 與已知傳輸模式；symlink／特殊檔／其他權限不修復。App 自己的 activation／response 不走這條權限修復路徑。正常 reader 不因讀取而改權限。
+
+active support pointer 與 bounded receipt history 位於同一份原子提交；rename 後同步錯誤是 commitUnknown，下次讀實際檔案。Native resolver 先驗正式 pointer，只有完全沒有 pointer 才可用舊 Documents/DDI；正式狀態損壞不可混用舊支援。C06 重用啟動時已核對、綁定當前 Bundle 的 Team／日期，不在畫面求值重算大檔。所有資料證據都不代表 VPN、GPS、native ACK 或冷啟動同意，既有 cold hold 不由安裝解除。
+
+正式 pointer 存在時，NativeDeviceService 不再消耗舊 v1 輸入；本次 v1 在實際解碼後核對預期交易 ID。配對狀態採背景唯讀觀察快取，C01／C06 畫面求值不做檔案 IO。Python 在首次啟動前持久化完整 manifest／檔案摘要；只有已核實發布的 formalPublished 階段可讀 activation 或進入第二次啟動，每次重連與寫入仍重新核對裝置、OS、Developer Mode 與信任。
+
+最終軟體檢查與已知限制見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)。Core458、Mac37、LocalGo52、App聚焦6及受影響既有UI8均通過；build19未簽署裝置建置、三語428鍵、native verifier及雙軸審查已完成。開發未連接、列出、簽署、安裝或操作手機，硬體驗收保持未驗。

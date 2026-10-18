@@ -6,149 +6,60 @@ import SwiftUI
 struct GoFlyApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var preferences = GoFlyPreferences.shared
-    @StateObject private var service: ServiceController
-    @StateObject private var sessionRecovery: SessionRecoveryStore
-    @StateObject private var movement: GoFlyMovementModel
-    @StateObject private var favorites = Self.favoritePlacesStore()
-    @StateObject private var importedRoutes = Self.importedRoutesStore()
-    @StateObject private var favoriteRoutes = Self.favoriteRoutesStore()
-    @StateObject private var onboarding = OnboardingController(
-        probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
-    )
+    @StateObject private var bootstrap: GoFlySetupBootstrap
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
 
     init() {
         _ = GoFlyPreferences.shared
-        let recovery = goFlySessionRecoveryStore()
-        let service = ServiceController(service: Self.deviceService())
-        let snapshot = recovery.initialSnapshot
-        _ = service.restoreColdRecovery(
-            position: snapshot.position,
-            requiresConfirmation: recovery.loadState != .ready ||
-                snapshot.activeMovement != nil || snapshot.uncertainty != nil
-        )
-        _service = StateObject(wrappedValue: service)
-        _sessionRecovery = StateObject(wrappedValue: recovery)
-        let movement = GoFlyMovementModel(service: service, recoveryStore: recovery)
-        _movement = StateObject(wrappedValue: movement)
+        GoFlySetupFixture.seedIfRequested()
+        _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if onboardingComplete {
-                    GoFlyMapView(service: service, recoveryStore: sessionRecovery, movement: movement)
+                if let runtime = bootstrap.runtime {
+                    normalRuntimeView(runtime)
                 } else {
-                    GoFlyOnboardingView(controller: onboarding) {
-                        onboardingComplete = true
-                    }
+                    GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
                 }
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
-            .onChange(of: preferences.effectiveLanguage) { _, _ in
-                movement.continuation.refreshPresentation()
-            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { preferences.refreshSystemPreferences() }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()
             }
-            .environmentObject(favorites)
-            .environmentObject(importedRoutes)
-            .environmentObject(favoriteRoutes)
-            .task {
-                await importedRoutes.load()
-                await favoriteRoutes.load()
+        }
+    }
+
+    @ViewBuilder
+    private func normalRuntimeView(_ runtime: GoFlyRuntimeAssembly) -> some View {
+        Group {
+            if onboardingComplete {
+                GoFlyMapView(
+                    service: runtime.service,
+                    recoveryStore: runtime.sessionRecovery,
+                    movement: runtime.movement,
+                    setupMetadata: bootstrap.metadata
+                )
+            } else {
+                GoFlyOnboardingView(controller: runtime.onboarding) {
+                    onboardingComplete = true
+                }
             }
         }
-    }
-
-    private static func deviceService() -> any DeviceService {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-unconfirmed-point") {
-            return UnconfirmedPointUITestService()
+        .onChange(of: preferences.effectiveLanguage) { _, _ in
+            runtime.movement.continuation.refreshPresentation()
         }
-        #endif
-        return NativeDeviceService()
-    }
-
-    private static func favoritePlacesStore() -> FavoritePlacesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("FavoritePlaces", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-favorites-store"),
-               arguments.indices.contains(index + 1),
-               let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/FavoritePlaces", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: directory))
-        } catch {
-            return FavoritePlacesStore(persistence: UnavailableFavoritePlacesPersistence())
+        .environmentObject(runtime.favorites)
+        .environmentObject(runtime.importedRoutes)
+        .environmentObject(runtime.favoriteRoutes)
+        .task {
+            await runtime.importedRoutes.load()
+            await runtime.favoriteRoutes.load()
         }
     }
-
-    private static func importedRoutesStore() -> ImportedRoutesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("ImportedRoutes", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-imports-store"),
-               arguments.indices.contains(index + 1), let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/ImportedRoutes", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: directory))
-        } catch {
-            return ImportedRoutesStore(persistence: UnavailableImportedRoutesPersistence())
-        }
-    }
-
-    private static func favoriteRoutesStore() -> FavoriteRoutesStore {
-        do {
-            let support = try FileManager.default.url(
-                for: .applicationSupportDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: true
-            )
-            var directory = support.appendingPathComponent("FavoriteRoutes", isDirectory: true)
-            #if DEBUG && targetEnvironment(simulator)
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-gofly-ui-favorite-routes-store"),
-               arguments.indices.contains(index + 1), let namespace = UUID(uuidString: arguments[index + 1]) {
-                directory = support.appendingPathComponent("UITests/FavoriteRoutes", isDirectory: true)
-                    .appendingPathComponent(namespace.uuidString, isDirectory: true)
-            }
-            #endif
-            return FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: directory))
-        } catch {
-            return FavoriteRoutesStore(persistence: UnavailableFavoriteRoutesPersistence())
-        }
-    }
-
-    private static func onboardingProbe() -> any TunnelProbing {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-unreachable") {
-            return NetworkTunnelProbe.unavailableUITestProbe
-        }
-        #endif
-        return NetworkTunnelProbe()
-    }
-}
-
-private struct UnavailableFavoritePlacesPersistence: FavoritePlacesPersistence {
-    func read() throws -> Data? { throw FavoritePlacesFailure.unavailable }
-    func replaceAtomically(with data: Data) throws { throw FavoritePlacesFailure.unavailable }
 }
