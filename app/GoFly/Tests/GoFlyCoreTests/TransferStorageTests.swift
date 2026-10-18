@@ -321,12 +321,22 @@ final class TransferStorageTests: XCTestCase {
     func testReadyWinsNullReleaseAndRequiresFullReleaseBinding() throws {
         let root = try makeProjectionRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let identity = try identity(); let input = try writeExportRequest(root: root, identity: identity, categories: [])
+        let identity = try identity()
+        let target = try SetupAppIdentity(bundleID: SetupAppIdentity.formalBundleID, build: "21",
+            profileSHA256: String(repeating: "d", count: 64), executableSHA256: String(repeating: "e", count: 64))
+        let input = try writeExportRequest(root: root, identity: identity, categories: [], targetIdentity: target)
         let projection = try TransferRestoreStore(applicationSupport: root).currentProjection()
         let store = TransferExportStore(applicationSupport: root)
-        let preparation = try store.beginPreparation(input: input, currentApp: identity,
-                                                      cutline: TransferExportCutline(draft: RouteDraft(), settings: try settings(), projection: projection))
+        let cutline = TransferExportCutline(draft: RouteDraft(), settings: try settings(), projection: projection)
+        XCTAssertThrowsError(try store.beginPreparation(input: input, currentApp: target, cutline: cutline)) {
+            XCTAssertEqual($0 as? TransferFailure, .identityMismatch)
+        }
+        let preparation = try store.beginPreparation(input: input, currentApp: identity, cutline: cutline)
         let ready = try store.commitReady(store.stage(preparation: preparation, favorites: nil, importedRoutes: nil, favoriteRoutes: nil))
+        let manifestURL = root.appendingPathComponent("GoFlyTransfer/exports/\(input.request.dataSetID.uuidString.lowercased())/package/manifest.json")
+        let manifest = try TransferCodec.decodeManifest(Data(contentsOf: manifestURL))
+        XCTAssertEqual(manifest.sourceApp, identity)
+        XCTAssertEqual(manifest.targetApp, target)
         let nullRelease = try TransferControlRequest(action: .release, commandID: UUID(), transferID: input.request.transferID,
                                                       nonce: input.request.nonce, requestSHA256: input.rawSHA256,
                                                       manifestSHA256: nil, sourceApp: nil)
@@ -429,9 +439,10 @@ final class TransferStorageTests: XCTestCase {
         return root
     }
 
-    private func writeExportRequest(root: URL, identity: SetupAppIdentity, categories: [TransferCategory]) throws -> TransferExportInput {
+    private func writeExportRequest(root: URL, identity: SetupAppIdentity, categories: [TransferCategory],
+                                    targetIdentity: SetupAppIdentity? = nil) throws -> TransferExportInput {
         let request = try TransferExportRequest(transferID: UUID(), dataSetID: UUID(), nonce: UUID(), sourceDeviceUDID: device,
-                                                destinationDeviceUDID: device, sourceBuild: identity.build, targetApp: identity,
+                                                destinationDeviceUDID: device, sourceBuild: identity.build, targetApp: targetIdentity ?? identity,
                                                 setupID: UUID(), categories: categories)
         let data = try TransferControlCodec.encodeExportRequest(request)
         let url = root.appendingPathComponent("GoFlyTransfer/export-request.json"); try data.write(to: url); try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o600)], ofItemAtPath: url.path)

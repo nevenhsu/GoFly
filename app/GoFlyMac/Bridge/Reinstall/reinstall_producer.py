@@ -676,6 +676,11 @@ class ReinstallProducer:
             journal["outcome"] = "unknown"
             self.store.update(journal)
             raise ReinstallBridgeError("source-busy")
+        if readback.error_code is not None:
+            journal["stages"]["sourceReady"] = {"state": "unknown"}
+            journal["outcome"] = "unknown"
+            self.store.update(journal)
+            raise ReinstallBridgeError("source-busy")
         if readback.transfer_id != journal["transferID"] or readback.data_set_id != journal["dataSetID"] or readback.nonce != journal["nonce"]:
             raise ReinstallBridgeError("export-conflict")
         if readback.source_app.build != known_source.get("build"):

@@ -8,6 +8,7 @@ import shutil
 import hashlib
 import json
 import copy
+import dataclasses
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -539,6 +540,7 @@ class ReinstallB2Tests(unittest.TestCase):
                     super().__init__(package_root)
                     self.export_attempts = 0
                     self.export_command_ids = []
+                    self.fail_next_readback = False
 
                 def source_request(self, device_id, request_value, control):
                     self.export_attempts += 1
@@ -546,6 +548,13 @@ class ReinstallB2Tests(unittest.TestCase):
                     if self.export_attempts == 1:
                         raise SetupBridgeError("source-busy")
                     return super().source_request(device_id, request_value, control)
+
+                def source_readback(self, device_id, transfer_id, nonce):
+                    existing = super().source_readback(device_id, transfer_id, nonce)
+                    if self.fail_next_readback:
+                        self.fail_next_readback = False
+                        return dataclasses.replace(existing, error_code="source-busy")
+                    return existing
 
             device = FlakyExport(package)
             validator = Validator(device=device)
@@ -560,6 +569,18 @@ class ReinstallB2Tests(unittest.TestCase):
             self.assertEqual(stored["stages"]["sourceRequest"]["state"], "unknown")
 
             resume_request = ReinstallRequest(apply_request.request_id, "resume", transfer, DEVICE, options)
+            device.fail_next_readback = True
+            with self.assertRaisesRegex(Exception, "source-busy"):
+                ReinstallProducer(config, device=device, artifact_validator=ArtifactValidator(artifact), validator=validator).resume(resume_request)
+            rejected = ReinstallJournalStore(config.state_root).read()
+            self.assertEqual(rejected["commands"]["sourceRequest"]["commandID"], first_command["commandID"])
+            self.assertEqual(rejected["commands"]["sourceRequest"]["controlSHA256"], first_command["controlSHA256"])
+            self.assertEqual(rejected["stages"]["sourceReady"]["state"], "unknown")
+            self.assertEqual(rejected["outcome"], "unknown")
+            self.assertNotIn("sourcePID", rejected["commands"]["sourceRequest"])
+            self.assertEqual(device.copy_calls, [])
+            self.assertEqual(device.uninstall_calls, 0)
+
             result = ReinstallProducer(config, device=device, artifact_validator=ArtifactValidator(artifact), validator=validator).resume(resume_request)
             self.assertEqual(result.stage, "complete")
             self.assertEqual(device.export_command_ids, [first_command["commandID"], first_command["commandID"]])

@@ -529,8 +529,9 @@ public final class TransferExportStore: @unchecked Sendable {
                                  cutline: TransferExportCutline) throws -> TransferPreparation {
         try withLock {
             guard input.request.sourceBundleID == currentApp.bundleID,
-                  input.request.sourceBuild == currentApp.build,
-                  input.request.targetApp == currentApp else { throw TransferFailure.identityMismatch }
+                  input.request.sourceBuild == currentApp.build else { throw TransferFailure.identityMismatch }
+            // The target is the future installation. Keep its frozen identity
+            // for the manifest/restore checks; this process is the source.
             if let existing = try readExportUnlocked() {
                 if existing.request.transferID == input.request.transferID {
                     switch existing.phase {
