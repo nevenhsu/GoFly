@@ -214,7 +214,7 @@ SessionRecovery保存完整既有草稿及data-only歷史／顯示快取，App�
 票15 v2追加：實際整合bundle原預設多Scene，與process單一Service／driver及Map持有Controller衝突；第二輪Advisor核准明確單一Scene，實際兩 SDK bundle 已讀回 false。未擴充多視窗；App 在 SwiftUI observers 建立前一次建立 GoFlyMovementModel，StateObject 保留同一組 controller／facade；Map 只觀察，變更畫面不可建立第二個送點 owner。
 
 
-## 偏好與共用設定（票16，整合驗證中）
+## 偏好與共用設定（票16，已實作／離線驗證；手機未驗）
 
 App 的 `GoFlyPreferences.shared` 保存 `gofly.preferences.v1` 單一 UserDefaults 字典，語言與外觀為同一份已選值；無效欄位個別回退 system，讀取不覆寫。App 用 State 保留同一 singleton，在穩定 root 注入 Locale／preferredColorScheme；語言變更只刷新同一背景工作的文字，服務／路線／搖桿／恢復 owner 不變。本地化查詢讀實際選定 lproj 並明確英文 fallback，Foundation 格式與預先格式化的數字／百分比均使用選定 Locale。座標／檔案資料維持原格式；Apple 地圖標籤及系統權限對話框由 OS 管理。
 
@@ -224,4 +224,4 @@ C01／C03／C04／C05／C06／C07 共用實際狀態與原生導覽。定位服�
 
 Service 的 `TunnelResetState` 以真實 UUID 同步發布 running：准入先關閉實際連線 fence／開始 lifecycle，再發布 incoming 值，最後排入 native reset。Recovery 直接消費 incoming publisher，撤銷舊 probe generation，保留實體 Task 到真正返回；C01／C05 共用 reset 等舊探測排空後才送出。明確同意與實體 Task 身分分開，自身 running 不撤銷自身；直接 Service reset 則作廢等待中的舊同意。Restore／Stop／離開場景撤銷尚未送出的 reset。只有同一 revision、同一仍 running UUID 的實際完成能發布結果；watchdog／取消後遲到回覆只清理實體 bookkeeping。TCP 恢復不提高 native 健康、不解除 cold hold、不恢復 GPS 或自動 Resume。
 
-目前完整 Swift406（Core397／46 suites＋Transport9）、雙 SDK27.1 未簽署 build18、414key三語／格式／實際bundle、native verifier及最後兩軸審查通過；新設定 focused UI、兩種實際系統外觀、三語最大字級巡覽及資料保留檢查已通過，完整60項UI仍以凍結build18回歸中。實際權限變更、外部 VPN 成功、背景與接收 App 以及 VoiceOver 留最後集中手機驗收。
+目前完整 Swift406（Core397／46 suites＋Transport9）、雙 SDK27.1 未簽署 build18、414key三語／格式／實際bundle、native verifier及最後兩軸審查通過；新設定 focused UI、兩種實際系統外觀、三語最大字級巡覽及資料保留檢查已通過，完整UI依來源51b8fb8成功覆蓋60個不同case：原run24PASS／1helper競態FAIL／1取消；throwing單一快照helper修正後1PASS，其餘35／35PASS，零skip／runtime warning。Root讀回精確案例集合及source／binary雜湊，原run結果不改稱全通過，M1未編譯來源不混入。實際權限變更、外部 VPN 成功、背景與接收 App 以及 VoiceOver 留最後集中手機驗收。

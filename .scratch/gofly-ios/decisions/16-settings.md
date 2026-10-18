@@ -1,6 +1,6 @@
 # 16：即時偏好與共用設定流程
 
-狀態：approved-v2 / implementation-in-progress。基準 `c60608142afe678b9802e541eefd2bc1685f6c3e`；預定 build18。
+狀態：approved-v2 / implementation-complete / device-verification-pending。基準 `c60608142afe678b9802e541eefd2bc1685f6c3e`；交付 build18；產品來源提交51b8fb8。
 
 Root 編寫方案；Advisor 第1輪要求補齊同步重置准入訊號 P16-01，第2輪核准 v2。P16-01 已納入，無未決項；最多五輪，尚餘三輪。實作細節與公開介面凍結另記 work/gofly-ios/research/16-api-frozen.md。
 
@@ -33,7 +33,7 @@ Recovery 直接消費 incoming $tunnelResetState，不能延後讀 objectWillCha
 完成後檢查完整 Swift、設定與既有 UI、雙 SDK27.1 未簽署建置、三語 key／格式／bundle、native verifier、diffcheck 及獨立 Standards／Spec 審查。SDK26 未安裝，不聲稱26編譯或真機通過。所有 iPhone／USB／簽署／安裝、真實權限／VPN／背景／接收端與 VoiceOver 留使用者最後集中驗收。
 
 
-## 整合檢查記錄（尚未完成全部 UI）
+## 整合檢查記錄（保留各次 run 結果）
 
 完整 Swift406（Core397／46 suites＋Transport9）與 native verifier 通過。初次完整run有三項舊測試問題：reset 現在同時關閉 fence 與准入，舊測試過度假設 revision 恰好加一；另一測試在實際500ms sleep登記前推進 controlled clock。修正為驗證 revision 前進及等待真實 clock request 後，第二次完整run另發現同族 submission 測試缺少 cadence 同步；補齊並單項通過後，第三次完整run406全通過。未改動定位／ACK產品邏輯，未把初次run改稱通過。
 
@@ -48,4 +48,15 @@ Standards ST16-001（重複 OS 狀態投影）已合併至 GoFlySystemStatus；S
 
 最大 Dynamic Type 的實際截圖曾顯示英文狀態在並排列內不自然斷字；共用 value row 在輔助字級改為上下排列，C05 操作同步改為直排。最新三語六頁巡覽通過，Root 核對 C01 三語及 C03–C07 英文截圖；深色系統下實際地圖 trait、設定列及原生選單通過且完成截圖核對。沒有用截圖或 AX 測試宣稱已完成真實 VoiceOver 操作。
 
-目前 production source 已凍結，build18 雙 SDK27.1、三語414 key／格式／實際 bundle、native verifier、完整 Swift406 及最後兩軸審查皆通過。新增偏好／資料保留 focused UI 最後讀回與完整60項 UI 回歸仍進行中；未完成部分不能算通過。
+production source 已於51b8fb8提交，build18 雙 SDK27.1、三語414 key／格式／實際 bundle、native verifier、完整 Swift406 及最後兩軸審查皆通過。新增偏好／資料保留 focused UI 最後讀回、實際SystemLight／SystemDark與三語最大字級均通過；完整案例覆蓋的結案讀回如下。
+
+
+## 完整 UI 結案讀回
+
+初次完整 run 原樣保留24PASS、1真實測試失敗與1因停止而取消；xcresult原始failedTests=2，其中一項明確為Testing was canceled。取消已完成後，舊helper跨兩次AX快照先查exists再讀isEnabled，造成按鈕消失競態。只修正測試：throwing app.snapshot()一次取樹，所有pending disabled斷言讀同一樹；快照失敗會拋出，不吞錯、不延長native fixture延遲，最終候選／輸入保留斷言不變。
+
+修正單項1／1通過（runner21.929s），其餘35／35通過（wall1398.636s），全部零skip／runtime warning。Root以結構化xcresult讀回24＋1＋35恰等於來源51b8fb8所列60個不同case，無重疊／遺漏；這是完整案例成功覆蓋，不是把原始run改稱60／60。較早未完成的remaining嘗試停止於0case，也不計通過。
+
+修正後測試對private gitarchive51b8fb8產品來源加唯一helper差異與獨立DerivedData執行；同時開發的M1來源未混入。Root核對helper SHA256 60956092044bb99ff240fed4a516b1bc90156b3708a154901b8c5e3d0849580c、App 2c578a61d0c80a6cf8114f1270748c7495ec88d44f713e2786f0fd4967b0dceb、UITest binary be540314e0d56cc35260dd555158d712aaa8db6d9e51682bdfc6b4815a4454f3。結構化摘要／案例集合保留work/gofly-ios/ticket16-ui-unique-coverage.json及相關summary，實際畫面讀回保留ticket16-visuals。
+
+票16實作與離線檢查完成；真實權限變更、VPN／任務連續性、iOS26／27裝置／接收App及VoiceOver全部deferred-by-user。後續M1／M2／17持續開發，不在此要求接手機。

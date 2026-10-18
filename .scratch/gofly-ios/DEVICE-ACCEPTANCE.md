@@ -194,7 +194,7 @@ Core public controlled-driver／atomic completion證明可攜狀態機與鎖次�
 票15離線基準為 build17：Swift395、完整UI45／45及current-source背景2／2通過；另三語最大字級／淺色單項與雙SDK27.1未簽署建置、352key資源、兩軸零finding通過。上述不代替本節任何手機結果。
 
 
-## 票16：偏好與設定（實作整合中；手機未驗）
+## 票16：偏好與設定（實作／離線驗證完成；手機未驗）
 
 最終 build 確認後，集中執行下列項目；開發期間不要求連接手機。
 
@@ -205,3 +205,5 @@ Core public controlled-driver／atomic completion證明可攜狀態機與鎖次�
 5. 六頁三語、深淺色、最大字級與多尺寸均可捲動、可返回，44pt 操作與 VoiceOver 可用；手動／漫步放開規則、路線編輯 Pin 回填無 Go、等待 GPS 半透明箭頭均維持。
 
 所有手機項目未執行；離線結果另由票16交付記錄，不等同本節通過。
+
+票16離線基準為build18／產品來源51b8fb8：Swift406、雙SDK27.1與414key資源／native verifier／最後兩軸審查通過；60個不同UI案例完整成功覆蓋（原run24PASS／1helper競態FAIL／1取消，修正單項1PASS＋其餘35／35PASS），零skip／runtime warning，Root完成三語最大字級與實際系統淺深色畫面核對。上述保留原run結果，不代替本節手機測試。

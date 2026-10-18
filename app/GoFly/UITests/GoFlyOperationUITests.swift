@@ -21,7 +21,7 @@ final class GoFlyOperationUITests: XCTestCase {
         XCTAssertTrue(source(app).contains("|point|"))
         XCTAssertFalse(app.buttons["map.candidate.go"].isEnabled)
         app.buttons["operation.cancel"].tap()
-        assertCancellationWaitingIfPresent(app)
+        try assertCancellationWaitingIfPresent(app)
         XCTAssertTrue(query.waitForExistence(timeout: 10))
         XCTAssertEqual(query.value as? String, "25.0478, 121.5170")
         XCTAssertEqual(pin.value as? String, selected)
@@ -34,7 +34,7 @@ final class GoFlyOperationUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["operation.source"].label, "Prepares the service without changing location.")
         XCTAssertEqual(pin.value as? String, selected)
         app.buttons["operation.cancel"].tap()
-        assertCancellationWaitingIfPresent(app)
+        try assertCancellationWaitingIfPresent(app)
         XCTAssertTrue(query.waitForExistence(timeout: 10))
         XCTAssertEqual(pin.value as? String, selected)
         XCTAssertEqual(app.alerts.count, 0)
@@ -145,14 +145,36 @@ final class GoFlyOperationUITests: XCTestCase {
         #endif
     }
 
-    private func assertCancellationWaitingIfPresent(_ app: XCUIApplication) {
+    private func assertCancellationWaitingIfPresent(_ app: XCUIApplication) throws {
         // The real native return may finish between UI snapshots. While still
         // pending, cancellation cannot enable another native operation.
-        if app.buttons["operation.cancel"].exists {
-            XCTAssertFalse(app.buttons["operation.cancel"].isEnabled)
-            XCTAssertFalse(app.buttons["map.serviceControl"].isEnabled)
-            XCTAssertFalse(app.buttons["map.candidate.go"].isEnabled)
+        let snapshot = try app.snapshot()
+        guard let cancel = findSnapshotElement(snapshot, identifier: "operation.cancel") else {
+            return
         }
+
+        XCTAssertFalse(cancel.isEnabled)
+        let service = findSnapshotElement(snapshot, identifier: "map.serviceControl")
+        let candidateGo = findSnapshotElement(snapshot, identifier: "map.candidate.go")
+        XCTAssertNotNil(service, "The cancellation snapshot must retain the service control.")
+        XCTAssertNotNil(candidateGo, "The cancellation snapshot must retain the candidate action.")
+        if let service {
+            XCTAssertFalse(service.isEnabled)
+        }
+        if let candidateGo {
+            XCTAssertFalse(candidateGo.isEnabled)
+        }
+    }
+
+    private func findSnapshotElement(_ snapshot: XCUIElementSnapshot,
+                                     identifier: String) -> XCUIElementSnapshot? {
+        if snapshot.identifier == identifier { return snapshot }
+        for child in snapshot.children {
+            if let match = findSnapshotElement(child, identifier: identifier) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func revealFully(_ action: XCUIElement, in panel: XCUIElement,

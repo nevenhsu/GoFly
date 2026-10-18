@@ -38,4 +38,4 @@
 
 票 15 實作／離線交付完成：基準703309e／build17，v2 經 Advisor 第2輪核准。正式 App 的完整 ID 註冊、固定256次嘗試界線、真實 ACK／明確意圖與原子背景資格門檻已接入；Core386＋Transport9共395PASS、未簽署 SDK27.1 device／simulator（arm64／x86_64）建置及單一 Scene／352key資源讀回通過，兩軸無剩餘 finding。完整 UI 45／45 PASS（runner 2105.041s；wall 2127.022s），審查修正後背景 UI 2／2、三語最大字級與淺色單項通過，皆零 runtime warning，Root 完成畫面核對。手機、真實 scheduler 與接收端集中最後驗收；可依序進入票16。
 
-票16整合驗證中：基準c606081／build18，核准v2已實作六個設定頁、穩定偏好／本地化／地圖外觀與共用實際VPN重置。Core397＋Transport9共406PASS、native verifier通過；初次完整run與兩次舊測試同步修正分開記錄，沒有倒推全綠。雙軸初次3項已修正／readback關閉；最後雙SDK27.1未簽署build18／414key資源與設定focused UI、實際系統淺深色、三語最大字級及資料保留通過；完整60項UI仍以凍結build18回歸中，尚未宣稱本票軟體驗證完成。手機依使用者安排集中最後驗收。
+票16實作／離線驗證完成：基準c606081、產品來源51b8fb8／build18；Core397＋Transport9共406PASS、雙SDK27.1未簽署建置、414key三語／格式／bundle、native verifier及兩軸零finding通過。完整UI成功覆蓋60個不同case：初次24PASS／1快照競態FAIL／1取消，throwing單一快照helper修正後單項1PASS，其餘35／35PASS；零skip／runtime warning。Root比對來源case集合無重疊／遺漏，保留原始失敗與取消，不稱原run60／60。獨立封存來源與binary雜湊已保存，M1未編譯來源不混入。手機集中最後驗收；可繼續M1／M2／17。
