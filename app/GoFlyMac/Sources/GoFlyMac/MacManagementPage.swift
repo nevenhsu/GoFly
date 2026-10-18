@@ -209,7 +209,7 @@ struct MacManagementPage: View {
     private func transportName(_ transport: MacManagementTransport) -> String { transport == .usb ? "USB" : "Wi-Fi" }
     private func detail(_ payload: MacManagementPayload) -> String {
         if payload.isComplete { return "App 身分、配對匯入、裝置支援與資料接續回報均已核對。回 iPhone 依正常提示繼續。" }
-        if released { return "原 App 已確認取消，資料與設定保留。" }
+        if released { return "本次操作已結束，已保留原 App 資料與設定。" }
         if payload.outcome == .unknown { return "操作結果尚未確認。保持原 iPhone 連線，手動查詢或接續。" }
         if payload.stage == .preflight && payload.outcome == .ready { return "檢查通過，可以開始本次操作。" }
         return "本次操作尚未完成，已完成的進度會保留。"

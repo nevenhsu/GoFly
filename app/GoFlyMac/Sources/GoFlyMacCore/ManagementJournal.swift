@@ -196,6 +196,8 @@ public struct MacManagementJournalReader: MacManagementJournalReading {
             parsedRevisions.append((revisionSelection, transport))
         }
 
+        try validatePublications(root["publications"], revisionCount: parsedRevisions.count)
+
         var selectionIDs = revisionSelections
         if let selectionValue = root["selections"] {
             guard case .array(let values) = selectionValue, !values.isEmpty,
@@ -238,6 +240,86 @@ public struct MacManagementJournalReader: MacManagementJournalReading {
             connectionRevision: parsedRevisions.count - 1,
             currentTransport: last.transport, options: options)
         return ParsedDocument(continuation: continuation, selectionIDs: selectionIDs)
+    }
+
+    /// The Core UI only needs the immutable continuation, but it still rejects
+    /// malformed optional publication metadata on reopen.  This validator is
+    /// intentionally closed and derives no device or effect authority.
+    private static func validatePublications(_ value: MacManagementWire.Value?,
+                                             revisionCount: Int) throws {
+        guard let value else { return }
+        guard let publications = MacManagementWire.object(value),
+              MacManagementWire.keys(publications, required: ["readbackPublish"]),
+              let record = MacManagementWire.object(publications["readbackPublish"]),
+              MacManagementWire.keys(record, required: ["attempts", "exhausted"]),
+              let attemptsValue = record["attempts"], case .array(let attempts) = attemptsValue,
+              attempts.count <= 32,
+              let exhausted = MacManagementWire.bool(record["exhausted"]) else {
+            throw MacManagementFailure.invalidResponse
+        }
+        var originalRevision: Int?
+        var previousState: String?
+        for (index, item) in attempts.enumerated() {
+            guard let attempt = MacManagementWire.object(item),
+                  MacManagementWire.keys(attempt, required: [
+                    "number", "revision", "requestSHA256", "state", "recordedAt",
+                    "priorOutcome", "terminalReason"
+                  ]),
+                  MacManagementWire.int(attempt["number"]) == index + 1,
+                  let revision = MacManagementWire.int(attempt["revision"]),
+                  revision < revisionCount,
+                  let requestSHA = MacManagementWire.string(attempt["requestSHA256"]),
+                  MacManagementWire.validHash(requestSHA),
+                  let state = MacManagementWire.string(attempt["state"]),
+                  ["inflight", "unknown", "absentAfterReconcile", "confirmed"].contains(state),
+                  let recordedAt = MacManagementWire.string(attempt["recordedAt"]),
+                  MacManagementWire.validDate(recordedAt) else {
+                throw MacManagementFailure.invalidResponse
+            }
+            if index == 0 {
+                guard attempt["priorOutcome"]?.isNull == true else {
+                    throw MacManagementFailure.invalidResponse
+                }
+                originalRevision = revision
+            } else {
+                guard revision == originalRevision,
+                      MacManagementWire.string(attempt["priorOutcome"]) == previousState else {
+                    throw MacManagementFailure.invalidResponse
+                }
+            }
+            let terminalReason = MacManagementWire.string(attempt["terminalReason"])
+            switch state {
+            case "inflight":
+                guard attempt["terminalReason"]?.isNull == true else {
+                    throw MacManagementFailure.invalidResponse
+                }
+            case "unknown":
+                guard terminalReason == "publication-interrupted" || terminalReason == "attempt-limit" else {
+                    throw MacManagementFailure.invalidResponse
+                }
+                if terminalReason == "attempt-limit" {
+                    guard exhausted, attempts.count == 32 else {
+                        throw MacManagementFailure.invalidResponse
+                    }
+                }
+            case "absentAfterReconcile":
+                guard terminalReason == "absent-on-explicit-resume" else {
+                    throw MacManagementFailure.invalidResponse
+                }
+            case "confirmed":
+                guard terminalReason == "exact-request-observed" else {
+                    throw MacManagementFailure.invalidResponse
+                }
+            default:
+                throw MacManagementFailure.invalidResponse
+            }
+            previousState = state
+        }
+        if exhausted {
+            guard attempts.count == 32 else {
+                throw MacManagementFailure.invalidResponse
+            }
+        }
     }
 
     private static func decodeOptions(_ value: MacManagementWire.Value?,

@@ -43,7 +43,7 @@ try:
         ManagementPreparationAdapter,
     )
     from .management_protocol import ManagementBridgeError, ManagementRequest
-    from .management_source import PreparationAppIdentity, SourceActivation
+    from .management_source import PreparationAppIdentity, SourceActivation, decode_source_activation
 except ImportError:  # direct execution from the packaged Bridge root
     from Setup.setup_adapters import (  # type: ignore
         FormalSetupInput,
@@ -62,7 +62,9 @@ except ImportError:  # direct execution from the packaged Bridge root
         ManagementPreparationAdapter,
     )
     from Management.management_protocol import ManagementBridgeError, ManagementRequest  # type: ignore
-    from Management.management_source import PreparationAppIdentity, SourceActivation  # type: ignore
+    from Management.management_source import (  # type: ignore
+        PreparationAppIdentity, SourceActivation, decode_source_activation,
+    )
 
 
 _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
@@ -71,6 +73,10 @@ _TARGET_PAIRING_NAMESPACE = "gofly-management-repair-pairing-v1"
 _READBACK_POLL_SECONDS = 30.0
 _ACTIVATION_POLL_SECONDS = 1800.0
 _POLL_INTERVAL_SECONDS = 0.05
+_READBACK_RECOVERY_STATES = frozenset({
+    "owned", "absent", "ownershipUnproven", "retryPending", "retryExhausted",
+    "externallyActive",
+})
 
 
 def _error(code: str = "operation-failed") -> ManagementBridgeError:
@@ -253,6 +259,10 @@ class TargetReconciliation:
     activation: bool
     adoption: bool
     installed: bool
+    # This is a bounded recovery classification, never a caller-supplied
+    # authority grant.  In particular, externallyActive does not authorize a
+    # stop and ownershipUnproven does not authorize a fresh launch.
+    readback_recovery: str = "ownershipUnproven"
 
 
 class ManagementTargetDriver:
@@ -293,11 +303,30 @@ class ManagementTargetDriver:
     def _confirm(self, name: str, evidence: str) -> None:
         state = self._stage(name)["state"]
         if state in {"inflight", "unknown"}:
-            self.store.confirm(name, evidence)
+            if name == "readbackPublish":
+                publications = self._value().get("publications")
+                publication = publications.get("readbackPublish") if isinstance(publications, Mapping) else None
+                if isinstance(publication, Mapping) and publication.get("attempts"):
+                    self.store.confirm_readback_publication(evidence)
+                else:
+                    # Component journals predating the bounded attempt ledger
+                    # can reconcile an exact fixed request, but have no retry
+                    # authority after that request is absent.
+                    self.store.confirm(name, evidence)
+            else:
+                self.store.confirm(name, evidence)
 
     def _unknown(self, name: str, code: str) -> None:
         if self._stage(name)["state"] in {"inflight", "unknown"}:
-            self.store.mark_unknown(name, code)
+            if name == "readbackPublish":
+                publications = self._value().get("publications")
+                publication = publications.get("readbackPublish") if isinstance(publications, Mapping) else None
+                if isinstance(publication, Mapping) and publication.get("attempts"):
+                    self.store.mark_readback_publication_unknown(code)
+                else:
+                    self.store.mark_unknown(name, code)
+            else:
+                self.store.mark_unknown(name, code)
 
     def _put_once(self, name: str, raw: bytes) -> None:
         previous = self.store.read_evidence(name)
@@ -338,6 +367,76 @@ class ManagementTargetDriver:
                 return None
             time.sleep(min(_POLL_INTERVAL_SECONDS, remaining))
 
+    def _validated_readback_plan(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+    ) -> tuple[bytes, dict[str, Any]]:
+        """Return the immutable candidate-bound readback plan.
+
+        A target response is useful for recovery only when its request was
+        frozen before the target effect.  Reconstructing a plan from the
+        response (or from the current artifact) would let a later candidate
+        masquerade as the submitted operation, so this helper requires the
+        exact journal bytes and canonical closed object.
+        """
+        raw = self.store.read_evidence("readbackPlan")
+        if raw is None:
+            raise _error("transaction-conflict")
+        try:
+            plan = _strict_object(raw, limit=64 * 1024)
+            if set(plan) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app"}:
+                raise ValueError()
+            if (
+                plan.get("version") != 1
+                or type(plan.get("version")) is not int
+                or plan.get("setupID") != header["targetSetupID"]
+                or plan.get("nonce") != header["setupNonce"]
+                or plan.get("expectedDeviceUDID") != header["deviceID"]
+                or plan.get("app") != _identity_app(identity)
+                or _json(plan) != raw
+            ):
+                raise ValueError()
+        except ManagementBridgeError:
+            raise _error("transaction-conflict") from None
+        except Exception:
+            raise _error("transaction-conflict") from None
+        return raw, plan
+
+    def _validated_absence_observation(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+    ) -> bytes | None:
+        """Validate the persisted genuine-zero observation, if present."""
+        raw = self.store.read_evidence("readbackAbsenceObservation")
+        if raw is None:
+            return None
+        plan_raw, _ = self._validated_readback_plan(header, identity)
+        try:
+            value = _strict_object(raw, limit=32 * 1024)
+            if set(value) != {
+                "version", "deviceID", "setupID", "nonce", "readbackPlanSHA256", "pid"
+            }:
+                raise ValueError()
+            if (
+                value.get("version") != 1
+                or type(value.get("version")) is not int
+                or value.get("deviceID") != header["deviceID"]
+                or value.get("setupID") != header["targetSetupID"]
+                or value.get("nonce") != header["setupNonce"]
+                or value.get("readbackPlanSHA256") != _sha(plan_raw)
+                or value.get("pid") != 0
+                or type(value.get("pid")) is not int
+                or _json(value) != raw
+            ):
+                raise ValueError()
+        except ManagementBridgeError:
+            raise _error("transaction-conflict") from None
+        except Exception:
+            raise _error("transaction-conflict") from None
+        return raw
+
     def _validated_readback(
         self,
         header: Mapping[str, Any],
@@ -346,6 +445,28 @@ class ManagementTargetDriver:
         typed: Any,
         raw: bytes,
     ) -> Any:
+        decoded = self._validated_readback_raw(header, identity, pairing_sha, raw)
+        if decoded != typed:
+            raise _error("handoff-unknown")
+        return decoded
+
+    def _validated_readback_raw(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+        pairing_sha: str,
+        raw: bytes,
+    ) -> Any:
+        """Validate saved response bytes without a fresh adapter read.
+
+        This is used only after an earlier typed readback was durably bound.
+        The pinned decoder and immutable plan still bind the saved bytes to
+        this operation; the method never turns a raw response into PID
+        ownership.
+        """
+        # The request was frozen before any target upgrade.  A response that
+        # validates in isolation is insufficient recovery evidence.
+        self._validated_readback_plan(header, identity)
         try:
             decoded = PinnedPymobiledeviceAdapter._decode_readback(
                 raw,
@@ -355,8 +476,6 @@ class ManagementTargetDriver:
             )
         except Exception:
             raise _error("handoff-unknown") from None
-        if decoded != typed:
-            raise _error("handoff-unknown")
         values = _readback_dict(decoded)
         expected = {
             "nonce": header["setupNonce"], "setupID": header["targetSetupID"],
@@ -380,6 +499,35 @@ class ManagementTargetDriver:
                 raise _error("transaction-conflict") from None
         return decoded
 
+    def _formal_input_observed(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+        formal: FormalSetupInput,
+    ) -> bool:
+        """Reconcile only the exact, stable formal-input publication.
+
+        ``setupIncoming`` is published last by Setup after all DDI files are
+        uploaded.  Two identical reads plus the pinned full decoder prove the
+        submitted manifest; they do not prove activation or launch.
+        """
+        first = self.preparation.read_file(header["deviceID"], "setupIncoming")
+        second = self.preparation.read_file(header["deviceID"], "setupIncoming")
+        if first is None or second != first or first != formal.raw_manifest:
+            return False
+        try:
+            decoded = PinnedPymobiledeviceAdapter._decode_formal_manifest(
+                first,
+                device_id=header["deviceID"],
+                setup_id=header["targetSetupID"],
+                nonce=header["setupNonce"],
+            )
+            if _json(dict(decoded)) != first:
+                raise ValueError()
+        except Exception:
+            raise _error("handoff-unknown") from None
+        return True
+
     def _stable_activation(self, device_id: str) -> bytes:
         """Read the App-owned activation record twice as one stable snapshot."""
         first = self.device.read_activation(device_id)
@@ -391,6 +539,28 @@ class ManagementTargetDriver:
         ):
             raise _error("adoption-unknown")
         return first
+
+    def _process_pid(self, raw: bytes, header: Mapping[str, Any]) -> int:
+        """Validate one journaled returned PID before retaining or stopping it."""
+        try:
+            value = _strict_object(raw, limit=32 * 1024)
+            if set(value) != {"version", "deviceID", "setupID", "nonce", "pid"}:
+                raise ValueError()
+            if (
+                value.get("version") != 1
+                or type(value.get("version")) is not int
+                or value.get("deviceID") != header["deviceID"]
+                or value.get("setupID") != header["targetSetupID"]
+                or value.get("nonce") != header["setupNonce"]
+                or type(value.get("pid")) is not int
+                or value["pid"] <= 0
+            ):
+                raise ValueError()
+            return value["pid"]
+        except ManagementBridgeError:
+            raise _error("transaction-conflict") from None
+        except Exception:
+            raise _error("transaction-conflict") from None
 
     def _formal_snapshot(
         self,
@@ -413,7 +583,9 @@ class ManagementTargetDriver:
                 or pairing_plan.get("targetSetupID") != header["targetSetupID"]
                 or pairing_plan.get("setupNonce") != header["setupNonce"]
                 or pairing_plan.get("deviceID") != header["deviceID"]
-                or pairing_plan.get("pairingSHA256") != pairing_sha
+                or pairing_plan.get("pairingSHA256") != (
+                    pairing_sha if header["kind"] == "renew" else None
+                )
             ):
                 raise ValueError()
             binding_raw = self.store.read_evidence("pairingBinding")
@@ -701,12 +873,53 @@ class ManagementTargetDriver:
                 raise _error("transaction-conflict")
             return plan
         if current == plan:
+            if state == "pending":
+                # The exact request is already present and is bound to this
+                # frozen setup/nonce.  Record the stage before checkpointing
+                # the positive observation so completion cannot depend on a
+                # pending stage that was never durably closed.
+                self._record("readbackPublish")
             self._confirm("readbackPublish", "readbackPlan")
             return plan
         if current is not None:
             raise _error("transaction-conflict")
-        if state in {"unknown", "inflight"} and request.action != "resume":
-            raise _error("handoff-unknown")
+        if state == "confirmed":
+            # A confirmed publication must retain the exact fixed request;
+            # absence after confirmation is never permission to republish.
+            raise _error("transaction-conflict")
+        if state in {"unknown", "inflight"}:
+            if request.action != "resume":
+                raise _error("handoff-unknown")
+            value = self._value()
+            revisions = value.get("revisions")
+            stage = value.get("stages", {}).get("readbackPublish")
+            if (
+                not isinstance(revisions, list)
+                or not revisions
+                or not isinstance(stage, Mapping)
+                or stage.get("revision") != len(revisions) - 1
+            ):
+                raise _error("revision-conflict")
+            # Retry authority belongs to the bounded publication ledger.  A
+            # legacy journal with only an unknown stage has no safe retry
+            # authority and must remain unresolved.
+            publications = value.get("publications")
+            publication = publications.get("readbackPublish") if isinstance(publications, Mapping) else None
+            if (
+                not isinstance(publication, Mapping)
+                or not isinstance(publication.get("attempts"), list)
+                or not publication.get("attempts")
+            ):
+                raise _error("handoff-unknown")
+            try:
+                if state == "inflight":
+                    self._unknown("readbackPublish", "handoff-unknown")
+                self.store.reconcile_readback_absence(
+                    fresh_absent=True, revision=len(revisions) - 1
+                )
+                self._record("readbackPublish")
+            except ManagementBridgeError:
+                raise _error("handoff-unknown") from None
         if state == "pending":
             self._record("readbackPublish")
         try:
@@ -725,18 +938,17 @@ class ManagementTargetDriver:
             self._unknown("readbackPublish", "handoff-unknown")
             raise _error("handoff-unknown") from None
 
-    def prepare_readback_metadata(
+    def publish_readback_metadata(
         self,
         request: ManagementRequest,
         identity: PreparationAppIdentity,
     ) -> bytes:
-        """Freeze the candidate-bound readback bytes before an app upgrade.
+        """Publish the frozen candidate-bound readback before an app upgrade.
 
-        This is intentionally local and data-only.  It does not publish to a
-        device, launch the target, or invoke any pairing/support primitive.
-        The later ``advance`` call reuses these exact bytes after the upgrade;
-        an unknown upgrade therefore cannot be followed by a newly invented
-        readback request.
+        Source mutation and legacy cleanup must already be durably complete.
+        This boundary publishes only the bounded readback request; it does
+        not upgrade, launch, stop, pair, or install support.  The later
+        ``advance`` call reuses these exact bytes after the upgrade.
         """
         if not isinstance(request, ManagementRequest) or request.action not in {"apply", "resume"}:
             raise _error("invalid-request")
@@ -761,21 +973,36 @@ class ManagementTargetDriver:
             or getattr(self.preparation, "transport", None) != revisions[-1].get("transport")
         ):
             raise _error("revision-conflict")
-        app_request = self.store.read_evidence("appRequest")
-        if app_request is None:
-            raise _error("transaction-conflict")
-        core = _validate_management_request(app_request)
         if (
-            core["managementID"] != header.get("managementID")
-            or core["expectedDeviceUDID"] != header.get("deviceID")
-            or core["targetSetupID"] != header.get("targetSetupID")
-            or core["targetApp"] != _identity_app(identity)
-            or core["teamID"] != identity.team_id
+            self._stage("sourceStop")["state"] != "confirmed"
+            or self._stage("legacyTransition")["state"] != "confirmed"
         ):
-            raise _error("identity-mismatch")
+            raise _error("transaction-conflict")
+
+        # Reconstruct the source from the journal's bounded admission and
+        # activation bytes so _header_bindings can verify every Core field,
+        # including sourceSetupID, source app/team, and source root hash.
         source_raw = self.store.read_evidence("sourceActivation")
-        if source_raw is None or _sha(source_raw) != core["sourceActivationSHA256"]:
-            raise _error("identity-mismatch")
+        admission_raw = self.store.read_evidence("sourceAdmission")
+        if source_raw is None or admission_raw is None:
+            raise _error("transaction-conflict")
+        admission = _strict_object(admission_raw, limit=64 * 1024)
+        source_app = admission.get("sourceApp")
+        source_team = admission.get("teamID")
+        if not isinstance(source_app, Mapping) or not isinstance(source_app.get("build"), str):
+            raise _error("transaction-conflict")
+        if not isinstance(source_team, str):
+            raise _error("transaction-conflict")
+        try:
+            source = decode_source_activation(
+                source_raw,
+                device_id=header["deviceID"],
+                installed_build=source_app["build"],
+                installed_team=source_team,
+            )
+        except ManagementBridgeError:
+            raise _error("identity-mismatch") from None
+        self._header_bindings(request, source, identity)
         raw = _json({
             "version": 1,
             "setupID": header["targetSetupID"],
@@ -787,10 +1014,225 @@ class ManagementTargetDriver:
         if existing is not None and existing != raw:
             raise _error("transaction-conflict")
         self._put_once("readbackPlan", raw)
-        if self._stage("readbackPublish")["state"] == "confirmed":
+        publish_stage = self._stage("readbackPublish")
+        if publish_stage["state"] in {"inflight", "unknown"}:
+            if request.action != "resume":
+                raise _error("handoff-unknown")
+            if publish_stage.get("revision") != len(revisions) - 1:
+                raise _error("revision-conflict")
+        if publish_stage["state"] == "confirmed":
             if self.preparation.read_file(header["deviceID"], "setupReadbackRequest") != raw:
                 raise _error("transaction-conflict")
+        else:
+            # This is the one pre-upgrade publication boundary.  It freezes
+            # readbackPlan before entering the actual preparation write and
+            # verifies the exact bytes after that write.
+            self._readback_publication(header, identity, request)
         return raw
+
+    # Kept as a compatibility spelling for callers being migrated by the
+    # producer.  It intentionally has the same safe, source-stopped behavior
+    # as the public publication boundary; it is no longer local-only.
+    def prepare_readback_metadata(
+        self,
+        request: ManagementRequest,
+        identity: PreparationAppIdentity,
+    ) -> bytes:
+        return self.publish_readback_metadata(request, identity)
+
+    def _publication_recovery_state(self) -> str | None:
+        """Classify the optional bounded publication-attempt ledger.
+
+        The journal owner validates and writes this record.  The target driver
+        only reads it, so older journals without the optional record remain
+        safe: an unresolved stage is still pending and can never be retried
+        implicitly.
+        """
+        value = self._value()
+        publications = value.get("publications")
+        if publications is None:
+            return None
+        if not isinstance(publications, Mapping):
+            raise _error("transaction-conflict")
+        record = publications.get("readbackPublish")
+        if not isinstance(record, Mapping):
+            raise _error("transaction-conflict")
+        attempts = record.get("attempts")
+        if not isinstance(attempts, list):
+            raise _error("transaction-conflict")
+        if (
+            record.get("exhausted") is True
+            and attempts
+            and isinstance(attempts[-1], Mapping)
+            and attempts[-1].get("state") != "confirmed"
+        ):
+            return "retryExhausted"
+        if attempts and isinstance(attempts[-1], Mapping) and attempts[-1].get("state") in {
+            "inflight", "unknown"
+        }:
+            return "retryPending"
+        return None
+
+    def _readback_recovery_state(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+        *,
+        live_pid: int | None = None,
+    ) -> str:
+        """Classify readback ownership from saved facts and optional live PID.
+
+        ``live_pid`` is supplied only by the explicit read-only recovery path;
+        callers that only have journal data must omit it.  A fresh PID is
+        never persisted or treated as an owned process.
+        """
+        publication_state = self._publication_recovery_state()
+        process_raw = self.store.read_evidence("readbackProcess")
+        if process_raw is not None:
+            self._process_pid(process_raw, header)
+            return "owned"
+        absence = self._validated_absence_observation(header, identity)
+        target_raw = self.store.read_evidence("targetReadback")
+        if absence is not None and target_raw is not None:
+            if publication_state is not None:
+                # A completed absence is stronger than a historical metadata
+                # retry status; it still does not prove a native stop.
+                return "absent"
+            return "absent"
+        if live_pid is not None and target_raw is not None:
+            if type(live_pid) is int and live_pid > 0:
+                return "externallyActive"
+        if publication_state is not None:
+            return publication_state
+        return "ownershipUnproven"
+
+    def _recover_readback_absence(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+        pairing_sha: str,
+        request: ManagementRequest,
+    ) -> bool:
+        """Resolve a lost identity-launch PID using data-only absence proof.
+
+        This path is restricted to an explicit Resume.  It performs no
+        launch, kill, pairing, publication, or formal activation operation.
+        The stop stage intent is recorded before the first live observation;
+        confirmation is possible only after the exact response and two
+        authenticated zero-PID observations have been retained.
+        """
+        if request.action != "resume":
+            raise _error("handoff-unknown")
+        if self.store.read_evidence("readbackProcess") is not None:
+            return False
+        self._validated_readback_plan(header, identity)
+
+        stop_state = self._stage("readbackStop")["state"]
+        if stop_state == "pending":
+            self._record("readbackStop")
+        elif stop_state == "confirmed":
+            # A confirmed stop must carry this exact data-only observation;
+            # revalidate the response and current PID before relying on it.
+            if self._validated_absence_observation(header, identity) is None:
+                raise _error("transaction-conflict")
+        elif stop_state not in {"inflight", "unknown"}:
+            raise _error("transaction-conflict")
+
+        try:
+            before = self.device.source_pid(header["deviceID"])
+        except Exception:
+            raise _error("handoff-unknown") from None
+        if type(before) is not int or before < 0:
+            raise _error("handoff-unknown")
+        if before != 0:
+            raise _error("app-running")
+
+        response_raw = self.preparation.read_file(
+            header["deviceID"], "setupReadbackResponse"
+        )
+        response_typed = self.preparation.readback(
+            header["deviceID"], header["targetSetupID"], header["setupNonce"]
+        )
+        if response_raw is None or response_typed is None:
+            raise _error("handoff-unknown")
+        self._validated_readback(
+            header, identity, pairing_sha, response_typed, response_raw
+        )
+
+        try:
+            after = self.device.source_pid(header["deviceID"])
+        except Exception:
+            raise _error("handoff-unknown") from None
+        if type(after) is not int or after < 0:
+            raise _error("handoff-unknown")
+        if after != 0:
+            raise _error("app-running")
+
+        # Freeze the exact response before recording absence.  A raw response
+        # from a different candidate cannot be paired with this operation.
+        prior_target_readback = self.store.read_evidence("targetReadback")
+        self._put_once("targetReadback", response_raw)
+        plan_raw, _ = self._validated_readback_plan(header, identity)
+        absence_raw = _json({
+            "version": 1,
+            "deviceID": header["deviceID"],
+            "setupID": header["targetSetupID"],
+            "nonce": header["setupNonce"],
+            "readbackPlanSHA256": _sha(plan_raw),
+            "pid": 0,
+        })
+        self._put_once("readbackAbsenceObservation", absence_raw)
+
+        # A submitted launch can be closed by exact response evidence without
+        # inventing a PID.  When the first launch remained pending (for
+        # example, an unknown upgrade followed by a manual target open), the
+        # already-confirmed update or frozen target response is the submitted
+        # physical predecessor that permits this observation checkpoint.  The
+        # launch stage itself remains pending in that alternative.
+        readback_state = self._stage("readback")["state"]
+        launch_state = self._stage("readbackLaunch")["state"]
+        update_state = self._stage("update")["state"]
+        had_target_readback = prior_target_readback is not None
+        submitted_predecessor = (
+            launch_state in {"inflight", "unknown", "confirmed"}
+            or update_state == "confirmed"
+            or had_target_readback
+        )
+        if launch_state in {"inflight", "unknown"}:
+            # This closes only a previously submitted readback launch.  The
+            # response proves the App observed the request, never a returned
+            # PID or ownership of the process that produced it.
+            self._confirm("readbackLaunch", "targetReadback")
+        if readback_state == "pending" and submitted_predecessor:
+            self._record("readback")
+        if readback_state in {"inflight", "unknown"}:
+            self._confirm("readback", "targetReadback")
+        elif readback_state == "pending" and not submitted_predecessor:
+            raise _error("handoff-unknown")
+
+        # The stop checkpoint is a data-only assertion of absence.  No native
+        # stop primitive is called and no current PID becomes owned evidence.
+        self._confirm("readbackStop", "readbackAbsenceObservation")
+        return True
+
+    def _confirmed_saved_readback(
+        self,
+        header: Mapping[str, Any],
+        identity: PreparationAppIdentity,
+        pairing_sha: str,
+        raw: bytes,
+    ) -> bool:
+        """Accept an already-completed identity phase without live reads."""
+        if (
+            self._stage("readback")["state"] != "confirmed"
+            or self._stage("readbackStop")["state"] != "confirmed"
+            or self._stage("readbackStop").get("evidence") != "readbackAbsenceObservation"
+        ):
+            return False
+        if self._validated_absence_observation(header, identity) is None:
+            raise _error("transaction-conflict")
+        self._validated_readback_raw(header, identity, pairing_sha, raw)
+        return True
 
     def _readback(
         self,
@@ -805,28 +1247,31 @@ class ManagementTargetDriver:
         frozen_target_readback = self.store.read_evidence("targetReadback")
         if frozen_target_readback is not None and process_raw is None:
             # A previous unknown upgrade may have left an actual response in
-            # the App.  It is useful read-only evidence, but it cannot create
-            # the missing launch/stop PID facts or authorize a new launch.
-            if process_state == "pending":
-                self._unknown("readbackLaunch", "handoff-unknown")
+            # the App.  Resume may resolve it only with the amendment's
+            # exact response plus genuine-zero absence proof; it never adopts
+            # a fresh PID or retries the launch.
+            if self._confirmed_saved_readback(
+                header, identity, pairing_sha, frozen_target_readback
+            ):
+                return
+            if request.action == "resume":
+                self._recover_readback_absence(header, identity, pairing_sha, request)
+                return
             raise _error("handoff-unknown")
         pid: int | None = None
         if process_raw is not None:
-            process = _strict_object(process_raw, limit=32 * 1024)
-            pid_value = process.get("pid")
-            if type(pid_value) is not int or pid_value <= 0:
-                raise _error("transaction-conflict")
-            if (
-                process.get("deviceID") != header["deviceID"]
-                or process.get("setupID") != header["targetSetupID"]
-                or process.get("nonce") != header["setupNonce"]
-            ):
-                raise _error("transaction-conflict")
-            pid = pid_value
+            pid = self._process_pid(process_raw, header)
             self._confirm("readbackLaunch", "readbackProcess")
         elif process_state == "confirmed":
             raise _error("transaction-conflict")
         elif process_state in {"unknown", "inflight"}:
+            if request.action == "resume":
+                try:
+                    if self._recover_readback_absence(header, identity, pairing_sha, request):
+                        return
+                except ManagementBridgeError as error:
+                    if error.code != "handoff-unknown":
+                        raise
             self._unknown("readbackLaunch", "handoff-unknown")
             raise _error("handoff-unknown")
         else:
@@ -967,16 +1412,18 @@ class ManagementTargetDriver:
         if state == "confirmed":
             return formal
         if state in {"inflight", "unknown"}:
-            # An interrupted upload is never repeated.  A committed actual
-            # receipt is the only read-only resolution.
-            receipt = self._poll_activation_receipt(
-                header["deviceID"], header["targetSetupID"], header["setupNonce"]
-            )
-            if receipt is None:
+            # Setup publishes setupIncoming last.  Reconcile only that exact
+            # stable manifest; an activation receipt is not evidence that the
+            # interrupted formal upload itself completed.
+            try:
+                observed = self._formal_input_observed(header, identity, formal)
+            except ManagementBridgeError:
+                self._unknown("formalInput", "handoff-unknown")
+                raise
+            if not observed:
                 self._unknown("formalInput", "handoff-unknown")
                 raise _error("handoff-unknown")
-            # Support is already frozen and the receipt is checked later in
-            # _activation; this check only authorizes skipping re-upload.
+            self._confirm("formalInput", "formalPlan")
             return formal
         self._record("formalInput")
         try:
@@ -1012,16 +1459,7 @@ class ManagementTargetDriver:
         formal_state = self._stage("formalLaunch")["state"]
         preexisting_receipt = None
         if formal_process is not None:
-            process = _strict_object(formal_process, limit=32 * 1024)
-            pid = process.get("pid")
-            if (
-                type(pid) is not int
-                or pid <= 0
-                or process.get("deviceID") != header["deviceID"]
-                or process.get("setupID") != header["targetSetupID"]
-                or process.get("nonce") != header["setupNonce"]
-            ):
-                raise _error("transaction-conflict")
+            pid = self._process_pid(formal_process, header)
             self._confirm("formalLaunch", "formalProcess")
         elif formal_state in {"unknown", "inflight"}:
             # A positive receipt below can reconcile an unknown launch.  No
@@ -1037,24 +1475,29 @@ class ManagementTargetDriver:
             preexisting_receipt = self.preparation.read_activation_receipt(
                 header["deviceID"], header["targetSetupID"], header["setupNonce"]
             )
-            if preexisting_receipt is None:
-                self._record("formalLaunch")
-                try:
-                    pid = self.preparation.launch(header["deviceID"])
-                    if type(pid) is not int or pid <= 0:
-                        raise _error("handoff-unknown")
-                    self._put_once("formalProcess", _json({
-                        "version": 1, "deviceID": header["deviceID"],
-                        "setupID": header["targetSetupID"], "nonce": header["setupNonce"],
-                        "pid": pid,
-                    }))
-                    self._confirm("formalLaunch", "formalProcess")
-                except ManagementBridgeError:
-                    self._unknown("formalLaunch", "handoff-unknown")
-                    raise
-                except Exception:
-                    self._unknown("formalLaunch", "handoff-unknown")
-                    raise _error("handoff-unknown") from None
+            if preexisting_receipt is not None:
+                # A receipt found while formalLaunch is still pending has no
+                # durable launch intent in this journal.  It may belong to a
+                # prior operation or an externally started process; adopting
+                # it would retroactively manufacture the missing effect.
+                raise _error("handoff-unknown")
+            self._record("formalLaunch")
+            try:
+                pid = self.preparation.launch(header["deviceID"])
+                if type(pid) is not int or pid <= 0:
+                    raise _error("handoff-unknown")
+                self._put_once("formalProcess", _json({
+                    "version": 1, "deviceID": header["deviceID"],
+                    "setupID": header["targetSetupID"], "nonce": header["setupNonce"],
+                    "pid": pid,
+                }))
+                self._confirm("formalLaunch", "formalProcess")
+            except ManagementBridgeError:
+                self._unknown("formalLaunch", "handoff-unknown")
+                raise
+            except Exception:
+                self._unknown("formalLaunch", "handoff-unknown")
+                raise _error("handoff-unknown") from None
         receipt = preexisting_receipt or self._poll_activation_receipt(
             header["deviceID"], header["targetSetupID"], header["setupNonce"]
         )
@@ -1067,13 +1510,6 @@ class ManagementTargetDriver:
             pairing_transaction_id=pairing_transaction_id, pairing_sha256=pairing_sha,
             support=support, plan=plan,
         )
-        self._confirm("formalInput", "formalPlan")
-        # The committed formal activation receipt is the final pairing-import
-        # proof.  AFC readback and the preparation adapter's local response
-        # only bind bytes; neither is native pairing authority.
-        self._record("pairing")
-        self._confirm("pairDelivery", "pairingBinding")
-        self._confirm("pairing", "pairingBinding")
         target_raw = self._stable_activation(header["deviceID"])
         try:
             decoded_target = PinnedPymobiledeviceAdapter._decode_activation_receipt(
@@ -1086,6 +1522,18 @@ class ManagementTargetDriver:
             raise _error("adoption-unknown") from None
         if decoded_target != receipt:
             raise _error("adoption-unknown")
+        # Persist the exact App-owned activation bytes before any pairing
+        # stage confirmation.  This is the full receipt binding used by the
+        # Core query path even if managementResponse has not arrived yet.
+        self._put_once("activationReceipt", target_raw)
+        self._confirm("formalInput", "formalPlan")
+        # The committed formal activation receipt is the final pairing-import
+        # proof.  AFC readback and the preparation adapter's local response
+        # only bind bytes; neither is native pairing authority.
+        self._record("pairing")
+        if header["kind"] == "repair":
+            self._confirm("pairDelivery", "pairingBinding")
+        self._confirm("pairing", "pairingBinding")
         target_sha = _sha(target_raw)
         response_raw = self.preparation.read_file(header["deviceID"], "managementResponse")
         if response_raw is None:
@@ -1098,7 +1546,6 @@ class ManagementTargetDriver:
         if response.get("targetActivationSHA256") != target_sha:
             self._unknown("activation", "adoption-unknown")
             raise _error("adoption-unknown")
-        self._put_once("activationReceipt", target_raw)
         self._put_once("adoptionReceipt", response_raw)
         self._confirm("activation", "adoptionReceipt")
 
@@ -1200,6 +1647,10 @@ class ManagementTargetDriver:
             pairing_sha = parsed.get("sha256")
             if not isinstance(pairing_sha, str) or _HEX64_RE.fullmatch(pairing_sha) is None:
                 raise _error("transaction-conflict")
+            # pairingBinding is written only after exact candidate
+            # verification.  It can close a submitted pairCreate intent, but
+            # never a pending one.
+            checkpoint("pairCreate", "pairingBinding")
         elif header["kind"] == "renew":
             pairing_sha = _hash(source.receipt.pairing_sha256)
 
@@ -1232,6 +1683,7 @@ class ManagementTargetDriver:
                 checkpoint("readbackPublish", "readbackPlan")
 
         readback_ok = False
+        readback_recovery = self._publication_recovery_state() or "ownershipUnproven"
         readback_raw = self.preparation.read_file(header["deviceID"], "setupReadbackResponse")
         readback_typed = self.preparation.readback(
             header["deviceID"], header["targetSetupID"], header["setupNonce"]
@@ -1246,6 +1698,59 @@ class ManagementTargetDriver:
             except ManagementBridgeError:
                 readback_ok = False
 
+        # Explicit Resume may close a lost identity-launch PID with a
+        # data-only absence observation.  This is deliberately attempted only
+        # after the response has passed the strict plan/pairing decoder above;
+        # it never adopts a PID and never invokes the stop primitive.
+        if readback_ok and self.store.read_evidence("readbackProcess") is None:
+            try:
+                self._recover_readback_absence(header, identity, pairing_sha, request)
+                readback_recovery = "absent"
+            except ManagementBridgeError as error:
+                if error.code == "app-running":
+                    readback_recovery = "externallyActive"
+                elif error.code in {"handoff-unknown", "transaction-conflict"}:
+                    readback_recovery = self._publication_recovery_state() or "ownershipUnproven"
+                else:
+                    raise
+        elif self.store.read_evidence("readbackProcess") is not None:
+            self._process_pid(self.store.read_evidence("readbackProcess") or b"", header)
+            readback_recovery = "owned"
+
+        # Formal input is a separate publication boundary.  A receipt or
+        # activation response cannot retroactively confirm an interrupted
+        # upload; only the exact stable setupIncoming manifest can do so.
+        if self._stage("formalInput")["state"] in {"inflight", "unknown"}:
+            try:
+                formal_raw = self.store.read_evidence("formalPlan")
+                support_raw = self.store.read_evidence("supportObservation")
+                pairing_plan_raw = self.store.read_evidence("pairingPlan")
+                if formal_raw is not None and support_raw is not None and pairing_plan_raw is not None and pairing_sha is not None:
+                    support = _strict_object(support_raw, limit=64 * 1024)
+                    pairing_plan = _strict_object(pairing_plan_raw, limit=32 * 1024)
+                    pairing_tx = _uuid(pairing_plan.get("pairingTransactionID"))
+                    formal = build_formal_setup_input(
+                        device_id=header["deviceID"], setup_id=header["targetSetupID"],
+                        nonce=header["setupNonce"], artifact=identity,
+                        pairing_transaction_id=pairing_tx, pairing_sha256=pairing_sha,
+                        support=support,
+                    )
+                    if formal.raw_manifest != formal_raw:
+                        raise _error("transaction-conflict")
+                    if self._formal_input_observed(header, identity, formal):
+                        checkpoint("formalInput", "formalPlan")
+            except ManagementBridgeError:
+                pass
+            except Exception:
+                pass
+
+        # A returned PID is durable evidence of the one launch call.  It may
+        # close an interrupted launch intent without adopting a fresh lookup.
+        process_raw = self.store.read_evidence("readbackProcess")
+        if process_raw is not None and self._stage("readbackLaunch")["state"] in {"inflight", "unknown"}:
+            self._process_pid(process_raw, header)
+            checkpoint("readbackLaunch", "readbackProcess")
+
         # A durable process fact is required before stopping.  If the stop
         # effect itself was interrupted, a fresh PID==0 observation may close
         # that stop intent; no new kill is attempted.
@@ -1253,23 +1758,45 @@ class ManagementTargetDriver:
         stop_state = self._stage("readbackStop")["state"]
         if process_raw is not None and stop_state in {"inflight", "unknown"}:
             try:
-                process = _strict_object(process_raw, limit=32 * 1024)
-                pid = process.get("pid")
+                pid = self._process_pid(process_raw, header)
                 if (
-                    type(pid) is int
-                    and pid > 0
-                    and process.get("deviceID") == header["deviceID"]
-                    and process.get("setupID") == header["targetSetupID"]
-                    and process.get("nonce") == header["setupNonce"]
-                    and self.device.source_pid(header["deviceID"]) == 0
+                    self.device.source_pid(header["deviceID"]) == 0
                 ):
                     checkpoint("readbackStop", "readbackProcess")
+            except Exception:
+                pass
+
+        # A frozen support observation may close only its own submitted
+        # support intent, after a fresh query against the same local
+        # generation.  No preparation or installation is entered here.
+        support_raw = self.store.read_evidence("supportObservation")
+        if support_raw is not None and self._stage("support")["state"] in {"inflight", "unknown"}:
+            try:
+                support = _strict_object(support_raw, limit=64 * 1024)
+                restore = self.store.transaction_root(header["managementID"]) / "support"
+                generation = validate_generation(support["method"], restore)
+                observed = self.preparation.query_support(
+                    header["deviceID"], support["method"], restore
+                )
+                current_support = _support_map(observed, generation)
+                if any(current_support.get(key) != support.get(key) for key in (
+                    "method", "osVersion", "generationID", "identifier", "version",
+                    "inputFiles", "inputManifestSHA256",
+                )):
+                    raise _error("support-unavailable")
+                checkpoint("support", "supportObservation")
             except Exception:
                 pass
 
         activation_ok = False
         adoption_ok = False
         formal_snapshot = None
+        formal_process_raw = self.store.read_evidence("formalProcess")
+        formal_launch_state = self._stage("formalLaunch")["state"]
+        formal_launch_submitted = formal_launch_state in {"inflight", "unknown", "confirmed"}
+        if formal_process_raw is not None and formal_launch_state in {"inflight", "unknown"}:
+            self._process_pid(formal_process_raw, header)
+            checkpoint("formalLaunch", "formalProcess")
         if pairing_sha is not None:
             try:
                 formal_snapshot = self._formal_snapshot(header, identity, pairing_sha)
@@ -1277,24 +1804,28 @@ class ManagementTargetDriver:
                 formal_snapshot = None
         if formal_snapshot is not None:
             _receipt, target_raw, _plan, _support = formal_snapshot
-            activation_ok = True
+            activation_ok = formal_launch_submitted
             formal_input_state = self._stage("formalInput")["state"]
             formal_checkpoint_intent = formal_input_state in {"inflight", "unknown"}
             formal_launch_checkpoint_intent = self._stage("formalLaunch")["state"] in {"inflight", "unknown"}
             activation_checkpoint_intent = self._stage("activation")["state"] in {"inflight", "unknown"}
-            if formal_input_state in {"inflight", "unknown"}:
-                checkpoint("formalInput", "formalPlan")
-            # The formal receipt closes pairing proof only when that stage had
-            # already entered.  A pending pairing stage is never promoted by
-            # read-only reconciliation.
-            checkpoint("pairing", "pairingBinding")
+            # The formal receipt closes pairing/adoption proof only after the
+            # formalLaunch effect itself has a durable intent.  A preexisting
+            # receipt must not retroactively create that missing launch.
+            if formal_launch_submitted:
+                checkpoint("pairing", "pairingBinding")
             activation_receipt_raw = self.store.read_evidence("activationReceipt")
             if activation_receipt_raw is None or activation_receipt_raw != target_raw:
-                if formal_checkpoint_intent or formal_launch_checkpoint_intent or activation_checkpoint_intent:
+                if formal_launch_submitted and (
+                    formal_checkpoint_intent or formal_launch_checkpoint_intent or activation_checkpoint_intent
+                ):
                     self._put_once("activationReceipt", target_raw)
                     activation_receipt_raw = target_raw
 
-            adoption_raw = self.preparation.read_file(header["deviceID"], "managementResponse")
+            adoption_raw = (
+                self.preparation.read_file(header["deviceID"], "managementResponse")
+                if formal_launch_submitted else None
+            )
             request_raw = self.store.read_evidence("appRequest")
             if adoption_raw is not None and request_raw is not None:
                 parsed_request = _validate_management_request(request_raw)
@@ -1304,12 +1835,13 @@ class ManagementTargetDriver:
                     _terminal_response_is_bound(adoption_raw, parsed_request)
                     and response.get("targetActivationSHA256") == _sha(target_raw)
                 )
-                if adoption_ok and any(self._stage(name)["state"] in {"inflight", "unknown"}
+                if adoption_ok and formal_launch_submitted and any(self._stage(name)["state"] in {"inflight", "unknown"}
                                        for name in ("formalLaunch", "activation")):
                     self._put_once("adoptionReceipt", adoption_raw)
                     checkpoint("formalLaunch", "activationReceipt")
                     checkpoint("activation", "adoptionReceipt")
-                    checkpoint("pairDelivery", "pairingBinding")
+                    if header["kind"] == "repair":
+                        checkpoint("pairDelivery", "pairingBinding")
 
         # Final support is read-only here: reuse the already frozen restore
         # directory and query the same method/generation without preparing or
@@ -1353,6 +1885,7 @@ class ManagementTargetDriver:
         return TargetReconciliation(
             header["targetSetupID"], header["setupNonce"], pairing_sha,
             readback_ok, activation_ok, adoption_ok, installed_ok,
+            readback_recovery,
         )
 
 

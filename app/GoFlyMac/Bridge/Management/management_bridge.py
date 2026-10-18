@@ -69,23 +69,6 @@ def _default_producer(config: ReinstallConfiguration) -> ManagementProducer:
     return ManagementProducer(config)
 
 
-def _error_payload(request: Any, config: ReinstallConfiguration | None) -> Mapping[str, Any] | None:
-    if config is None:
-        return None
-    try:
-        from .management_journal import ManagementJournal
-        from .management_producer import ManagementProducer
-        journal = ManagementJournal(config.state_root).read()
-        if journal is None:
-            return None
-        producer = object.__new__(ManagementProducer)
-        producer.config = config
-        producer.store = ManagementJournal(config.state_root)
-        return producer._payload(journal, request).as_dict() if request is not None else None
-    except Exception:
-        return None
-
-
 def run_stdio(
     config_path: str | Path,
     *,
@@ -107,7 +90,10 @@ def run_stdio(
         config = ReinstallConfiguration.load(config_path)
         config.validate_read_only_paths()
         producer = producer_factory(config) if producer_factory is not None else _default_producer(config)
-        payload = producer.handle(request)
+        # Dependency progress output is neither a protocol frame nor a safe
+        # error message. Keep stdout reserved for the one encoded response.
+        with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+            payload = producer.handle(request)
         return json.loads(encode_response(request, payload).decode("utf-8"))
     except ManagementBridgeError as error:
         return error_response(request, error.code)

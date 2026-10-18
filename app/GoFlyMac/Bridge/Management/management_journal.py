@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import datetime as _datetime
 import hashlib
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Iterator, Mapping
@@ -74,6 +76,7 @@ EVIDENCE_LIMITS = {
     "pairingPlan": 32 * 1024, "readbackProcess": 32 * 1024,
     "formalProcess": 32 * 1024, "targetReadback": 64 * 1024,
     "finalSupportObservation": 64 * 1024,
+    "readbackAbsenceObservation": 32 * 1024,
     "quiesceCommand": MAX_CONTROL_COMMAND_BYTES,
     "sealCommand": MAX_CONTROL_COMMAND_BYTES,
     "releaseCommand": MAX_CONTROL_COMMAND_BYTES,
@@ -100,6 +103,36 @@ _STAGE_KEYS = {"state", "revision", "evidence"}
 _REVISION_KEYS = {"number", "selectionID", "transport", "previous", "resolvedThroughSHA256"}
 _COMMAND_KEYS = {"attempts"}
 _ATTEMPT_KEYS = {"attempt", "revision", "commandSHA256", "state"}
+_PUBLICATION_KEYS = {"attempts", "exhausted"}
+_PUBLICATION_ATTEMPT_KEYS = {
+    "number", "revision", "requestSHA256", "state", "recordedAt", "priorOutcome", "terminalReason",
+}
+_PUBLICATION_STATES = frozenset({"inflight", "unknown", "absentAfterReconcile", "confirmed"})
+_PUBLICATION_TERMINAL_REASONS = frozenset({
+    "absent-on-explicit-resume", "exact-request-observed", "publication-interrupted", "attempt-limit",
+})
+_PUBLICATION_TIMESTAMP_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$"
+)
+
+
+def _publications(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the optional readback publication record without synthesizing it."""
+    publications = value.get("publications")
+    if publications is None:
+        return {}
+    return publications
+
+
+def _readback_publication(value: Mapping[str, Any]) -> dict[str, Any] | None:
+    publications = _publications(value)
+    if not publications:
+        return None
+    return publications.get("readbackPublish")
+
+
+def _utc_timestamp() -> str:
+    return _datetime.datetime.now(_datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _selections(value: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -119,7 +152,75 @@ def _commands(value: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return commands
 
 
-def _completion_ready(value: Mapping[str, Any]) -> bool:
+def _completion_readback_evidence(value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> bool:
+    """Check the full immutable plan/response binding for the launchless path."""
+    try:
+        plan_raw = blobs["readbackPlan"]
+        plan = _parse_object(plan_raw, limit=EVIDENCE_LIMITS["readbackPlan"])
+        if (
+            set(plan) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app"}
+            or type(plan["version"]) is not int or plan["version"] != 1
+            or plan["setupID"] != value["header"]["targetSetupID"]
+            or plan["nonce"] != value["header"]["setupNonce"]
+            or plan["expectedDeviceUDID"] != value["header"]["deviceID"]
+            or _encoded(plan) != plan_raw
+        ):
+            return False
+        target_app = _validate_app(plan["app"], code="storage-unavailable")
+        core = _control_request(blobs["appRequest"])
+        admission = _parse_object(blobs["sourceAdmission"], limit=EVIDENCE_LIMITS["sourceAdmission"])
+        source_app = _validate_app(admission["sourceApp"], code="storage-unavailable")
+        if (
+            core["managementID"] != value["header"]["managementID"]
+            or core["expectedDeviceUDID"] != value["header"]["deviceID"]
+            or core["targetSetupID"] != value["header"]["targetSetupID"]
+            or core["sourceApp"] != source_app
+            or core["targetApp"] != target_app
+        ):
+            return False
+        response = _parse_object(blobs["targetReadback"], limit=EVIDENCE_LIMITS["targetReadback"])
+        if set(response) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app", "pairing"}:
+            return False
+        if (
+            type(response["version"]) is not int or response["version"] != 1
+            or response["setupID"] != plan["setupID"]
+            or response["nonce"] != plan["nonce"]
+            or response["expectedDeviceUDID"] != plan["expectedDeviceUDID"]
+            or _validate_app(response["app"], code="storage-unavailable") != target_app
+        ):
+            return False
+        binding_raw = blobs["pairingBinding"]
+        binding = _parse_object(binding_raw, limit=EVIDENCE_LIMITS["pairingBinding"])
+        if (
+            set(binding) != {"version", "managementID", "targetSetupID", "deviceID", "transactionID", "sha256"}
+            or type(binding["version"]) is not int or binding["version"] != 1
+            or binding["managementID"] != value["header"]["managementID"]
+            or binding["targetSetupID"] != value["header"]["targetSetupID"]
+            or binding["deviceID"] != value["header"]["deviceID"]
+            or not isinstance(binding["transactionID"], str)
+            or UUID_RE.fullmatch(binding["transactionID"]) is None
+            or not isinstance(binding["sha256"], str)
+            or HEX64_RE.fullmatch(binding["sha256"]) is None
+            or _encoded(binding) != binding_raw
+        ):
+            return False
+        pairing = response["pairing"]
+        if not isinstance(pairing, dict) or pairing.get("kind") != "verified":
+            return False
+        if (
+            set(pairing) != {"kind", "expectedDeviceUDID", "sha256"}
+            or pairing["expectedDeviceUDID"] != plan["expectedDeviceUDID"]
+            or not isinstance(pairing["sha256"], str)
+            or HEX64_RE.fullmatch(pairing["sha256"]) is None
+            or pairing["sha256"] != binding["sha256"]
+        ):
+            return False
+        return True
+    except (ManagementBridgeError, KeyError, TypeError, ValueError, RecursionError):
+        return False
+
+
+def _completion_ready(value: Mapping[str, Any], blobs: Mapping[str, bytes] | None = None) -> bool:
     stages = value["stages"]
     required = {"sourceRequest", "sourceReady", "mutationIntent", "sourceStop", "legacy", "pairing", "support", "readback", "formalInput", "activation", "finalSupport"}
     if "legacyTransition" in stages:
@@ -137,6 +238,25 @@ def _completion_ready(value: Mapping[str, Any]) -> bool:
             required.update({"pairCreate", "pairDelivery"})
         elif any(stages[name]["state"] != "pending" for name in ("pairCreate", "pairDelivery")):
             return False
+    # A lost first identity launch may be closed only by a confirmed exact
+    # target readback plus a readback-stop checkpoint backed by the bounded,
+    # exact genuine-zero observation.  This is a narrow completion alternative;
+    # it never creates launch ownership or formal-launch proof.
+    recovery_without_launch = (
+        "readbackLaunch" in stages
+        and stages["readbackLaunch"]["state"] == "pending"
+        and stages.get("readbackStop", {}).get("state") == "confirmed"
+        and stages["readbackStop"].get("evidence") == "readbackAbsenceObservation"
+        and stages.get("readback", {}).get("state") == "confirmed"
+        and {"readbackPlan", "targetReadback", "pairingBinding", "readbackAbsenceObservation"} <= set(value["evidence"])
+    )
+    if recovery_without_launch:
+        # The alternative is only valid after the caller has loaded and
+        # revalidated every immutable evidence blob.  Stage metadata alone
+        # can never close a pending launch.
+        if blobs is None or not _completion_readback_evidence(value, blobs):
+            return False
+        required.discard("readbackLaunch")
     return (value["sourceAdmission"] in {"live", "cold"} and
             {"sourceActivation", "sourceAdmission", "appRequest", "adoptionReceipt"} <= set(value["evidence"]) and
             all(value["stages"][name]["state"] == "confirmed" for name in required))
@@ -227,8 +347,14 @@ def _control_response(raw: bytes, action: str, request_raw: bytes) -> tuple[dict
 
 def _validate(value: Any) -> None:
     try:
-        allowed_top_keys = (_TOP_KEYS, _TOP_KEYS | {"selections"}, _TOP_KEYS | {"commands"},
-                            _TOP_KEYS | {"selections", "commands"})
+        allowed_top_keys = tuple(
+            _TOP_KEYS | optional
+            for optional in (
+                set(), {"selections"}, {"commands"}, {"publications"},
+                {"selections", "commands"}, {"selections", "publications"},
+                {"commands", "publications"}, {"selections", "commands", "publications"},
+            )
+        )
         if not isinstance(value, dict) or set(value) not in allowed_top_keys:
             raise _failure()
         if type(value["version"]) is not int or value["version"] != 1 or value["operation"] != "management":
@@ -363,6 +489,81 @@ def _validate(value: Any) -> None:
                     for attempt in commands["quiesce"]["attempts"])
                     and not commands["release"]["attempts"]):
                 raise _failure()
+        if "publications" in value:
+            publications = value["publications"]
+            if not isinstance(publications, dict) or set(publications) != {"readbackPublish"}:
+                raise _failure()
+            record = publications["readbackPublish"]
+            if not isinstance(record, dict) or set(record) != _PUBLICATION_KEYS:
+                raise _failure()
+            attempts = record["attempts"]
+            if (not isinstance(attempts, list) or len(attempts) > MAX_CONTROL_ATTEMPTS or
+                    type(record["exhausted"]) is not bool):
+                raise _failure()
+            first_revision = None
+            previous_state = None
+            for index, attempt in enumerate(attempts):
+                if not isinstance(attempt, dict) or set(attempt) != _PUBLICATION_ATTEMPT_KEYS:
+                    raise _failure()
+                if (type(attempt["number"]) is not int or attempt["number"] != index + 1 or
+                        type(attempt["revision"]) is not int or
+                        not 0 <= attempt["revision"] < len(revisions) or
+                        not isinstance(attempt["requestSHA256"], str) or
+                        HEX64_RE.fullmatch(attempt["requestSHA256"]) is None or
+                        attempt["state"] not in _PUBLICATION_STATES or
+                        not isinstance(attempt["recordedAt"], str) or
+                        _PUBLICATION_TIMESTAMP_RE.fullmatch(attempt["recordedAt"]) is None):
+                    raise _failure()
+                try:
+                    parsed_timestamp = _datetime.datetime.fromisoformat(attempt["recordedAt"].replace("Z", "+00:00"))
+                except ValueError:
+                    raise _failure() from None
+                if parsed_timestamp.tzinfo is None:
+                    raise _failure()
+                prior = attempt["priorOutcome"]
+                if index == 0:
+                    if prior is not None:
+                        raise _failure()
+                    first_revision = attempt["revision"]
+                else:
+                    if prior != previous_state:
+                        raise _failure()
+                    if attempt["revision"] != first_revision:
+                        raise _failure()
+                terminal_reason = attempt["terminalReason"]
+                if attempt["state"] == "inflight":
+                    if terminal_reason is not None:
+                        raise _failure()
+                elif attempt["state"] == "unknown":
+                    if terminal_reason not in {"publication-interrupted", "attempt-limit"}:
+                        raise _failure()
+                    if (terminal_reason == "attempt-limit" and
+                            (not record["exhausted"] or len(attempts) != MAX_CONTROL_ATTEMPTS)):
+                        raise _failure()
+                elif attempt["state"] == "absentAfterReconcile":
+                    if terminal_reason != "absent-on-explicit-resume":
+                        raise _failure()
+                elif attempt["state"] == "confirmed":
+                    if terminal_reason != "exact-request-observed":
+                        raise _failure()
+                previous_state = attempt["state"]
+            if record["exhausted"] and len(attempts) < MAX_CONTROL_ATTEMPTS:
+                raise _failure()
+            if attempts:
+                if "readbackPlan" not in value["evidence"]:
+                    raise _failure()
+                plan_sha = value["evidence"]["readbackPlan"]["sha256"]
+                if any(attempt["requestSHA256"] != plan_sha for attempt in attempts):
+                    raise _failure()
+            if attempts:
+                latest_state = attempts[-1]["state"]
+                publication_stage_state = stages["readbackPublish"]["state"]
+                if latest_state == "confirmed" and publication_stage_state != "confirmed":
+                    raise _failure()
+                if latest_state in {"inflight", "unknown", "absentAfterReconcile"} and publication_stage_state not in {
+                    "inflight", "unknown",
+                }:
+                    raise _failure()
         if value["outcome"] not in {"inProgress", "confirmed", "unknown", "failed"}:
             raise _failure()
         if value["errorCode"] is not None and value["errorCode"] not in SAFE_ERROR_CODES:
@@ -375,11 +576,20 @@ def _validate(value: Any) -> None:
                 ("commands" in value and any(
                     attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}
                     for record in value["commands"].values() for attempt in record["attempts"]
-                ))):
+                ) or
+                ("publications" in value and any(
+                    attempt["state"] in {"inflight", "unknown"}
+                    for attempt in value["publications"]["readbackPublish"]["attempts"]
+                )))):
             raise _failure()
         if stages["release"]["state"] == "confirmed" and stages["mutationIntent"]["state"] != "pending":
             raise _failure()
-        if stages["complete"]["state"] == "confirmed" and not _completion_ready(value):
+        # Evidence-backed completion is checked by _check_evidence below.  A
+        # pending readback launch specifically requires those bytes, so do not
+        # make the structural pass authorize the launchless alternative.
+        if (stages["complete"]["state"] == "confirmed"
+                and stages.get("readbackLaunch", {}).get("state") != "pending"
+                and not _completion_ready(value)):
             raise _failure()
     except ManagementBridgeError as error:
         raise _failure() from error
@@ -502,6 +712,51 @@ class ManagementJournal:
         if "legacyInventory" in value["evidence"]:
             self._check_legacy_inventory(value, blobs)
         self._check_legacy_stage_rules(value, blobs)
+        if "readbackAbsenceObservation" in value["evidence"]:
+            self._check_readback_absence(value, blobs)
+        if value["stages"]["complete"]["state"] == "confirmed" and not _completion_ready(value, blobs):
+            raise _failure()
+
+    @staticmethod
+    def _check_readback_absence(value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
+        """Validate the bounded genuine-zero observation against immutable plan identity."""
+        if not {"readbackPlan", "readbackAbsenceObservation"} <= set(blobs):
+            raise _failure()
+        try:
+            plan_raw = blobs["readbackPlan"]
+            plan = _parse_object(plan_raw, limit=EVIDENCE_LIMITS["readbackPlan"])
+            if (
+                set(plan) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app"}
+                or type(plan["version"]) is not int or plan["version"] != 1
+                or plan["setupID"] != value["header"]["targetSetupID"]
+                or plan["nonce"] != value["header"]["setupNonce"]
+                or plan["expectedDeviceUDID"] != value["header"]["deviceID"]
+                or _encoded(plan) != plan_raw
+            ):
+                raise _failure()
+            _validate_app(plan["app"], code="storage-unavailable")
+            observation = _parse_object(
+                blobs["readbackAbsenceObservation"],
+                limit=EVIDENCE_LIMITS["readbackAbsenceObservation"],
+            )
+        except (ManagementBridgeError, TypeError, ValueError):
+            raise _failure() from None
+        if set(observation) != {
+            "version", "deviceID", "setupID", "nonce", "readbackPlanSHA256", "pid",
+        }:
+            raise _failure()
+        if (type(observation["version"]) is not int or observation["version"] != 1 or
+                type(observation["pid"]) is not int or observation["pid"] != 0 or
+                observation["deviceID"] != value["header"]["deviceID"] or
+                observation["setupID"] != value["header"]["targetSetupID"] or
+                observation["nonce"] != value["header"]["setupNonce"] or
+                not isinstance(observation["readbackPlanSHA256"], str) or
+                HEX64_RE.fullmatch(observation["readbackPlanSHA256"]) is None or
+                observation["readbackPlanSHA256"] != value["evidence"]["readbackPlan"]["sha256"]):
+            raise _failure()
+        _uuid(observation["setupID"])
+        _uuid(observation["nonce"])
+        _device(observation["deviceID"], code="storage-unavailable")
 
     @staticmethod
     def _check_command_records(value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
@@ -1114,9 +1369,197 @@ class ManagementJournal:
             raise _failure("transaction-conflict")
         self._legacy_removal_gate(value, "legacyIncomingRemoval")
 
+    @staticmethod
+    def _publication_revision(value: Mapping[str, Any], revision: int | None) -> int:
+        current_revision = len(value["revisions"]) - 1
+        if revision is None:
+            return current_revision
+        if type(revision) is not int or not 0 <= revision < len(value["revisions"]):
+            raise _failure("revision-conflict")
+        return revision
+
+    @staticmethod
+    def _publication_record(value: Mapping[str, Any]) -> dict[str, Any] | None:
+        return _readback_publication(value)
+
+    def _append_readback_publication(self, value: dict[str, Any], *, revision: int | None = None) -> None:
+        """Append one durable intent for the exact frozen readbackPlan bytes."""
+        if self.is_terminal(value):
+            raise _failure("transaction-conflict")
+        stage = value["stages"].get("readbackPublish")
+        if not isinstance(stage, dict):
+            raise _failure("transaction-conflict")
+        plan = value["evidence"].get("readbackPlan")
+        if not isinstance(plan, dict):
+            raise _failure("transaction-conflict")
+        target_revision = self._publication_revision(value, revision)
+        request_sha = plan["sha256"]
+        record = self._publication_record(value)
+        if record is None:
+            if stage["state"] != "pending":
+                # Component journals written before publication attempts have
+                # no retry authority.  An exact request may still be
+                # reconciled by the caller through the normal stage confirm.
+                raise _failure("transaction-conflict")
+            record = {"attempts": [], "exhausted": False}
+            value["publications"] = {"readbackPublish": record}
+        if record["exhausted"]:
+            raise _failure("revision-conflict")
+        attempts = record["attempts"]
+        if attempts:
+            original_revision = attempts[0]["revision"]
+            if target_revision != original_revision:
+                raise _failure("revision-conflict")
+            latest = attempts[-1]
+            if latest["requestSHA256"] != request_sha:
+                raise _failure("transaction-conflict")
+            if latest["state"] in {"inflight", "confirmed"}:
+                # A durable inflight intent is not permission to enter the
+                # effect again, and a confirmed attempt has no retry path.
+                raise _failure("transaction-conflict")
+            if latest["state"] == "unknown":
+                # Unknown publication is never retried without an explicit
+                # fresh fixed-file absence reconciliation.
+                raise _failure("transaction-conflict")
+            if latest["state"] != "absentAfterReconcile":
+                raise _failure("transaction-conflict")
+        elif stage["state"] != "pending":
+            raise _failure("transaction-conflict")
+        if len(attempts) >= MAX_CONTROL_ATTEMPTS:
+            record["exhausted"] = True
+            self._write(value)
+            raise _failure("revision-conflict")
+        previous = attempts[-1]["state"] if attempts else None
+        attempts.append({
+            "number": len(attempts) + 1,
+            "revision": target_revision,
+            "requestSHA256": request_sha,
+            "state": "inflight",
+            "recordedAt": _utc_timestamp(),
+            "priorOutcome": previous,
+            "terminalReason": None,
+        })
+        stage["state"] = "inflight"
+        stage["revision"] = target_revision
+        stage["evidence"] = None
+        value["outcome"] = "inProgress"
+        value["errorCode"] = None
+
+    def begin_readback_publication(self, *, revision: int | None = None) -> dict[str, Any]:
+        """Persist readback publication intent before calling the adapter."""
+        value = self._required()
+        self._append_readback_publication(value, revision=revision)
+        return self._write(value)
+
+    beginReadbackPublication = begin_readback_publication
+
+    def reconcile_readback_absence(
+        self, *, fresh_absent: bool = False, revision: int | None = None,
+    ) -> dict[str, Any]:
+        """Close an unknown attempt only after explicit fresh fixed-file absence."""
+        value = self._required()
+        if not fresh_absent:
+            raise _failure("transaction-conflict")
+        record = self._publication_record(value)
+        if record is None or not record["attempts"] or record["exhausted"]:
+            raise _failure("transaction-conflict")
+        latest = record["attempts"][-1]
+        if latest["state"] != "unknown":
+            raise _failure("transaction-conflict")
+        if revision is not None and revision != latest["revision"]:
+            raise _failure("revision-conflict")
+        latest["state"] = "absentAfterReconcile"
+        latest["terminalReason"] = "absent-on-explicit-resume"
+        value["outcome"] = "unknown"
+        return self._write(value)
+
+    reconcileReadbackAbsence = reconcile_readback_absence
+
+    def exhaust_readback_publication(self, *, revision: int | None = None) -> dict[str, Any]:
+        """Durably retain the bounded retry limit without creating another attempt."""
+        value = self._required()
+        record = self._publication_record(value)
+        if record is None or not record["attempts"]:
+            raise _failure("transaction-conflict")
+        latest = record["attempts"][-1]
+        if revision is not None and revision != latest["revision"]:
+            raise _failure("revision-conflict")
+        if len(record["attempts"]) < MAX_CONTROL_ATTEMPTS:
+            raise _failure("revision-conflict")
+        record["exhausted"] = True
+        if latest["state"] == "unknown":
+            latest["terminalReason"] = "attempt-limit"
+        value["outcome"] = "unknown"
+        return self._write(value)
+
+    exhaustReadbackPublication = exhaust_readback_publication
+
+    def mark_readback_publication_unknown(self, code: str = "publication-interrupted") -> dict[str, Any]:
+        value = self._required()
+        record = self._publication_record(value)
+        if record is None or not record["attempts"]:
+            raise _failure("transaction-conflict")
+        latest = record["attempts"][-1]
+        if latest["state"] not in {"inflight", "unknown"}:
+            raise _failure("transaction-conflict")
+        latest["state"] = "unknown"
+        latest["terminalReason"] = "publication-interrupted"
+        value["stages"]["readbackPublish"]["state"] = "unknown"
+        value["stages"]["readbackPublish"]["revision"] = latest["revision"]
+        value["stages"]["readbackPublish"]["evidence"] = None
+        value["outcome"] = "unknown"
+        value["errorCode"] = code if code in SAFE_ERROR_CODES else "operation-failed"
+        return self._write(value)
+
+    markReadbackPublicationUnknown = mark_readback_publication_unknown
+
+    def confirm_readback_publication(self, evidence: str = "readbackPlan") -> dict[str, Any]:
+        """Close the latest attempt from the caller's exact readonly match."""
+        value = self._required()
+        record = self._publication_record(value)
+        if record is None:
+            # Component journals written before the bounded attempt ledger
+            # may still close an exact readonly request.  They have no retry
+            # authority, so this delegates only to the existing stage proof.
+            return self.confirm("readbackPublish", evidence)
+        if not record["attempts"]:
+            raise _failure("transaction-conflict")
+        latest = record["attempts"][-1]
+        if latest["state"] == "confirmed":
+            if value["stages"]["readbackPublish"]["state"] == "confirmed":
+                return value
+            raise _failure("transaction-conflict")
+        if latest["state"] not in {"inflight", "unknown", "absentAfterReconcile"}:
+            raise _failure("transaction-conflict")
+        if evidence not in value["evidence"]:
+            raise _failure("transaction-conflict")
+        latest["state"] = "confirmed"
+        latest["terminalReason"] = "exact-request-observed"
+        value["stages"]["readbackPublish"]["state"] = "confirmed"
+        value["stages"]["readbackPublish"]["revision"] = latest["revision"]
+        value["stages"]["readbackPublish"]["evidence"] = evidence
+        value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
+        value["errorCode"] = None
+        return self._write(value)
+
+    confirmReadbackPublication = confirm_readback_publication
+
     def record_intent(self, stage: str) -> dict[str, Any]:
         value = self._required()
-        if stage not in STAGES or stage == "complete" or value["stages"][stage]["state"] != "pending" or self.is_terminal(value):
+        if stage not in STAGES or stage == "complete" or self.is_terminal(value):
+            raise _failure("transaction-conflict")
+        if stage == "readbackPublish":
+            state = value["stages"][stage]["state"]
+            publication = self._publication_record(value)
+            retry_after_absence = (
+                state == "unknown" and publication is not None and publication["attempts"] and
+                publication["attempts"][-1]["state"] == "absentAfterReconcile"
+            )
+            if state != "pending" and not retry_after_absence:
+                raise _failure("transaction-conflict")
+            self._append_readback_publication(value)
+            return self._write(value)
+        if value["stages"][stage]["state"] != "pending":
             raise _failure("transaction-conflict")
         if stage in _LEGACY_REMOVAL_EVIDENCE:
             self._legacy_removal_gate(value, stage)
@@ -1151,6 +1594,16 @@ class ManagementJournal:
             self._legacy_transition_gate(value)
             if evidence != "legacyInventory":
                 raise _failure("transaction-conflict")
+        elif stage == "readbackPublish" and self._publication_record(value) is not None:
+            record = self._publication_record(value)
+            if not record or not record["attempts"]:
+                raise _failure("transaction-conflict")
+            latest = record["attempts"][-1]
+            if latest["state"] not in {"inflight", "unknown", "absentAfterReconcile", "confirmed"}:
+                raise _failure("transaction-conflict")
+            if latest["state"] != "confirmed":
+                latest["state"] = "confirmed"
+                latest["terminalReason"] = "exact-request-observed"
         value["stages"][stage]["state"] = "confirmed"
         value["stages"][stage]["evidence"] = evidence
         value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
@@ -1170,6 +1623,15 @@ class ManagementJournal:
         value = self._required()
         if stage not in STAGES or value["stages"][stage]["state"] not in {"inflight", "unknown"}:
             raise _failure("transaction-conflict")
+        if stage == "readbackPublish" and self._publication_record(value) is not None:
+            record = self._publication_record(value)
+            if not record or not record["attempts"]:
+                raise _failure("transaction-conflict")
+            latest = record["attempts"][-1]
+            if latest["state"] not in {"inflight", "unknown"}:
+                raise _failure("transaction-conflict")
+            latest["state"] = "unknown"
+            latest["terminalReason"] = "publication-interrupted"
         value["stages"][stage]["state"] = "unknown"
         value["outcome"] = "unknown"
         value["errorCode"] = code if code in SAFE_ERROR_CODES else "operation-failed"
@@ -1199,11 +1661,18 @@ class ManagementJournal:
             for action, record in _commands(value).items()
         ):
             return True
-        return any(
+        if any(
             attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}
             for record in _commands(value).values()
             for attempt in record["attempts"]
-        )
+        ):
+            return True
+        publication = _readback_publication(value)
+        if publication and publication["attempts"]:
+            # Older absent attempts are audit only.  Only the latest unknown
+            # or inflight publication remains native authority.
+            return publication["attempts"][-1]["state"] in {"inflight", "unknown"}
+        return False
 
     def append_revision(self, selection_id: str, transport: str) -> dict[str, Any]:
         value = self._required()
@@ -1269,7 +1738,11 @@ class ManagementJournal:
         value = self._required()
         if value["stages"]["complete"]["state"] == "confirmed":
             return value
-        if self._outstanding(value) or not _completion_ready(value):
+        # Read the immutable blobs before making the terminal transition.  In
+        # particular, a launchless recovery must validate the exact pinned
+        # response and pairing binding rather than relying on stage metadata.
+        blobs = {name: self._evidence_bytes(value, name) for name in value["evidence"]}
+        if self._outstanding(value) or not _completion_ready(value, blobs):
             raise _failure("transaction-conflict")
         value["stages"]["complete"] = {"state": "confirmed", "revision": len(value["revisions"]) - 1,
                                        "evidence": "adoptionReceipt"}

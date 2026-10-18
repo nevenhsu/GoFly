@@ -47,6 +47,9 @@ try:
         _parse_object,
         _validate_receipt,
         _validate_app,
+        _expiry,
+        _team,
+        _hash,
         encode_request,
     )
     from .management_source import PreparationAppIdentity, SourceActivation, decode_source_activation
@@ -58,23 +61,27 @@ except ImportError:  # direct execution from packaged Bridge root
     from Management.management_journal import ManagementJournal, reject_unresolved_management
     from Management.management_lineage import generation_ids, validate_source_lineage
     from Management.management_preparation import ManagementPreparationAdapter
-    from Management.management_protocol import ManagementBridgeError, ManagementRequest, _canonical_request, _parse_object, _validate_receipt, _validate_app, encode_request
+    from Management.management_protocol import ManagementBridgeError, ManagementRequest, _canonical_request, _parse_object, _validate_receipt, _validate_app, _expiry, _team, _hash, encode_request
     from Management.management_source import PreparationAppIdentity, SourceActivation, decode_source_activation
 
 
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+# Public phases deliberately use protocol 5's closed vocabulary. Internal
+# readback/launch checkpoints are grouped under pairing or adoption.
 _STAGE_MAP = (
-    ("sourceRequest", "source"), ("sourceReady", "source"),
-    ("mutationIntent", "seal"), ("sourceSeal", "seal"),
-    ("sourceStop", "seal"), ("legacy", "seal"),
-    ("legacyIncomingRemoval", "seal"), ("legacyReadbackRequestRemoval", "seal"),
-    ("legacyReadbackResponseRemoval", "seal"), ("legacyTransition", "seal"),
-    ("artifact", "artifact"), ("update", "update"), ("pairing", "pairing"),
-    ("support", "support"), ("readback", "readback"),
-    ("formalInput", "readback"), ("activation", "adoption"),
-    ("finalSupport", "support"), ("complete", "complete"), ("release", "release"),
+    ("artifact", "artifact"), ("sourceRequest", "source"), ("sourceReady", "source"),
+    ("mutationIntent", "seal"), ("sourceSeal", "seal"), ("sourceStop", "seal"),
+    ("legacy", "seal"), ("legacyIncomingRemoval", "seal"),
+    ("legacyReadbackRequestRemoval", "seal"), ("legacyReadbackResponseRemoval", "seal"),
+    ("legacyTransition", "seal"), ("update", "update"),
+    ("pairCreate", "pairing"), ("pairDelivery", "pairing"),
+    ("readbackPublish", "pairing"), ("readbackLaunch", "pairing"),
+    ("readback", "pairing"), ("readbackStop", "pairing"), ("support", "support"),
+    ("formalInput", "adoption"), ("formalLaunch", "adoption"),
+    ("pairing", "adoption"), ("activation", "adoption"), ("finalSupport", "support"),
 )
+
 _PROOF_KEYS = (
     "sourceBound", "sourceQuiescent", "mutationSealed", "updateConfirmed",
     "pairingImported", "supportObserved", "adoptionCommitted",
@@ -228,7 +235,6 @@ class ManagementProducer:
                 {key: False for key in _PROOF_KEYS},
             ).as_dict()
         self._bind_identity(value, request, allow_options=False)
-        self._validate_journal_typed(value)
         return self._payload(value, request).as_dict()
 
     def preflight(self, request: ManagementRequest) -> ManagementPayload:
@@ -296,12 +302,13 @@ class ManagementProducer:
                     value: Mapping[str, Any]) -> ManagementPayload:
         # All source evidence and the admission decision are persisted
         # before the first remote publication or process mutation.
-        source, restore_intent, restore_root, installed, observed = self._capture_source(
+        source, restore_intent, restore_root, management_root, installed, observed = self._capture_source(
             device, preparation, request, value
         )
         self.store.put_evidence("sourceActivation", source.raw)
         self._put_optional("sourceRestoreIntent", restore_intent)
         self._put_optional("sourceRestoreRoot", restore_root)
+        self._put_optional("sourceManagementRoot", management_root)
         target_artifact = self._candidate_artifact(request, value, observed)
         if target_artifact is not None and target_artifact.team_id != source.receipt.team_id:
             raise ManagementBridgeError("identity-mismatch")
@@ -457,6 +464,16 @@ class ManagementProducer:
                 elif transport != value["revisions"][-1]["transport"]:
                     raise ManagementBridgeError("revision-conflict")
                 committed_request = replace(request, connection_revision=len(self.store.read()["revisions"]) - 1)
+                if self.store.read_evidence("releaseCommand") is not None:
+                    latest = self.store.read()
+                    attempts = latest.get("commands", {}).get("release", {}).get("attempts", [])
+                    if not attempts or attempts[-1]["state"] != "confirmed":
+                        self._publish_source(committed_request, device, preparation)
+                        admission = _parse_object(self.store.read_evidence("sourceAdmission"), limit=64 * 1024)
+                        self._control_action(device, preparation, committed_request, "release",
+                                             admission["sourcePID"], explicit_resume=True)
+                    self.store.release()
+                    return self._payload(self.store.read(), committed_request)
                 return self._continue(committed_request, device, preparation, explicit_resume=True)
             except Exception as error:
                 self._record_failure(value, _error(error).code)
@@ -492,7 +509,7 @@ class ManagementProducer:
                 self._record_failure(value, _error(error).code)
                 raise _error(error)
 
-    def _capture_source(self, device: Any, preparation: Any, request: ManagementRequest, value: Mapping[str, Any]) -> tuple[SourceActivation, bytes | None, bytes | None, Any, Any]:
+    def _capture_source(self, device: Any, preparation: Any, request: ManagementRequest, value: Mapping[str, Any]) -> tuple[SourceActivation, bytes | None, bytes | None, bytes | None, Any, Any]:
         observed = self._observe(device, request.device_id)
         installed = self._installed(device, request.device_id)
         if not bool(getattr(installed, "exists", False)):
@@ -509,7 +526,7 @@ class ManagementProducer:
         management_root = preparation.read_management_root(request.device_id)
         generations = self._read_generations(preparation, request.device_id, management_root)
         validate_source_lineage(source, request.device_id, restore_intent, restore_root, management_root, generations)
-        return source, restore_intent, restore_root, installed, observed
+        return source, restore_intent, restore_root, management_root, installed, observed
 
     @staticmethod
     def _decode_source(raw: bytes | None, device_id: str, build: Any, team: Any) -> SourceActivation:
@@ -576,6 +593,13 @@ class ManagementProducer:
         candidate = transaction / "candidate.app"
         if self.store.read_evidence("targetArtifact") is not None:
             return self._load_candidate(request, value)
+        if candidate.exists() or candidate.is_symlink():
+            if candidate.is_symlink() or not candidate.is_dir():
+                raise ManagementBridgeError("artifact-mismatch")
+            # Snapshot publication can finish just before its evidence is
+            # frozen. Reinspect that private copy instead of building a new
+            # signature that could conflict with the already published copy.
+            return self.artifact_validator.inspect(candidate, device_id=request.device_id, team_id=options.team_id)
         if options.source == "signedApp":
             if options.artifact_path is None:
                 raise ManagementBridgeError("invalid-request")
@@ -584,13 +608,15 @@ class ManagementProducer:
                                      device_id=request.device_id, team_id=options.team_id)
         # The existing builder owns local files only. Isolate its output in
         # this management operation, never an M1 install-owning transaction.
-        build_config = SimpleNamespace(state_root=transaction,
+        build_root = transaction / "local-builds" / str(uuid.uuid4())
+        build_root.mkdir(parents=True, mode=0o700)
+        build_config = SimpleNamespace(state_root=build_root,
             project_path=self.config.project_path, workspace_root=self.config.workspace_root,
             developer_directory=self.config.developer_directory)
         process = self.process or PinnedXcodeProcessAdapter(build_config)
         try:
             path = process.build(value["header"]["targetSetupID"], options.team_id, options.allow_provisioning_updates)
-            expected = (transaction / "transactions" / value["header"]["targetSetupID"] / "build").resolve()
+            expected = (build_root / "transactions" / value["header"]["targetSetupID"] / "build").resolve()
             Path(path).resolve().relative_to(expected)
             artifact = self.artifact_validator.inspect(path, device_id=request.device_id, team_id=options.team_id)
             return snapshot_artifact(artifact, candidate, self.artifact_validator,
@@ -638,8 +664,23 @@ class ManagementProducer:
                 raise ManagementBridgeError("handoff-unknown")
         if publish:
             self.store.begin_publication(action)
-            previous = self.store.read_evidence("quiesceCommand") if action in {"seal", "release"} else self.store.read_evidence("previousControl")
             try:
+                # A crash may leave the terminal prior operation's command
+                # in the mailbox before this operation's quiesce reached it.
+                # Select only freshly matched immutable prior bytes. The
+                # adapter independently checks the archived terminal request
+                # and response before replacing a prior operation.
+                actual = preparation.read_file(request.device_id, "managementControl")
+                quiesce = self.store.read_evidence("quiesceCommand")
+                archived = self.store.read_evidence("previousControl")
+                if actual is None or actual == raw:
+                    previous = actual
+                elif action in {"seal", "release"} and actual == quiesce:
+                    previous = quiesce
+                elif action in {"quiesce", "release"} and actual == archived:
+                    previous = archived
+                else:
+                    raise ManagementBridgeError("transaction-conflict")
                 preparation.publish_control(request.device_id, raw, previous=previous,
                     previous_request=self.store.read_evidence("previousRequest"))
             except Exception:
@@ -688,6 +729,7 @@ class ManagementProducer:
                 self.store.record_intent("sourceSeal")
             self.store.confirm("sourceSeal", "sealedReceipt")
         current = self.store.read()
+        sealed = current["stages"]["sourceSeal"]["state"] == "confirmed"
         state = current["stages"]["sourceStop"]["state"]
         fresh_pid = self._source_pid(device, request.device_id)
         if state == "pending":
@@ -864,7 +906,7 @@ class ManagementProducer:
         if request.kind == "renew":
             if artifact is None:
                 raise ManagementBridgeError("artifact-mismatch")
-            driver.prepare_readback_metadata(request, identity)
+            driver.publish_readback_metadata(request, identity)
             current = self.store.read()
             state = current["stages"]["update"]["state"]
             if state == "pending":
@@ -915,6 +957,13 @@ class ManagementProducer:
         if preparation.read_file(value["header"]["deviceID"], "restoreRoot") != root:
             raise ManagementBridgeError("identity-mismatch")
         if preparation.read_file(value["header"]["deviceID"], "restoreIntent") != self.store.read_evidence("sourceRestoreIntent"):
+            raise ManagementBridgeError("identity-mismatch")
+        # Core legitimately appends this operation's preparing/sealed record
+        # after publication. Only the first publication compares the original
+        # lineage snapshot; later gates validate the exact original request
+        # and source lease/receipt instead.
+        if (value["stages"]["sourceRequest"]["state"] == "pending" and
+                preparation.read_management_root(value["header"]["deviceID"]) != self.store.read_evidence("sourceManagementRoot")):
             raise ManagementBridgeError("identity-mismatch")
         admission = _parse_object(self.store.read_evidence("sourceAdmission") or b"", limit=64 * 1024)
         source = decode_source_activation(evidence, device_id=value["header"]["deviceID"],
@@ -1013,39 +1062,190 @@ class ManagementProducer:
         with contextlib.suppress(Exception):
             self.store.fail(code)
 
+    def _target_identity(self) -> PreparationAppIdentity | None:
+        raw = self.store.read_evidence("targetIdentity")
+        if raw is None:
+            return None
+        identity = _parse_object(raw, limit=32 * 1024)
+        if set(identity) != {"bundleID", "build", "profileSHA256", "executableSHA256", "teamID", "expiresAt"}:
+            raise ManagementBridgeError("transaction-unknown")
+        app = _validate_app({key: identity[key] for key in (
+            "bundleID", "build", "profileSHA256", "executableSHA256")}, code="transaction-unknown")
+        return _identity_from_app(app, _team(identity["teamID"], code="transaction-unknown"),
+                                  _expiry(identity["expiresAt"], code="transaction-unknown"))
+
     def _validate_journal_typed(self, value: Mapping[str, Any]) -> None:
-        """Revalidate typed Core blobs before a pure query response."""
-        app_request = self.store.read_evidence("appRequest")
-        if app_request is None:
-            return
+        """Revalidate saved full Core/App evidence without contacting a device.
+
+        Stage flags and hashes alone are not completion proof. Partial local
+        preparation remains readable, but any saved adoption must bind the
+        actual full activation record and the exact frozen formal input.
+        """
+        from .management_preparation import _terminal_response_is_bound, _validate_management_request
+        from .management_target import _receipt_matches
         try:
-            from .management_preparation import _terminal_response_is_bound, _validate_management_request
-        except ImportError:
-            from Management.management_preparation import _terminal_response_is_bound, _validate_management_request
-        try:
-            request = _validate_management_request(app_request)
-            request["_raw"] = app_request
-            header = value["header"]
-            if (request["managementID"] != header["managementID"] or
-                    request["expectedDeviceUDID"] != header["deviceID"] or
-                    request["kind"] != header["kind"] or
-                    request["targetSetupID"] != header["targetSetupID"]):
+            header, stages = value["header"], value["stages"]
+            identity = self._target_identity()
+            app_raw = self.store.read_evidence("appRequest")
+            if app_raw is None:
+                if value["sourceAdmission"] is not None and self.store.read_evidence("sourceAdmission") is None:
+                    raise ValueError()
+                if any(stages[name]["state"] != "pending" for name in stages if name not in {"artifact", "release"}):
+                    raise ValueError()
+                return
+            core = _validate_management_request(app_raw)
+            core["_raw"] = app_raw
+            for key, expected in (
+                ("managementID", header["managementID"]), ("nonce", header["nonce"]),
+                ("expectedDeviceUDID", header["deviceID"]), ("kind", header["kind"]),
+                ("targetSetupID", header["targetSetupID"]),
+            ):
+                if core[key] != expected:
+                    raise ValueError()
+            if identity is None or identity.app() != core["targetApp"] or identity.team_id != core["teamID"]:
                 raise ValueError()
-            source_raw = self.store.read_evidence("sourceActivation")
-            admission_raw = self.store.read_evidence("sourceAdmission")
-            if source_raw is None or admission_raw is None:
+            source = self._load_source(value)
+            source.require_new_receipt_capacity()
+            admission = _parse_object(self.store.read_evidence("sourceAdmission") or b"", limit=64 * 1024)
+            pid = admission.get("sourcePID")
+            root = self.store.read_evidence("sourceRestoreRoot")
+            root_sha = _sha(root) if root is not None else None
+            if (type(pid) is not int or not 0 <= pid <= 2_147_483_647 or
+                    admission != {**source.admission_evidence(), "deviceID": header["deviceID"],
+                        "sourcePID": pid, "sourceAdmission": "live" if pid > 0 else "cold",
+                        "sourceRestoreRootSHA256": root_sha, "targetSetupID": header["targetSetupID"]} or
+                    value["sourceAdmission"] != admission["sourceAdmission"] or
+                    core["sourceActivationSHA256"] != source.sha256 or
+                    core["sourceApp"] != source.identity.app() or
+                    core["sourceSetupID"] != source.receipt.setup_id or
+                    core["sourceRestoreRootSHA256"] != root_sha or
+                    core["teamID"] != source.identity.team_id):
                 raise ValueError()
-            admission = _parse_object(admission_raw, limit=64 * 1024)
-            source = decode_source_activation(
-                source_raw,
-                device_id=header["deviceID"],
-                installed_build=request["sourceApp"]["build"],
-                installed_team=request["teamID"],
-            )
-            if source.sha256 != request["sourceActivationSHA256"] or admission["activationSHA256"] != source.sha256:
+            if header["kind"] == "repair" and identity != source.identity:
+                raise ValueError()
+            if header["options"] is not None and header["options"]["teamID"] != identity.team_id:
+                raise ValueError()
+            generation_ids(self.store.read_evidence("sourceManagementRoot"))
+            artifact_raw = self.store.read_evidence("targetArtifact")
+            artifact = None
+            if artifact_raw is not None:
+                artifact = _parse_object(artifact_raw, limit=32 * 1024)
+                if (header["kind"] != "renew" or set(artifact) != {"app", "teamID", "expiresAt", "artifactSHA256"} or
+                        artifact["app"] != identity.app() or artifact["teamID"] != identity.team_id or
+                        artifact["expiresAt"] != identity.expires_at):
+                    raise ValueError()
+                _hash(artifact["artifactSHA256"], code="transaction-unknown")
+            if header["kind"] == "renew" and artifact is None:
+                raise ValueError()
+            if header["kind"] == "repair" and any(stages[name]["state"] != "pending" for name in ("artifact", "update")):
+                raise ValueError()
+            if header["kind"] == "renew" and any(stages.get(name, {"state": "pending"})["state"] != "pending" for name in ("pairCreate", "pairDelivery")):
+                raise ValueError()
+
+            # Pairing plans carry no positive import authority. Their binding
+            # is nevertheless immutable and required by every later proof.
+            pairing_raw = self.store.read_evidence("pairingBinding")
+            pairing = _parse_object(pairing_raw, limit=32 * 1024) if pairing_raw is not None else None
+            if pairing is not None:
+                tx = source.receipt.pairing_transaction_id if header["kind"] == "renew" else str(
+                    uuid.uuid5(uuid.UUID(header["targetSetupID"]), "gofly-management-repair-pairing-v1"))
+                digest = _hash(pairing.get("sha256"), code="transaction-unknown")
+                if pairing != {"version": 1, "managementID": header["managementID"],
+                        "targetSetupID": header["targetSetupID"], "deviceID": header["deviceID"],
+                        "transactionID": tx, "sha256": digest}:
+                    raise ValueError()
+                if header["kind"] == "renew" and digest != source.receipt.pairing_sha256:
+                    raise ValueError()
+                planned = _parse_object(self.store.read_evidence("pairingPlan") or b"", limit=32 * 1024)
+                if planned != {"version": 1, "kind": header["kind"], "managementID": header["managementID"],
+                        "targetSetupID": header["targetSetupID"], "setupNonce": header["setupNonce"],
+                        "deviceID": header["deviceID"], "pairingTransactionID": tx,
+                        "pairingSHA256": digest if header["kind"] == "renew" else None}:
+                    raise ValueError()
+            readback_raw = self.store.read_evidence("targetReadback")
+            readback_plan = self.store.read_evidence("readbackPlan")
+            if readback_plan is not None and readback_plan != _json({
+                    "version": 1, "setupID": header["targetSetupID"], "nonce": header["setupNonce"],
+                    "expectedDeviceUDID": header["deviceID"], "app": identity.app()}):
+                raise ValueError()
+            if readback_raw is not None:
+                if readback_plan is None:
+                    raise ValueError()
+                readback = PinnedPymobiledeviceAdapter._decode_readback(readback_raw,
+                    device_id=header["deviceID"], setup_id=header["targetSetupID"], nonce=header["setupNonce"])
+                expected_pair = pairing["sha256"] if pairing is not None else source.receipt.pairing_sha256
+                if (readback.build != identity.build or readback.profile_sha256 != identity.profile_sha256 or
+                        readback.executable_sha256 != identity.executable_sha256 or readback.pairing_sha256 != expected_pair):
+                    raise ValueError()
+            if stages["readback"]["state"] == "confirmed" and readback_raw is None:
+                raise ValueError()
+            absence_raw = self.store.read_evidence("readbackAbsenceObservation")
+            if absence_raw is not None:
+                absence = _parse_object(absence_raw, limit=32 * 1024)
+                if (readback_raw is None or readback_plan is None or absence != {
+                        "version": 1, "deviceID": header["deviceID"], "setupID": header["targetSetupID"],
+                        "nonce": header["setupNonce"], "readbackPlanSHA256": _sha(readback_plan), "pid": 0}):
+                    raise ValueError()
+            for evidence_name, launch in (("readbackProcess", "readbackLaunch"), ("formalProcess", "formalLaunch")):
+                process_raw = self.store.read_evidence(evidence_name)
+                if process_raw is None:
+                    continue
+                process = _parse_object(process_raw, limit=32 * 1024)
+                owned_pid = process.get("pid")
+                if (type(owned_pid) is not int or not 0 < owned_pid <= 2_147_483_647 or
+                        process != {"version": 1, "deviceID": header["deviceID"],
+                            "setupID": header["targetSetupID"], "nonce": header["setupNonce"], "pid": owned_pid} or
+                        stages.get(launch, {"state": "pending"})["state"] == "pending"):
+                    raise ValueError()
+            if stages.get("readbackStop", {"state": "pending"})["state"] == "confirmed":
+                if self.store.read_evidence("readbackProcess") is None and absence_raw is None:
+                    raise ValueError()
+            if stages["update"]["state"] == "confirmed":
+                observation_raw = self.store.read_evidence("updateObservation")
+                if observation_raw is not None:
+                    observation = _parse_object(observation_raw, limit=32 * 1024)
+                    if observation != {"version": 1, "deviceID": header["deviceID"], "bundleID": identity.bundle_id,
+                            "build": identity.build, "teamID": identity.team_id, "artifactSHA256": artifact["artifactSHA256"]}:
+                        raise ValueError()
+                elif readback_raw is None:
+                    raise ValueError()
+
+            support_raw = self.store.read_evidence("supportObservation")
+            support = _parse_object(support_raw, limit=64 * 1024) if support_raw is not None else None
+            formal_raw = self.store.read_evidence("formalPlan")
+            plan = None
+            if formal_raw is not None:
+                if support is None or pairing is None:
+                    raise ValueError()
+                plan = build_formal_setup_input(device_id=header["deviceID"], setup_id=header["targetSetupID"],
+                    nonce=header["setupNonce"], artifact=identity, pairing_transaction_id=pairing["transactionID"],
+                    pairing_sha256=pairing["sha256"], support=support)
+                if plan.raw_manifest != formal_raw:
+                    raise ValueError()
+            if stages["support"]["state"] == "confirmed" and support is None:
+                raise ValueError()
+            final_raw = self.store.read_evidence("finalSupportObservation")
+            if final_raw is not None and _parse_object(final_raw, limit=64 * 1024) != support:
+                raise ValueError()
+            if stages["finalSupport"]["state"] == "confirmed" and final_raw is None:
+                raise ValueError()
+            target_raw = self.store.read_evidence("activationReceipt")
+            if target_raw is not None:
+                if plan is None or stages.get("formalLaunch", {"state": "pending"})["state"] == "pending":
+                    raise ValueError()
+                target = PinnedPymobiledeviceAdapter._decode_activation_receipt(target_raw,
+                    device_id=header["deviceID"], setup_id=header["targetSetupID"], nonce=header["setupNonce"])
+                _receipt_matches(target, device_id=header["deviceID"], setup_id=header["targetSetupID"],
+                    nonce=header["setupNonce"], identity=identity, pairing_transaction_id=pairing["transactionID"],
+                    pairing_sha256=pairing["sha256"], support=support, plan=plan)
+            if stages["pairing"]["state"] == "confirmed" and target_raw is None:
                 raise ValueError()
             adoption = self.store.read_evidence("adoptionReceipt")
-            if adoption is not None and not _terminal_response_is_bound(adoption, request):
+            if adoption is not None:
+                if (target_raw is None or not _terminal_response_is_bound(adoption, core) or
+                        _parse_object(adoption, limit=64 * 1024)["targetActivationSHA256"] != _sha(target_raw)):
+                    raise ValueError()
+            if stages["activation"]["state"] == "confirmed" and adoption is None:
                 raise ValueError()
         except Exception:
             raise ManagementBridgeError("transaction-unknown") from None
@@ -1092,15 +1292,24 @@ class ManagementProducer:
             raise ManagementBridgeError("transaction-conflict")
 
     def _payload(self, value: Mapping[str, Any], request: ManagementRequest) -> ManagementPayload:
+        self._validate_journal_typed(value)
         stages = value["stages"]
-        stage, outcome = "preflight", "inProgress"
-        for key, external in _STAGE_MAP:
-            state = stages[key]["state"]
-            if state in {"unknown", "inflight"}:
-                stage, outcome = external, "unknown"
+        skipped = {"artifact", "update"} if request.kind == "repair" else {"pairCreate", "pairDelivery"}
+        if value.get("sourceAdmission") == "cold":
+            skipped.add("sourceSeal")
+        relevant = [(key, phase) for key, phase in _STAGE_MAP if key in stages and key not in skipped]
+        stage = next((phase for key, phase in relevant if stages[key]["state"] != "confirmed"), "adoption")
+        outcome = "failed" if value.get("outcome") == "failed" else "inProgress"
+        # Submitted effects take priority over an earlier optional/pending
+        # checkpoint; they cannot be presented as a safe fresh operation.
+        for key, phase in relevant:
+            if stages[key]["state"] in {"unknown", "inflight"}:
+                stage, outcome = phase, "unknown"
                 break
-            if state != "confirmed":
-                stage, outcome = external, "inProgress"
+        for action, phase in (("release", "release"), ("seal", "seal"), ("quiesce", "source")):
+            attempts = value.get("commands", {}).get(action, {}).get("attempts", [])
+            if attempts and attempts[-1]["state"] in {"unknown", "inflight", "absentAfterReconcile"}:
+                stage, outcome = phase, "unknown"
                 break
         if stages["complete"]["state"] == "confirmed":
             stage, outcome = "complete", "confirmed"
@@ -1115,41 +1324,32 @@ class ManagementProducer:
             "supportObserved": stages["finalSupport"]["state"] == "confirmed" or stages["support"]["state"] == "confirmed",
             "adoptionCommitted": stages["activation"]["state"] == "confirmed" and "adoptionReceipt" in value["evidence"],
         }
-        app = team = expiry = receipt = None
-        request_raw = self.store.read_evidence("appRequest")
-        if request_raw is not None:
-            try:
-                core = _parse_object(request_raw, limit=32 * 1024)
-                app = core.get("targetApp")
-                team = core.get("teamID")
-            except Exception:
-                app = team = None
-        identity_raw = self.store.read_evidence("targetIdentity")
-        if identity_raw is not None:
-            try:
-                identity = _parse_object(identity_raw, limit=32 * 1024)
-                expiry = identity.get("expiresAt")
-            except Exception:
-                expiry = None
+        identity = self._target_identity()
         receipt_raw = self.store.read_evidence("adoptionReceipt")
-        if receipt_raw is not None:
-            try:
-                receipt = _parse_object(receipt_raw, limit=64 * 1024)
-                app = receipt.get("targetApp")
-                team = receipt.get("teamID")
-                proof["adoptionCommitted"] = True
-            except Exception:
-                receipt = None
+        receipt = _parse_object(receipt_raw, limit=64 * 1024) if receipt_raw is not None else None
+        # Metadata never becomes a committed adoption merely by existing.
+        if not proof["adoptionCommitted"]:
+            receipt = None
+        forbidden = ("mutationIntent", "sourceSeal", "sourceStop", "legacy", "update", "pairing",
+                     "support", "readback", "formalInput", "activation", "finalSupport",
+                     "pairCreate", "pairDelivery", "readbackPublish", "readbackLaunch", "readbackStop", "formalLaunch")
         can_release = (
             stage in {"artifact", "source"} and outcome in {"inProgress", "unknown", "failed"}
-            and not proof["mutationSealed"] and not proof["updateConfirmed"]
-            and not proof["pairingImported"] and not proof["adoptionCommitted"]
+            and all(stages.get(name, {"state": "pending"})["state"] == "pending" for name in forbidden)
+            and stages["artifact"]["state"] not in {"inflight", "unknown"}
+            and stages["sourceReady"]["state"] not in {"inflight", "unknown"}
+            and (stages["sourceRequest"]["state"] == "pending" or (
+                value.get("sourceAdmission") == "live" and
+                bool(value.get("commands", {}).get("quiesce", {}).get("attempts"))))
+            and not any(proof[key] for key in ("mutationSealed", "updateConfirmed", "pairingImported", "adoptionCommitted"))
         )
-        can_resume = outcome not in {"confirmed"} and stage != "release"
+        can_resume = outcome != "confirmed"
         return ManagementPayload(
             stage, outcome, can_resume, can_release, value.get("sourceAdmission"),
             len(value["revisions"]) - 1, value["revisions"][-1]["transport"], proof,
-            app, team, expiry, receipt,
+            identity.app() if identity is not None else None,
+            identity.team_id if identity is not None else None,
+            identity.expires_at if identity is not None else None, receipt,
         )
 
 

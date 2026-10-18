@@ -5,7 +5,7 @@ import unittest
 import hashlib
 from pathlib import Path
 
-from app.GoFlyMac.Bridge.Management.management_journal import ManagementJournal
+from app.GoFlyMac.Bridge.Management.management_journal import ManagementJournal, _validate
 from app.GoFlyMac.Bridge.Management.management_protocol import ManagementBridgeError, decode_request
 import json
 from app.GoFlyMac.Bridge.Setup.setup_config import SetupConfiguration
@@ -68,6 +68,31 @@ class ManagementJournalTests(unittest.TestCase):
                                                               "88888888-8888-4888-8888-888888888888"))
                 app_raw = app_request(control_initial)
                 control_store.put_evidence("appRequest", app_raw)
+                header = control_initial["header"]
+                plan = json.dumps({
+                    "version": 1, "setupID": header["targetSetupID"], "nonce": header["setupNonce"],
+                    "expectedDeviceUDID": header["deviceID"],
+                    "app": {"bundleID": "com.neven.gofly", "build": "1",
+                            "profileSHA256": "a" * 64, "executableSHA256": "b" * 64},
+                }, sort_keys=True, separators=(",", ":")).encode()
+                control_store.put_evidence("readbackPlan", plan)
+                control_store.record_intent("readbackPublish")
+                attempt = control_store.read()["publications"]["readbackPublish"]["attempts"][0]
+                self.assertEqual((attempt["number"], attempt["revision"], attempt["state"]), (1, 0, "inflight"))
+                control_store.mark_unknown("readbackPublish", "handoff-unknown")
+                with self.assertRaises(ManagementBridgeError):
+                    control_store.begin_readback_publication(revision=0)
+                control_store.reconcile_readback_absence(revision=0, fresh_absent=True)
+                control_store.record_intent("readbackPublish")
+                attempts = control_store.read()["publications"]["readbackPublish"]["attempts"]
+                self.assertEqual((attempts[0]["state"], attempts[1]["priorOutcome"]),
+                                 ("absentAfterReconcile", "absentAfterReconcile"))
+                control_store.confirm_readback_publication()
+                malformed_publication = control_store.read()
+                malformed_publication["publications"]["readbackPublish"]["attempts"][-1]["state"] = "unknown"
+                malformed_publication["publications"]["readbackPublish"]["attempts"][-1]["terminalReason"] = None
+                with self.assertRaises(ManagementBridgeError):
+                    _validate(malformed_publication)
                 command = control(control_initial, app_raw, "quiesce")
                 control_store.freeze_command("quiesce", command)
                 control_store.begin_publication("quiesce")
@@ -106,6 +131,20 @@ class ManagementJournalTests(unittest.TestCase):
             self.assertEqual(blocked.exception.code, "transaction-conflict")
             with reopened.lock():
                 self.assertEqual(reopened.create(request())["header"], initial["header"])
+                legacy_header = reopened.read()["header"]
+                legacy_plan = json.dumps({
+                    "version": 1, "setupID": legacy_header["targetSetupID"],
+                    "nonce": legacy_header["setupNonce"], "expectedDeviceUDID": legacy_header["deviceID"],
+                    "app": {"bundleID": "com.neven.gofly", "build": "1",
+                            "profileSHA256": "a" * 64, "executableSHA256": "b" * 64},
+                }, sort_keys=True, separators=(",", ":")).encode()
+                reopened.put_evidence("readbackPlan", legacy_plan)
+                legacy = reopened.read()
+                legacy["stages"]["readbackPublish"] = {"state": "unknown", "revision": 0, "evidence": None}
+                reopened.path.write_text(json.dumps(legacy))
+                with self.assertRaises(ManagementBridgeError):
+                    reopened.begin_readback_publication(revision=0)
+                self.assertEqual(reopened.confirm_readback_publication()["stages"]["readbackPublish"]["state"], "confirmed")
                 with self.assertRaises(ManagementBridgeError):
                     reopened.create(request("44444444-4444-4444-8444-444444444444"))
                 with self.assertRaises(ManagementBridgeError):
@@ -137,6 +176,30 @@ class ManagementJournalTests(unittest.TestCase):
             store = ManagementJournal(Path(directory) / "state")
             with store.lock():
                 first = store.create(request())
+                header = first["header"]
+                plan = json.dumps({
+                    "version": 1, "setupID": header["targetSetupID"], "nonce": header["setupNonce"],
+                    "expectedDeviceUDID": header["deviceID"],
+                    "app": {"bundleID": "com.neven.gofly", "build": "1",
+                            "profileSHA256": "a" * 64, "executableSHA256": "b" * 64},
+                }, sort_keys=True, separators=(",", ":")).encode()
+                store.put_evidence("readbackPlan", plan)
+                absence = json.dumps({
+                    "version": 1, "deviceID": header["deviceID"], "setupID": header["targetSetupID"],
+                    "nonce": header["setupNonce"], "readbackPlanSHA256": hashlib.sha256(plan).hexdigest(), "pid": 0,
+                }, sort_keys=True, separators=(",", ":")).encode()
+                store.put_evidence("readbackAbsenceObservation", absence)
+                self.assertEqual(store.read_evidence("readbackAbsenceObservation"), absence)
+                mismatched_absence = json.loads(absence)
+                mismatched_absence["readbackPlanSHA256"] = "0" * 64
+                with self.assertRaises(ManagementBridgeError):
+                    store._check_readback_absence(
+                        store.read(),
+                        {"readbackPlan": plan,
+                         "readbackAbsenceObservation": json.dumps(
+                             mismatched_absence, sort_keys=True, separators=(",", ":")
+                         ).encode()},
+                    )
                 resumed_selection = "88888888-8888-4888-8888-888888888888"
                 store.append_revision(resumed_selection, "USB")
                 store.release()
