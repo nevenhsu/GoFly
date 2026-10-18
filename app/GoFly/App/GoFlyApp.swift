@@ -40,10 +40,14 @@ struct GoFlyApp: App {
                 #if DEBUG && targetEnvironment(simulator)
                 if GoFlyIconPreview.isRequested { return }
                 #endif
-                await bootstrap.observeManagementCommands()
+                await bootstrap.observeMacCommands()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { preferences.refreshSystemPreferences() }
+                if phase == .active {
+                    preferences.refreshSystemPreferences()
+                } else {
+                    bootstrap.invalidateMacCommandObservation()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()

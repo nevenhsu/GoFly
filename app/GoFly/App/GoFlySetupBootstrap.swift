@@ -36,6 +36,27 @@ struct GoFlySetupMetadata: Equatable, Sendable {
     }
 }
 
+/// Process-local generation for the active-scene mailbox observer.  The
+/// observer task can be cancelled while an unstructured physical transfer is
+/// draining, so cancellation is kept separate from that transfer task.
+final class GoFlyMacCommandObservation: @unchecked Sendable {
+    let id = UUID()
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+}
+
 /// Owns only the formal setup check until it has produced an ordinary or
 /// completed result. The normal runtime assembly is retained exactly once and
 /// is created on the main actor only after that result.
@@ -50,6 +71,9 @@ final class GoFlySetupBootstrap: ObservableObject {
     var transferTaskID: UUID?
     var activeDataLease: GoFlyDataLease?
     var completedManagementControl: ManagementControlCommand?
+    var completedTransferControl: TransferControlInput?
+    var commandObservation: GoFlyMacCommandObservation?
+    var preferManagementCommand = true
 
     init() {
         #if DEBUG && targetEnvironment(simulator)
@@ -287,6 +311,15 @@ final class GoFlySetupBootstrap: ObservableObject {
         guard transferTaskID == id else { return }
         transferTask = nil
         transferTaskID = nil
+    }
+
+    func invalidateMacCommandObservation() {
+        commandObservation?.cancel()
+    }
+
+    func commandObservationIsCurrent(_ token: GoFlyMacCommandObservation?) -> Bool {
+        guard let token else { return true }
+        return commandObservation?.id == token.id && !token.isCancelled
     }
 
     func restartAfterTransfer() {

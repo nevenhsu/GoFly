@@ -90,6 +90,28 @@ public struct TransferControlRequest: Sendable, Equatable {
     }
 }
 
+/// One publication of the fixed request and control mailboxes. Both original
+/// byte sequences remain part of its identity across queued App work.
+public struct TransferControlInput: Sendable, Equatable {
+    public let input: TransferExportInput
+    public let control: TransferControlRequest
+    public let rawControlData: Data
+    public let rawControlSHA256: String
+
+    public init(input: TransferExportInput, controlData: Data) throws {
+        let control = try TransferControlCodec.decodeControlRequest(controlData)
+        guard control.transferID == input.request.transferID,
+              control.nonce == input.request.nonce,
+              control.requestSHA256 == input.rawSHA256 else {
+            throw TransferFailure.identityMismatch
+        }
+        self.input = input
+        self.control = control
+        self.rawControlData = controlData
+        self.rawControlSHA256 = SetupValidation.sha256(controlData)
+    }
+}
+
 public struct TransferRestoreIntent: Sendable, Equatable {
     public static let schemaVersion = 1
     public let version: Int
@@ -462,6 +484,30 @@ public final class TransferExportStore: @unchecked Sendable {
     public func readControl() throws -> TransferControlRequest? {
         try withLock { guard let data = try TransferStorageDisk.read(transferRoot.appendingPathComponent("control-request.json"), maximum: TransferLimits.requestBytes) else { return nil }; return try TransferControlCodec.decodeControlRequest(data) }
     }
+    public func readControlInput() throws -> TransferControlInput? {
+        try withLock { try readControlInputUnlocked() }
+    }
+    public func requireCurrentControlInput(_ captured: TransferControlInput) throws {
+        try withLock { try requireCurrentControlInputUnlocked(captured) }
+    }
+
+    private func readControlInputUnlocked() throws -> TransferControlInput? {
+        let requestURL = transferRoot.appendingPathComponent("export-request.json")
+        let controlURL = transferRoot.appendingPathComponent("control-request.json")
+        guard let request = try TransferStorageDisk.read(requestURL, maximum: TransferLimits.requestBytes),
+              let control = try TransferStorageDisk.read(controlURL, maximum: TransferLimits.requestBytes) else { return nil }
+        let captured = try TransferControlInput(input: TransferExportInput(data: request), controlData: control)
+        guard try TransferStorageDisk.read(requestURL, maximum: TransferLimits.requestBytes) == request,
+              try TransferStorageDisk.read(controlURL, maximum: TransferLimits.requestBytes) == control else {
+            throw TransferFailure.identityMismatch
+        }
+        return captured
+    }
+
+    private func requireCurrentControlInputUnlocked(_ captured: TransferControlInput) throws {
+        guard try readControlInputUnlocked() == captured else { throw TransferFailure.identityMismatch }
+    }
+
     public func readExport() throws -> TransferExportReceipt? {
         try withLock { try readExportUnlocked() }
     }
@@ -699,34 +745,50 @@ public final class TransferExportStore: @unchecked Sendable {
     public func writeReadback(control: TransferControlRequest, currentApp: SetupAppIdentity,
                               pid: Int32, failure: TransferFailure? = nil) throws -> TransferReadback {
         try withLock {
-            guard pid > 0 else { throw TransferFailure.invalidInput }
-            let root = try readExportRootUnlocked()
-            let receipt = root?.current?.request.transferID == control.transferID
-                ? root?.current
-                : root?.history.first(where: { $0.request.transferID == control.transferID })
-            let input = try TransferStorageDisk.read(transferRoot.appendingPathComponent("export-request.json"), maximum: TransferLimits.requestBytes).map(TransferExportInput.init(data:))
-            let requestSHA = receipt?.requestSHA256 ?? input?.rawSHA256
-            guard let requestSHA, requestSHA == control.requestSHA256 else { throw TransferFailure.identityMismatch }
-            if let receipt {
-                guard receipt.request.nonce == control.nonce,
-                      let original = try TransferStorageDisk.read(transferRoot.appendingPathComponent("exports/\(receipt.request.dataSetID.uuidString.lowercased())/request.json"), maximum: TransferLimits.requestBytes),
-                      SetupValidation.sha256(original) == receipt.requestSHA256 else { throw TransferFailure.artifactMismatch }
-            } else {
-                guard input?.request.nonce == control.nonce else { throw TransferFailure.identityMismatch }
-            }
-            let phase: TransferReadbackPhase
-            if let receipt {
-                phase = TransferReadbackPhase(rawValue: receipt.phase.rawValue) ?? .failed
-            } else { phase = .waiting }
-            let readback = TransferReadback(version: 1, commandID: control.commandID, action: control.action,
-                transferID: control.transferID, nonce: control.nonce, requestSHA256: requestSHA,
-                manifestSHA256: receipt?.manifestSHA256, sourceApp: currentApp,
-                pid: pid, phase: phase, receiptSHA256: receipt?.receiptSHA256,
-                errorCode: failure.map(TransferStorageErrorCode.code))
-            let object = try TransferStorageJSON.readbackObject(readback)
-            try TransferStorageDisk.atomicWrite(object, to: transferRoot.appendingPathComponent("control-response.json"), checkpoint: checkpoint)
-            return readback
+            try writeReadbackUnlocked(control: control, currentApp: currentApp, pid: pid, failure: failure)
         }
+    }
+
+    public func writeReadback(input: TransferControlInput, currentApp: SetupAppIdentity,
+                              pid: Int32, failure: TransferFailure? = nil) throws -> TransferReadback {
+        try withLock {
+            try requireCurrentControlInputUnlocked(input)
+            return try writeReadbackUnlocked(control: input.control, currentApp: currentApp,
+                                            pid: pid, failure: failure, captured: input)
+        }
+    }
+
+    private func writeReadbackUnlocked(control: TransferControlRequest, currentApp: SetupAppIdentity,
+                                       pid: Int32, failure: TransferFailure?,
+                                       captured: TransferControlInput? = nil) throws -> TransferReadback {
+        guard pid > 0 else { throw TransferFailure.invalidInput }
+        let root = try readExportRootUnlocked()
+        let receipt = root?.current?.request.transferID == control.transferID
+            ? root?.current
+            : root?.history.first(where: { $0.request.transferID == control.transferID })
+        let input = try TransferStorageDisk.read(transferRoot.appendingPathComponent("export-request.json"), maximum: TransferLimits.requestBytes).map(TransferExportInput.init(data:))
+        let requestSHA = receipt?.requestSHA256 ?? input?.rawSHA256
+        guard let requestSHA, requestSHA == control.requestSHA256 else { throw TransferFailure.identityMismatch }
+        if let receipt {
+            guard receipt.request.nonce == control.nonce,
+                  let original = try TransferStorageDisk.read(transferRoot.appendingPathComponent("exports/\(receipt.request.dataSetID.uuidString.lowercased())/request.json"), maximum: TransferLimits.requestBytes),
+                  SetupValidation.sha256(original) == receipt.requestSHA256 else { throw TransferFailure.artifactMismatch }
+        } else {
+            guard input?.request.nonce == control.nonce else { throw TransferFailure.identityMismatch }
+        }
+        let phase: TransferReadbackPhase
+        if let receipt {
+            phase = TransferReadbackPhase(rawValue: receipt.phase.rawValue) ?? .failed
+        } else { phase = .waiting }
+        let readback = TransferReadback(version: 1, commandID: control.commandID, action: control.action,
+            transferID: control.transferID, nonce: control.nonce, requestSHA256: requestSHA,
+            manifestSHA256: receipt?.manifestSHA256, sourceApp: currentApp,
+            pid: pid, phase: phase, receiptSHA256: receipt?.receiptSHA256,
+            errorCode: failure.map(TransferStorageErrorCode.code))
+        let object = try TransferStorageJSON.readbackObject(readback)
+        if let captured { try requireCurrentControlInputUnlocked(captured) }
+        try TransferStorageDisk.atomicWrite(object, to: transferRoot.appendingPathComponent("control-response.json"), checkpoint: checkpoint)
+        return readback
     }
 
     public func writePendingReadback(control: TransferControlRequest, input: TransferExportInput,
@@ -1601,7 +1663,11 @@ private enum TransferStorageDisk {
             } else if type == mode_t(S_IFREG) {
                 guard value.st_nlink == 1 else { throw TransferFailure.unsafeFile }
                 let fileMode = value.st_mode & 0o7777
-                guard fileMode == 0o600 || (incomingIngress && fileMode == 0o644) || (initialIngress && depth == 0 && fileMode == 0o644),
+                // AFC cannot chmod a newly published command. These are the
+                // same fixed producer leaves sealed by prepareIncomingFiles;
+                // later publications may arrive after the root is private.
+                let fixedIngress = depth == 0 && ["export-request.json", "control-request.json", "restore-intent.json", "incoming.json"].contains(name)
+                guard fileMode == 0o600 || (fixedIngress && fileMode == 0o644) || (incomingIngress && fileMode == 0o644) || (initialIngress && depth == 0 && fileMode == 0o644),
                       value.st_size >= 0, value.st_size <= off_t(TransferLimits.aggregateBytes) else { throw TransferFailure.unsafeFile }
             } else {
                 throw TransferFailure.unsafeFile

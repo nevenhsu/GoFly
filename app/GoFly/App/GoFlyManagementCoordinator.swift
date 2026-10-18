@@ -37,36 +37,141 @@ struct GoFlyManagementControlURL: Equatable {
 }
 
 extension GoFlySetupBootstrap {
-    /// A foreground App consumes the same request-bound controls as deep
-    /// links. Reading metadata never acquires data owners or proves readiness.
-    func observeManagementCommands() async {
+    private struct ManagementMailboxSnapshot: Sendable {
+        let input: ManagementInput
+        let command: ManagementControlCommand
+        let status: ManagementStatus?
+    }
+
+    /// One active-scene owner loop consumes both fixed mailboxes. Reading and
+    /// validating either mailbox never acquires owners or proves readiness.
+    func observeMacCommands() async {
+        let token = GoFlyMacCommandObservation()
+        commandObservation = token
+        defer {
+            if commandObservation?.id == token.id { commandObservation = nil }
+        }
+        await withTaskCancellationHandler(operation: {
+            await runMacCommandObserver(token)
+        }, onCancel: {
+            token.cancel()
+        })
+    }
+
+    private func runMacCommandObserver(_ token: GoFlyMacCommandObservation) async {
         if let startup = startupTask { await startup.value }
-        guard let support = FileManager.default.urls(for: .applicationSupportDirectory,
+        guard commandObservationIsCurrent(token),
+              let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                      in: .userDomainMask).first else { return }
-        let store = ManagementStore(applicationSupport: support)
-        while !Task.isCancelled {
-            do {
-                let command = try await Task.detached(priority: .utility) {
-                    try store.readControlCommand()
-                }.value
-                guard !Task.isCancelled else { return }
-                if let command, transferTask == nil {
-                    let link = GoFlyManagementControlURL(command: command)
-                    if completedManagementControl != command {
-                        handleManagement(link, mailboxCommand: command)
-                    }
-                }
-            } catch {
-                // An absent, incomplete or invalid command cannot change
-                // owner admission. A later exact publication may be read.
+        let managementStore = ManagementStore(applicationSupport: support)
+        let exportStore = TransferExportStore(applicationSupport: support)
+
+        while !Task.isCancelled && commandObservationIsCurrent(token) {
+            // Keep the two reads independent: malformed management input must
+            // not suppress a valid transfer control, and vice versa.
+            let management = await readManagementMailbox(managementStore)
+            let transfer = await readTransferMailbox(exportStore)
+            guard !Task.isCancelled && commandObservationIsCurrent(token) else { return }
+
+            guard transferTask == nil else {
+                do { try await Task.sleep(for: .seconds(1)) }
+                catch { return }
+                continue
             }
+
+            let managementEligible: Bool
+            if let management {
+                // This read is independent and asynchronous. Recheck the
+                // observer token and task slot after it so a URL or a
+                // cancellation cannot race an admission while we wait.
+                let exportEligible = await managementMayDispatch(exportStore)
+                guard !Task.isCancelled, commandObservationIsCurrent(token) else { return }
+                guard transferTask == nil else {
+                    do { try await Task.sleep(for: .seconds(1)) }
+                    catch { return }
+                    continue
+                }
+                managementEligible = !isHistoricalManagement(management) &&
+                    completedManagementControl != management.command && exportEligible
+            } else {
+                managementEligible = false
+            }
+            let transferEligible = transfer.map {
+                !phase.isManagementLocked && completedTransferControl != $0
+            } ?? false
+
+            if managementEligible && transferEligible, let management, let transfer {
+                if preferManagementCommand {
+                    preferManagementCommand = false
+                    handleManagement(GoFlyManagementControlURL(command: management.command),
+                                     mailboxCommand: management.command, observation: token)
+                } else {
+                    preferManagementCommand = true
+                    handleTransfer(GoFlyTransferCommand(control: transfer.control),
+                                   captured: transfer, observation: token)
+                }
+            } else if managementEligible, let management {
+                handleManagement(GoFlyManagementControlURL(command: management.command),
+                                 mailboxCommand: management.command, observation: token)
+            } else if transferEligible, let transfer {
+                handleTransfer(GoFlyTransferCommand(control: transfer.control),
+                               captured: transfer, observation: token)
+            }
+
             do { try await Task.sleep(for: .seconds(1)) }
             catch { return }
         }
     }
 
+    private func readManagementMailbox(_ store: ManagementStore) async -> ManagementMailboxSnapshot? {
+        do {
+            return try await Task.detached(priority: .utility) {
+                guard let input = try store.readInput(),
+                      let command = try store.readControlCommand() else { return nil }
+                try command.bound(to: input)
+                return ManagementMailboxSnapshot(input: input, command: command, status: try store.status())
+            }.value
+        } catch {
+            return nil
+        }
+    }
+
+    private func readTransferMailbox(_ store: TransferExportStore) async -> TransferControlInput? {
+        do {
+            return try await Task.detached(priority: .utility) {
+                try store.prepareIncomingFiles()
+                return try store.readControlInput()
+            }.value
+        } catch {
+            return nil
+        }
+    }
+
+    private func managementMayDispatch(_ exportStore: TransferExportStore) async -> Bool {
+        do {
+            let receipt = try await Task.detached(priority: .utility) {
+                try exportStore.readExport()
+            }.value
+            guard let receipt else { return true }
+            return ![.preparing, .ready, .removalSealed].contains(receipt.phase)
+        } catch {
+            return false
+        }
+    }
+
+    private func isHistoricalManagement(_ mailbox: ManagementMailboxSnapshot) -> Bool {
+        guard mailbox.command.managementID == mailbox.input.request.managementID,
+              mailbox.command.requestSHA256 == mailbox.input.rawRequestSHA256,
+              let status = mailbox.status,
+              status.managementID == mailbox.command.managementID,
+              status.requestSHA256 == mailbox.input.rawRequestSHA256,
+              status.phase == .adopted || status.phase == .released else { return false }
+        return true
+    }
+
     func handleManagement(_ link: GoFlyManagementControlURL,
-                          mailboxCommand: ManagementControlCommand? = nil) {
+                          mailboxCommand: ManagementControlCommand? = nil,
+                          observation: GoFlyMacCommandObservation? = nil) {
         if link.action == .quiesce, transferTask != nil { return }
         let prior = transferTask
         let id = UUID()
@@ -77,12 +182,13 @@ extension GoFlySetupBootstrap {
             if let prior { await prior.value }
             guard let self else { return }
             defer { transferDidFinish(id) }
-            await processManagement(link, mailboxCommand: mailboxCommand)
+            await processManagement(link, mailboxCommand: mailboxCommand, observation: observation)
         }
     }
 
     private func processManagement(_ link: GoFlyManagementControlURL,
-                                   mailboxCommand: ManagementControlCommand?) async {
+                                   mailboxCommand: ManagementControlCommand?,
+                                   observation: GoFlyMacCommandObservation?) async {
         do {
             guard let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                          in: .userDomainMask).first else { return }
@@ -110,6 +216,7 @@ extension GoFlySetupBootstrap {
             if let receipt = try export.readExport(),
                [.preparing, .ready, .removalSealed].contains(receipt.phase) { return }
             let app = try GoFlySetupIdentityReader.read()
+            guard commandObservationIsCurrent(observation) else { return }
             let pid = Int32(getpid())
             let setup = SetupActivationStore(directory: try GoFlySetupPaths.directory())
             let restore = TransferRestoreStore(applicationSupport: support)

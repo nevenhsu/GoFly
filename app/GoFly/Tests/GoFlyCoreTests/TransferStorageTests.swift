@@ -32,6 +32,39 @@ final class TransferStorageTests: XCTestCase {
                                                   nonce: request.nonce, requestSHA256: input.rawSHA256,
                                                   manifestSHA256: nil, sourceApp: nil)
         XCTAssertEqual(try TransferControlCodec.decodeControlRequest(TransferControlCodec.encodeControlRequest(control)), control)
+
+        let wrongHash = try TransferControlRequest(action: .export, commandID: control.commandID,
+            transferID: request.transferID, nonce: request.nonce,
+            requestSHA256: String(repeating: "0", count: 64), manifestSHA256: nil, sourceApp: nil)
+        XCTAssertThrowsError(try TransferControlInput(input: input,
+            controlData: TransferControlCodec.encodeControlRequest(wrongHash)))
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gofly-control-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transfer = root.appendingPathComponent("GoFlyTransfer")
+        try FileManager.default.createDirectory(at: transfer, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: NSNumber(value: 0o755)])
+        let controlData = try TransferControlCodec.encodeControlRequest(control)
+        for (name, bytes) in [("export-request.json", raw), ("control-request.json", controlData)] {
+            let url = transfer.appendingPathComponent(name)
+            try bytes.write(to: url)
+            try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)], ofItemAtPath: url.path)
+        }
+        let store = TransferExportStore(applicationSupport: root)
+        try store.prepareIncomingFiles()
+        let captured = try XCTUnwrap(store.readControlInput())
+        XCTAssertEqual(captured.rawControlData, controlData)
+        try store.requireCurrentControlInput(captured)
+        // Even a semantically identical replacement is a different publication.
+        try (controlData + Data("\n".utf8)).write(to: transfer.appendingPathComponent("control-request.json"))
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)],
+            ofItemAtPath: transfer.appendingPathComponent("control-request.json").path)
+        try store.prepareIncomingFiles()
+        XCTAssertNotEqual(try store.readControlInput(), captured)
+        XCTAssertThrowsError(try store.requireCurrentControlInput(captured))
+        XCTAssertThrowsError(try store.writeReadback(input: captured, currentApp: app,
+            pid: ProcessInfo.processInfo.processIdentifier, failure: .sourceBusy))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: transfer.appendingPathComponent("control-response.json").path))
     }
 
     func testControlCodecRejectsMixedReleaseAuthorityAndDuplicateKeys() throws {

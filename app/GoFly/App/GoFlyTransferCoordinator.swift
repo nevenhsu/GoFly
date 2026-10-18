@@ -86,19 +86,69 @@ final class GoFlyDataLease {
     }
 }
 
+struct GoFlyTransferCommand: Sendable, Equatable {
+    let action: TransferAction
+    let transferID: UUID
+    let nonce: UUID
+
+    init(_ link: TransferControlURL) {
+        action = link.action
+        transferID = link.transferID
+        nonce = link.nonce
+    }
+
+    init(control: TransferControlRequest) {
+        action = control.action
+        transferID = control.transferID
+        nonce = control.nonce
+    }
+}
+
 extension GoFlySetupBootstrap {
     func handle(url: URL) {
         if let management = GoFlyManagementControlURL(url: url) {
             handleManagement(management)
             return
         }
-        guard !phase.isManagementLocked,
-              let link = try? TransferControlURL(url: url) else { return }
+        guard let link = try? TransferControlURL(url: url) else { return }
+        handleTransfer(GoFlyTransferCommand(link), captured: nil, observation: nil)
+    }
+
+    func handleTransfer(_ command: GoFlyTransferCommand,
+                        captured: TransferControlInput?,
+                        observation: GoFlyMacCommandObservation?) {
+        guard !phase.isManagementLocked else { return }
+        // URL ingress has no observer snapshot. Capture the exact request and
+        // control bytes before waiting for startup or a prior physical task;
+        // the later body can only revalidate this immutable pairing.
+        let capturedSnapshot: TransferControlInput
+        if let captured {
+            capturedSnapshot = captured
+        } else {
+            guard let support = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+            let store = TransferExportStore(applicationSupport: support)
+            do {
+                // Normalize the supported AFC ingress permissions before the
+                // strict raw-pair snapshot. Preparation is metadata-only and
+                // never admits the command or acquires transfer owners.
+                try store.prepareIncomingFiles()
+            } catch {
+                return
+            }
+            guard let value = try? store.readControlInput() else { return }
+            capturedSnapshot = value
+        }
+        guard capturedSnapshot.control.action == command.action,
+              capturedSnapshot.control.transferID == command.transferID,
+              capturedSnapshot.control.nonce == command.nonce,
+              capturedSnapshot.input.request.transferID == command.transferID,
+              capturedSnapshot.input.request.nonce == command.nonce else { return }
         // A live physical export is never canceled by a duplicate URL. A
         // release/seal waits for the existing physical body to return before
         // observing the durable root.
-        if link.action == .export, transferTask != nil { return }
-        let prior = link.action == .export ? nil : transferTask
+        if command.action == .export, transferTask != nil { return }
+        let prior = command.action == .export ? nil : transferTask
         let id = UUID()
         transferTaskID = id
         let startup = startupTask
@@ -107,11 +157,16 @@ extension GoFlySetupBootstrap {
             if let prior { await prior.value }
             guard let self else { return }
             defer { self.transferDidFinish(id) }
-            await self.processTransfer(link)
+            guard self.commandObservationIsCurrent(observation),
+                  !self.phase.isManagementLocked else { return }
+            await self.processTransfer(command, captured: capturedSnapshot, observation: observation)
         }
     }
 
-    private func processTransfer(_ link: TransferControlURL) async {
+    private func processTransfer(_ command: GoFlyTransferCommand,
+                                 captured: TransferControlInput,
+                                 observation: GoFlyMacCommandObservation?) async {
+        var bodyAdmitted = false
         do {
             guard let support = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask
@@ -120,39 +175,38 @@ extension GoFlySetupBootstrap {
             try await Task.detached(priority: .utility, operation: {
                 try store.prepareIncomingFiles()
             }).value
-            guard let input = try await Task.detached(priority: .utility, operation: {
-                try store.readRequest()
-            }).value, let control = try await Task.detached(priority: .utility, operation: {
-                try store.readControl()
-            }).value,
-                  control.action == link.action,
-                  control.transferID == link.transferID,
-                  control.nonce == link.nonce,
-                  input.request.transferID == link.transferID,
-                  input.request.nonce == link.nonce else { return }
             let currentApp = try await Task.detached(priority: .utility, operation: {
                 try GoFlySetupIdentityReader.read()
             }).value
+            // This is the final bounded synchronous mailbox recheck after
+            // every await and immediately before the token/phase admission.
+            try store.requireCurrentControlInput(captured)
+            guard commandObservationIsCurrent(observation),
+                  !phase.isManagementLocked else { return }
+            bodyAdmitted = true
 
-            switch link.action {
+            switch command.action {
             case .export:
-                await performExport(input: input, control: control, currentApp: currentApp,
-                                    support: support, store: store)
+                if await performExport(captured: captured, currentApp: currentApp,
+                                       support: support, store: store) {
+                    completedTransferControl = captured
+                }
             case .seal:
                 let receipt = try await Task.detached(priority: .utility) {
-                    try store.seal(control, currentApp: currentApp)
+                    try store.seal(captured.control, currentApp: currentApp)
                 }.value
                 setTransferPhase(.exportLocked(receipt))
-                try await writeReadback(store: store, control: control, currentApp: currentApp)
+                let readback = try await writeReadback(store: store, input: captured,
+                                                       currentApp: currentApp)
+                if successful(readback, for: captured) { completedTransferControl = captured }
             case .release:
                 let receipt = try await Task.detached(priority: .utility) {
-                    try store.release(control, input: input, currentApp: currentApp)
+                    try store.release(captured.control, input: captured.input, currentApp: currentApp)
                 }.value
                 if let lease = activeDataLease {
                     guard lease.releaseAll() else { return }
                     activeDataLease = nil
                 }
-                try await writeReadback(store: store, control: control, currentApp: currentApp)
                 if receipt.phase == .released || receipt.phase == .releasedNoSnapshot {
                     // Keep the existing RuntimeAssembly alive; the release
                     // receipt is the terminal boundary and later bootstrap
@@ -170,44 +224,95 @@ extension GoFlySetupBootstrap {
                 } else {
                     setTransferPhase(.exportLocked(receipt))
                 }
+                // Physical release and SessionRecovery handling are complete
+                // before publication. A replaced mailbox must be rejected by
+                // the captured-input writer without reblocking this terminal
+                // release or attributing a response to the replacement.
+                do {
+                    let readback = try await writeReadback(store: store, input: captured,
+                                                           currentApp: currentApp)
+                    if successful(readback, for: captured) { completedTransferControl = captured }
+                } catch {
+                    // Publication remains retryable; completion is cached
+                    // only after an exact durable readback succeeds.
+                }
             }
         } catch let failure as TransferFailure {
+            // A stale/replaced snapshot may fail the final bounded recheck;
+            // it must not publish a readback or mutate the current phase.
+            guard bodyAdmitted else { return }
             if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
                let store = Optional(TransferExportStore(applicationSupport: support)),
-               let input = try? store.readRequest(), let control = try? store.readControl(),
                let currentApp = try? GoFlySetupIdentityReader.read() {
-                try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: failure)
+                _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: failure)
                 if let receipt = try? store.readExport(),
                    [.preparing, .ready, .removalSealed].contains(receipt.phase) {
                     setTransferPhase(.exportLocked(receipt))
                 } else if activeDataLease == nil {
                     setTransferPhase(.transferBlocked(failure))
                 }
-                _ = input
             }
         } catch {
-            setTransferPhase(.transferBlocked(.storageUnavailable))
+            if bodyAdmitted,
+               let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+               let currentApp = try? GoFlySetupIdentityReader.read() {
+                let store = TransferExportStore(applicationSupport: support)
+                _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp,
+                                         failure: .storageUnavailable)
+                setTransferPhase(.transferBlocked(.storageUnavailable))
+            }
         }
     }
 
-    private func performExport(input: TransferExportInput, control: TransferControlRequest,
+    private func performExport(captured: TransferControlInput,
                                currentApp: SetupAppIdentity, support: URL,
-                               store: TransferExportStore) async {
+                               store: TransferExportStore) async -> Bool {
+        let input = captured.input
         guard let runtime else {
-            await performColdExport(input: input, control: control, currentApp: currentApp,
-                                    support: support, store: store)
-            return
+            return await performColdExport(captured: captured, currentApp: currentApp,
+                                           support: support, store: store)
         }
-        guard activeDataLease == nil else { return }
+        if activeDataLease != nil {
+            // A prior export may already own the physical sources and have a
+            // durable ready receipt while its publication was interrupted.
+            // Retry only that exact receipt's readback; never reacquire owners
+            // or treat the lease as a success cache.
+            let existing: TransferExportReceipt?
+            do {
+                existing = try await Task.detached(priority: .utility) {
+                    try store.readExport()
+                }.value
+            } catch {
+                return false
+            }
+            guard let existing,
+                  existing.request == input.request,
+                  existing.requestSHA256 == input.rawSHA256,
+                  existing.sourceApp == currentApp else { return false }
+            if existing.phase == .preparing {
+                guard let lease = activeDataLease else { return false }
+                return await resumePreparingExport(captured: captured, currentApp: currentApp,
+                                                   store: store, runtime: runtime,
+                                                   lease: lease)
+            }
+            guard existing.phase == .ready else { return false }
+            do {
+                let readback = try await writeReadback(store: store, input: captured,
+                                                       currentApp: currentApp)
+                return successful(readback, for: captured)
+            } catch {
+                return false
+            }
+        }
         let priorPhase = phase
         guard runtime.movement.canExportFromMap else {
-            try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: .sourceBusy)
-            return
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: .sourceBusy)
+            return false
         }
         guard let lease = GoFlyDataLease.acquire(runtime: runtime) else {
-            try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: .sourceBusy)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: .sourceBusy)
             setTransferPhase(priorPhase)
-            return
+            return false
         }
 
         let settings: TransferSettings
@@ -225,7 +330,7 @@ extension GoFlySetupBootstrap {
         } catch {
             _ = lease.releaseAll()
             setTransferPhase(priorPhase)
-            return
+            return false
         }
 
         setTransferPhase(.transferWaiting(.export))
@@ -236,6 +341,85 @@ extension GoFlySetupBootstrap {
             }.value
             preparingCommitted = true
             activeDataLease = lease
+            return await finishPreparedExport(captured: captured, currentApp: currentApp,
+                                              store: store, runtime: runtime,
+                                              lease: lease, preparation: preparation)
+        } catch let failure as TransferFailure {
+            do {
+                let actual = try await Task.detached(priority: .utility, operation: {
+                    try store.readExport()
+                }).value
+                if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
+                    activeDataLease = lease
+                    setTransferPhase(.exportLocked(actual))
+                } else if !preparingCommitted {
+                    _ = lease.releaseAll()
+                    setTransferPhase(priorPhase)
+                }
+            } catch {
+                activeDataLease = lease
+                setTransferPhase(.transferBlocked(.commitUnknown))
+            }
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: failure)
+            return false
+        } catch {
+            do {
+                let actual = try await Task.detached(priority: .utility, operation: {
+                    try store.readExport()
+                }).value
+                if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
+                    activeDataLease = lease
+                    setTransferPhase(.exportLocked(actual))
+                } else if !preparingCommitted {
+                    _ = lease.releaseAll()
+                    setTransferPhase(priorPhase)
+                }
+            } catch {
+                activeDataLease = lease
+                setTransferPhase(.transferBlocked(.commitUnknown))
+            }
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp,
+                                     failure: .storageUnavailable)
+            return false
+        }
+    }
+
+    /// Continue a preparing root with the lease that created it. A retry may
+    /// finish staging after an interrupted publication, but it never reacquires
+    /// owners or treats the preparing receipt as a completed export.
+    private func resumePreparingExport(captured: TransferControlInput,
+                                       currentApp: SetupAppIdentity,
+                                       store: TransferExportStore,
+                                       runtime: GoFlyRuntimeAssembly,
+                                       lease: GoFlyDataLease) async -> Bool {
+        let input = captured.input
+        do {
+            let preparation = try await Task.detached(priority: .utility) {
+                try store.reopenPreparation(input: input, currentApp: currentApp)
+            }.value
+            return await finishPreparedExport(captured: captured, currentApp: currentApp,
+                                              store: store, runtime: runtime,
+                                              lease: lease, preparation: preparation)
+        } catch let failure as TransferFailure {
+            await recoverPreparedExportFailure(store: store, lease: lease)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: failure)
+            return false
+        } catch {
+            await recoverPreparedExportFailure(store: store, lease: lease)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp,
+                                     failure: .storageUnavailable)
+            return false
+        }
+    }
+
+    private func finishPreparedExport(captured: TransferControlInput,
+                                      currentApp: SetupAppIdentity,
+                                      store: TransferExportStore,
+                                      runtime: GoFlyRuntimeAssembly,
+                                      lease: GoFlyDataLease,
+                                      preparation: TransferPreparation) async -> Bool {
+        let input = captured.input
+        do {
             if let receipt = try await Task.detached(priority: .utility, operation: {
                 try store.readExport()
             }).value {
@@ -270,48 +454,42 @@ extension GoFlySetupBootstrap {
                 try store.commitReady(prepared)
             }.value
             setTransferPhase(.exportLocked(receipt))
-            try await writeReadback(store: store, control: control, currentApp: currentApp)
+            let readback = try await writeReadback(store: store, input: captured, currentApp: currentApp)
+            return successful(readback, for: captured)
         } catch let failure as TransferFailure {
-            do {
-                let actual = try await Task.detached(priority: .utility, operation: {
-                    try store.readExport()
-                }).value
-                if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
-                    activeDataLease = lease
-                    setTransferPhase(.exportLocked(actual))
-                } else if !preparingCommitted {
-                    _ = lease.releaseAll()
-                    setTransferPhase(priorPhase)
-                }
-            } catch {
-                activeDataLease = lease
-                setTransferPhase(.transferBlocked(.commitUnknown))
-            }
-            try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: failure)
+            await recoverPreparedExportFailure(store: store, lease: lease)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: failure)
+            return false
         } catch {
-            do {
-                let actual = try await Task.detached(priority: .utility, operation: {
-                    try store.readExport()
-                }).value
-                if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
-                    activeDataLease = lease
-                    setTransferPhase(.exportLocked(actual))
-                } else if !preparingCommitted {
-                    _ = lease.releaseAll()
-                    setTransferPhase(priorPhase)
-                }
-            } catch {
-                activeDataLease = lease
-                setTransferPhase(.transferBlocked(.commitUnknown))
-            }
-            try? await writeReadback(store: store, control: control, currentApp: currentApp,
+            await recoverPreparedExportFailure(store: store, lease: lease)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp,
                                      failure: .storageUnavailable)
+            return false
         }
     }
 
-    private func performColdExport(input: TransferExportInput, control: TransferControlRequest,
+    private func recoverPreparedExportFailure(store: TransferExportStore,
+                                              lease: GoFlyDataLease) async {
+        let actual: TransferExportReceipt?
+        do {
+            actual = try await Task.detached(priority: .utility, operation: {
+                try store.readExport()
+            }).value
+        } catch {
+            activeDataLease = lease
+            setTransferPhase(.transferBlocked(.commitUnknown))
+            return
+        }
+        if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
+            activeDataLease = lease
+            setTransferPhase(.exportLocked(actual))
+        }
+    }
+
+    private func performColdExport(captured: TransferControlInput,
                                    currentApp: SetupAppIdentity, support: URL,
-                                   store: TransferExportStore) async {
+                                   store: TransferExportStore) async -> Bool {
+        let input = captured.input
         do {
             let preparation = try await Task.detached(priority: .utility) {
                 try store.reopenPreparation(input: input, currentApp: currentApp)
@@ -338,20 +516,38 @@ extension GoFlySetupBootstrap {
                 try store.commitReady(prepared)
             }.value
             setTransferPhase(.exportLocked(receipt))
-            try await writeReadback(store: store, control: control, currentApp: currentApp)
+            let readback = try await writeReadback(store: store, input: captured, currentApp: currentApp)
+            return successful(readback, for: captured)
         } catch let failure as TransferFailure {
-            try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: failure)
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp, failure: failure)
+            return false
         } catch {
-            try? await writeReadback(store: store, control: control, currentApp: currentApp,
+            _ = try? await writeReadback(store: store, input: captured, currentApp: currentApp,
                                      failure: .storageUnavailable)
+            return false
         }
     }
 
-    private func writeReadback(store: TransferExportStore, control: TransferControlRequest,
-                               currentApp: SetupAppIdentity, failure: TransferFailure? = nil) async throws {
+    private func writeReadback(store: TransferExportStore, input: TransferControlInput,
+                               currentApp: SetupAppIdentity, failure: TransferFailure? = nil) async throws -> TransferReadback {
         let pid = Int32(getpid())
-        try await Task.detached(priority: .utility) {
-            _ = try store.writeReadback(control: control, currentApp: currentApp, pid: pid, failure: failure)
+        return try await Task.detached(priority: .utility) {
+            try store.writeReadback(input: input, currentApp: currentApp, pid: pid, failure: failure)
         }.value
+    }
+
+    private func successful(_ readback: TransferReadback, for captured: TransferControlInput) -> Bool {
+        guard readback.version == 1,
+              readback.commandID == captured.control.commandID,
+              readback.action == captured.control.action,
+              readback.transferID == captured.control.transferID,
+              readback.nonce == captured.control.nonce,
+              readback.requestSHA256 == captured.input.rawSHA256,
+              readback.errorCode == nil else { return false }
+        switch captured.control.action {
+        case .export: return readback.phase == .ready
+        case .seal: return readback.phase == .removalSealed
+        case .release: return readback.phase == .released || readback.phase == .releasedNoSnapshot
+        }
     }
 }
