@@ -11,6 +11,10 @@ private let managementSourceReceiptKeys: Set<String> = [
     "sourceSetupID", "activationSHA256", "restoreRootSHA256"
 ]
 
+private let managementControlKeys: Set<String> = [
+    "version", "managementID", "nonce", "requestSHA256", "action"
+]
+
 private func managementUUID(_ value: _SetupJSON) throws -> UUID {
     let text = try value.string()
     guard text == text.lowercased(),
@@ -109,6 +113,43 @@ public enum ManagementCodec {
                 teamID: try managementString(value.object("teamID")),
                 targetSetupID: try managementUUID(value.object("targetSetupID")),
                 targetApp: try managementApp(value.object("targetApp")))
+        } catch let failure as ManagementFailure {
+            throw failure
+        } catch let failure as SetupFailure {
+            throw managementFailure(failure)
+        } catch {
+            throw ManagementFailure.invalidInput
+        }
+    }
+
+    public static func encodeControl(_ command: ManagementControlCommand) throws -> Data {
+        let object: [String: Any] = [
+            "version": command.version,
+            "managementID": command.managementID.uuidString.lowercased(),
+            "nonce": command.nonce.uuidString.lowercased(),
+            "requestSHA256": command.requestSHA256,
+            "action": command.action.rawValue
+        ]
+        return try encode(object: object, maximum: ManagementControlCommand.maximumBytes)
+    }
+
+    public static func decodeControl(_ data: Data) throws -> ManagementControlCommand {
+        do {
+            let value = try managementParse(data, maximum: ManagementControlCommand.maximumBytes)
+            try value.requireObjectKeys(managementControlKeys)
+            let version = try managementInt(value.object("version"))
+            guard version == ManagementControlCommand.schemaVersion else {
+                throw ManagementFailure.unsupportedVersion
+            }
+            guard let action = ManagementControlAction(rawValue: try managementString(value.object("action"))) else {
+                throw ManagementFailure.invalidInput
+            }
+            return try ManagementControlCommand(
+                version: version,
+                managementID: try managementUUID(value.object("managementID")),
+                nonce: try managementUUID(value.object("nonce")),
+                requestSHA256: try managementHash(value.object("requestSHA256")),
+                action: action)
         } catch let failure as ManagementFailure {
             throw failure
         } catch let failure as SetupFailure {

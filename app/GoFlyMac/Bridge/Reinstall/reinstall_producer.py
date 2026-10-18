@@ -1432,11 +1432,18 @@ class ReinstallProducer:
         return is_terminal_journal(journal)
 
     def _guard_m1(self) -> None:
+        try:
+            from ..Management.management_journal import reject_unresolved_management
+        except ImportError:
+            from Management.management_journal import reject_unresolved_management
+        try:
+            reject_unresolved_management(self.config.state_root)
+        except SetupBridgeError as error:
+            raise ReinstallBridgeError(error.code) from None
         current = JournalStore(self.config.state_root).read()
         if current is None:
             return
-        stages = current.get("stages", {}) if isinstance(current, Mapping) else {}
-        if not isinstance(stages, Mapping) or not all(isinstance(stages.get(key), Mapping) and stages[key].get("state") == "confirmed" for key in ("complete",)):
+        if not JournalStore(self.config.state_root)._completed_eligible(current):
             raise ReinstallBridgeError("transaction-conflict")
 
     def _call(self, name: str, *args: Any) -> Any:

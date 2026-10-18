@@ -113,6 +113,7 @@ private enum ManagementStorageMapping {
 private enum ManagementStorageDisk {
     static let rootName = "GoFlyManagement"
     static let responseName = "response.json"
+    static let controlRequestName = "control-request.json"
     static let rootMaximum = 512 * 1_024
 
     static func base(_ value: URL) -> URL {
@@ -253,17 +254,44 @@ private enum ManagementStorageDisk {
         }
         let rootMode = rootInfo.st_mode & 0o7777
         guard rootMode == 0o700 || rootMode == 0o755 else { throw ManagementFailure.unsafeFile }
-        let allowed = Set(["request.json", "root.json", responseName, "generations"])
+        let allowed = Set(["request.json", "root.json", responseName, controlRequestName, "generations"])
         let names = try FileManager.default.contentsOfDirectory(atPath: root.path)
         guard Set(names).isSubset(of: allowed) else { throw ManagementFailure.unsafeFile }
+        let requestInput: ManagementInput?
         if names.contains("request.json") {
             try validateFile(root.appendingPathComponent("request.json"),
                              maximum: ManagementRequest.maximumBytes, allowIngress: true)
+            guard let requestBytes = try read(root.appendingPathComponent("request.json"),
+                                              maximum: ManagementRequest.maximumBytes, allowIngress: true) else {
+                throw ManagementFailure.unavailable
+            }
             let requestPath = root.appendingPathComponent("request.json").path
             let requestFD = Darwin.open(requestPath, O_RDWR | O_NOFOLLOW | O_CLOEXEC)
             guard requestFD >= 0 else { throw ManagementFailure.unsafeFile }
             defer { Darwin.close(requestFD) }
             guard fchmod(requestFD, 0o600) == 0, fsync(requestFD) == 0 else {
+                throw ManagementFailure.storageUnavailable
+            }
+            requestInput = try ManagementInput(data: requestBytes)
+        } else {
+            requestInput = nil
+        }
+        if names.contains(controlRequestName) {
+            let controlURL = root.appendingPathComponent(controlRequestName)
+            try validateFile(controlURL, maximum: ManagementControlCommand.maximumBytes,
+                             allowIngress: true)
+            guard let requestInput,
+                  let controlBytes = try read(controlURL,
+                                              maximum: ManagementControlCommand.maximumBytes,
+                                              allowIngress: true) else {
+                throw ManagementFailure.identityMismatch
+            }
+            let command = try ManagementCodec.decodeControl(controlBytes)
+            try command.bound(to: requestInput)
+            let controlFD = Darwin.open(controlURL.path, O_RDWR | O_NOFOLLOW | O_CLOEXEC)
+            guard controlFD >= 0 else { throw ManagementFailure.unsafeFile }
+            defer { Darwin.close(controlFD) }
+            guard fchmod(controlFD, 0o600) == 0, fsync(controlFD) == 0 else {
                 throw ManagementFailure.storageUnavailable
             }
         }
@@ -509,6 +537,23 @@ public final class ManagementStore: @unchecked Sendable {
         }
     }
 
+    /// Reads the one fixed control mailbox and binds it to the current raw
+    /// management request. This is data-only: it never advances a phase,
+    /// grants authority, or clears the mailbox.
+    public func readControlCommand() throws -> ManagementControlCommand? {
+        try locked {
+            let controlURL = root.appendingPathComponent(ManagementStorageDisk.controlRequestName)
+            guard let controlBytes = try ManagementStorageDisk.read(
+                    controlURL, maximum: ManagementControlCommand.maximumBytes, allowIngress: true) else {
+                return nil
+            }
+            let input = try requiredInput()
+            let command = try ManagementCodec.decodeControl(controlBytes)
+            try command.bound(to: input)
+            return command
+        }
+    }
+
     public func prepareSource(currentApp: SetupAppIdentity, pid: Int32,
                               setupStore: SetupActivationStore,
                               restoreStore: TransferRestoreStore) throws -> ManagementPreparedSource {
@@ -621,6 +666,7 @@ public final class ManagementStore: @unchecked Sendable {
                 return try sourceReceipt(record)
             }
             guard record.phase == .preparing || record.phase == .ready else { throw ManagementFailure.conflict }
+            guard record.pid == pid else { throw ManagementFailure.identityMismatch }
             try validateSourceEvidence(input: input, record: record, setupStore: setupStore, restoreStore: restoreStore)
             record = replace(record, phase: .released, currentApp: currentApp, pid: pid)
             state.current = record

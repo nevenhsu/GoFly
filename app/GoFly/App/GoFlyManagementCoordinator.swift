@@ -2,11 +2,21 @@ import Darwin
 import Foundation
 import GoFlyCore
 
-struct GoFlyManagementControlURL {
+struct GoFlyManagementControlURL: Equatable {
     enum Action: String { case quiesce, seal, release }
     let action: Action
     let managementID: UUID
     let nonce: UUID
+
+    init(command: ManagementControlCommand) {
+        switch command.action {
+        case .quiesce: action = .quiesce
+        case .seal: action = .seal
+        case .release: action = .release
+        }
+        managementID = command.managementID
+        nonce = command.nonce
+    }
 
     init?(url: URL) {
         guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -27,7 +37,36 @@ struct GoFlyManagementControlURL {
 }
 
 extension GoFlySetupBootstrap {
-    func handleManagement(_ link: GoFlyManagementControlURL) {
+    /// A foreground App consumes the same request-bound controls as deep
+    /// links. Reading metadata never acquires data owners or proves readiness.
+    func observeManagementCommands() async {
+        if let startup = startupTask { await startup.value }
+        guard let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                     in: .userDomainMask).first else { return }
+        let store = ManagementStore(applicationSupport: support)
+        while !Task.isCancelled {
+            do {
+                let command = try await Task.detached(priority: .utility) {
+                    try store.readControlCommand()
+                }.value
+                guard !Task.isCancelled else { return }
+                if let command, transferTask == nil {
+                    let link = GoFlyManagementControlURL(command: command)
+                    if completedManagementControl != command {
+                        handleManagement(link, mailboxCommand: command)
+                    }
+                }
+            } catch {
+                // An absent, incomplete or invalid command cannot change
+                // owner admission. A later exact publication may be read.
+            }
+            do { try await Task.sleep(for: .seconds(1)) }
+            catch { return }
+        }
+    }
+
+    func handleManagement(_ link: GoFlyManagementControlURL,
+                          mailboxCommand: ManagementControlCommand? = nil) {
         if link.action == .quiesce, transferTask != nil { return }
         let prior = transferTask
         let id = UUID()
@@ -38,11 +77,12 @@ extension GoFlySetupBootstrap {
             if let prior { await prior.value }
             guard let self else { return }
             defer { transferDidFinish(id) }
-            await processManagement(link)
+            await processManagement(link, mailboxCommand: mailboxCommand)
         }
     }
 
-    private func processManagement(_ link: GoFlyManagementControlURL) async {
+    private func processManagement(_ link: GoFlyManagementControlURL,
+                                   mailboxCommand: ManagementControlCommand?) async {
         do {
             guard let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                          in: .userDomainMask).first else { return }
@@ -51,6 +91,21 @@ extension GoFlySetupBootstrap {
             guard let input = try store.readInput(),
                   input.request.managementID == link.managementID,
                   input.request.nonce == link.nonce else { return }
+            guard let action = ManagementControlAction(rawValue: link.action.rawValue) else { return }
+            let command: ManagementControlCommand
+            if let mailboxCommand {
+                // Preserve the command read by the observer across startup
+                // and physical-task serialization. A removed/replaced file
+                // cannot become a newly bound action when this task runs.
+                guard try store.readControlCommand() == mailboxCommand,
+                      mailboxCommand.action == action else { return }
+                try mailboxCommand.bound(to: input)
+                command = mailboxCommand
+            } else {
+                command = try ManagementControlCommand(
+                    managementID: link.managementID, nonce: link.nonce,
+                    requestSHA256: input.rawRequestSHA256, action: action)
+            }
             let export = TransferExportStore(applicationSupport: support)
             if let receipt = try export.readExport(),
                [.preparing, .ready, .removalSealed].contains(receipt.phase) { return }
@@ -64,7 +119,18 @@ extension GoFlySetupBootstrap {
                     if let receipt = try store.readSourceReceipt(currentApp: app, pid: pid),
                        receipt.phase == .ready || receipt.phase == .mutationSealed {
                         _ = try store.writeSourceReadback(currentApp: app, pid: pid)
+                        completedManagementControl = command
                     }
+                    return
+                }
+                if let status = try store.status(),
+                   status.managementID == command.managementID,
+                   status.requestSHA256 == command.requestSHA256,
+                   status.sourceAdmission == .live,
+                   [.preparing, .ready, .mutationSealed].contains(status.phase) {
+                    // A recovered record has its original process identity.
+                    // Without that process's actual lease, polling cannot
+                    // acquire new owners or re-admit the historical source.
                     return
                 }
                 guard let runtime, runtime.movement.canExportFromMap,
@@ -88,6 +154,7 @@ extension GoFlySetupBootstrap {
                     _ = try store.commitSourceReady(prepared, currentApp: app, pid: pid)
                     if let status = try store.status() { setTransferPhase(.managementLocked(status)) }
                     _ = try store.writeSourceReadback(currentApp: app, pid: pid)
+                    completedManagementControl = command
                 } catch {
                     // A durable preparing root or an unreadable outcome keeps
                     // the actual holds. Only a proven absent root may release.
@@ -112,6 +179,7 @@ extension GoFlySetupBootstrap {
                 }
                 if let status = try store.status() { setTransferPhase(.managementLocked(status)) }
                 _ = try store.writeSourceReadback(currentApp: app, pid: pid)
+                completedManagementControl = command
             case .release:
                 _ = try store.releaseSource(currentApp: app, pid: pid,
                                             setupStore: setup, restoreStore: restore)
@@ -123,6 +191,7 @@ extension GoFlySetupBootstrap {
                     activeDataLease = nil
                 }
                 _ = try store.writeSourceReadback(currentApp: app, pid: pid)
+                completedManagementControl = command
                 if runtime == nil { restartAfterTransfer() }
                 else { setTransferPhase(.ordinaryStartup) }
             }

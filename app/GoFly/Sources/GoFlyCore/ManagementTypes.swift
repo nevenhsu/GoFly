@@ -27,6 +27,14 @@ public enum ManagementSourceAdmission: String, Equatable, Sendable {
     case cold
 }
 
+/// A data-only source control action delivered through the fixed management
+/// mailbox. The App remains the authority for applying the action.
+public enum ManagementControlAction: String, Equatable, Sendable {
+    case quiesce
+    case seal
+    case release
+}
+
 /// Stable failures exposed by the management value and codec boundary.
 public enum ManagementFailure: Error, Equatable, Sendable {
     case invalidInput
@@ -123,6 +131,44 @@ public struct ManagementInput: Equatable, Sendable {
         self.rawRequestSHA256 = SetupValidation.sha256(data)
     }
 
+}
+
+/// The bounded command written to the fixed management control mailbox.
+public struct ManagementControlCommand: Equatable, Sendable {
+    public static let schemaVersion = 1
+    public static let maximumBytes = 4 * 1_024
+
+    public let version: Int
+    public let managementID: UUID
+    public let nonce: UUID
+    public let requestSHA256: String
+    public let action: ManagementControlAction
+
+    public init(version: Int = Self.schemaVersion,
+                managementID: UUID,
+                nonce: UUID,
+                requestSHA256: String,
+                action: ManagementControlAction) throws {
+        guard version == Self.schemaVersion,
+              SetupValidation.isLowerHex(requestSHA256, count: 64) else {
+            throw ManagementFailure.invalidInput
+        }
+        self.version = version
+        self.managementID = managementID
+        self.nonce = nonce
+        self.requestSHA256 = requestSHA256
+        self.action = action
+    }
+
+    /// Binds the command to the exact immutable request bytes received by
+    /// the management store.
+    public func bound(to input: ManagementInput) throws {
+        guard managementID == input.request.managementID,
+              nonce == input.request.nonce,
+              requestSHA256 == input.rawRequestSHA256 else {
+            throw ManagementFailure.identityMismatch
+        }
+    }
 }
 
 /// A data-only acknowledgement from the source application.

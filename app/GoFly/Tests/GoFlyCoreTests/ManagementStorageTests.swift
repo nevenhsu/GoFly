@@ -19,6 +19,35 @@ final class ManagementStorageTests: XCTestCase {
         let management = try makeManagementStore(appSupport: appSupport, request: request)
         let setupStore = SetupActivationStore(directory: setup.directory)
         let restoreStore = TransferRestoreStore(applicationSupport: appSupport)
+        let input = try XCTUnwrap(management.readInput())
+        let controlURL = appSupport.appendingPathComponent("GoFlyManagement/control-request.json")
+        let control = try ManagementControlCommand(managementID: request.managementID,
+                                                    nonce: request.nonce,
+                                                    requestSHA256: input.rawRequestSHA256,
+                                                    action: .quiesce)
+        try ManagementCodec.encodeControl(control).write(to: controlURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)],
+                                              ofItemAtPath: controlURL.path)
+        XCTAssertEqual(try management.readControlCommand(), control)
+        try Data("{\"version\":1}".utf8).write(to: controlURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o600)],
+                                              ofItemAtPath: controlURL.path)
+        XCTAssertThrowsError(try management.readControlCommand()) { error in
+            XCTAssertEqual(error as? ManagementFailure, .invalidInput)
+        }
+        let foreignControl = try ManagementControlCommand(managementID: request.managementID,
+                                                           nonce: request.nonce,
+                                                           requestSHA256: String(repeating: "f", count: 64),
+                                                           action: .seal)
+        try ManagementCodec.encodeControl(foreignControl).write(to: controlURL, options: .atomic)
+        XCTAssertThrowsError(try management.readControlCommand()) { error in
+            XCTAssertEqual(error as? ManagementFailure, .identityMismatch)
+        }
+        try ManagementCodec.encodeControl(control).write(to: controlURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: NSNumber(value: 0o644)],
+                                              ofItemAtPath: controlURL.path)
+        try management.prepareIncomingFiles()
+        XCTAssertEqual(try management.readControlCommand(), control)
 
         let prepared = try management.prepareSource(currentApp: setup.manifest.app, pid: 101,
                                                      setupStore: setupStore, restoreStore: restoreStore)
@@ -56,6 +85,12 @@ final class ManagementStorageTests: XCTestCase {
             appSupport: root.appendingPathComponent("released-support", isDirectory: true), request: request)
         let releasedPrepared = try releasedManagement.prepareSource(currentApp: setup.manifest.app, pid: 104,
                                                                      setupStore: setupStore, restoreStore: restoreStore)
+        XCTAssertThrowsError(try releasedManagement.releaseSource(currentApp: setup.manifest.app, pid: 105,
+                                                                   setupStore: setupStore, restoreStore: restoreStore)) { error in
+            XCTAssertEqual(error as? ManagementFailure, .identityMismatch)
+        }
+        XCTAssertEqual(try releasedManagement.status()?.phase, .preparing)
+        XCTAssertEqual(try releasedManagement.readSourceReceipt(currentApp: setup.manifest.app, pid: 104)?.pid, 104)
         _ = try releasedManagement.releaseSource(currentApp: setup.manifest.app, pid: 104,
                                                   setupStore: setupStore, restoreStore: restoreStore)
         XCTAssertThrowsError(try releasedManagement.prepareTarget(currentApp: request.targetApp,

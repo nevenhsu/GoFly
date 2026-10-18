@@ -49,6 +49,7 @@ final class GoFlySetupBootstrap: ObservableObject {
     var transferTask: Task<Void, Never>?
     var transferTaskID: UUID?
     var activeDataLease: GoFlyDataLease?
+    var completedManagementControl: ManagementControlCommand?
 
     init() {
         start()

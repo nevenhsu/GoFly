@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import copy
 import contextlib
-import os
 import hashlib
 import json
 import re
-import stat
 import time
 import uuid
 from dataclasses import dataclass
@@ -30,7 +28,7 @@ try:
     )
     from .setup_config import SetupConfiguration
     from .setup_delivery import deliver_v1_once
-    from .setup_journal import JournalStore
+    from .setup_journal import JournalStore, _regular
     from .setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 except ImportError:  # script execution from the packaged Setup directory
     from setup_adapters import (
@@ -47,7 +45,7 @@ except ImportError:  # script execution from the packaged Setup directory
     )
     from setup_config import SetupConfiguration
     from setup_delivery import deliver_v1_once
-    from setup_journal import JournalStore
+    from setup_journal import JournalStore, _regular
     from setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 
 
@@ -75,56 +73,19 @@ def _reject_unresolved_reinstall(state_root: Path) -> None:
     lock, and may only proceed after M2 has reached a durable terminal state.
     This small crossguard intentionally performs no reconciliation or writes.
     """
-    path = state_root / "reinstall-journal.json"
     try:
-        info = path.lstat()
-    except FileNotFoundError:
-        return
-    except OSError:
-        raise SetupBridgeError("storage-unavailable") from None
-    if stat.S_ISLNK(info.st_mode):
-        raise SetupBridgeError("storage-unavailable")
-    fd: int | None = None
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
-        current = os.fstat(fd)
-        if not stat.S_ISREG(current.st_mode) or current.st_uid != os.getuid() or current.st_nlink != 1 or stat.S_IMODE(current.st_mode) != 0o600 or current.st_size > 2 * 1024 * 1024:
-            raise SetupBridgeError("storage-unavailable")
-        raw = bytearray()
-        while len(raw) < current.st_size:
-            chunk = os.read(fd, min(1024 * 1024, current.st_size - len(raw)))
-            if not chunk:
-                raise SetupBridgeError("storage-unavailable")
-            raw.extend(chunk)
-        if os.read(fd, 1):
-            raise SetupBridgeError("storage-unavailable")
-        value = json.loads(bytes(raw).decode("utf-8"), object_pairs_hook=lambda pairs: _strict_pairs(pairs), parse_constant=lambda _: (_ for _ in ()).throw(ValueError()), parse_float=lambda _: (_ for _ in ()).throw(ValueError()))
-    except SetupBridgeError:
-        raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
-        raise SetupBridgeError("storage-unavailable") from None
-    finally:
-        if fd is not None:
-            with contextlib.suppress(OSError):
-                os.close(fd)
-    if not isinstance(value, dict) or value.get("version") != 1 or value.get("operation") != "reinstall":
-        raise SetupBridgeError("storage-unavailable")
-    stages = value.get("stages")
-    terminal = value.get("outcome") == "confirmed" and isinstance(stages, dict) and (
-        isinstance(stages.get("complete"), dict) and stages["complete"].get("state") == "confirmed"
-        or isinstance(stages.get("abandon"), dict) and stages["abandon"].get("state") == "confirmed"
-    )
-    if not terminal:
+        from ..Management.management_journal import reject_unresolved_management
+        from ..Reinstall.reinstall_journal import ReinstallJournalStore, is_terminal_journal
+    except ImportError:
+        from Management.management_journal import reject_unresolved_management
+        from Reinstall.reinstall_journal import ReinstallJournalStore, is_terminal_journal
+    reject_unresolved_management(state_root)
+    # Validate even a dangling link before the other store's optional read.
+    # Its complete/abandon markers are meaningful only after its full codec.
+    _regular(state_root / "reinstall-journal.json", allow_missing=True)
+    value = ReinstallJournalStore(state_root).read()
+    if value is not None and not is_terminal_journal(value):
         raise SetupBridgeError("transaction-conflict")
-
-
-def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    value: dict[str, Any] = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError("duplicate")
-        value[key] = item
-    return value
 
 
 @dataclass(frozen=True)

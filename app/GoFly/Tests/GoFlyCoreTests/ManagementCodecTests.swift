@@ -61,6 +61,25 @@ final class ManagementCodecTests: XCTestCase {
         for mutation in mutations + [escapedDuplicate] {
             XCTAssertThrowsError(try ManagementCodec.decodeRequest(Data(mutation.utf8)), "accepted mutation: \(mutation)")
         }
+
+        let input = try ManagementInput(data: try ManagementCodec.encodeRequest(request))
+        let control = try ManagementControlCommand(managementID: request.managementID,
+                                                    nonce: request.nonce,
+                                                    requestSHA256: input.rawRequestSHA256,
+                                                    action: .seal)
+        let controlBytes = try ManagementCodec.encodeControl(control)
+        XCTAssertEqual(try ManagementCodec.decodeControl(controlBytes), control)
+        XCTAssertNoThrow(try control.bound(to: input))
+        let controlText = String(decoding: controlBytes, as: UTF8.self)
+        let controlMutations = [
+            controlText.replacingOccurrences(of: "\"version\":1", with: "\"version\":1.0"),
+            controlText.replacingOccurrences(of: "\"action\":\"seal\"", with: "\"action\":\"unknown\""),
+            controlText.replacingOccurrences(of: "\"version\":1}", with: "\"version\":1,\"version\":1}")
+        ]
+        for mutation in controlMutations {
+            XCTAssertThrowsError(try ManagementCodec.decodeControl(Data(mutation.utf8)),
+                                 "accepted control mutation: \(mutation)")
+        }
     }
 
     func testRepairRequiresTheSameTargetAppAndReceiptPidIsBounded() throws {

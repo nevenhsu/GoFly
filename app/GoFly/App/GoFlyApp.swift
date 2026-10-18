@@ -33,6 +33,10 @@ struct GoFlyApp: App {
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                await bootstrap.observeManagementCommands()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { preferences.refreshSystemPreferences() }
             }

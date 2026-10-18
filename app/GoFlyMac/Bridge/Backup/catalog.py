@@ -1191,6 +1191,19 @@ class BackupManager:
         return result
 
     def _guard_mutation(self, root: _RootHandle, sources: Mapping[str, _Source]) -> None:
+        try:
+            from ..Management.management_journal import reject_unresolved_management
+        except ImportError:
+            from Management.management_journal import reject_unresolved_management
+        try:
+            if not _same_directory(root.fd, self.state_root):
+                raise _error("storage-unavailable")
+            reject_unresolved_management(self.state_root)
+            if not _same_directory(root.fd, self.state_root):
+                raise _error("storage-unavailable")
+        except Exception as error:
+            code = getattr(error, "code", "storage-unavailable")
+            raise _error("busy" if code == "transaction-conflict" else "storage-unavailable") from None
         # Read M1's actual current journal.  A completed receipt may be
         # released; every other current record keeps this manager read-only.
         setup_raw = _read_fd_regular_optional(root.fd, "journal.json", max_bytes=MAX_JOURNAL_BYTES)
