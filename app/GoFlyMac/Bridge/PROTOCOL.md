@@ -30,14 +30,23 @@ The error code set accepted by the Swift client is: `invalid-request`,
 unavailable.
 
 `devices` lists exact usbmux USB and Network observations. Device IDs are
-normalized to lowercase and duplicate IDs prefer USB. Unknown names are an
+normalized to lowercase; duplicate observations of the same ID and transport
+collapse, while USB and Network choices remain available independently. The
+GUI shows one row per phone, defaults to USB and offers an explicit connection
+picker when both are observed. Unknown names are an
 empty string and unknown OS versions are `null`; no online devices are
 invented.
 
-`inspect` requires `deviceID`. It selects the exact observed transport and
+`inspect` requires `deviceID` and accepts an optional `transport` of `usb` or
+`wifi`. The GUI always pins its selected transport; an unavailable requested
+transport fails instead of falling back. Older requests without `transport`
+retain USB preference. It selects the exact observed transport and
 opens lockdown with `autopair=false` and a private temporary cache. Identity,
 OS version, and developer mode are checked. Installed LocalGo metadata is
 looked up through InstallationProxy when available. Signing evidence,
 LocalDevVPN's bundle ID, and expiry are not guessed, so the corresponding
 fields remain `null` when unavailable; an unsupported developer-mode key also
 remains `null`. Capability fields are always `false` in this read-only build.
+The GUI creates a fresh selection identity only from an explicit user selection;
+discovery, refresh and repeated inspection do not create another selection.
+Protocol 5 independently authenticates the selected connection before renewal.

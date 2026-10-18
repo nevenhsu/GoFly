@@ -17,39 +17,49 @@ struct MacReinstallPage: View {
     @State private var validationMessage: String?
 
     var body: some View {
-        ScrollView {
-            StatusCard {
-                StatusRow(title: title, detail: "原裝置：…\((reinstall.continuation?.deviceID ?? device?.id ?? "未選擇").suffix(6))")
-                Rule()
-                if reinstall.hasRecordedTransaction {
-                    recordedTransaction
-                } else {
-                    form.disabled(reinstall.isBusy || reinstall.options != nil)
-                    if reinstall.options != nil {
-                        Button("修改保留資料與安裝選項") { reinstall.resetSelection() }.disabled(reinstall.isBusy)
-                    }
+        StatusCard {
+            StatusRow(title: title, detail: "原裝置：…\((reinstall.continuation?.deviceID ?? device?.id ?? "未選擇").suffix(6))")
+            Rule()
+            if reinstall.hasRecordedTransaction {
+                recordedTransaction
+            } else {
+                form.disabled(reinstall.isBusy || reinstall.options != nil)
+                if reinstall.options != nil {
+                    Button("修改保留資料與安裝選項") { reinstall.resetSelection() }.disabled(reinstall.isBusy)
                 }
-                if let result = reinstall.snapshot {
-                    StatusRow(title: result.stage.title, detail: result.detail)
-                    ForEach(result.categories, id: \.category) { category in
-                        StatusRow(title: category.category.title, detail: category.state.title)
-                    }
-                    if let counts = result.counts {
-                        Text("最愛 \(counts.favorites) · 匯入路線 \(counts.importedRoutes) · 最愛路線 \(counts.favoriteRoutes) · 草稿節點 \(counts.draftNodes) · GPX 點 \(counts.gpxPoints)")
-                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                    }
-                }
-                if let failure = reinstall.failure { StatusRow(title: "尚未完成", detail: failure.detail) }
-                if let validationMessage { Text(validationMessage).foregroundStyle(GoFlyStyle.muted) }
-                if reinstall.isBusy {
-                    HStack(spacing: 12) {
-                        ProgressView().controlSize(.small)
-                        Text(reinstall.cancellationRequested ? "正在中止程序，等待實際返回…" : reinstall.progressStage?.title ?? "正在處理原交易…")
-                    }
-                }
-                Rule()
-                actions
             }
+            if let result = reinstall.snapshot {
+                StatusRow(title: result.stage.title, detail: result.detail)
+                ForEach(result.categories, id: \.category) { category in
+                    StatusRow(title: category.category.title, detail: category.state.title)
+                }
+                if let counts = result.counts {
+                    Text("最愛 \(counts.favorites) · 匯入路線 \(counts.importedRoutes) · 最愛路線 \(counts.favoriteRoutes) · 草稿節點 \(counts.draftNodes) · GPX 點 \(counts.gpxPoints)")
+                        .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                }
+            }
+            if let failure = reinstall.failure {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle").font(.system(size: 18))
+                        .accessibilityHidden(true)
+                    StatusRow(title: "尚未完成", detail: failure.detail)
+                }.goFlyInset()
+            }
+            if let validationMessage {
+                Label(validationMessage, systemImage: "exclamationmark.circle")
+                    .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.ink)
+                    .fixedSize(horizontal: false, vertical: true).goFlyInset()
+            }
+            if reinstall.isBusy {
+                HStack(spacing: 12) {
+                    ProgressView().controlSize(.small)
+                    Text(reinstall.cancellationRequested ? "正在中止程序，等待實際返回…" : reinstall.progressStage?.title ?? "正在處理原交易…")
+                        .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Rule()
+            actions
         }
         .accessibilityIdentifier("reinstall.page")
     }
@@ -82,33 +92,74 @@ struct MacReinstallPage: View {
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("只保留已儲存、已接受的資料。請先在 iPhone 停止移動並確認裝置清除完成，關閉未結束的編輯，再開始。")
-                .foregroundStyle(GoFlyStyle.muted)
-            Toggle("最愛地點與標籤", isOn: $favorites).toggleStyle(.checkbox)
-            Toggle("路線、GPX、目前已接受的草稿與路線速度", isOn: $routes).toggleStyle(.checkbox)
-            Toggle("語言、外觀、模式與操作設定", isOn: $settings).toggleStyle(.checkbox)
-            Text(favorites || routes || settings ? "未勾選的資料會隨重新安裝清除。移動任務與目前位置不會還原。" : "全部不選代表全新安裝；原 App 的所有使用者資料會清除。")
-                .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("保留資料", systemImage: "square.stack.3d.up")
+                    .font(GoFlyStyle.font(13, bold: true))
+                Text("只保留已儲存、已接受的資料。請先在 iPhone 停止移動並確認裝置清除完成，關閉未結束的編輯，再開始。")
+                    .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 14) {
+                    preservationToggle("最愛地點與標籤", symbol: "star", selection: $favorites)
+                    preservationToggle("路線、GPX、目前已接受的草稿與路線速度", symbol: "point.topleft.down.to.point.bottomright.curvepath", selection: $routes)
+                    preservationToggle("語言、外觀、模式與操作設定", symbol: "slider.horizontal.3", selection: $settings)
+                }.goFlyInset()
+                Label(favorites || routes || settings ? "未勾選的資料會隨重新安裝清除。移動任務與目前位置不會還原。" : "全部不選代表全新安裝；原 App 的所有使用者資料會清除。", systemImage: "info.circle")
+                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Rule()
-            Picker("安裝來源", selection: $source) {
-                Text("從本機 GoFly 專案建置").tag(MacSetupSource.project)
-                Text("選擇已簽署的 GoFly.app").tag(MacSetupSource.signedApp)
-            }.pickerStyle(.radioGroup)
-            TextField("開發團隊 Team ID（10 碼）", text: $teamID)
-                .textFieldStyle(.roundedBorder).accessibilityIdentifier("reinstall.team")
-            if source == .signedApp {
-                HStack {
-                    Text(artifactPath.isEmpty ? "尚未選擇 GoFly.app" : artifactPath).lineLimit(2).truncationMode(.middle)
-                    Spacer()
-                    Button("選擇 App…", action: chooseApp)
+            VStack(alignment: .leading, spacing: 12) {
+                Label("安裝來源", systemImage: "shippingbox")
+                    .font(GoFlyStyle.font(13, bold: true))
+                Picker("安裝來源", selection: $source) {
+                    Text("從本機 GoFly 專案建置").tag(MacSetupSource.project)
+                    Text("選擇已簽署的 GoFly.app").tag(MacSetupSource.signedApp)
                 }
-            } else {
-                Toggle("允許 Xcode 連線 Apple 更新本次開發簽署資料", isOn: $allowProvisioningUpdates).toggleStyle(.checkbox)
+                .pickerStyle(.radioGroup).labelsHidden()
+                .accessibilityLabel("安裝來源")
+                if source == .signedApp {
+                    HStack(spacing: 12) {
+                        Image(systemName: "app.dashed")
+                            .font(.system(size: 22)).foregroundStyle(GoFlyStyle.muted)
+                            .accessibilityHidden(true)
+                        Text(artifactPath.isEmpty ? "尚未選擇 GoFly.app" : artifactPath)
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .lineLimit(3).truncationMode(.middle).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("選擇 App…", action: chooseApp).controlSize(.large)
+                    }.goFlyInset()
+                }
+            }
+            Rule()
+            VStack(alignment: .leading, spacing: 12) {
+                Label("開發簽署", systemImage: "signature")
+                    .font(GoFlyStyle.font(13, bold: true))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("開發團隊 Team ID").font(GoFlyStyle.font(12, bold: true))
+                    TextField("輸入 10 碼 Team ID", text: $teamID)
+                        .goFlyInput().accessibilityIdentifier("reinstall.team")
+                        .accessibilityLabel("開發團隊 Team ID（10 碼）")
+                        .frame(maxWidth: 360)
+                }
+                if source == .project {
+                    Toggle("允許 Xcode 連線 Apple 更新本次開發簽署資料", isOn: $allowProvisioningUpdates)
+                        .toggleStyle(.checkbox).goFlyInset()
+                }
             }
             Text("本流程使用 USB，先在 Mac 完整驗證備份，再同機移除、安裝及匯入。舊版 App 若沒有資料接收功能，會保留原 App 並提示需要更新。")
                 .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .foregroundStyle(GoFlyStyle.ink)
+    }
+
+    private func preservationToggle(_ title: String, symbol: String, selection: Binding<Bool>) -> some View {
+        Toggle(isOn: selection) {
+            Label(title, systemImage: symbol)
+                .font(GoFlyStyle.font(13))
+                .fixedSize(horizontal: false, vertical: true)
+        }.toggleStyle(.checkbox)
     }
 
     @ViewBuilder private var actions: some View {
@@ -121,10 +172,10 @@ struct MacReinstallPage: View {
                     Spacer()
                     PillButton(title: "完成", primary: true) { Task { await finish() } }
                 } else {
-                    PillButton(title: "查詢原交易", enabled: reinstall.canStatus) { reinstall.status() }
-                    if reinstall.canAbandon { PillButton(title: "放棄本次重裝") { reinstall.abandon() } }
+                    PillButton(title: "查詢原交易", width: 144, enabled: reinstall.canStatus) { reinstall.status() }
+                    if reinstall.canAbandon { PillButton(title: "放棄本次重裝", width: 160) { reinstall.abandon() } }
                     Spacer()
-                    if reinstall.canResume { PillButton(title: "繼續原交易", primary: true) { reinstall.resume() } }
+                    if reinstall.canResume { PillButton(title: "繼續原交易", primary: true, width: 160) { reinstall.resume() } }
                 }
             } else {
                 PillButton(title: "唯讀檢查", enabled: reinstall.isRestored && device?.transport == .usb) { preflight() }

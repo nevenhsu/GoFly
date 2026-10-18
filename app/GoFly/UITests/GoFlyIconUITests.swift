@@ -16,6 +16,7 @@ final class GoFlyIconUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["iconPreview.title"].waitForExistence(timeout: 10))
             XCTAssertEqual(app.staticTexts["iconPreview.symbolAvailability"].label, "SF Symbols: OK")
             XCTAssertEqual(app.staticTexts["iconPreview.presentation"].label, "zh-Hant · \(appearance)")
+            XCTAssertEqual(app.staticTexts["iconPreview.startup"].label, "Startup: idle")
             XCTAssertTrue(app.staticTexts["iconPreview.scope"].label.contains("不代表裝置、GPS 或 ACK 驗證"))
             XCTAssertFalse(app.buttons["map.serviceControl"].exists)
             for role in ["recenter", "settings", "favorite", "play", "pause"] {

@@ -160,6 +160,13 @@ class ManagementProtocolTests(unittest.TestCase):
         preflight = decode_request(json.dumps(_request("preflight")).encode())
         with self.assertRaisesRegex(ManagementBridgeError, "operation-failed"):
             encode_response(preflight, payload)
+        waiting = {**payload, "stage": "source", "outcome": "unknown", "canResume": True, "canRelease": True,
+                   "app": None, "teamID": None, "expiresAt": None, "adoptionReceipt": None,
+                   "proof": {key: key == "sourceBound" for key in payload["proof"]}}
+        self.assertTrue(json.loads(encode_response(request, waiting))["payload"]["canRelease"])
+        waiting["proof"]["mutationSealed"] = True
+        with self.assertRaisesRegex(ManagementBridgeError, "operation-failed"):
+            encode_response(request, waiting)
 
     def test_errors_are_closed_and_do_not_echo_payload(self) -> None:
         request = decode_request(json.dumps(_request("query")).encode())

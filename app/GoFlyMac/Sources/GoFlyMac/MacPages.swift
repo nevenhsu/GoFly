@@ -10,7 +10,10 @@ extension MacRootView {
                     ForEach(environment.checks) { check in
                         HStack(alignment: .top, spacing: 12) {
                             if check.passed { DesignAsset("EnvironmentPassed", width: 24) }
-                            else { Text("○").font(GoFlyStyle.font(22)).foregroundStyle(GoFlyStyle.muted) }
+                            else {
+                                Image(systemName: "exclamationmark.circle").font(.system(size: 19))
+                                    .foregroundStyle(GoFlyStyle.muted).frame(width: 24, height: 24).accessibilityHidden(true)
+                            }
                             StatusRow(title: check.title, detail: check.detail)
                         }
                         if check.id != environment.checks.last?.id { Rule() }
@@ -56,6 +59,12 @@ extension MacRootView {
             }
             }
         case .signing:
+            if !model.isPreview, let management = model.management {
+                MacManagementPage(management: management, kind: .renew, device: model.selected,
+                    selection: model.managementSelection, defaultTeam: model.environment?.teamID,
+                    finish: { await model.finishManagement() }, cancel: { model.cancelManagement() })
+                    .disabled(model.isChecking)
+            } else {
             StatusCard {
                 StatusRow(title: "目前簽名", detail: signatureDetail)
                 Rule()
@@ -67,7 +76,14 @@ extension MacRootView {
                     StatusRow(title: "重新安裝與資料保留", detail: "簽名相容性尚未確認時，可明確選擇資料保留流程。備份完整驗證後才會移除原 App。")
                 }
             }
+            }
         case .repair:
+            if !model.isPreview, let management = model.management {
+                MacManagementPage(management: management, kind: .repair, device: model.selected,
+                    selection: model.managementSelection, defaultTeam: model.environment?.teamID,
+                    finish: { await model.finishManagement() }, cancel: { model.cancelManagement() })
+                    .disabled(model.isChecking)
+            } else {
             StatusCard {
                 StatusRow(title: model.selected?.displayName ?? "尚未選擇 iPhone", detail: connectionDetail)
                 Rule()
@@ -75,9 +91,10 @@ extension MacRootView {
                 Rule()
                 Button { model.navigate(.channel) } label: {
                     StatusRow(title: "手機 App 仍無法啟動或連線？  ›", detail: "查看 LocalDevVPN 與手機端服務檢查步驟。")
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).goFlyRowFocus()
                 Rule()
                 StatusRow(title: "裝置配對", detail: model.isPreview ? "裝置身分已核對（預覽）" : "這次只用既有信任進行唯讀核對，不建立、重建或交付配對資料。")
+            }
             }
         case .channel:
             StatusCard {
@@ -139,7 +156,7 @@ extension MacRootView {
             HStack {
                 Text("可連接的裝置").font(GoFlyStyle.font(16, bold: true))
                 Spacer()
-                Text("\(model.visibleDevices.count) 部裝置").font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                Text("\(Set(model.visibleDevices.map { $0.id.lowercased() }).count) 部裝置").font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
                 Button("搜尋裝置") { model.refreshDevices() }.disabled(model.busy)
             }
             if model.visibleDevices.isEmpty {
@@ -150,29 +167,46 @@ extension MacRootView {
                         .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity).padding(.vertical, 48)
             } else {
-                ForEach(model.visibleDevices) { device in
-                    Button { model.select(device.id) } label: {
+                ForEach(model.visibleDevices, id: \.connectionID) { device in
+                    let selected = model.selectedID?.lowercased() == device.id.lowercased()
+                    let displayed = selected ? model.selected ?? device : device
+                    Button { model.select(device.id, transport: displayed.transport) } label: {
                         HStack(spacing: 16) {
                             DesignAsset("Device", width: 32, height: 44)
                             VStack(alignment: .leading, spacing: 9) {
                                 Text(device.displayName).font(GoFlyStyle.font(18, bold: true))
-                                Text("可偵測 · 信任與安裝狀態待檢查").font(GoFlyStyle.font(13)).foregroundStyle(Color(white: 0.4))
+                                Text("可偵測 · 信任與安裝狀態待檢查").font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
                                 Text(device.osVersion.map { "iOS \($0)" } ?? "裝置識別：…\(device.id.suffix(6))")
-                                    .font(GoFlyStyle.font(12)).foregroundStyle(Color(white: 0.5))
+                                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
                             }
                             Spacer()
                             HStack(spacing: 8) {
-                                if device.transport == .usb { DesignAsset("USB", width: 24) }
-                                Text(device.connectionName).font(GoFlyStyle.font(14, bold: true))
-                            }.padding(.horizontal, 16).frame(height: 44)
-                                .overlay(Capsule().strokeBorder(GoFlyStyle.line))
-                        }.padding(16).frame(minHeight: 130)
-                            .background(model.selectedID == device.id ? Color(white: 0.96) : .white, in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(model.selectedID == device.id ? .black : GoFlyStyle.line, lineWidth: model.selectedID == device.id ? 2 : 1))
-                            .contentShape(RoundedRectangle(cornerRadius: 16))
-                    }.buttonStyle(.plain).disabled(model.busy)
-                        .accessibilityLabel("\(device.displayName)，\(device.connectionName)")
-                        .accessibilityAddTraits(model.selectedID == device.id ? .isSelected : [])
+                                Image(systemName: displayed.transport == .usb ? GoFlyMacSymbols.usb : GoFlyMacSymbols.wifi)
+                                    .accessibilityHidden(true)
+                                Text(displayed.connectionName).font(GoFlyStyle.font(12, bold: true))
+                            }.padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(GoFlyStyle.surface, in: Capsule())
+                                .overlay(Capsule().strokeBorder(GoFlyStyle.line, lineWidth: 0.75))
+                            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 20)).foregroundStyle(selected ? GoFlyStyle.ink : GoFlyStyle.muted)
+                                .accessibilityHidden(true)
+                        }.padding(20).frame(minHeight: 112)
+                            .background(selected ? GoFlyStyle.secondarySurface : GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? GoFlyStyle.ink : GoFlyStyle.line, lineWidth: selected ? 1.5 : 0.75))
+                            .contentShape(RoundedRectangle(cornerRadius: 12))
+                    }.buttonStyle(.plain).goFlyRowFocus().disabled(model.busy)
+                        .accessibilityLabel("\(device.displayName)，\(displayed.connectionName)")
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    let connections = model.availableConnections.filter { $0.id.lowercased() == device.id.lowercased() }
+                    if connections.count > 1 {
+                        Picker("本次連線", selection: Binding(
+                            get: { displayed.transport },
+                            set: { model.select(device.id, transport: $0) })) {
+                            ForEach(connections, id: \.connectionID) { connection in
+                                Text(connection.connectionName).tag(connection.transport)
+                            }
+                        }.disabled(model.busy).padding(.bottom, 8)
+                    }
                 }
             }
         }
@@ -180,7 +214,8 @@ extension MacRootView {
 
     @ViewBuilder var pageActions: some View {
         if model.failure != nil && !(!model.isPreview &&
-            ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil))) {
+            ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) ||
+             ((model.page == .signing || model.page == .repair) && model.management != nil))) {
             PillButton(title: "返回裝置清單", enabled: model.environment?.ready == true) { model.openDevices(firstInstall: model.firstInstall) }
             Spacer(minLength: 0)
             PillButton(title: "重新檢查", primary: true) { retry() }
@@ -213,14 +248,16 @@ extension MacRootView {
                 Spacer()
                 PillButton(title: "前往裝置管理", primary: true) { model.openDevices(firstInstall: false) }
             case .signing:
-                PillButton(title: "保留資料與重裝") { model.navigate(.reinstall) }
+                PillButton(title: "保留資料與重裝", enabled: !model.setupLocksDevice) { model.navigate(.reinstall) }
                 Spacer(minLength: 0)
-                PillButton(title: model.isPreview ? "預覽重新簽名" : "本版不執行簽名", primary: true,
-                           enabled: model.isPreview) { model.previewAdvance() }
+                if model.isPreview {
+                    PillButton(title: "預覽重新簽名", primary: true) { model.previewAdvance() }
+                }
             case .repair:
-                PillButton(title: model.isPreview ? "預覽修復裝置配對" : "本版不寫入配對", enabled: model.isPreview) { model.previewAdvance() }
+                if model.isPreview { PillButton(title: "預覽修復裝置配對") { model.previewAdvance() } }
+                else { PillButton(title: "手機連線指引", enabled: !model.setupLocksDevice) { model.navigate(.channel) } }
                 Spacer(minLength: 0)
-                PillButton(title: "重新檢查連接", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
+                PillButton(title: "重新檢查連接", primary: true, enabled: model.selected != nil && !model.setupLocksDevice) { model.inspectSelected() }
             case .channel:
                 Spacer()
                 PillButton(title: "返回連接與修復", primary: true) { model.navigate(.repair) }

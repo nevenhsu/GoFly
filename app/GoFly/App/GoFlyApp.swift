@@ -11,7 +11,11 @@ struct GoFlyApp: App {
 
     init() {
         _ = GoFlyPreferences.shared
+        #if DEBUG && targetEnvironment(simulator)
+        if !GoFlyIconPreview.isRequested { GoFlySetupFixture.seedIfRequested() }
+        #else
         GoFlySetupFixture.seedIfRequested()
+        #endif
         _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
 
@@ -19,8 +23,9 @@ struct GoFlyApp: App {
         WindowGroup {
             Group {
                 #if DEBUG && targetEnvironment(simulator)
-                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-icon-preview") {
-                    GoFlyIconPreview()
+                if GoFlyIconPreview.isRequested {
+                    GoFlyIconPreview(bootstrapIsIdle: bootstrap.runtime == nil
+                        && bootstrap.startupTask == nil && bootstrap.transferTask == nil)
                 } else {
                     startupContent
                 }
@@ -32,6 +37,9 @@ struct GoFlyApp: App {
             .preferredColorScheme(preferences.colorScheme)
             .task(id: scenePhase) {
                 guard scenePhase == .active else { return }
+                #if DEBUG && targetEnvironment(simulator)
+                if GoFlyIconPreview.isRequested { return }
+                #endif
                 await bootstrap.observeManagementCommands()
             }
             .onChange(of: scenePhase) { _, phase in
@@ -41,6 +49,9 @@ struct GoFlyApp: App {
                 preferences.refreshSystemPreferences()
             }
             .onOpenURL { url in
+                #if DEBUG && targetEnvironment(simulator)
+                if GoFlyIconPreview.isRequested { return }
+                #endif
                 bootstrap.handle(url: url)
             }
         }

@@ -29,17 +29,18 @@ public enum MacManagementFailure: Error, Equatable, Sendable {
         case .unavailable: return "管理工具尚未就緒"
         case .cancelled: return "已停止等待這次操作"
         case .timeout: return "等待裝置回覆逾時"
-        case .invalidRequest: return "Invalid management request"
-        case .invalidResponse: return "Invalid management response"
+        case .invalidRequest: return "請確認本次管理選項"
+        case .invalidResponse: return "無法核對管理結果"
         case .service(let code):
             switch code {
-            case "receipt-capacity": return "Preparation history is full"
-            case "identity-unverified": return "App identity could not be verified"
-            case "source-busy": return "The source app is busy"
-            case "update-unknown": return "The app update result is unknown"
-            case "adoption-unknown": return "The adoption result is unknown"
-            case "revision-conflict": return "The device connection changed"
-            default: return "Management could not be completed"
+            case "receipt-capacity": return "App 準備紀錄已滿"
+            case "identity-unverified", "identity-mismatch": return "App 身分尚未確認"
+            case "source-busy": return "請先完成手機上的操作"
+            case "update-unknown": return "App 更新結果待確認"
+            case "adoption-unknown": return "資料接續結果待確認"
+            case "revision-conflict": return "需要重新核對連線"
+            case "signing-required", "signature-invalid": return "需要完成簽名設定"
+            default: return "本次操作尚未完成"
             }
         }
     }
@@ -48,18 +49,22 @@ public enum MacManagementFailure: Error, Equatable, Sendable {
         case .unavailable: return "請確認 Mac 執行環境可用，再接續原操作。"
         case .cancelled: return "裝置操作可能尚未確認。原進度會保留，重新核對後才能繼續。"
         case .timeout: return "請保持原 iPhone 連線並解鎖，再手動接續；不會自動重送未知的裝置操作。"
-        case .invalidRequest: return "The management request did not satisfy the protocol."
-        case .invalidResponse: return "The management service returned an invalid response."
+        case .invalidRequest: return "請確認原 iPhone、開發團隊與簽名來源，再進行唯讀檢查。"
+        case .invalidResponse: return "回覆未通過身分與進度核對，已保留操作紀錄。請先查詢原操作；仍無法讀取時請重新開啟 Mac App。"
         case .service(let code):
             switch code {
-            case "receipt-capacity": return "Use the explicit backup and reinstall flow to continue with your data preserved."
-            case "identity-unverified": return "Confirm the selected device and installed app, then try again."
-            case "source-busy": return "Finish or close the source app operation before retrying."
-            case "update-required": return "Update the source app before continuing."
-            case "update-unknown": return "Check the source app before retrying the operation."
-            case "adoption-unknown": return "Check the target app before retrying the operation."
-            case "revision-conflict": return "Reconnect the same device and start from its current state."
-            default: return "The management operation was not confirmed."
+            case "receipt-capacity": return "本次沒有開始新的更新。取消本次操作後，可明確選擇「保留資料與重裝」；不會自動刪除準備紀錄。"
+            case "identity-unverified", "identity-mismatch": return "請確認連接的是原 iPhone，且 App 與開發團隊相符，再查詢原操作。"
+            case "source-busy": return "請在 iPhone 停止移動並完成清除、結束編輯，再停留於 GoFly 地圖，手動接續。"
+            case "update-required": return "原 App 尚未支援此資料交接流程。請使用相容版本或明確選擇保留資料的重裝流程。"
+            case "update-unknown": return "更新可能已提交。請保持原 iPhone 連線並查詢，不會盲目重送更新。"
+            case "adoption-unknown": return "尚未取得完整 App 與資料接續回報。保持 GoFly 開啟，手動查詢原操作。"
+            case "revision-conflict": return "請連接同一部 iPhone，明確選擇接續使用的連線。未確認的舊操作會先保留。"
+            case "signing-required", "signature-invalid": return "請在 Xcode 完成開發團隊與簽署設定，再接續原操作。本次選項與已完成的進度會保留。"
+            case "device-disconnected": return "請重新連接原 iPhone 並解鎖，再手動接續原操作。"
+            case "trust-required": return "請解鎖 iPhone，確認信任這部 Mac，再手動接續。"
+            case "developer-mode-required": return "請在 iPhone「設定 → 隱私權與安全性」開啟開發者模式，再手動接續。"
+            default: return "本次操作尚未完整確認，請查詢原操作並依目前狀態接續。"
             }
         }
     }
@@ -353,7 +358,7 @@ public struct MacManagementPayload: Equatable, Sendable {
         if sourceAdmission == .cold { guard !proof.sourceQuiescent && !proof.mutationSealed else { throw MacManagementFailure.invalidRequest } }
         if request.kind == .repair { guard !proof.updateConfirmed else { throw MacManagementFailure.invalidRequest } }
         if canRelease {
-            guard [.artifact, .source].contains(stage), [.inProgress, .failed].contains(outcome),
+            guard [.artifact, .source].contains(stage), [.inProgress, .failed, .unknown].contains(outcome),
                   !proof.updateConfirmed, !proof.pairingImported, !proof.adoptionCommitted,
                   !proof.mutationSealed, adoptionReceipt == nil else { throw MacManagementFailure.invalidRequest }
         }

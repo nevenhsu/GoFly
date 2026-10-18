@@ -8,12 +8,14 @@ public struct CheckRequest: Codable, Sendable {
     public let requestID: String
     public let action: CheckAction
     public let deviceID: String?
+    public let transport: ConnectedDevice.Transport?
 
-    public init(action: CheckAction, deviceID: String? = nil) {
+    public init(action: CheckAction, deviceID: String? = nil, transport: ConnectedDevice.Transport? = nil) {
         self.protocol = 1
         self.requestID = UUID().uuidString
         self.action = action
         self.deviceID = deviceID
+        self.transport = action == .inspect ? transport : nil
     }
 }
 
@@ -47,6 +49,20 @@ public struct ConnectedDevice: Codable, Identifiable, Equatable, Sendable {
     }
     public var connectionName: String { transport == .usb ? "USB" : "Wi-Fi" }
     public var displayName: String { name.isEmpty ? "iPhone · …\(id.suffix(6))" : name }
+    public var connectionID: String { id.lowercased() + ":" + transport.rawValue }
+
+    /// Management keeps both explicit connection choices for the same phone.
+    /// First install continues to use the USB-only list.
+    public static func connectionChoices(_ devices: [Self], usbOnly: Bool) -> [Self] {
+        var choices: [String: Self] = [:]
+        for device in devices where !usbOnly || device.transport == .usb {
+            if choices[device.connectionID] == nil { choices[device.connectionID] = device }
+        }
+        return choices.values.sorted {
+            ($0.name, $0.id.lowercased(), $0.transport == .usb ? 0 : 1) <
+            ($1.name, $1.id.lowercased(), $1.transport == .usb ? 0 : 1)
+        }
+    }
 
     public static func unique(_ devices: [Self], usbOnly: Bool) -> [Self] {
         var byID: [String: Self] = [:]

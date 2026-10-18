@@ -88,14 +88,25 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(bridge._map_error("SECRET-PAIRING-DATA"), "operation-failed")
         self.assertEqual(bridge.BridgeError("unexpected-internal").code, "operation-failed")
 
-    def test_device_dedup_prefers_usb_and_skips_unknown_transport(self):
+    def test_device_connections_remain_explicit_and_skip_unknown_transport(self):
         rows = [
             SimpleNamespace(serial=UDID, connection_type="Network"),
             SimpleNamespace(serial=UDID.upper(), connection_type="USB", name="Phone"),
             SimpleNamespace(serial="not-an-udid", connection_type="USB"),
         ]
-        result = bridge.Bridge(self.config(), self.modules(rows)).devices()
-        self.assertEqual(result["devices"], [{"id": UDID, "name": "Phone", "transport": "usb", "osVersion": None}])
+        instance = bridge.Bridge(self.config(), self.modules(rows))
+        result = instance.devices()
+        self.assertEqual({item["transport"] for item in result["devices"]}, {"usb", "wifi"})
+        self.assertEqual(len(result["devices"]), 2)
+        self.assertEqual(instance._find_device(rows, UDID)[2], "USB")
+        self.assertEqual(instance._find_device(rows, UDID, "wifi")[2], "Network")
+        with self.assertRaisesRegex(bridge.BridgeError, "device-disconnected"):
+            instance._find_device(rows[1:], UDID, "wifi")
+        self.assertEqual(bridge._validate_request({"protocol": 1, "requestID": RID, "action": "inspect",
+                                                 "deviceID": UDID, "transport": "wifi"}), "inspect")
+        with self.assertRaisesRegex(bridge.BridgeError, "invalid-request"):
+            bridge._validate_request({"protocol": 1, "requestID": RID, "action": "inspect",
+                                      "deviceID": UDID, "transport": ["wifi"]})
 
     def test_inspect_uses_exact_usb_autopair_false_and_unknown_capabilities(self):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}

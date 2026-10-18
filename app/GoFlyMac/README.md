@@ -35,9 +35,11 @@ open work/gofly-mac/GoFly.app
 
 ## 真實流程與預覽
 
-真實環境檢查沿用 protocol 1 的唯讀裝置邊界，僅利用既有信任，優先選取 USB 並去重。正式 `com.neven.gofly` 的安裝使用分離的 protocol 2；protocol 1 仍拒絕安裝請求。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
+真實環境檢查沿用 protocol 1 的唯讀裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用分離的 protocol 2，仍只限 USB；protocol 1 仍拒絕安裝請求。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
 介面預覽持續顯示預覽標示，使用示意裝置與日期，可討論安裝、管理、續簽、修復、保留資料等畫面；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
+
+純介面檢查可用 `open work/gofly-mac/GoFly.app --args --preview` 啟動。此模式不讀取真實操作紀錄，也不執行實際裝置檢查；完整流程仍須在實際操作模式驗收。
 
 建置腳本產生固定 `LocalConfiguration.json` 與 `SetupConfiguration.json`，綁定此工作目錄、既有 Python 與正式 GoFly 專案；生成的絕對路徑設定不追蹤進版控。實際程序入口只接受隨 Mac App 附帶的固定 Bridge 腳本與設定。沒有手機不等於環境檢查失敗；本輪開發不偵測或操作實體手機。
 
@@ -61,4 +63,4 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 
-字體使用 [Google Fonts 的 Noto Sans TC](https://github.com/google/fonts/tree/main/ofl/notosanstc)，保留 `NotoSansTC-OFL.txt`。圖示來自使用者提供的 GoFly Figma，沒有暫時素材 URL 留在執行程式中。既有 LocalGo 裝置邊界沿用 AGPL-3.0，見 `../LocalGo/LICENSE`。
+介面使用 macOS 內建系統字體（中文交由系統選擇字形），支援系統深淺色；保留既有未使用字體資源的 `NotoSansTC-OFL.txt`。功能圖示採 SF Symbols，品牌圖形保留使用者提供的 GoFly 素材，沒有暫時素材 URL 留在執行程式中。詳見 [Mac UI 設計規格](../../docs/MAC-UI-DESIGN.md)。既有 LocalGo 裝置邊界沿用 AGPL-3.0，見 `../LocalGo/LICENSE`。

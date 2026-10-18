@@ -12,6 +12,7 @@
 | 面板標題 | 路線 `.title3.bold`；狀態 `.headline`；一般內容 `.body`；說明 `.subheadline`／`.footnote` |
 | 底面 | `.systemGroupedBackground`；內容卡 `.systemBackground`；內嵌控制 `.secondarySystemBackground` |
 | 邊界 | 主面板 20 pt 連續圓角、0.5 pt 語意分隔線；搜尋／地點 14 pt；資料列及較小卡 12 pt |
+| 輸入區 | 搜尋／標籤欄位使用 `systemGray5` 底色與 `systemGray` 0.75 pt 常態邊線；聚焦 1.5 pt primary。這取代原先與頁面相近的 secondarySystemBackground＋淡邊線 |
 | 層次 | 一般頁面卡平面；地圖卡 16 pt 模糊、向下 5 pt 的克制陰影；深色提高陰影不透明度 |
 | 主要按鈕 | 17 pt 語意 body semibold，最低內容高 44 pt，加上下各 6 pt；可因換行長高。僅地圖候選 Go 在無障礙字級取消額外上下留白，保留自然字高與至少 44 pt 操作範圍，避免鍵盤壓縮可視地圖 |
 | 次要按鈕 | 同主按鈕字級，最低內容高 44 pt，加上下各 2 pt、柔灰底與細邊界 |
@@ -29,9 +30,9 @@
 | VPN 引導／說明 | 網路圖示、標題與狀態分層；連接說明步驟卡、權限提示與回到檢查的操作；檢查中／失敗／可達各依真實 controller 狀態呈現 |
 | 地圖頂部 | 目前／模擬位置來源與次要服務狀態；右側原位置的啟停與設定圓形按鈕；浮層底色不透明 |
 | 模式列 | 瞬移／路線／搖桿合為一組柔灰膠囊，選取為實心黑／白；保留文字與 selected trait；長字級仍切換到原有 Menu |
-| 搜尋 | 52 pt 最低輸入區、16 pt 左右留白、次要色搜尋與清除圖示；聚焦／要求強調時 1.5 pt 實色邊線，平常細邊線。搜尋中、無結果、失敗與輸入錯誤依原資料狀態顯示 |
+| 搜尋 | 52 pt 最低輸入區、16 pt 左右留白、次要色搜尋與清除圖示；聚焦／要求強調時 1.5 pt 實色邊線，平常 0.75 pt systemGray 邊線。提示字使用語意 secondary。搜尋中、無結果、失敗與輸入錯誤依原資料狀態顯示 |
 | 地點選項 | 單 title＋獨立星號；選取以字重、底面、邊線及 selected trait 表達；標準字級維持單列，大字級允許多行；星號點擊不選點、不送 Go |
-| 候選 Go／Pin | 沿用原定位與候選分工；Go 使用共用主要按鈕，Pin 保留獨立 44 pt 操作；兩者間距標準 8 pt、無障礙字級 4 pt，讓鍵盤出現時仍保留完整候選可視區；不增加目前位置 marker 外圈 |
+| 位置箭頭／候選 Go／Pin | GPS 空心、模擬實心的同一路徑向量箭頭；邊線沿箭頭輪廓，等待維持 50% 透明度，無圓底／外圈。候選 Pin 為實心圓頭＋細圓桿，漫步目的地為空心地標，均有克制對比描邊。Go 使用共用主要按鈕，Pin 保留獨立 44 pt 操作；兩者間距標準 8 pt、無障礙字級 4 pt |
 | 地點詳情 | 圖釘、標題、獨立星號；地址與座標分組卡，座標保留選取複製；只有詳情，不增加送點 |
 | 最愛地點 | 同一地點卡；空白狀態有安靜的星號圖示、置中的既有說明與獨立搜尋操作；長按編輯及立即星號交易不變 |
 | 路線編輯 | title3 粗體標題、獨立最愛／調整圖示、單一清單；左把手／中地點／右垃圾桶不變。角色為 caption medium、地點 body semibold；大字級允許換行；新增節點有加號 |
@@ -50,6 +51,7 @@
 - 深淺色：文字、卡片與主次 CTA 依語意色切換；選取、失敗、停用不能只靠顏色判別。
 - 操作：最少 44 × 44 pt；選點、最愛、詳情、排序、刪除與開始各維持獨立目標；地圖露出區依實測面板高度計算。
 - 原生能力：保留系統鍵盤、手勢與 VoiceOver 標籤；裝飾圖示不加入朗讀；沒有新增持續動畫，支援減少動態效果。
+- 圖示：`GoFlySymbols` 為標準 SF Symbol 語意目錄；齒輪、重定位、關閉、重試、排序、匯入／匯出、外部連結同一用途用同一符號。`goFlyControlSymbol` 只調整獨立 glyph，文字不因固定圖示容器縮小；目前／模擬位置、候選 Pin 與目的地各可辨識。
 - 驗證順序：專案 `check.sh`、既有對應 UI 測試、模擬器截圖檢視；手機 VoiceOver、觸感與定位／背景效果集中於裝置驗收。
 
 ## 完成度與證據
@@ -57,3 +59,11 @@
 以上為本次 App 精修範圍，並非 Figma 視覺稿更新。驗證結果與截圖索引記錄在 `work/gofly-ios/design-polish/RESULT.md`。模擬器／建置通過不代表真機定位、GPS、VPN 或接收 App 行為已通過。
 
 設計依據：`ios-hig-design` 與 `mobile-ios-design` skills，以及 Apple [Layout](https://developer.apple.com/design/human-interface-guidelines/layout)／[Typography](https://developer.apple.com/design/human-interface-guidelines/typography) 的原生版面與語意字級方向。
+
+## 地圖語言的可實作範圍
+
+App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的反向地理編碼地址。`MapKitPlaceResolver` 在每次建立 request 時讀取最新偏好，設定 `MKReverseGeocodingRequest.preferredLocale`；系統選項使用 nil 以沿用 MapKit 預設，不需要替換地圖、移動鏡頭或重建任務。
+
+查核已安裝 iOS 27.1 SDK：`MKMapView`、`MKMapConfiguration`、`MKLocalSearch.Request` 未提供每張底圖／搜尋結果的 locale 設定。底圖地名與 POI 標籤仍由 iOS／Apple 地圖及可用資料決定，不宣告已隨 App 偏好翻譯；既有最愛、歷史搜尋與使用者標籤也不改寫。可用公開 API 見 Apple [preferredLocale](https://developer.apple.com/documentation/mapkit/mkreversegeocodingrequest/preferredlocale)。
+
+本輪圖示、Pin、輸入對比與地址語言的驗證位於 `work/gofly-ios/icon-refinement/RESULT.md`；Debug Simulator 元件預覽只驗證繪圖，不提供 GPS、服務或 ACK 證據，也不編入 iPhone target。

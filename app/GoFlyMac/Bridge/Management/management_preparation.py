@@ -17,7 +17,7 @@ import re
 import tempfile
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, TypeVar
 
 try:
     from ..Setup.setup_adapters import (
@@ -46,6 +46,9 @@ except ImportError:  # direct execution from the packaged Bridge root
     from Management.management_protocol import ManagementBridgeError, TEAM_RE, _expiry, _validate_app
     from Management.management_source import PreparationAppIdentity
 
+if TYPE_CHECKING:
+    from .management_lineage import ManagementGeneration
+
 
 MAX_MANAGEMENT_REQUEST_BYTES = 32 * 1024
 MAX_MANAGEMENT_RESPONSE_BYTES = 64 * 1024
@@ -55,6 +58,7 @@ MAX_PAIRING_ENVELOPE_BYTES = 1024 * 1024 + 64 * 1024
 
 _LOGICAL_FILES: dict[str, tuple[str, int]] = {
     "managementRequest": ("Library/Application Support/GoFlyManagement/request.json", 32 * 1024),
+    "managementRoot": ("Library/Application Support/GoFlyManagement/root.json", 512 * 1024),
     "managementResponse": ("Library/Application Support/GoFlyManagement/response.json", 64 * 1024),
     "managementControl": ("Library/Application Support/GoFlyManagement/control-request.json", MAX_MANAGEMENT_CONTROL_BYTES),
     "restoreIntent": ("Library/Application Support/GoFlyTransfer/restore-intent.json", 256 * 1024),
@@ -605,6 +609,53 @@ class ManagementPreparationAdapter:
         try:
             with self._house_arrest(device_id) as service:
                 return self._read_remote(service, path, max_bytes=limit)
+        except (ManagementBridgeError, SetupBridgeError) as error:
+            raise _map_exception(error) from None
+        except Exception as error:
+            raise _map_exception(error) from None
+
+    def read_management_root(self, device_id: str) -> bytes | None:
+        """Read Core's fixed bounded management root without granting authority."""
+        return self.read_file(device_id, "managementRoot")
+
+    def read_management_generation(self, device_id: str, management_id: str) -> "ManagementGeneration | None":
+        """Read one UUID-derived generation's fixed three raw files.
+
+        A missing generation is returned as ``None``.  A partially present
+        generation is an immutable-storage conflict; callers never receive a
+        synthesized or path-selected record.  The second pass prevents a
+        concurrent App write from combining bytes from different generations.
+        """
+        try:
+            management_id = _uuid(management_id)
+            from .management_lineage import ManagementGeneration
+        except (ManagementBridgeError, ImportError):
+            raise _error("invalid-request") from None
+        base = "Library/Application Support/GoFlyManagement/generations/" + management_id
+        files = (
+            (base + "/request.json", 32 * 1024),
+            (base + "/source-activation.json", 256 * 1024),
+            (base + "/source-restore-root.json", 1024 * 1024),
+        )
+
+        def read_once(service: Any) -> tuple[bytes | None, bytes | None, bytes | None]:
+            return tuple(self._read_remote(service, path, max_bytes=limit) for path, limit in files)  # type: ignore[return-value]
+
+        try:
+            with self._house_arrest(device_id) as service:
+                first = read_once(service)
+                if all(item is None for item in first):
+                    # Recheck an honest absence so a generation appearing
+                    # during the read is not mistaken for a stable absence.
+                    if read_once(service) != first:
+                        raise SetupBridgeError("transaction-conflict")
+                    return None
+                if first[0] is None or first[1] is None:
+                    raise SetupBridgeError("transaction-conflict")
+                second = read_once(service)
+                if second != first:
+                    raise SetupBridgeError("transaction-conflict")
+                return ManagementGeneration(first[0], first[1], first[2])
         except (ManagementBridgeError, SetupBridgeError) as error:
             raise _map_exception(error) from None
         except Exception as error:

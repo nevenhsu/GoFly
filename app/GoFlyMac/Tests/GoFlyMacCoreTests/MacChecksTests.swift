@@ -8,9 +8,10 @@ private struct EchoChecker: MacChecking {
         let payload: [String: Any]
         switch request.action {
         case .environment: payload = ["ready": true, "checks": [], "teamID": NSNull()]
-        case .devices: payload = ["devices": [["id": "device-a", "name": "iPhone", "transport": "usb"]]]
+        case .devices: payload = ["devices": [["id": "device-a", "name": "iPhone", "transport": "usb"],
+                                              ["id": "device-a", "name": "iPhone", "transport": "wifi"]]]
         case .inspect:
-            payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": "usb"],
+            payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": request.transport?.rawValue ?? "usb"],
                        "developerMode": true, "installed": NSNull(), "vpnInstalled": NSNull(),
                        "canInstall": false, "canRenew": false, "canRepair": false, "canReinstall": false]
         }
@@ -64,9 +65,16 @@ private actor HeldChecker: MacChecking {
     #expect(management.count == 2)
     #expect(management.first(where: { $0.id.lowercased() == "abc" })?.transport == .usb)
     #expect(ConnectedDevice.unique([wifi, usb, other], usbOnly: true) == [usb])
+    let choices = ConnectedDevice.connectionChoices([wifi, usb, wifi, other], usbOnly: false)
+    #expect(choices.count == 3)
+    #expect(Set(choices.map(\.connectionID)).count == 3)
+    #expect(ConnectedDevice.connectionChoices([wifi, usb, other], usbOnly: true) == [usb])
 }
 
 @Test func responseMustMatchFreshRequest() throws {
+    let pinned = CheckRequest(action: .inspect, deviceID: "abc", transport: .wifi)
+    let encoded = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(pinned)) as? [String: Any])
+    #expect(encoded["transport"] as? String == "wifi")
     let request = CheckRequest(action: .environment)
     let oldRequest = CheckRequest(action: .environment)
     let stale = try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": oldRequest.requestID,
@@ -155,10 +163,20 @@ private actor HeldChecker: MacChecking {
 @Test @MainActor func changingDeviceClearsEvidence() async throws {
     let model = MacAppModel(live: EchoChecker(wrongDevice: false))
     model.checkEnvironment(); try await settled(model)
-    model.openDevices(firstInstall: true); try await settled(model)
+    model.openDevices(firstInstall: false); try await settled(model)
+    #expect(model.visibleDevices.count == 1)
+    #expect(model.availableConnections.count == 2)
     model.select("device-a"); model.inspectSelected(); try await settled(model)
     #expect(model.inspection != nil)
     #expect(model.inspection?.installed == nil)
+    let initialSelection = model.managementSelection?.selectionID
+    model.inspectSelected(); try await settled(model)
+    #expect(model.managementSelection?.selectionID == initialSelection)
+    model.select("device-a", transport: .wifi)
+    #expect(model.inspection == nil)
+    #expect(model.managementSelection?.selectionID != initialSelection)
+    model.inspectSelected(); try await settled(model)
+    #expect(model.inspection?.device.transport == .wifi)
     model.refreshDevices(); try await settled(model)
     #expect(model.inspection == nil)
     #expect(model.selectedID == nil)

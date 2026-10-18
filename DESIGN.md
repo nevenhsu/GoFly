@@ -1,5 +1,7 @@
 # GoFly 視覺方向
 
+2026-10-18 Mac 適配：使用者要求 Mac App 同樣精修，直接實作於 `app/GoFlyMac`。系統中文字體、深淺色語意配色、SF Symbols、側邊欄與表單規格見 [Mac UI 設計與驗收規格](docs/MAC-UI-DESIGN.md)。這是 App 視覺實作，不代表 Figma 或實機驗收已同步。
+
 確認日期：2026-10-17。正式 App 視覺採用使用者指定的 [Uber design.md](https://getdesign.md/uber/design-md)；[完整來源](https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/uber/DESIGN.md) 為該站對 Uber 網站的獨立分析。以下是 GoFly 的原生 iOS 適配決策，不是照搬網站版面。
 
 ## 需求來源與優先序
@@ -22,6 +24,9 @@
 - 選項卡維持單 title＋獨立星號；路線維持單一清單與左把手／中間地點／右垃圾桶。這些已確認結構不因按鈕風格而改成整列膠囊。
 - 地點選取、最愛、啟停及警示均需形狀／圖示／文字或輔助標籤辨識，不只靠顏色；全部操作目標至少 44 × 44 pt。
 - 目前位置 marker 只保留箭頭與沿箭頭輪廓的對比邊線，不加圓形底或外圈（2026-10-17 真機回饋）。從未取得有效 GPS 時不畫 marker；Stop／Restore 或讀值無效時保留最後一次有效位置，箭頭以 50% 透明表示等待，收到有效 GPS 才更新位置並恢復 100%。最後已知位置僅供顯示，不作為新 GPS、路線起點或 clear 證據；停止／clear 與後續 GPS 觀察分開表示。
+- 2026-10-18 圖示精修：位置 marker 改用同一條圓角向上箭頭向量，GPS 空心、模擬位置實心，以形狀區別來源；對比邊線沿精確同一路徑描繪，仍無圓底／外圈。候選 Pin 採實心圓頭＋細圓桿，漫步目的地採空心地標輪廓；兩種地點 Pin 與位置箭頭分工清楚，保持原 Go／詳情操作。標準控制統一使用 `GoFlySymbols` 的 SF Symbols。
+- 2026-10-18 淺色輸入區：搜尋與標籤欄位採 `systemGray5` 不透明灰底、`systemGray` 常態邊線，聚焦使用 primary 邊線，避免與白色卡片／頁底過近；深色及系統字級仍自適應。
+- 語言偏好同步至新建立的地點地址解析 request；明確選擇繁中／簡中／英文時設定 MapKit `preferredLocale`，「系統」則使用 MapKit 預設。原生 MapKit 沒有每張地圖的底圖標籤語言 API，路名／POI 標籤與 `MKLocalSearch` 搜尋結果不宣告可由 App 強制翻譯。不得以私有 API、全域語言覆寫或重建地圖偽裝已支援。
 - 來源的網站展示尺寸不直接套成手機字級或固定高度。長英文、最大字級、長路線及鍵盤出現時允許重排／捲動。
 - App 保持 GoFly 品牌；採用風格不變更既有產品名稱、Go 文案或功能語意。
 

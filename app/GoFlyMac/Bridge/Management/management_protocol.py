@@ -494,7 +494,7 @@ def _validate_payload(payload: Any, request: ManagementRequest) -> dict[str, Any
     if payload["canRelease"]:
         if (
             stage not in {"artifact", "source"}
-            or outcome not in {"inProgress", "failed"}
+            or outcome not in {"inProgress", "failed", "unknown"}
             or proof["mutationSealed"]
             or proof["updateConfirmed"]
             or proof["pairingImported"]
@@ -502,7 +502,7 @@ def _validate_payload(payload: Any, request: ManagementRequest) -> dict[str, Any
             or canonical_receipt is not None
         ):
             _failed()
-    if stage in {"complete", "release"} or outcome in {"ready", "unknown"}:
+    if stage in {"complete", "release"} or outcome == "ready":
         if payload["canRelease"]:
             _failed()
     if stage == "preflight" and outcome == "ready":

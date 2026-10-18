@@ -17,45 +17,49 @@ struct MacSetupPage: View {
     @State private var validationMessage: String?
 
     var body: some View {
-        ScrollView {
-            StatusCard {
-                StatusRow(title: setup.snapshot?.isComplete == true ? (vpnConfirmed ? "Mac 安裝完成" : "確認 LocalDevVPN") : "首次安裝 GoFly",
-                          detail: "裝置識別：…\((setup.continuation?.deviceID ?? deviceID ?? "未選擇").suffix(6))")
+        StatusCard {
+            StatusRow(title: setup.snapshot?.isComplete == true ? (vpnConfirmed ? "Mac 安裝完成" : "確認 LocalDevVPN") : "首次安裝 GoFly",
+                      detail: "裝置識別：…\((setup.continuation?.deviceID ?? deviceID ?? "未選擇").suffix(6))")
+            Rule()
+            if setup.snapshot?.isComplete == true, let result = setup.snapshot {
+                StatusRow(title: "GoFly build \(result.appBuild ?? "")", detail: "App 安裝、本次配對資料匯入及裝置支援狀態均已確認。")
                 Rule()
-                if setup.snapshot?.isComplete == true, let result = setup.snapshot {
-                    StatusRow(title: "GoFly build \(result.appBuild ?? "")", detail: "App 安裝、本次配對資料匯入及裝置支援狀態均已確認。")
-                    Rule()
-                    StatusRow(title: "簽名", detail: "Team \(result.teamID ?? "")\n到期：\(result.expiresAt ?? "")")
-                    Rule()
-                    StatusRow(title: "LocalDevVPN", detail: vpnConfirmed ? "已確認安裝。開啟 iPhone 內的 LocalDevVPN 連線，再回 GoFly 依正常流程操作。" : vpnInstalled == false ? "尚未安裝。請先在 iPhone 的 App Store 安裝 LocalDevVPN，再重新核對。" : "正在等待原 iPhone 的安裝狀態核對。")
-                    if !vpnConfirmed {
-                        HStack {
-                            Link("在 App Store 查看 LocalDevVPN", destination: URL(string: "https://apps.apple.com/app/id6755608044")!)
-                            Spacer()
-                            PillButton(title: "重新核對", enabled: !checkingDevice, action: verifyDevice)
-                        }
+                StatusRow(title: "簽名", detail: "Team \(result.teamID ?? "")\n到期：\(result.expiresAt ?? "")")
+                Rule()
+                StatusRow(title: "LocalDevVPN", detail: vpnConfirmed ? "已確認安裝。開啟 iPhone 內的 LocalDevVPN 連線，再回 GoFly 依正常流程操作。" : vpnInstalled == false ? "尚未安裝。請先在 iPhone 的 App Store 安裝 LocalDevVPN，再重新核對。" : "正在等待原 iPhone 的安裝狀態核對。")
+                if !vpnConfirmed {
+                    HStack {
+                        Link("在 App Store 查看 LocalDevVPN", destination: URL(string: "https://apps.apple.com/app/id6755608044")!)
+                        Spacer()
+                        PillButton(title: "重新核對", enabled: !checkingDevice, action: verifyDevice)
                     }
-                    Text("安裝完成不代表 VPN 已連線、GPS 已取得或定位服務已啟動。")
-                        .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                } else if setup.hasRecordedTransaction {
-                    StatusRow(title: "繼續原交易", detail: "使用原本的 iPhone。查詢不會重新安裝；不確定的步驟會保留待確認狀態。")
+                }
+                Text("安裝完成不代表 VPN 已連線、GPS 已取得或定位服務已啟動。")
+                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+            } else if setup.hasRecordedTransaction {
+                StatusRow(title: "繼續原交易", detail: "使用原本的 iPhone。查詢不會重新安裝；不確定的步驟會保留待確認狀態。")
+                progress
+            } else {
+                form.disabled(setup.isBusy || setup.options != nil)
+                if setup.options != nil {
+                    Button("修改安裝選項") { setup.resetSelection() }.disabled(setup.isBusy)
                     progress
-                } else {
-                    form.disabled(setup.isBusy || setup.options != nil)
-                    if setup.options != nil {
-                        Button("修改安裝選項") { setup.resetSelection() }.disabled(setup.isBusy)
-                        progress
-                    }
                 }
-                if let message = validationMessage {
-                    Text(message).foregroundStyle(GoFlyStyle.muted)
-                }
-                if let failure = setup.failure {
-                    StatusRow(title: "尚未完成", detail: failure.detail)
-                }
-                Rule()
-                actions
             }
+            if let message = validationMessage {
+                Label(message, systemImage: "exclamationmark.circle")
+                    .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.ink)
+                    .fixedSize(horizontal: false, vertical: true).goFlyInset()
+            }
+            if let failure = setup.failure {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle").font(.system(size: 18))
+                        .accessibilityHidden(true)
+                    StatusRow(title: "尚未完成", detail: failure.detail)
+                }.goFlyInset()
+            }
+            Rule()
+            actions
         }
         .accessibilityIdentifier("setup.page")
         .task(id: setup.snapshot?.isComplete == true && !setup.isBusy) {
@@ -64,27 +68,58 @@ struct MacSetupPage: View {
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Picker("安裝來源", selection: $source) {
-                Text("從本機 GoFly 專案建置").tag(MacSetupSource.project)
-                Text("選擇已簽署的 GoFly.app").tag(MacSetupSource.signedApp)
-            }.pickerStyle(.radioGroup)
-            TextField("開發團隊 Team ID（10 碼）", text: $teamID)
-                .textFieldStyle(.roundedBorder).accessibilityIdentifier("setup.team")
-            if source == .signedApp {
-                HStack {
-                    Text(artifactPath.isEmpty ? "尚未選擇 GoFly.app" : artifactPath)
-                        .lineLimit(2).truncationMode(.middle)
-                    Spacer()
-                    Button("選擇 App…", action: chooseApp)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("安裝來源", systemImage: "shippingbox")
+                    .font(GoFlyStyle.font(13, bold: true))
+                Picker("安裝來源", selection: $source) {
+                    Text("從本機 GoFly 專案建置").tag(MacSetupSource.project)
+                    Text("選擇已簽署的 GoFly.app").tag(MacSetupSource.signedApp)
                 }
-            } else {
-                Toggle("允許 Xcode 連線 Apple 更新開發簽署資料", isOn: $allowProvisioningUpdates)
-                    .toggleStyle(.checkbox)
-                Text("只有勾選並開始安裝後，才允許這次建置更新簽署資料。")
-                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                .accessibilityLabel("安裝來源")
+                if source == .signedApp {
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: "app.dashed")
+                            .font(.system(size: 22)).foregroundStyle(GoFlyStyle.muted)
+                            .accessibilityHidden(true)
+                        Text(artifactPath.isEmpty ? "尚未選擇 GoFly.app" : artifactPath)
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .lineLimit(3).truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("選擇 App…", action: chooseApp)
+                            .controlSize(.large)
+                    }
+                    .goFlyInset()
+                }
+            }
+            Rule()
+            VStack(alignment: .leading, spacing: 12) {
+                Label("開發簽署", systemImage: "signature")
+                    .font(GoFlyStyle.font(13, bold: true))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("開發團隊 Team ID")
+                        .font(GoFlyStyle.font(12, bold: true))
+                    TextField("輸入 10 碼 Team ID", text: $teamID)
+                        .goFlyInput().accessibilityIdentifier("setup.team")
+                        .accessibilityLabel("開發團隊 Team ID（10 碼）")
+                        .frame(maxWidth: 360)
+                }
+                if source == .project {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("允許 Xcode 連線 Apple 更新開發簽署資料", isOn: $allowProvisioningUpdates)
+                            .toggleStyle(.checkbox)
+                        Text("只有勾選並開始安裝後，才允許這次建置更新簽署資料。")
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .goFlyInset()
+                }
             }
         }
+        .foregroundStyle(GoFlyStyle.ink)
     }
 
     @ViewBuilder private var progress: some View {
@@ -105,6 +140,8 @@ struct MacSetupPage: View {
             HStack(spacing: 12) {
                 ProgressView().controlSize(.small)
                 Text(setup.cancellationRequested ? "正在取消，等待程序結束…" : "正在處理，請保持原裝置連接…")
+                    .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

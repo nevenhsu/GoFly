@@ -52,6 +52,9 @@ final class GoFlySetupBootstrap: ObservableObject {
     var completedManagementControl: ManagementControlCommand?
 
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if GoFlyIconPreview.isRequested { return }
+        #endif
         start()
     }
 

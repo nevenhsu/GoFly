@@ -64,6 +64,12 @@ struct MacManagementProtocolTests {
         let decoded = try MacManagementResponseDecoder.decode(response, for: request)
         #expect(decoded.isComplete)
         #expect(decoded.adoptionReceipt?.canonicalSHA256 == decoded.adoptionReceipt?.receiptSHA256)
+        let waiting = try MacManagementPayload(stage: .source, outcome: .unknown, canResume: true, canRelease: true,
+            sourceAdmission: .live, connectionRevision: 2, currentTransport: .network,
+            proof: MacManagementProof(sourceBound: true, sourceQuiescent: false, mutationSealed: false,
+                updateConfirmed: false, pairingImported: false, supportObserved: false, adoptionCommitted: false),
+            app: nil, teamID: nil, expiresAt: nil, adoptionReceipt: nil, request: request)
+        #expect(try MacManagementResponseDecoder.decode(encodeResponse(waiting, for: request), for: request).canRelease)
 
         let error = try errorResponse(for: request, code: "source-busy")
         #expect(throws: MacManagementFailure.service("source-busy")) {

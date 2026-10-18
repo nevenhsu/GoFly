@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import GoFlyMacCore
-import CoreText
 
 @main
 struct GoFlyApp: App {
@@ -9,9 +8,6 @@ struct GoFlyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     init() {
-        if let fontURL = Bundle.module.url(forResource: "NotoSansTC", withExtension: "ttf") {
-            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-        }
         let resources = Bundle.main.resourceURL ?? URL(fileURLWithPath: "/")
         let checker: any MacChecking = (try? ProcessBridge(
             configurationURL: resources.appendingPathComponent("LocalConfiguration.json"),
@@ -30,15 +26,24 @@ struct GoFlyApp: App {
             configurationURL: resources.appendingPathComponent("SetupConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/Backup/bridge.py"))) ?? UnavailableBackupRunner()
         let backups = MacBackupModel(runner: backupRunner)
-        _model = State(initialValue: MacAppModel(live: checker, setup: setup, reinstall: reinstall, backups: backups))
+        let managementRunner: any MacManagementRunning = (try? ManagementProcessBridge(
+            configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
+            scriptURL: resources.appendingPathComponent("Bridge/Management/management_bridge.py"))) ?? UnavailableManagementRunner()
+        let management = MacManagementModel(runner: managementRunner, journal: MacManagementJournalReader(stateRoot: stateRoot))
+        let appModel = MacAppModel(live: checker, setup: setup, reinstall: reinstall,
+                                   backups: backups, management: management)
+        if CommandLine.arguments.contains("--preview") { appModel.switchMode(preview: true) }
+        _model = State(initialValue: appModel)
     }
 
     var body: some Scene {
         Window("GoFly for Mac", id: "main") {
             MacRootView(model: model)
                 .frame(minWidth: 1000, minHeight: 700)
-                .preferredColorScheme(.light)
-                .task { await model.restoreSetup(); model.checkEnvironment() }
+                .task {
+                    if !model.isPreview { await model.restoreSetup() }
+                    model.checkEnvironment()
+                }
                 .onChange(of: model.busy) { _, busy in
                     if !busy { model.maintainBackupsIfIdle() }
                 }
@@ -51,7 +56,7 @@ struct GoFlyApp: App {
                             Text(model.isPreview ? "介面預覽 · 示意資料" : "實際操作")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .help("唯讀檢查不會變更手機；按開始安裝才會簽署、配對與安裝。介面預覽使用示意資料。")
+                        .help("切換實際操作與示意資料。介面預覽不會操作手機。")
                         .accessibilityIdentifier("mode-menu")
                     }
                 }

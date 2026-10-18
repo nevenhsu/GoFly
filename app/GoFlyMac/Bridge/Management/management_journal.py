@@ -38,7 +38,21 @@ except ImportError:  # fixed packaged Bridge root
 MAX_JOURNAL_BYTES = 2 * 1024 * 1024
 MAX_HISTORY = 128
 MAX_REVISIONS = 32
+MAX_SELECTIONS = 128
+MAX_CONTROL_COMMAND_BYTES = 4 * 1024
+MAX_CONTROL_ATTEMPTS = 32
+CONTROL_ACTIONS = ("quiesce", "seal", "release")
+CONTROL_ATTEMPT_STATES = frozenset({
+    "inflight", "unknown", "absentAfterReconcile", "confirmed", "supersededByRelease",
+})
 STAGES = (
+    "artifact", "sourceRequest", "sourceReady", "mutationIntent", "sourceSeal",
+    "sourceStop", "legacy", "legacyIncomingRemoval", "legacyReadbackRequestRemoval",
+    "legacyReadbackResponseRemoval", "legacyTransition", "update", "pairing", "support",
+    "readback", "formalInput", "activation", "finalSupport", "complete", "release",
+    "pairCreate", "pairDelivery", "readbackPublish", "readbackLaunch", "readbackStop", "formalLaunch",
+)
+_LEGACY_STAGES = (
     "artifact", "sourceRequest", "sourceReady", "mutationIntent", "sourceSeal",
     "sourceStop", "legacy", "update", "pairing", "support", "readback",
     "formalInput", "activation", "finalSupport", "complete", "release",
@@ -48,6 +62,7 @@ EVIDENCE_LIMITS = {
     "sourceRestoreIntent": 256 * 1024, "sourceAdmission": 64 * 1024,
     "targetArtifact": 32 * 1024, "appRequest": 32 * 1024,
     "previousRequest": 32 * 1024, "previousResponse": 64 * 1024,
+    "previousControl": 4 * 1024, "sourceManagementRoot": 512 * 1024,
     "sourceReceipt": 64 * 1024, "sealedReceipt": 64 * 1024,
     "releasedReceipt": 64 * 1024, "legacyInventory": 32 * 1024,
     "legacyIncoming": 256 * 1024, "legacyReadbackRequest": 64 * 1024,
@@ -56,19 +71,72 @@ EVIDENCE_LIMITS = {
     "pairingBinding": 32 * 1024, "activationReceipt": 256 * 1024,
     "adoptionReceipt": 64 * 1024, "supportObservation": 64 * 1024,
     "updateObservation": 32 * 1024,
+    "pairingPlan": 32 * 1024, "readbackProcess": 32 * 1024,
+    "formalProcess": 32 * 1024, "targetReadback": 64 * 1024,
+    "finalSupportObservation": 64 * 1024,
+    "quiesceCommand": MAX_CONTROL_COMMAND_BYTES,
+    "sealCommand": MAX_CONTROL_COMMAND_BYTES,
+    "releaseCommand": MAX_CONTROL_COMMAND_BYTES,
 }
+_LEGACY_EVIDENCE_PATHS = {
+    "legacyIncoming": "incoming.json",
+    "legacyReadbackRequest": "readback-request.json",
+    "legacyReadbackResponse": "readback-response.json",
+}
+_LEGACY_REMOVAL_EVIDENCE = {
+    "legacyIncomingRemoval": "legacyIncoming",
+    "legacyReadbackRequestRemoval": "legacyReadbackRequest",
+    "legacyReadbackResponseRemoval": "legacyReadbackResponse",
+}
+_LEGACY_INVENTORY_ENTRIES = tuple(_LEGACY_EVIDENCE_PATHS)
+_LEGACY_INVENTORY_KEYS = {
+    "version", "sourceSetupID", "sourceNonce", "sourceApp", "deviceID",
+    "rawManifestSHA256", "entries",
+}
+_LEGACY_INVENTORY_ENTRY_KEYS = {"present", "byteCount", "sha256"}
 _TOP_KEYS = {"version", "operation", "header", "revisions", "stages", "evidence", "sourceAdmission", "outcome", "errorCode"}
 _HEADER_KEYS = {"managementID", "nonce", "targetSetupID", "setupNonce", "deviceID", "selectionID", "kind", "transport", "options"}
 _STAGE_KEYS = {"state", "revision", "evidence"}
 _REVISION_KEYS = {"number", "selectionID", "transport", "previous", "resolvedThroughSHA256"}
+_COMMAND_KEYS = {"attempts"}
+_ATTEMPT_KEYS = {"attempt", "revision", "commandSHA256", "state"}
+
+
+def _selections(value: Mapping[str, Any]) -> list[dict[str, Any]]:
+    # Older component journals predate same-transport selection consumption.
+    # Their immutable revision identities still remain consumed.
+    return value.get("selections", [{"selectionID": item["selectionID"], "revision": item["number"]}
+                                     for item in value["revisions"]])
+
+
+def _commands(value: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    # Component journals written before the control-mailbox amendment have no
+    # command records.  Treat those records as empty until a new command is
+    # explicitly frozen; never synthesize a command or an attempt on reopen.
+    commands = value.get("commands")
+    if commands is None:
+        return {action: {"attempts": []} for action in CONTROL_ACTIONS}
+    return commands
 
 
 def _completion_ready(value: Mapping[str, Any]) -> bool:
+    stages = value["stages"]
     required = {"sourceRequest", "sourceReady", "mutationIntent", "sourceStop", "legacy", "pairing", "support", "readback", "formalInput", "activation", "finalSupport"}
+    if "legacyTransition" in stages:
+        required.update({
+            "legacyIncomingRemoval", "legacyReadbackRequestRemoval",
+            "legacyReadbackResponseRemoval", "legacyTransition",
+        })
     if value["header"]["kind"] == "renew":
         required.update({"artifact", "update"})
     if value["sourceAdmission"] == "live":
         required.add("sourceSeal")
+    if "pairCreate" in stages:
+        required.update({"readbackPublish", "readbackLaunch", "readbackStop", "formalLaunch"})
+        if value["header"]["kind"] == "repair":
+            required.update({"pairCreate", "pairDelivery"})
+        elif any(stages[name]["state"] != "pending" for name in ("pairCreate", "pairDelivery")):
+            return False
     return (value["sourceAdmission"] in {"live", "cold"} and
             {"sourceActivation", "sourceAdmission", "appRequest", "adoptionReceipt"} <= set(value["evidence"]) and
             all(value["stages"][name]["state"] == "confirmed" for name in required))
@@ -101,9 +169,67 @@ def _sync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _control_request(raw: bytes) -> dict[str, Any]:
+    """Validate the stored Core management request without device access."""
+    try:
+        from .management_preparation import _validate_management_request
+    except ImportError:  # fixed packaged Bridge root
+        from Management.management_preparation import _validate_management_request
+    request = _validate_management_request(raw)
+    request["_raw"] = raw
+    return request
+
+
+def _control_bytes(raw: bytes, action: str, request_raw: bytes) -> dict[str, Any]:
+    if action not in CONTROL_ACTIONS or not isinstance(raw, bytes) or not 1 <= len(raw) <= MAX_CONTROL_COMMAND_BYTES:
+        raise _failure("invalid-request")
+    try:
+        from .management_preparation import _validate_control
+    except ImportError:  # fixed packaged Bridge root
+        from Management.management_preparation import _validate_control
+    try:
+        control = _validate_control(raw, _control_request(request_raw))
+    except ManagementBridgeError as error:
+        raise _failure(error.code) from None
+    except Exception:
+        raise _failure("transaction-conflict") from None
+    if control["action"] != action:
+        raise _failure("transaction-conflict")
+    return control
+
+
+def _typed_source_response(raw: bytes, phases: set[str], request_raw: bytes) -> tuple[dict[str, Any], int]:
+    if not isinstance(raw, bytes):
+        raise _failure("invalid-request")
+    try:
+        from .management_preparation import _source_response_has_phase, _strict_object
+    except ImportError:  # fixed packaged Bridge root
+        from Management.management_preparation import _source_response_has_phase, _strict_object
+    try:
+        request = _control_request(request_raw)
+        if not _source_response_has_phase(raw, request, phases):
+            raise ValueError("response does not bind")
+        response = _strict_object(raw, limit=64 * 1024)
+        pid = response["pid"]
+        if type(pid) is not int or pid <= 0:
+            raise ValueError("invalid pid")
+    except Exception:
+        raise _failure("transaction-conflict") from None
+    return response, pid
+
+
+def _control_response(raw: bytes, action: str, request_raw: bytes) -> tuple[dict[str, Any], int]:
+    phase = {"quiesce": "ready", "seal": "mutationSealed", "release": "released"}.get(action)
+    if phase is None:
+        raise _failure("invalid-request")
+    return _typed_source_response(raw, {phase}, request_raw)
+
+
 def _validate(value: Any) -> None:
     try:
-        if not isinstance(value, dict) or set(value) != _TOP_KEYS:
+        allowed_top_keys = (_TOP_KEYS, _TOP_KEYS | {"selections"}, _TOP_KEYS | {"commands"},
+                            _TOP_KEYS | {"selections", "commands"})
+        if not isinstance(value, dict) or set(value) not in allowed_top_keys:
             raise _failure()
         if type(value["version"]) is not int or value["version"] != 1 or value["operation"] != "management":
             raise _failure()
@@ -134,9 +260,30 @@ def _validate(value: Any) -> None:
                                 "previous": None, "resolvedThroughSHA256": None}:
                     raise _failure()
             elif (type(revision["previous"]) is not int or revision["previous"] != index - 1 or
+                  revision["transport"] == revisions[index - 1]["transport"] or
                   not isinstance(revision["resolvedThroughSHA256"], str) or
                   HEX64_RE.fullmatch(revision["resolvedThroughSHA256"]) is None):
                 raise _failure()
+        selections = _selections(value)
+        if not isinstance(selections, list) or not 1 <= len(selections) <= MAX_SELECTIONS:
+            raise _failure()
+        association_ids = set()
+        previous_revision = 0
+        for association in selections:
+            if not isinstance(association, dict) or set(association) != {"selectionID", "revision"}:
+                raise _failure()
+            _uuid(association["selectionID"])
+            number = association["revision"]
+            if (association["selectionID"] in association_ids or type(number) is not int or
+                    not previous_revision <= number < len(revisions)):
+                raise _failure()
+            association_ids.add(association["selectionID"])
+            previous_revision = number
+        if selections[0] != {"selectionID": header["selectionID"], "revision": 0}:
+            raise _failure()
+        if any({"selectionID": revision["selectionID"], "revision": revision["number"]} not in selections
+               for revision in revisions):
+            raise _failure()
         evidence = value["evidence"]
         if not isinstance(evidence, dict) or not set(evidence) <= set(EVIDENCE_LIMITS):
             raise _failure()
@@ -150,7 +297,7 @@ def _validate(value: Any) -> None:
         if value["sourceAdmission"] is not None and not {"sourceActivation", "sourceAdmission"} <= set(evidence):
             raise _failure()
         stages = value["stages"]
-        if not isinstance(stages, dict) or set(stages) != set(STAGES):
+        if not isinstance(stages, dict) or set(stages) not in (set(_LEGACY_STAGES), set(STAGES)):
             raise _failure()
         for stage in stages.values():
             if not isinstance(stage, dict) or set(stage) != _STAGE_KEYS:
@@ -165,6 +312,57 @@ def _validate(value: Any) -> None:
                     raise _failure()
             else:
                 raise _failure()
+        if "legacyTransition" in stages:
+            removal_names = (
+                "legacyIncomingRemoval", "legacyReadbackRequestRemoval",
+                "legacyReadbackResponseRemoval",
+            )
+            if (stages["legacyTransition"]["state"] == "confirmed" and
+                    any(stages[name]["state"] != "confirmed" for name in removal_names)):
+                raise _failure()
+        if "commands" in value:
+            commands = value["commands"]
+            if not isinstance(commands, dict) or set(commands) != set(CONTROL_ACTIONS):
+                raise _failure()
+            for action in CONTROL_ACTIONS:
+                record = commands[action]
+                if not isinstance(record, dict) or set(record) != _COMMAND_KEYS:
+                    raise _failure()
+                attempts = record["attempts"]
+                if not isinstance(attempts, list) or len(attempts) > MAX_CONTROL_ATTEMPTS:
+                    raise _failure()
+                previous_revision = None
+                for index, attempt in enumerate(attempts):
+                    if not isinstance(attempt, dict) or set(attempt) != _ATTEMPT_KEYS:
+                        raise _failure()
+                    if (type(attempt["attempt"]) is not int or attempt["attempt"] != index + 1 or
+                            type(attempt["revision"]) is not int or
+                            not 0 <= attempt["revision"] < len(revisions) or
+                            not isinstance(attempt["commandSHA256"], str) or
+                            HEX64_RE.fullmatch(attempt["commandSHA256"]) is None or
+                            attempt["state"] not in CONTROL_ATTEMPT_STATES):
+                        raise _failure()
+                    if previous_revision is None:
+                        previous_revision = attempt["revision"]
+                    elif attempt["revision"] != previous_revision:
+                        raise _failure()
+                    evidence_name = action + "Command"
+                    if evidence_name not in evidence or evidence[evidence_name]["sha256"] != attempt["commandSHA256"]:
+                        raise _failure()
+                    if action != "quiesce" and attempt["state"] == "supersededByRelease":
+                        raise _failure()
+        if "commands" in value:
+            commands = value["commands"]
+            if commands["seal"]["attempts"] and not commands["quiesce"]["attempts"]:
+                raise _failure()
+            if commands["release"]["attempts"] and not commands["quiesce"]["attempts"]:
+                raise _failure()
+            if (commands["seal"]["attempts"] and commands["release"]["attempts"]):
+                raise _failure()
+            if (any(attempt["state"] == "supersededByRelease"
+                    for attempt in commands["quiesce"]["attempts"])
+                    and not commands["release"]["attempts"]):
+                raise _failure()
         if value["outcome"] not in {"inProgress", "confirmed", "unknown", "failed"}:
             raise _failure()
         if value["errorCode"] is not None and value["errorCode"] not in SAFE_ERROR_CODES:
@@ -173,7 +371,11 @@ def _validate(value: Any) -> None:
         if value["outcome"] == "confirmed" and not terminal_stages:
             raise _failure()
         if terminal_stages and (value["outcome"] != "confirmed" or
-                any(stage["state"] in {"inflight", "unknown"} for stage in stages.values())):
+                any(stage["state"] in {"inflight", "unknown"} for stage in stages.values()) or
+                ("commands" in value and any(
+                    attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}
+                    for record in value["commands"].values() for attempt in record["attempts"]
+                ))):
             raise _failure()
         if stages["release"]["state"] == "confirmed" and stages["mutationIntent"]["state"] != "pending":
             raise _failure()
@@ -240,6 +442,27 @@ class ManagementJournal:
             raise _failure() from None
         return path
 
+    @staticmethod
+    def _private_child_directory(parent: Path, name: str, *, create: bool) -> Path:
+        path = parent / name
+        try:
+            if create and not path.exists():
+                path.mkdir(mode=0o700)
+                _sync_directory(path)
+                _sync_directory(path.parent)
+            _validate_private_dir(path)
+        except (OSError, SetupBridgeError):
+            raise _failure() from None
+        return path
+
+    def _evidence_path(self, value: Mapping[str, Any], name: str, *, create: bool = False) -> Path:
+        directory = self.transaction_root(value["header"]["managementID"], create=create)
+        legacy_name = _LEGACY_EVIDENCE_PATHS.get(name)
+        if legacy_name is not None:
+            directory = self._private_child_directory(directory, "legacy", create=create)
+            return directory / legacy_name
+        return directory / (name + ".bin")
+
     def _read_path(self, path: Path) -> tuple[bytes, dict[str, Any]]:
         try:
             raw = _read_regular_bytes(path, max_bytes=MAX_JOURNAL_BYTES)
@@ -263,13 +486,11 @@ class ManagementJournal:
             raise _failure(error.code) from None
 
     def _check_evidence(self, value: Mapping[str, Any]) -> None:
-        if not value["evidence"]:
-            return
-        directory = self.transaction_root(value["header"]["managementID"])
         blobs = {}
         for name, descriptor in value["evidence"].items():
             try:
-                raw = _read_regular_bytes(directory / (name + ".bin"), max_bytes=EVIDENCE_LIMITS[name])
+                path = self._evidence_path(value, name)
+                raw = _read_regular_bytes(path, max_bytes=EVIDENCE_LIMITS[name])
             except SetupBridgeError:
                 raise _failure() from None
             if len(raw) != descriptor["byteCount"] or hashlib.sha256(raw).hexdigest() != descriptor["sha256"]:
@@ -277,6 +498,156 @@ class ManagementJournal:
             blobs[name] = raw
         if value["sourceAdmission"] is not None:
             self._check_source_binding(value, blobs)
+        self._check_command_records(value, blobs)
+        if "legacyInventory" in value["evidence"]:
+            self._check_legacy_inventory(value, blobs)
+        self._check_legacy_stage_rules(value, blobs)
+
+    @staticmethod
+    def _check_command_records(value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
+        if "commands" not in value:
+            return
+        confirmed_names = {
+            "quiesce": "sourceReceipt", "seal": "sealedReceipt", "release": "releasedReceipt",
+        }
+        for action, record in value["commands"].items():
+            for attempt in record["attempts"]:
+                if attempt["state"] != "confirmed":
+                    continue
+                receipt_name = confirmed_names[action]
+                if "appRequest" not in blobs or receipt_name not in blobs:
+                    raise _failure()
+                _, response_pid = _control_response(blobs[receipt_name], action, blobs["appRequest"])
+                if value["sourceAdmission"] != "live" or "sourceAdmission" not in blobs:
+                    raise _failure()
+                admission = _parse_object(blobs["sourceAdmission"], limit=EVIDENCE_LIMITS["sourceAdmission"])
+                if admission.get("sourcePID") != response_pid:
+                    raise _failure()
+        if any(attempt["state"] == "confirmed" for attempt in value["commands"]["seal"]["attempts"]):
+            if any(attempt["state"] != "confirmed" for attempt in value["commands"]["quiesce"]["attempts"]):
+                raise _failure()
+        if any(attempt["state"] == "confirmed" for attempt in value["commands"]["release"]["attempts"]):
+            if any(attempt["state"] != "supersededByRelease" for attempt in value["commands"]["quiesce"]["attempts"]):
+                raise _failure()
+
+    @staticmethod
+    def _parse_legacy_inventory(raw: bytes) -> dict[str, Any]:
+        inventory = _parse_object(raw, limit=EVIDENCE_LIMITS["legacyInventory"])
+        if set(inventory) != _LEGACY_INVENTORY_KEYS or inventory["version"] != 1:
+            raise _failure()
+        _uuid(inventory["sourceSetupID"])
+        _uuid(inventory["sourceNonce"])
+        _validate_app(inventory["sourceApp"], code="storage-unavailable")
+        _device(inventory["deviceID"], code="storage-unavailable")
+        if (not isinstance(inventory["rawManifestSHA256"], str) or
+                HEX64_RE.fullmatch(inventory["rawManifestSHA256"]) is None):
+            raise _failure()
+        entries = inventory["entries"]
+        if not isinstance(entries, dict) or set(entries) != set(_LEGACY_INVENTORY_ENTRIES):
+            raise _failure()
+        for name in _LEGACY_INVENTORY_ENTRIES:
+            entry = entries[name]
+            if not isinstance(entry, dict) or set(entry) != _LEGACY_INVENTORY_ENTRY_KEYS:
+                raise _failure()
+            present = entry["present"]
+            count = entry["byteCount"]
+            digest = entry["sha256"]
+            if type(present) is not bool or type(count) is not int:
+                raise _failure()
+            if present:
+                if (not 1 <= count <= EVIDENCE_LIMITS[name] or not isinstance(digest, str) or
+                        HEX64_RE.fullmatch(digest) is None):
+                    raise _failure()
+            elif count != 0 or digest is not None:
+                raise _failure()
+        return inventory
+
+    def _check_legacy_inventory(self, value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> dict[str, Any]:
+        if not {"sourceActivation", "sourceAdmission", "legacyInventory"} <= set(blobs):
+            raise _failure()
+        inventory = self._parse_legacy_inventory(blobs["legacyInventory"])
+        admission = _parse_object(blobs["sourceAdmission"], limit=EVIDENCE_LIMITS["sourceAdmission"])
+        source_app = _validate_app(admission["sourceApp"], code="storage-unavailable")
+        source = decode_source_activation(
+            blobs["sourceActivation"], device_id=value["header"]["deviceID"],
+            installed_build=source_app["build"], installed_team=admission["teamID"],
+        )
+        if (inventory["sourceSetupID"] != source.receipt.setup_id or
+                inventory["sourceNonce"] != source.receipt.nonce or
+                inventory["sourceApp"] != source.identity.app() or
+                inventory["deviceID"] != value["header"]["deviceID"] or
+                inventory["deviceID"] != source.receipt.device_id or
+                inventory["rawManifestSHA256"] != source.receipt.raw_manifest_sha256 or
+                inventory["sourceSetupID"] != admission["sourceSetupID"] or
+                inventory["sourceApp"] != source_app or
+                inventory["deviceID"] != admission["deviceID"]):
+            raise _failure()
+        entries = inventory["entries"]
+        for name in _LEGACY_INVENTORY_ENTRIES:
+            entry = entries[name]
+            if entry["present"]:
+                if name not in value["evidence"] or name not in blobs:
+                    raise _failure()
+                if (len(blobs[name]) != entry["byteCount"] or
+                        hashlib.sha256(blobs[name]).hexdigest() != entry["sha256"]):
+                    raise _failure()
+                continue
+            if name in value["evidence"] or name in blobs:
+                raise _failure()
+            directory = self.transaction_root(value["header"]["managementID"])
+            legacy_directory = directory / "legacy"
+            try:
+                legacy_directory.lstat()
+            except SetupBridgeError:
+                raise _failure() from None
+            except FileNotFoundError:
+                continue
+            except OSError:
+                raise _failure() from None
+            try:
+                _validate_private_dir(legacy_directory)
+                legacy_path = legacy_directory / _LEGACY_EVIDENCE_PATHS[name]
+                _regular(legacy_path, allow_missing=True)
+                if legacy_path.exists():
+                    raise _failure()
+            except SetupBridgeError:
+                raise _failure() from None
+        return inventory
+
+    def _check_legacy_stage_rules(self, value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
+        stages = value["stages"]
+        removal_names = tuple(_LEGACY_REMOVAL_EVIDENCE)
+        active_removals = [name for name in removal_names if stages.get(name, {}).get("state") != "pending"]
+        transition = stages.get("legacyTransition")
+        if not active_removals and (transition is None or transition["state"] == "pending"):
+            return
+        if (value["sourceAdmission"] not in {"live", "cold"} or
+                not {"sourceActivation", "sourceAdmission", "legacyInventory"} <= set(blobs) or
+                stages["legacy"]["state"] != "confirmed" or
+                stages["legacy"]["evidence"] != "legacyInventory" or
+                stages["mutationIntent"]["state"] != "confirmed" or
+                stages["sourceStop"]["state"] != "confirmed"):
+            raise _failure()
+        if value["sourceAdmission"] == "live":
+            if stages["sourceSeal"]["state"] != "confirmed":
+                raise _failure()
+        elif stages["sourceSeal"]["state"] != "pending":
+            raise _failure()
+        inventory = self._check_legacy_inventory(value, blobs)
+        for stage_name, evidence_name in _LEGACY_REMOVAL_EVIDENCE.items():
+            stage = stages[stage_name]
+            if stage["state"] == "pending":
+                continue
+            if stage["state"] == "confirmed":
+                entry = inventory["entries"][evidence_name]
+                expected = evidence_name if entry["present"] else "legacyInventory"
+                if stage["evidence"] != expected:
+                    raise _failure()
+        if transition is not None and transition["state"] != "pending":
+            if (stages["legacy"]["state"] != "confirmed" or
+                    any(stages[name]["state"] != "confirmed" for name in removal_names) or
+                    transition["state"] == "confirmed" and transition["evidence"] != "legacyInventory"):
+                raise _failure()
 
     @staticmethod
     def _check_source_binding(value: Mapping[str, Any], blobs: Mapping[str, bytes]) -> None:
@@ -334,13 +705,14 @@ class ManagementJournal:
     def find_selection(self, selection_id: str) -> dict[str, Any] | None:
         _uuid(selection_id)
         current = self.read()
-        if current is not None and any(item["selectionID"] == selection_id for item in current["revisions"]):
-            return copy.deepcopy(current["header"])
+        found = None
+        if current is not None and any(item["selectionID"] == selection_id for item in _selections(current)):
+            found = copy.deepcopy(current["header"])
         history = self.root / "management-history"
         if not history.exists():
             if history.is_symlink():
                 raise _failure()
-            return None
+            return found
         self._directory("management-history", create=False)
         try:
             paths = list(history.iterdir())
@@ -348,7 +720,6 @@ class ManagementJournal:
             raise _failure() from None
         if len(paths) > MAX_HISTORY:
             raise _failure()
-        found = None
         for path in paths:
             if path.suffix != ".json":
                 raise _failure()
@@ -356,7 +727,7 @@ class ManagementJournal:
             _, value = self._read_path(path)
             if value["header"]["managementID"] != path.stem or not self.is_terminal(value):
                 raise _failure()
-            if any(item["selectionID"] == selection_id for item in value["revisions"]):
+            if any(item["selectionID"] == selection_id for item in _selections(value)):
                 if found is not None and found != value["header"]:
                     raise _failure()
                 found = copy.deepcopy(value["header"])
@@ -414,6 +785,8 @@ class ManagementJournal:
         value = {"version": 1, "operation": "management", "header": header,
                  "revisions": [{"number": 0, "selectionID": request.selection_id, "transport": request.transport,
                                 "previous": None, "resolvedThroughSHA256": None}],
+                 "selections": [{"selectionID": request.selection_id, "revision": 0}],
+                 "commands": {action: {"attempts": []} for action in CONTROL_ACTIONS},
                  "stages": {name: {"state": "pending", "revision": None, "evidence": None} for name in STAGES},
                  "evidence": {}, "sourceAdmission": None, "outcome": "inProgress", "errorCode": None}
         return self._write(value)
@@ -438,10 +811,11 @@ class ManagementJournal:
         value = self._required()
         if name not in EVIDENCE_LIMITS or not isinstance(raw, bytes) or not 1 <= len(raw) <= EVIDENCE_LIMITS[name]:
             raise _failure()
+        if name in {action + "Command" for action in CONTROL_ACTIONS}:
+            raise _failure("transaction-conflict")
         if self.is_terminal(value):
             raise _failure("transaction-conflict")
-        directory = self.transaction_root(value["header"]["managementID"], create=True)
-        path = directory / (name + ".bin")
+        path = self._evidence_path(value, name, create=True)
         descriptor = {"byteCount": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
         try:
             _regular(path, allow_missing=True)
@@ -462,8 +836,7 @@ class ManagementJournal:
         if value is None or name not in value["evidence"]:
             return None
         try:
-            return _read_regular_bytes(self.transaction_root(value["header"]["managementID"]) / (name + ".bin"),
-                                       max_bytes=EVIDENCE_LIMITS[name])
+            return _read_regular_bytes(self._evidence_path(value, name), max_bytes=EVIDENCE_LIMITS[name])
         except SetupBridgeError as error:
             raise _failure(error.code) from None
 
@@ -476,28 +849,324 @@ class ManagementJournal:
         value["sourceAdmission"] = admission
         return self._write(value)
 
+    def _evidence_bytes(self, value: Mapping[str, Any], name: str) -> bytes:
+        if name not in value["evidence"]:
+            raise _failure("transaction-conflict")
+        try:
+            return _read_regular_bytes(self._evidence_path(value, name), max_bytes=EVIDENCE_LIMITS[name])
+        except SetupBridgeError:
+            raise _failure() from None
+
+    def _put_evidence(self, value: dict[str, Any], name: str, raw: bytes) -> None:
+        """Persist one immutable blob before its journal descriptor changes."""
+        directory = self.transaction_root(value["header"]["managementID"], create=True)
+        path = self._evidence_path(value, name, create=True)
+        descriptor = {"byteCount": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+        try:
+            _regular(path, allow_missing=True)
+            if path.exists():
+                if _read_regular_bytes(path, max_bytes=EVIDENCE_LIMITS[name]) != raw:
+                    raise _failure("transaction-conflict")
+            else:
+                _write_private(path, raw)
+        except SetupBridgeError as error:
+            raise _failure(error.code) from None
+        if name in value["evidence"] and value["evidence"][name] != descriptor:
+            raise _failure("transaction-conflict")
+        value["evidence"][name] = descriptor
+
+    def _command_record(self, value: Mapping[str, Any], action: str) -> dict[str, Any]:
+        if action not in CONTROL_ACTIONS:
+            raise _failure("invalid-request")
+        return _commands(value)[action]
+
+    @staticmethod
+    def _release_command_gate(value: Mapping[str, Any]) -> None:
+        commands = _commands(value)
+        if commands["seal"]["attempts"] or value["stages"]["sourceSeal"]["state"] != "pending":
+            raise _failure("transaction-conflict")
+        if value["stages"]["mutationIntent"]["state"] != "pending":
+            raise _failure("transaction-conflict")
+        forbidden = {
+            "sourceStop", "legacy", "legacyIncomingRemoval", "legacyReadbackRequestRemoval",
+            "legacyReadbackResponseRemoval", "legacyTransition", "update", "pairing",
+            "support", "readback", "formalInput", "activation", "finalSupport",
+            "pairCreate", "pairDelivery", "readbackPublish", "readbackLaunch", "readbackStop", "formalLaunch",
+        }
+        if any(value["stages"].get(name, {"state": "pending"})["state"] != "pending" for name in forbidden):
+            raise _failure("transaction-conflict")
+
+    def freeze_command(
+        self, action: str, raw: bytes, *, revision: int | None = None,
+        prior_response: bytes | None = None, actual_pid: int | None = None,
+    ) -> dict[str, Any]:
+        """Freeze one exact App control command before any publication attempt."""
+        value = self._required()
+        if self.is_terminal(value):
+            raise _failure("transaction-conflict")
+        request_raw = self._evidence_bytes(value, "appRequest")
+        _control_bytes(raw, action, request_raw)
+        current_revision = len(value["revisions"]) - 1
+        if revision is not None and (type(revision) is not int or revision != current_revision):
+            raise _failure("revision-conflict")
+        record = self._command_record(value, action)
+        evidence_name = action + "Command"
+        if evidence_name in value["evidence"]:
+            if self._evidence_bytes(value, evidence_name) != raw:
+                raise _failure("transaction-conflict")
+            return value
+
+        commands = _commands(value)
+        if action == "seal":
+            quiesce = commands["quiesce"]["attempts"]
+            if not quiesce or quiesce[-1]["state"] not in {
+                "confirmed", "inflight", "unknown", "absentAfterReconcile",
+            }:
+                raise _failure("transaction-conflict")
+            if value["stages"]["mutationIntent"]["state"] == "pending":
+                raise _failure("transaction-conflict")
+            if quiesce[-1]["state"] != "confirmed":
+                if prior_response is None or type(actual_pid) is not int or actual_pid <= 0:
+                    raise _failure("transaction-conflict")
+                parsed, response_pid = _typed_source_response(
+                    prior_response, {"ready", "mutationSealed"}, request_raw,
+                )
+                if response_pid != actual_pid:
+                    raise _failure("identity-mismatch")
+                if value["sourceAdmission"] != "live" or "sourceAdmission" not in value["evidence"]:
+                    raise _failure("identity-mismatch")
+                admission = _parse_object(
+                    self._evidence_bytes(value, "sourceAdmission"),
+                    limit=EVIDENCE_LIMITS["sourceAdmission"],
+                )
+                if admission.get("sourcePID") != actual_pid:
+                    raise _failure("identity-mismatch")
+                if parsed.get("phase") == "ready":
+                    self._put_evidence(value, "sourceReceipt", prior_response)
+                    for attempt in quiesce:
+                        if attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}:
+                            attempt["state"] = "confirmed"
+        elif action == "release":
+            # The narrow pre-ready exception is a same-operation cancellation
+            # only.  It cannot follow a sealed source or any submitted effect.
+            self._release_command_gate(value)
+
+        if "commands" not in value:
+            value["commands"] = {name: {"attempts": []} for name in CONTROL_ACTIONS}
+            record = value["commands"][action]
+        self._put_evidence(value, evidence_name, raw)
+        return self._write(value)
+
+    # Camel-case aliases match the control names in the cross-language packet;
+    # the snake-case methods remain the Python public API.
+    freezeCommand = freeze_command
+
+    def begin_publication(
+        self, action: str, raw: bytes | None = None, *, revision: int | None = None,
+    ) -> dict[str, Any]:
+        """Durably append an inflight command publication attempt."""
+        value = self._required()
+        if self.is_terminal(value) or action not in CONTROL_ACTIONS:
+            raise _failure("transaction-conflict")
+        if action == "release":
+            self._release_command_gate(value)
+        evidence_name = action + "Command"
+        command = self._evidence_bytes(value, evidence_name)
+        if raw is not None and raw != command:
+            raise _failure("transaction-conflict")
+        command_sha = hashlib.sha256(command).hexdigest()
+        record = self._command_record(value, action)
+        attempts = record["attempts"]
+        if attempts:
+            original_revision = attempts[0]["revision"]
+            if revision is not None and revision != original_revision:
+                raise _failure("revision-conflict")
+            last = attempts[-1]
+            if last["commandSHA256"] != command_sha:
+                raise _failure("transaction-conflict")
+            if last["state"] in {"inflight", "confirmed"}:
+                return value
+            if last["state"] == "supersededByRelease":
+                raise _failure("transaction-conflict")
+            if last["state"] == "unknown":
+                raise _failure("transaction-conflict")
+            revision = original_revision
+        else:
+            if revision is None:
+                revision = len(value["revisions"]) - 1
+            if type(revision) is not int or not 0 <= revision < len(value["revisions"]):
+                raise _failure("revision-conflict")
+        if len(attempts) >= MAX_CONTROL_ATTEMPTS:
+            raise _failure("revision-conflict")
+        attempts.append({"attempt": len(attempts) + 1, "revision": revision,
+                         "commandSHA256": command_sha, "state": "inflight"})
+        value["outcome"] = "inProgress"
+        value["errorCode"] = None
+        return self._write(value)
+
+    beginPublication = begin_publication
+
+    def reconcile_command_absence(
+        self, action: str, *, revision: int | None = None, fresh_absent: bool = False,
+    ) -> dict[str, Any]:
+        """Record an explicit Resume read proving the fixed mailbox absent."""
+        value = self._required()
+        if action not in CONTROL_ACTIONS or not fresh_absent:
+            raise _failure("transaction-conflict")
+        attempts = self._command_record(value, action)["attempts"]
+        if not attempts or attempts[-1]["state"] != "unknown":
+            raise _failure("transaction-conflict")
+        if revision is not None and revision != attempts[-1]["revision"]:
+            raise _failure("revision-conflict")
+        attempts[-1]["state"] = "absentAfterReconcile"
+        value["outcome"] = "unknown"
+        return self._write(value)
+
+    reconcileCommandAbsence = reconcile_command_absence
+
+    def mark_absent_after_reconcile(
+        self, action: str, *, revision: int | None = None, fresh_absent: bool = False,
+    ) -> dict[str, Any]:
+        return self.reconcile_command_absence(action, revision=revision, fresh_absent=fresh_absent)
+
+    markAbsentAfterReconcile = mark_absent_after_reconcile
+
+    def confirm_command(self, action: str, response: bytes, *, actual_pid: int | None = None) -> dict[str, Any]:
+        """Confirm a command only from its exact typed durable App response."""
+        value = self._required()
+        if action not in CONTROL_ACTIONS or not isinstance(response, bytes) or not response:
+            raise _failure("invalid-request")
+        attempts = self._command_record(value, action)["attempts"]
+        if not attempts:
+            raise _failure("transaction-conflict")
+        latest = attempts[-1]
+        if latest["state"] == "confirmed":
+            evidence_name = {"quiesce": "sourceReceipt", "seal": "sealedReceipt", "release": "releasedReceipt"}[action]
+            if evidence_name in value["evidence"] and self._evidence_bytes(value, evidence_name) == response:
+                return value
+            raise _failure("transaction-conflict")
+        if latest["state"] not in {"inflight", "unknown", "absentAfterReconcile"}:
+            raise _failure("transaction-conflict")
+        if action == "release":
+            self._release_command_gate(value)
+        request_raw = self._evidence_bytes(value, "appRequest")
+        parsed, response_pid = _control_response(response, action, request_raw)
+        if type(actual_pid) is not int or actual_pid <= 0 or actual_pid != response_pid:
+            raise _failure("identity-mismatch")
+        if value["sourceAdmission"] != "live" or "sourceAdmission" not in value["evidence"]:
+            raise _failure("identity-mismatch")
+        try:
+            admission = _parse_object(self._evidence_bytes(value, "sourceAdmission"), limit=EVIDENCE_LIMITS["sourceAdmission"])
+        except ManagementBridgeError:
+            raise _failure("identity-mismatch") from None
+        if admission.get("sourcePID") != actual_pid:
+            raise _failure("identity-mismatch")
+        evidence_name = {"quiesce": "sourceReceipt", "seal": "sealedReceipt", "release": "releasedReceipt"}[action]
+        self._put_evidence(value, evidence_name, response)
+        latest["state"] = "confirmed"
+        if action == "seal":
+            # A durable mutationSealed phase is strictly later than ready and
+            # can reconcile a prior unknown quiesce command.  It never creates
+            # a source-ready claim when no quiesce command was submitted.
+            for attempt in _commands(value)["quiesce"]["attempts"]:
+                if attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}:
+                    attempt["state"] = "confirmed"
+        elif action == "release":
+            # Release is the only approved same-operation replacement that may
+            # close an unresolved quiesce publication.  Preserve every attempt
+            # and retain the terminal superseded audit state.
+            for attempt in _commands(value)["quiesce"]["attempts"]:
+                if attempt["state"] != "supersededByRelease":
+                    attempt["state"] = "supersededByRelease"
+        value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
+        value["errorCode"] = None
+        return self._write(value)
+
+    confirmCommand = confirm_command
+
+    def _legacy_removal_gate(self, value: Mapping[str, Any], stage: str) -> dict[str, Any]:
+        evidence_name = _LEGACY_REMOVAL_EVIDENCE.get(stage)
+        if evidence_name is None:
+            raise _failure("invalid-request")
+        stages = value["stages"]
+        if (stages["legacy"]["state"] != "confirmed" or
+                stages["legacy"]["evidence"] != "legacyInventory" or
+                stages["mutationIntent"]["state"] != "confirmed" or
+                stages["sourceStop"]["state"] != "confirmed" or
+                value["sourceAdmission"] not in {"live", "cold"}):
+            raise _failure("transaction-conflict")
+        if value["sourceAdmission"] == "live":
+            if stages["sourceSeal"]["state"] != "confirmed":
+                raise _failure("transaction-conflict")
+        elif stages["sourceSeal"]["state"] != "pending":
+            raise _failure("transaction-conflict")
+        self._check_evidence(value)
+        try:
+            return self._parse_legacy_inventory(self._evidence_bytes(value, "legacyInventory"))
+        except ManagementBridgeError:
+            raise _failure("transaction-conflict") from None
+
+    def _legacy_transition_gate(self, value: Mapping[str, Any]) -> None:
+        if (value["stages"]["legacy"]["state"] != "confirmed" or
+                any(value["stages"][name]["state"] != "confirmed"
+                    for name in _LEGACY_REMOVAL_EVIDENCE) or
+                "legacyInventory" not in value["evidence"]):
+            raise _failure("transaction-conflict")
+        self._legacy_removal_gate(value, "legacyIncomingRemoval")
+
     def record_intent(self, stage: str) -> dict[str, Any]:
         value = self._required()
         if stage not in STAGES or stage == "complete" or value["stages"][stage]["state"] != "pending" or self.is_terminal(value):
             raise _failure("transaction-conflict")
+        if stage in _LEGACY_REMOVAL_EVIDENCE:
+            self._legacy_removal_gate(value, stage)
+        elif stage == "legacyTransition":
+            self._legacy_transition_gate(value)
         value["stages"][stage] = {"state": "inflight", "revision": len(value["revisions"]) - 1, "evidence": None}
         value["outcome"] = "inProgress"
         value["errorCode"] = None
         return self._write(value)
 
-    def confirm(self, stage: str, evidence: str | None = None) -> dict[str, Any]:
+    def confirm(
+        self, stage: str, evidence: str | bytes | None = None, *,
+        response: bytes | None = None, actual_pid: int | None = None,
+    ) -> dict[str, Any]:
+        if stage in CONTROL_ACTIONS:
+            raw_response = response if response is not None else evidence
+            if not isinstance(raw_response, bytes):
+                raise _failure("invalid-request")
+            return self.confirm_command(stage, raw_response, actual_pid=actual_pid)
         value = self._required()
         if (stage not in STAGES or stage in {"complete", "release"} or
                 value["stages"][stage]["state"] not in {"inflight", "unknown"} or
                 (evidence is not None and evidence not in value["evidence"])):
             raise _failure("transaction-conflict")
+        if stage in _LEGACY_REMOVAL_EVIDENCE:
+            inventory = self._legacy_removal_gate(value, stage)
+            evidence_name = _LEGACY_REMOVAL_EVIDENCE[stage]
+            expected = evidence_name if inventory["entries"][evidence_name]["present"] else "legacyInventory"
+            if evidence != expected:
+                raise _failure("transaction-conflict")
+        elif stage == "legacyTransition":
+            self._legacy_transition_gate(value)
+            if evidence != "legacyInventory":
+                raise _failure("transaction-conflict")
         value["stages"][stage]["state"] = "confirmed"
         value["stages"][stage]["evidence"] = evidence
         value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
         value["errorCode"] = None
         return self._write(value)
 
-    def mark_unknown(self, stage: str, code: str) -> dict[str, Any]:
+    def mark_unknown(self, stage: str, code: str = "operation-failed") -> dict[str, Any]:
+        if stage in CONTROL_ACTIONS:
+            value = self._required()
+            attempts = self._command_record(value, stage)["attempts"]
+            if not attempts or attempts[-1]["state"] not in {"inflight", "unknown"}:
+                raise _failure("transaction-conflict")
+            attempts[-1]["state"] = "unknown"
+            value["outcome"] = "unknown"
+            value["errorCode"] = code if code in SAFE_ERROR_CODES else "operation-failed"
+            return self._write(value)
         value = self._required()
         if stage not in STAGES or value["stages"][stage]["state"] not in {"inflight", "unknown"}:
             raise _failure("transaction-conflict")
@@ -505,6 +1174,8 @@ class ManagementJournal:
         value["outcome"] = "unknown"
         value["errorCode"] = code if code in SAFE_ERROR_CODES else "operation-failed"
         return self._write(value)
+
+    markUnknown = mark_unknown
 
     def fail(self, code: str) -> dict[str, Any]:
         """Retain a consumed pre-write operation for explicit release/resume.
@@ -521,21 +1192,44 @@ class ManagementJournal:
 
     @staticmethod
     def _outstanding(value: Mapping[str, Any]) -> bool:
-        return any(stage["state"] in {"inflight", "unknown"} for stage in value["stages"].values())
+        if any(stage["state"] in {"inflight", "unknown"} for stage in value["stages"].values()):
+            return True
+        if any(
+            action + "Command" in value["evidence"] and not record["attempts"]
+            for action, record in _commands(value).items()
+        ):
+            return True
+        return any(
+            attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}
+            for record in _commands(value).values()
+            for attempt in record["attempts"]
+        )
 
     def append_revision(self, selection_id: str, transport: str) -> dict[str, Any]:
         value = self._required()
         _uuid(selection_id)
-        if transport not in {"USB", "Network"} or self.is_terminal(value) or self._outstanding(value):
+        if transport not in {"USB", "Network"} or self.is_terminal(value):
             raise _failure("revision-conflict")
-        if value["revisions"][-1]["transport"] == transport:
+        if transport != value["revisions"][-1]["transport"] and self._outstanding(value):
+            raise _failure("revision-conflict")
+        consumed = self.find_selection(selection_id)
+        associations = _selections(value)
+        number = len(value["revisions"]) - 1
+        if consumed is not None:
+            if (consumed != value["header"] or value["revisions"][-1]["transport"] != transport or
+                    {"selectionID": selection_id, "revision": number} not in associations):
+                raise _failure("revision-conflict")
             return value
-        if len(value["revisions"]) >= MAX_REVISIONS or self.find_selection(selection_id) is not None:
+        if len(associations) >= MAX_SELECTIONS:
             raise _failure("revision-conflict")
-        number = len(value["revisions"])
-        value["revisions"].append({"number": number, "selectionID": selection_id, "transport": transport,
+        if value["revisions"][-1]["transport"] != transport:
+            if len(value["revisions"]) >= MAX_REVISIONS:
+                raise _failure("revision-conflict")
+            number += 1
+            value["revisions"].append({"number": number, "selectionID": selection_id, "transport": transport,
                                    "previous": number - 1,
                                    "resolvedThroughSHA256": hashlib.sha256(_encoded(value["stages"])).hexdigest()})
+        value["selections"] = associations + [{"selectionID": selection_id, "revision": number}]
         return self._write(value)
 
     def release(self) -> dict[str, Any]:
@@ -544,11 +1238,25 @@ class ManagementJournal:
             return value
         outstanding = any(stage["state"] in {"inflight", "unknown"}
                           for name, stage in value["stages"].items() if name != "release")
+        outstanding = outstanding or any(
+            attempt["state"] in {"inflight", "unknown", "absentAfterReconcile"}
+            for action, record in _commands(value).items() if action != "release"
+            for attempt in record["attempts"]
+        )
         if value["stages"]["mutationIntent"]["state"] != "pending" or outstanding:
             raise _failure("transaction-conflict")
-        if value["stages"]["sourceRequest"]["state"] != "pending" and (
-                value["stages"]["release"]["state"] not in {"inflight", "unknown"} or
+        release_attempts = _commands(value)["release"]["attempts"]
+        if release_attempts and release_attempts[-1]["state"] != "confirmed":
+            raise _failure("transaction-conflict")
+        if "releaseCommand" in value["evidence"] and (
+                not release_attempts or release_attempts[-1]["state"] != "confirmed" or
                 "releasedReceipt" not in value["evidence"]):
+            raise _failure("transaction-conflict")
+        if value["stages"]["sourceRequest"]["state"] != "pending" and (
+                (not release_attempts and value["stages"]["release"]["state"] not in {"inflight", "unknown"}) or
+                "releasedReceipt" not in value["evidence"]):
+            raise _failure("transaction-conflict")
+        if release_attempts and "releasedReceipt" not in value["evidence"]:
             raise _failure("transaction-conflict")
         revision = value["stages"]["release"]["revision"]
         value["stages"]["release"] = {"state": "confirmed", "revision": revision if revision is not None else len(value["revisions"]) - 1,

@@ -340,7 +340,7 @@ class Bridge:
         return result
 
     def _device_rows(self, raw: list[Any]) -> list[dict[str, Any]]:
-        selected: dict[str, tuple[int, dict[str, Any]]] = {}
+        selected: dict[tuple[str, str], dict[str, Any]] = {}
         for item in raw:
             transport = _transport(item)
             identity = _normalized_udid(_value(item, "serial", "SerialNumber", "UDID", "udid", "unique_device_id"))
@@ -357,11 +357,8 @@ class Bridge:
                 "transport": transport,
                 "osVersion": version if isinstance(version, str) else None,
             }
-            rank = 0 if transport == "usb" else 1
-            previous = selected.get(identity)
-            if previous is None or rank < previous[0]:
-                selected[identity] = (rank, row)
-        return [item[1] for item in selected.values()]
+            selected.setdefault((identity, transport), row)
+        return list(selected.values())
 
     def devices(self) -> dict[str, Any]:
         return {"devices": self._device_rows(self._raw_devices())}
@@ -539,13 +536,13 @@ class Bridge:
         ready = all(item["passed"] for item in checks if item["id"] in base_ids)
         return {"ready": ready, "checks": checks, "teamID": team}
 
-    def _find_device(self, raw: list[Any], target: str) -> tuple[Any, str, str]:
+    def _find_device(self, raw: list[Any], target: str, selected_transport: str | None = None) -> tuple[Any, str, str]:
         matches: list[tuple[int, Any, str, str]] = []
         for item in raw:
             transport = _transport(item)
             serial = _value(item, "serial", "SerialNumber", "UDID", "udid", "unique_device_id")
             identity = _normalized_udid(serial)
-            if transport is None or identity != target:
+            if transport is None or identity != target or (selected_transport is not None and transport != selected_transport):
                 continue
             connection = _value(item, "connection_type", "ConnectionType", "connectionType")
             connection = connection.strip() if isinstance(connection, str) else (USB if transport == "usb" else NETWORK)
@@ -643,10 +640,10 @@ class Bridge:
             raise BridgeError("operation-failed")
         return True, target
 
-    def inspect(self, target: str) -> dict[str, Any]:
+    def inspect(self, target: str, selected_transport: str | None = None) -> dict[str, Any]:
         target = _normalized_udid(target) or (_ for _ in ()).throw(BridgeError("invalid-request"))
         raw = self._raw_devices()
-        item, serial, connection = self._find_device(raw, target)
+        item, serial, connection = self._find_device(raw, target, selected_transport)
         with tempfile.TemporaryDirectory(prefix="goflymac-inspect-") as temporary:
             cache = Path(temporary)
             client = self._open_lockdown(serial, connection, cache)
@@ -712,7 +709,7 @@ class Bridge:
             elif action == "devices":
                 payload = self.devices()
             else:
-                payload = self.inspect(request["deviceID"])
+                payload = self.inspect(request["deviceID"], request.get("transport"))
             return {"protocol": PROTOCOL, "requestID": request_id, "status": "ok", "payload": payload}
         except BridgeError as error:
             return {"protocol": PROTOCOL, "requestID": request_id, "status": "error", "code": error.code}
@@ -741,6 +738,10 @@ def _validate_request(request: Any) -> str:
         target = request.get("deviceID")
         if _normalized_udid(target) is None:
             raise BridgeError("invalid-request")
+        if "transport" in request:
+            allowed.add("transport")
+            if not isinstance(request["transport"], str) or request["transport"] not in {"usb", "wifi"}:
+                raise BridgeError("invalid-request")
     if set(request) - allowed:
         raise BridgeError("invalid-request")
     return action

@@ -6,6 +6,8 @@
 
 2026-10-18 UI 精修：直接更新正式 iOS App，不修改 Figma。視覺 token、元件與逐畫面驗收依 [iOS UI 設計規格](../../docs/IOS-UI-DESIGN.md)；中文使用 iOS 內建字體，字級透過語意 styles 縮放。`GoFlyStyle`、`goFlyCard`、`GoFlyEmptyState` 統一呈現，View 只消費既有 controller 狀態，不增加命令／資料所有權。UI 建置、模擬器版面及手機行為驗收分開記錄。
 
+同日圖示／語言補充：`GoFlySymbols` 統一 SF Symbols；`GoFlyPositionArrowView` 只把既有 positionMarker 的來源／新鮮度／方向轉為向量繪圖（GPS 空心、simulation 實心、waiting 50%），不產生 GPS 或 ACK；`GoFlyPlacePinIcon` 共用候選／目的地圖釘。輸入區採獨立 inputSurface／inputBorder。`MapKitPlaceResolver` 逐 request 讀取偏好並設定公開 `preferredLocale`；`GoFlyMapCanvas.applyAnnotationLocale` 只更新 App 的標記標籤，不能改變 Apple 底圖語言，不能藉切換語言替換 map／controller／camera。
+
 - `GoFlyCore`：Swift 6 純 Swift 服務 protocol、狀態及驗證邊界，可在 macOS 執行測試，不連結原生 archive。
 - `GoFly`：iOS 26+ SwiftUI App，獨立 `com.neven.gofly` sandbox。App／Device／Resources 為正式來源；只明列沿用配對 store、setup codec、handoff 三個來源，不編入 prototype UI、JIT、診斷或 DDI 下載服務。
 - `iphoneos` 才匯入／連結 arm64 device FFI；模擬器使用明確失敗的 device-required adapter，不用假成功掩蓋原生能力限制。

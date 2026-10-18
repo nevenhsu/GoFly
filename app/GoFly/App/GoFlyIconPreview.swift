@@ -6,6 +6,8 @@ import UIKit
 /// Component-only inspection. This screen never creates a GPS fix, a movement
 /// task, or a device acknowledgement, and is absent from the device build.
 struct GoFlyIconPreview: View {
+    static let isRequested = ProcessInfo.processInfo.arguments.contains("-gofly-ui-icon-preview")
+    let bootstrapIsIdle: Bool
     @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
     private var chinese: Bool { GoFlyPreferences.shared.effectiveLanguage.hasPrefix("zh") }
@@ -28,6 +30,9 @@ struct GoFlyIconPreview: View {
                     Text("\(GoFlyPreferences.shared.effectiveLanguage) · \(colorScheme == .dark ? "dark" : "light")")
                         .font(.caption)
                         .accessibilityIdentifier("iconPreview.presentation")
+                    Text(bootstrapIsIdle ? "Startup: idle" : "Startup: active")
+                        .font(.caption)
+                        .accessibilityIdentifier("iconPreview.startup")
                 }
 
                 VStack(alignment: .leading, spacing: 12) {

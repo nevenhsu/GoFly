@@ -18,11 +18,20 @@ struct MacBackupsPage: View {
                 Rule()
             }
             if backup.entries.isEmpty {
-                StatusRow(title: "沒有本機備份", detail: "重新安裝時保留的資料會顯示在這裡。")
+                VStack(spacing: 12) {
+                    Image(systemName: "externaldrive")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundStyle(GoFlyStyle.muted)
+                        .accessibilityHidden(true)
+                    Text("沒有本機備份").font(GoFlyStyle.font(16, bold: true))
+                        .foregroundStyle(GoFlyStyle.ink)
+                    Text("重新安裝時保留的資料會顯示在這裡。")
+                        .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
+                        .multilineTextAlignment(.center)
+                }.frame(maxWidth: .infinity).padding(.vertical, 36)
             } else {
                 ForEach(backup.entries) { entry in
                     backupRow(entry)
-                    if entry.id != backup.entries.last?.id { Rule() }
                 }
             }
             if let failure = backup.failure {
@@ -73,31 +82,70 @@ struct MacBackupsPage: View {
 
     @ViewBuilder
     private func backupRow(_ entry: MacBackupEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            StatusRow(title: "iPhone · …\(entry.deviceID.suffix(6))", detail: entry.kind.title)
-            StatusRow(title: "保留項目", detail: categoriesText(entry))
-            if let counts = entry.counts {
-                StatusRow(title: "實際數量", detail: countsText(counts))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: entry.kind == .completed ? "externaldrive.badge.checkmark" : "externaldrive")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(GoFlyStyle.ink)
+                    .frame(width: 44, height: 44)
+                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(GoFlyStyle.divider, lineWidth: 1))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("iPhone · …\(entry.deviceID.suffix(6))")
+                        .font(GoFlyStyle.font(15, bold: true))
+                        .foregroundStyle(GoFlyStyle.ink)
+                    Text(entry.kind.title)
+                        .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
-            if let observed = entry.completedObservedAt {
-                StatusRow(title: "完成確認", detail: displayDate(observed))
+            VStack(alignment: .leading, spacing: 12) {
+                backupDetail("保留項目", value: categoriesText(entry))
+                if let counts = entry.counts {
+                    backupDetail("實際數量", value: countsText(counts))
+                }
+                if let observed = entry.completedObservedAt {
+                    backupDetail("完成確認", value: displayDate(observed))
+                }
+                if let deleteAfter = entry.deleteAfter {
+                    backupDetail("自動清理日期", value: displayDate(deleteAfter))
+                }
             }
-            if let deleteAfter = entry.deleteAfter {
-                StatusRow(title: "自動清理日期", detail: displayDate(deleteAfter))
-            }
-            HStack {
+            Rule()
+            HStack(spacing: 12) {
                 if entry.canContinue {
                     PillButton(title: "繼續原交易", primary: true, width: 160) {
                         continuePending(entry)
                     }
                 } else if entry.kind == .incomplete {
-                    Text("未完成備份會保留；只有目前原交易可繼續。")
+                    Label("未完成備份會保留；只有目前原交易可繼續。", systemImage: "clock")
                         .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 if entry.canDelete {
-                    PillButton(title: "刪除", width: 120) { pendingDelete = entry }
+                    PillButton(title: "刪除", width: 96) { pendingDelete = entry }
                 }
+            }
+        }
+        .goFlyInset()
+    }
+
+    private func backupDetail(_ title: String, value: String) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(title).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                    .frame(width: 92, alignment: .leading)
+                Text(value).font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.ink)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                Text(value).font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.ink)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
         }
     }

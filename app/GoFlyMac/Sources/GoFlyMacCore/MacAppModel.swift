@@ -29,6 +29,8 @@ public final class MacAppModel {
     public private(set) var devices: [ConnectedDevice] = []
     public private(set) var inspection: DeviceInspection?
     public private(set) var selectedID: String?
+    public private(set) var selectedTransport: ConnectedDevice.Transport?
+    public private(set) var managementSelection: MacManagementSelection?
     private var checkingBusy = false
     private var verifiedSetupID: UUID?
     public private(set) var isCancellingCheck = false
@@ -36,6 +38,9 @@ public final class MacAppModel {
     public let setup: MacSetupModel?
     public let reinstall: MacReinstallModel?
     public let backups: MacBackupModel?
+    public let management: MacManagementModel?
+    private var automaticManagementBusy = false
+    private var restoringOperations = false
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
     public private(set) var previewStage = 0
@@ -52,25 +57,44 @@ public final class MacAppModel {
     @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
     @ObservationIgnored private var backupMaintenanceStarted = false
     @ObservationIgnored private var backupMaintenanceReinstallID: UUID?
+    @ObservationIgnored private var automaticManagementTask: Task<Void, Never>?
+    @ObservationIgnored private var dispatchedManagementSelection: UUID?
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil,
-                backups: MacBackupModel? = nil) {
+                backups: MacBackupModel? = nil, management: MacManagementModel? = nil) {
         self.live = live
         self.setup = setup
         self.reinstall = reinstall
         self.backups = backups
+        self.management = management
     }
     public var busy: Bool {
-        checkingBusy || backups?.isBusy == true || (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true))
+        checkingBusy || automaticManagementBusy || restoringOperations || backups?.isBusy == true ||
+            (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true || management?.isBusy == true))
     }
     public var setupLocksDevice: Bool {
-        !isPreview && (setup?.locksDevice == true || reinstall?.locksDevice == true)
+        restoringOperations || (!isPreview && (automaticManagementBusy || setup?.locksDevice == true || reinstall?.locksDevice == true || management?.locksDevice == true))
     }
     private var activeOperationPage: MacPage {
-        reinstall?.locksDevice == true ? .reinstall : .install
+        if management?.locksDevice == true || automaticManagementBusy {
+            return management?.continuation?.kind == .repair ? .repair : .signing
+        }
+        return reinstall?.locksDevice == true ? .reinstall : .install
     }
 
     public func restoreSetup() async {
+        await management?.restore()
+        if let identity = management?.continuation {
+            selectedID = identity.deviceID
+            selectedTransport = identity.currentTransport == .usb ? .usb : .wifi
+            firstInstall = false
+            page = identity.kind == .renew ? .signing : .repair
+            return
+        } else if management?.failure != nil {
+            firstInstall = false
+            page = .signing
+            return
+        }
         await reinstall?.restore()
         if let identity = reinstall?.continuation {
             selectedID = identity.deviceID
@@ -90,6 +114,41 @@ public final class MacAppModel {
         } else if setup?.failure != nil {
             firstInstall = true
             page = .install
+        }
+    }
+
+    public func finishManagement() async {
+        guard !busy, let management,
+              management.snapshot?.isComplete == true ||
+                (management.snapshot?.stage == .release && management.snapshot?.outcome == .confirmed) else { return }
+        let identity = management.continuation
+        let result = management.snapshot
+        let priorDevice = selected
+        let priorDeveloperMode = inspection?.developerMode
+        management.resetSelection()
+        await reinstall?.restore()
+        await setup?.restore()
+        inspection = nil
+        selectedID = identity?.deviceID
+        selectedTransport = identity.map { $0.currentTransport == .usb ? .usb : .wifi }
+        managementSelection = nil
+        if reinstall?.locksDevice == true {
+            selectedID = reinstall?.continuation?.deviceID
+            page = .reinstall
+        } else if setup?.locksDevice == true {
+            selectedID = setup?.continuation?.deviceID
+            page = .install
+        } else {
+            if let identity, let result, result.isComplete {
+                let device = ConnectedDevice(id: identity.deviceID, name: priorDevice?.name ?? "",
+                    transport: identity.currentTransport == .usb ? .usb : .wifi, osVersion: priorDevice?.osVersion)
+                inspection = DeviceInspection(device: device, developerMode: priorDeveloperMode,
+                    installed: true, vpnInstalled: nil, appVersion: result.app?.build,
+                    teamID: result.teamID, expiresAt: result.expiresAt)
+                firstInstall = false
+                page = .device
+            } else { page = selectedID == nil ? .home : .device }
+            maintainBackupsIfIdle()
         }
     }
 
@@ -113,10 +172,14 @@ public final class MacAppModel {
     }
     public var ready: Bool { environment?.ready == true && !busy }
     public var selected: ConnectedDevice? {
-        if let inspection, inspection.device.id.lowercased() == selectedID?.lowercased() { return inspection.device }
-        return devices.first { $0.id.lowercased() == selectedID?.lowercased() }
+        if let inspection, inspection.device.id.lowercased() == selectedID?.lowercased(),
+           selectedTransport == nil || inspection.device.transport == selectedTransport { return inspection.device }
+        return devices.first {
+            $0.id.lowercased() == selectedID?.lowercased() && (selectedTransport == nil || $0.transport == selectedTransport)
+        }
     }
     public var visibleDevices: [ConnectedDevice] { ConnectedDevice.unique(devices, usbOnly: firstInstall) }
+    public var availableConnections: [ConnectedDevice] { ConnectedDevice.connectionChoices(devices, usbOnly: firstInstall) }
     public var mayInspect: Bool { ready && selected != nil }
     public var setupVPNConfirmed: Bool {
         guard setup?.snapshot?.isComplete == true, let identity = setup?.continuation,
@@ -152,10 +215,24 @@ public final class MacAppModel {
         if !isPreview && destination != .home && destination != .environment && destination != .backups &&
             !(destination == activeOperationPage && setupLocksDevice) &&
             !(destination == .install && setup?.hasRecordedTransaction == true) &&
-            !(destination == .reinstall && reinstall?.hasRecordedTransaction == true) && environment?.ready != true {
+            !(destination == .reinstall && reinstall?.hasRecordedTransaction == true) &&
+            !((destination == .signing || destination == .repair) && management?.hasRecordedTransaction == true) &&
+            environment?.ready != true {
             page = .environment; return
         }
+        if (destination == .signing && management?.continuation?.kind == .repair) ||
+            (destination == .repair && management?.continuation?.kind == .renew) {
+            management?.resetSelection()
+        }
         page = destination; failure = nil; previewMessage = nil
+    }
+
+    public func openRecordedOperation() {
+        if management?.hasRecordedTransaction == true || management?.locksDevice == true {
+            navigate(management?.continuation?.kind == .repair ? .repair : .signing)
+        } else if reinstall?.hasRecordedTransaction == true || reinstall?.locksDevice == true {
+            navigate(.reinstall)
+        } else { navigate(.install) }
     }
 
     public func switchMode(preview: Bool) {
@@ -167,26 +244,42 @@ public final class MacAppModel {
         }
         setup?.resetSelection()
         reinstall?.resetSelection()
+        management?.resetSelection()
         cancel()
         isPreview = preview; environment = nil; devices = []; inspection = nil
-        selectedID = nil; page = .home; previewStage = 0; previewMessage = nil; failure = nil
-        checkEnvironment()
+        selectedID = nil; selectedTransport = nil; managementSelection = nil
+        page = .home; previewStage = 0; previewMessage = nil; failure = nil
+        if !preview && (setup?.isRestored == false || reinstall?.isRestored == false || management?.isRestored == false) {
+            // A preview-only launch has intentionally not opened live records.
+            // Explicitly switching back restores them before any live action.
+            restoringOperations = true
+            Task {
+                await restoreSetup()
+                restoringOperations = false
+                checkEnvironment()
+            }
+        } else { checkEnvironment() }
     }
 
-    public func select(_ id: String) {
-        guard !busy, !setupLocksDevice, visibleDevices.contains(where: { $0.id == id }) else { return }
-        if selectedID?.lowercased() != id.lowercased() {
+    public func select(_ id: String, transport: ConnectedDevice.Transport? = nil) {
+        guard !busy, !setupLocksDevice,
+              let choice = availableConnections.first(where: { $0.id == id && (transport == nil || $0.transport == transport) }) else { return }
+        if selectedID?.lowercased() != id.lowercased() || selectedTransport != choice.transport {
             setup?.resetSelection()
             reinstall?.resetSelection()
         }
-        selectedID = id; inspection = nil; failure = nil
+        management?.resetSelection()
+        selectedID = id; selectedTransport = choice.transport
+        managementSelection = MacManagementSelection(selectionID: UUID(), transport: choice.transport == .usb ? .usb : .network)
+        inspection = nil; failure = nil
     }
 
     public func openDevices(firstInstall: Bool) {
         guard ready, !setupLocksDevice else { return }
         setup?.resetSelection()
         reinstall?.resetSelection()
-        self.firstInstall = firstInstall; selectedID = nil; inspection = nil
+        management?.resetSelection()
+        self.firstInstall = firstInstall; selectedID = nil; selectedTransport = nil; managementSelection = nil; inspection = nil
         page = .devices; refreshDevices()
     }
 
@@ -202,9 +295,10 @@ public final class MacAppModel {
         guard !busy, !setupLocksDevice else { return }
         setup?.resetSelection()
         reinstall?.resetSelection()
-        devices = []; selectedID = nil; inspection = nil
+        management?.resetSelection()
+        devices = []; selectedID = nil; selectedTransport = nil; managementSelection = nil; inspection = nil
         perform(.devices) { data, request in
-            self.devices = ConnectedDevice.unique(try ResponseDecoder.decode(data, for: request, as: DeviceList.self).devices,
+            self.devices = ConnectedDevice.connectionChoices(try ResponseDecoder.decode(data, for: request, as: DeviceList.self).devices,
                                                    usbOnly: false)
         }
     }
@@ -212,12 +306,33 @@ public final class MacAppModel {
     public func inspectSelected() {
         guard let device = selected, ready, !setupLocksDevice else { return }
         inspection = nil
-        perform(.inspect, deviceID: device.id) { data, request in
+        perform(.inspect, deviceID: device.id, transport: device.transport) { data, request in
             let result = try ResponseDecoder.decode(data, for: request, as: DeviceInspection.self)
             guard result.device.id.lowercased() == device.id.lowercased(),
                   result.device.transport == device.transport else { throw CheckFailure.invalidResponse }
             self.inspection = result
             self.page = self.firstInstall ? .install : .device
+            self.beginAutomaticManagement(after: result)
+        }
+    }
+
+    private func beginAutomaticManagement(after inspection: DeviceInspection) {
+        guard !isPreview, !firstInstall, let management, !management.locksDevice,
+              inspection.installed == true, inspection.developerMode == true,
+              let selection = managementSelection,
+              selection.selectionID != dispatchedManagementSelection,
+              selection.transport == (inspection.device.transport == .usb ? .usb : .network),
+              let team = environment?.teamID,
+              let options = try? MacManagementOptions(source: .project, teamID: team) else { return }
+        // This dispatch only follows an explicit selection and its exact
+        // authenticated inspection, never discovery, navigation or refresh.
+        dispatchedManagementSelection = selection.selectionID
+        automaticManagementBusy = true
+        page = .signing
+        automaticManagementTask = Task {
+            await management.automaticRenew(deviceID: inspection.device.id, selection: selection, options: options)
+            automaticManagementBusy = false
+            automaticManagementTask = nil
         }
     }
 
@@ -229,6 +344,11 @@ public final class MacAppModel {
         inspection = nil
     }
 
+    public func cancelManagement() {
+        automaticManagementTask?.cancel()
+        management?.cancel()
+    }
+
     public func applyScenario() {
         guard isPreview else { return }
         if checkingBusy {
@@ -236,7 +356,7 @@ public final class MacAppModel {
             cancel()
             return
         }
-        cancel(); failure = nil; inspection = nil; selectedID = nil; devices = []
+        cancel(); failure = nil; inspection = nil; selectedID = nil; selectedTransport = nil; managementSelection = nil; devices = []
         page = .home; checkEnvironment()
     }
 
@@ -286,13 +406,13 @@ public final class MacAppModel {
         }
     }
 
-    private func perform(_ action: CheckAction, deviceID: String? = nil,
+    private func perform(_ action: CheckAction, deviceID: String? = nil, transport: ConnectedDevice.Transport? = nil,
                          apply: @escaping @MainActor (Data, CheckRequest) throws -> Void) {
         guard !busy else { return }
         checkingBusy = true; failure = nil
         isCancellingCheck = false
         let token = UUID(); generation = token; activeCheckID = token
-        let request = CheckRequest(action: action, deviceID: deviceID)
+        let request = CheckRequest(action: action, deviceID: deviceID, transport: transport)
         let checker: any MacChecking = isPreview ? PreviewChecker(scenario: previewScenario) : live
         task = Task {
             defer { self.finishCheck(token) }

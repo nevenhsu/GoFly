@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 
 from app.GoFlyMac.Bridge.Management.management_journal import ManagementJournal
@@ -20,6 +21,38 @@ def request(operation="11111111-1111-4111-8111-111111111111", selection="2222222
     }).encode())
 
 
+def app_request(journal):
+    header = journal["header"]
+    return json.dumps({
+        "version": 1,
+        "managementID": header["managementID"],
+        "nonce": header["nonce"],
+        "kind": header["kind"],
+        "expectedDeviceUDID": header["deviceID"],
+        "sourceSetupID": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "sourceApp": {
+            "bundleID": "com.neven.gofly", "build": "1",
+            "profileSHA256": "a" * 64, "executableSHA256": "b" * 64,
+        },
+        "sourceActivationSHA256": "c" * 64,
+        "sourceRestoreRootSHA256": None,
+        "teamID": "ABCDEFGHIJ",
+        "targetSetupID": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "targetApp": {
+            "bundleID": "com.neven.gofly", "build": "1",
+            "profileSHA256": "a" * 64, "executableSHA256": "b" * 64,
+        },
+    }, sort_keys=True, separators=(",", ":")).encode()
+
+
+def control(journal, app_raw, action):
+    header = journal["header"]
+    return json.dumps({
+        "version": 1, "managementID": header["managementID"], "nonce": header["nonce"],
+        "requestSHA256": hashlib.sha256(app_raw).hexdigest(), "action": action,
+    }, sort_keys=True, separators=(",", ":")).encode()
+
+
 class ManagementJournalTests(unittest.TestCase):
     def test_selection_and_unknown_write_survive_reopen_without_resubmission(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -29,6 +62,32 @@ class ManagementJournalTests(unittest.TestCase):
                 store.put_evidence("sourceActivation", b"original activation bytes")
                 store.record_intent("update")
                 store.mark_unknown("update", "update-unknown")
+            control_store = ManagementJournal(Path(directory) / "control-state")
+            with control_store.lock():
+                control_initial = control_store.create(request("99999999-9999-4999-8999-999999999999",
+                                                              "88888888-8888-4888-8888-888888888888"))
+                app_raw = app_request(control_initial)
+                control_store.put_evidence("appRequest", app_raw)
+                command = control(control_initial, app_raw, "quiesce")
+                control_store.freeze_command("quiesce", command)
+                control_store.begin_publication("quiesce")
+                with self.assertRaises(ManagementBridgeError):
+                    control_store.confirm("quiesce", None, actual_pid=123)
+                with self.assertRaises(ManagementBridgeError):
+                    control_store.confirm("quiesce", b"{}", actual_pid=123)
+                control_store.mark_unknown("quiesce", "handoff-unknown")
+                with self.assertRaises(ManagementBridgeError):
+                    control_store.append_revision("77777777-7777-4777-8777-777777777777", "Network")
+                control_store.reconcile_command_absence("quiesce", fresh_absent=True)
+                control_store.begin_publication("quiesce")
+                self.assertEqual(control_store.read()["commands"]["quiesce"]["attempts"][-1]["state"], "inflight")
+                legacy_raw = b"legacy incoming bytes"
+                control_store.put_evidence("legacyIncoming", legacy_raw)
+                legacy_dir = control_store.transaction_root(control_initial["header"]["managementID"]) / "legacy"
+                self.assertEqual((legacy_dir / "incoming.json").read_bytes(), legacy_raw)
+                self.assertFalse((legacy_dir / "legacyIncoming.bin").exists())
+                with self.assertRaises(ManagementBridgeError):
+                    control_store.record_intent("legacyIncomingRemoval")
             reopened = ManagementJournal(store.root)
             self.assertEqual(reopened.read()["header"], initial["header"])
             self.assertEqual(reopened.read_evidence("sourceActivation"), b"original activation bytes")
@@ -63,16 +122,30 @@ class ManagementJournalTests(unittest.TestCase):
                 self.assertEqual(changed["revisions"][1]["transport"], "Network")
                 self.assertEqual(changed["stages"]["update"]["revision"], 0)
                 self.assertEqual(changed["header"]["transport"], "USB")
+                another_selection = "77777777-7777-4777-8777-777777777777"
+                unchanged_revision = reopened.append_revision(another_selection, "Network")
+                self.assertEqual(len(unchanged_revision["revisions"]), 2)
+                self.assertEqual(unchanged_revision["selections"][-1],
+                                 {"selectionID": another_selection, "revision": 1})
+                self.assertEqual(reopened.append_revision(another_selection, "Network"), unchanged_revision)
+                with self.assertRaises(ManagementBridgeError):
+                    reopened.append_revision(another_selection, "USB")
+            self.assertEqual(ManagementJournal(store.root).find_selection(another_selection), initial["header"])
 
     def test_released_selection_stays_consumed_after_next_transaction(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ManagementJournal(Path(directory) / "state")
             with store.lock():
                 first = store.create(request())
+                resumed_selection = "88888888-8888-4888-8888-888888888888"
+                store.append_revision(resumed_selection, "USB")
                 store.release()
                 second = request("44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555")
                 store.create(second)
                 self.assertEqual(store.find_selection(first["header"]["selectionID"])["managementID"], first["header"]["managementID"])
+                self.assertEqual(store.find_selection(resumed_selection)["managementID"], first["header"]["managementID"])
+                with self.assertRaises(ManagementBridgeError):
+                    store.append_revision(resumed_selection, "USB")
                 with self.assertRaises(ManagementBridgeError):
                     store.create(request("66666666-6666-4666-8666-666666666666"))
                 store.release()
