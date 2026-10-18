@@ -69,7 +69,7 @@ final class GoFlyOnboardingUITests: XCTestCase {
         XCTAssertFalse(next.isEnabled)
         let failure = app.staticTexts["onboarding.vpn.failure"]
         XCTAssertTrue(failure.waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["onboarding.vpn.status"].label, "Not connected")
+        XCTAssertEqual(app.staticTexts["onboarding.vpn.status"].label, "Not reachable")
         XCTAssertFalse(app.buttons["map.serviceControl"].exists)
         XCTAssertFalse(app.buttons["onboarding.location.skip"].exists)
         XCTAssertEqual(app.alerts.count, 0)
@@ -83,6 +83,38 @@ final class GoFlyOnboardingUITests: XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(welcome.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["map.settings"].exists)
+        #endif
+    }
+
+    func testConnectionHelpReturnsToCheckWithoutAdvancing() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("The bounded unavailable-endpoint fixture is only available in the Debug simulator app.")
+        #else
+        let app = onboardingApp()
+        app.launch()
+        XCTAssertTrue(app.buttons["onboarding.welcome.next"].waitForExistence(timeout: 10))
+        app.buttons["onboarding.welcome.next"].tap()
+        app.buttons["onboarding.location.skip"].tap()
+        let help = app.buttons["onboarding.vpn.help.open"]
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
+        help.tap()
+
+        for step in 1...3 {
+            XCTAssertTrue(app.staticTexts["onboarding.vpn.help.step\(step)"].waitForExistence(timeout: 5))
+        }
+        attach(app, name: "02-vpn-connection-help-steps")
+        let settings = app.buttons["onboarding.vpn.help.openSettings"]
+        for _ in 0..<8 where !settings.isHittable { app.swipeUp() }
+        XCTAssertTrue(settings.isHittable)
+        XCTAssertEqual(settings.label, "Open iPhone Settings")
+        let returnToCheck = app.buttons["onboarding.vpn.help.return"]
+        for _ in 0..<8 where !returnToCheck.isHittable { app.swipeUp() }
+        XCTAssertTrue(returnToCheck.isHittable)
+        attach(app, name: "02-vpn-connection-help")
+        returnToCheck.tap()
+        XCTAssertTrue(app.staticTexts["onboarding.vpn.failure"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["onboarding.vpn.next"].isEnabled)
+        XCTAssertFalse(app.buttons["map.serviceControl"].exists)
         #endif
     }
 

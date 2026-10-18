@@ -4,6 +4,25 @@ import GoFlyCore
 
 @Suite @MainActor
 struct TransferStoreHoldTests {
+    @Test func heldSessionOwnerFlushesCurrentSnapshotWithoutReleasingOrdinaryWriters() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let persistence = FileSessionRecoveryPersistence(directory: root)
+        let store = SessionRecoveryStore(persistence: persistence)
+        let other = SessionRecoveryStore(persistence: FileSessionRecoveryPersistence(
+            directory: root.appendingPathComponent("other")))
+        let token = try #require(store.acquireTransferHold())
+        let foreign = try #require(other.acquireTransferHold())
+        let current = SessionRecoverySnapshot(mode: .route)
+        #expect(!store.capture(current, using: foreign))
+        #expect(!store.capture(current))
+        #expect(store.capture(current, using: token))
+        #expect(await store.flush(using: token))
+        #expect(!store.capture(SessionRecoverySnapshot()))
+        #expect(SessionRecoveryStore(persistence: persistence).initialSnapshot == current)
+        #expect(store.releaseTransferHold(token))
+    }
+
     @Test func selectNilDoesNotReleaseAStillRunningValidation() async throws {
         let point = try #require(GeoCoordinate(latitude: 25, longitude: 121))
         let document = try GPXDocument(content: .waypoints([point, GeoCoordinate(latitude: 25.01, longitude: 121.01)!]))

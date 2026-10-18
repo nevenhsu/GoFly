@@ -112,16 +112,20 @@ class ManagementProtocolTests(unittest.TestCase):
             decoded = decode_request(json.dumps(raw).encode())
             self.assertEqual(decode_request(encode_request(decoded)).as_dict(), decoded.as_dict())
 
+        self.assertEqual(decode_request(json.dumps({**_request(), "deviceID": DEVICE.upper()}).encode()).device_id, DEVICE)
+
         invalid_values = [
             {**_request(), "metadata": {"unexpected": True}},
             {**_request(), "connectionRevision": True},
             {**_request(), "options": {**_request()["options"], "artifactPath": "/tmp/../candidate.app"}},  # type: ignore[index]
             {**_request(), "options": {**_request()["options"], "artifactPath": "/tmp/candidate\x01.app"}},  # type: ignore[index]
         ]
+        invalid_values.append({**_request(), "options": {
+            **_request()["options"], "source": "signedApp", "artifactPath": "/tmp/candidate\u0085.app"}})  # type: ignore[dict-item]
         for value in invalid_values:
             with self.assertRaisesRegex(ManagementBridgeError, "invalid-request"):
                 decode_request(json.dumps(value).encode())
-        duplicate = json.dumps(_request()).replace('"requestID": "', '"requestID": "', 1)
+        duplicate = json.dumps(_request())
         duplicate = duplicate[:-1] + ',"\\u0072equestID":"44444444-4444-4444-8444-444444444444"}'
         with self.assertRaisesRegex(ManagementBridgeError, "invalid-request"):
             decode_request(duplicate.encode())

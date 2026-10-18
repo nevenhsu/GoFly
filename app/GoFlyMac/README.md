@@ -1,6 +1,6 @@
 # GoFly for Mac
 
-**M1 軟體完成、手機待驗：** 正式 GoFly 首次安裝、私密交易紀錄及明確繼續流程已完成本機實作、檢查與雙軸審查。驗證與限制見 [首次安裝票](../../.scratch/gofly-ios/issues/M1-first-install.md)及[決策](../../.scratch/gofly-ios/decisions/M1-first-install.md)。開發期間不要求連接 iPhone，全部軟體完成後才集中實機驗收；本機開發 bundle 不是發行用 DMG。
+**2026-10-18 手機測試交付：** 依使用者本次要求，正式安裝 producer 已在 iPhone 15 Pro／iOS 27.0.1 完成 GoFly build 22 安裝、本次配對匯入、裝置支援精確核對及 activation receipt；已開啟並確認正常 Welcome 畫面，使用者接手拔除 USB 測試。這是本機開發包的實機交付，不代表完整 Mac GUI、iOS 26、定位效果或 M2 還原已驗收。本機開發 bundle 不是發行用 DMG；私密證據保留於 `work/gofly-ios/device-test`。
 
 使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
 
@@ -19,6 +19,8 @@ M2 已接入 Mac 介面、持久交易、共用驗證器、實際裝置 adapter 
 最後的產品交接另以原 USB iPhone 的實際 App 查詢核對 LocalDevVPN 已安裝，再開放前往裝置管理；缺少或無法確認時保留核對入口，不重做已完成的安裝。正式 bundle ID `com.jkcoxson.LocalDevVPN` 已由 [Apple 公開 metadata](https://itunes.apple.com/lookup?id=6755608044&country=us) 核對，並非以名稱猜測。這個唯讀查詢不控制 VPN，也不代表 VPN 已連線。
 
 重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [protocol 2](Bridge/Setup/README.md)。
+
+本次實機修正已進入共用安裝來源：USB 連線保留裝置實際序號大小寫；配對檔保留依賴回傳的文字或二進位 remote unlock 欄位；iOS 26／27 程序控制走已核對身分的 RSD。Apple BuildManifest 的 4 MiB 上限、支援檔案總量的 4 GiB 上限與 256 KiB 交易 JSON 上限分開。Cryptex 優先使用本機 Xcode 支援資料，缺少才下載；實際版本取自受雜湊保護的 `Image.dmg.cryptex_info`，不拿 BuildManifest 的佔位版本比較。已執行中的 GoFly 回報 `app-running`，介面提示關閉手機 App 後繼續原交易，不強制停止或重裝。
 
 ## 開啟
 
@@ -55,7 +57,7 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
   -s app/LocalGo/MacSetup/Tests
 ```
 
-目前 Mac Swift 68 項、M1 Python 57 項、M2 Python 51 項、唯讀 bridge 14 項及本機備份 4 項通過。另以暫存私密檔案核對備份確認刪除、七天清理、中斷接續與未完成保留；實際打包入口在隔離 HOME 下讀取空備份清單。打包的共用驗證工具已核對有效封包及拒絕流程，26 個 bundle 資源雜湊符合。iOS 未簽署建置及 4 項首次流程模擬器檢查通過；這些均非真機驗收。
+本次安裝修正已通過 Mac Swift 70 項、M1 Python 73 項、M2 Python 51 項及唯讀 bridge 14 項；手機產物對應快照的 transfer 回歸另有 43 項通過。重建後 26 個 bundle 資源雜湊及 Setup／Reinstall 來源副本均一致，打包的唯讀 status 入口可讀回原交易 `complete/confirmed`，stderr 為空且不呼叫裝置。另有先前本機備份 4 項、暫存私密檔案的確認刪除／七天清理／中斷接續／未完成保留、共用驗證工具有效封包與拒絕流程，以及 iOS 未簽署／模擬器檢查紀錄；這些離線結果不替代完整 GUI 或手機矩陣驗收。本次正常手機啟動證據與限制見本文開頭。
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 

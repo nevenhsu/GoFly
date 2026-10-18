@@ -29,6 +29,7 @@ public enum MacManagementFailure: Error, Equatable, Sendable {
         case .invalidResponse: return "Invalid management response"
         case .service(let code):
             switch code {
+            case "receipt-capacity": return "Preparation history is full"
             case "identity-unverified": return "App identity could not be verified"
             case "source-busy": return "The source app is busy"
             case "update-unknown": return "The app update result is unknown"
@@ -44,6 +45,7 @@ public enum MacManagementFailure: Error, Equatable, Sendable {
         case .invalidResponse: return "The management service returned an invalid response."
         case .service(let code):
             switch code {
+            case "receipt-capacity": return "Use the explicit backup and reinstall flow to continue with your data preserved."
             case "identity-unverified": return "Confirm the selected device and installed app, then try again."
             case "source-busy": return "Finish or close the source app operation before retrying."
             case "update-required": return "Update the source app before continuing."
@@ -576,9 +578,13 @@ private enum MacManagementWire {
         "transaction-conflict", "busy", "cancelled", "timeout", "storage-unavailable", "operation-failed",
         "update-required", "source-busy", "backup-invalid", "restore-unknown", "export-conflict",
         "removal-unknown", "operation-abandoned", "identity-unverified", "update-unknown", "adoption-unknown",
-        "operation-released", "revision-conflict"
+        "operation-released", "revision-conflict", "receipt-capacity"
     ]
 
+    // Protocol 5 validates lexical integer tokens at every nested boundary.
+    // SetupWireJSON only preserves one outer version token before Foundation
+    // decoding; reusing it would lose the distinction between 2 and 2.0 here.
+    // Keep this scanner local so existing M1/M2 acceptance remains unchanged.
     indirect enum Value: Equatable, Sendable {
         case object([String: Value]), array([Value]), string(String), number(String), bool(Bool), null
         var isNull: Bool { if case .null = self { return true }; return false }
@@ -657,13 +663,16 @@ private enum MacManagementWire {
 
     static func validDate(_ value: String) -> Bool {
         guard value.utf8.count <= 40,
-              value.range(of: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
-                          options: .regularExpression) != nil else { return false }
+              value.range(of: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+                          options: .regularExpression) != nil,
+              !value.hasPrefix("0000-") else { return false }
+        let seconds = String(value.prefix(19)) + "Z"
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
-        if formatter.date(from: value) != nil { return true }
-        formatter.formatOptions.insert(.withFractionalSeconds)
-        return formatter.date(from: value) != nil
+        formatter.formatOptions = [.withInternetDateTime]
+        guard let date = formatter.date(from: seconds) else { return false }
+        // Foundation may normalize an invalid calendar day. Require the exact
+        // whole-second value back; fractions cannot change calendar validity.
+        return formatter.string(from: date) == seconds
     }
 
     static func uuid(_ value: Value?) -> UUID? {

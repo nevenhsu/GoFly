@@ -19,18 +19,42 @@ struct ManagementTransferEvidence: Sendable {
 public final class ManagementPreparedSource: @unchecked Sendable {
     fileprivate let storeID: UUID
     fileprivate let input: ManagementInput
-    fileprivate init(storeID: UUID, input: ManagementInput) {
+    fileprivate let setupStore: SetupActivationStore
+    fileprivate let restoreStore: TransferRestoreStore
+    fileprivate init(storeID: UUID, input: ManagementInput,
+                     setupStore: SetupActivationStore,
+                     restoreStore: TransferRestoreStore) {
         self.storeID = storeID
         self.input = input
+        self.setupStore = setupStore
+        self.restoreStore = restoreStore
     }
 }
 
 public final class ManagementPreparedTarget: @unchecked Sendable {
     fileprivate let storeID: UUID
     fileprivate let input: ManagementInput
-    fileprivate init(storeID: UUID, input: ManagementInput) {
+    fileprivate let managementStore: ManagementStore
+    fileprivate let setupStore: SetupActivationStore
+    fileprivate let restoreStore: TransferRestoreStore
+    fileprivate init(storeID: UUID, input: ManagementInput,
+                     managementStore: ManagementStore,
+                     setupStore: SetupActivationStore,
+                     restoreStore: TransferRestoreStore) {
         self.storeID = storeID
         self.input = input
+        self.managementStore = managementStore
+        self.setupStore = setupStore
+        self.restoreStore = restoreStore
+    }
+
+    /// Internal typed gate used by SetupBootstrapCoordinator immediately
+    /// before pairing or activation consumption. The initializer remains
+    /// opaque to callers.
+    func validateSetupAcceptance(currentApp: SetupAppIdentity,
+                                 setupStore: SetupActivationStore) throws {
+        try managementStore.validateSetupAcceptance(self, currentApp: currentApp,
+                                                     setupStore: setupStore, restoreStore: restoreStore)
     }
 }
 
@@ -88,6 +112,7 @@ private enum ManagementStorageMapping {
 
 private enum ManagementStorageDisk {
     static let rootName = "GoFlyManagement"
+    static let responseName = "response.json"
     static let rootMaximum = 512 * 1_024
 
     static func base(_ value: URL) -> URL {
@@ -228,7 +253,7 @@ private enum ManagementStorageDisk {
         }
         let rootMode = rootInfo.st_mode & 0o7777
         guard rootMode == 0o700 || rootMode == 0o755 else { throw ManagementFailure.unsafeFile }
-        let allowed = Set(["request.json", "root.json", "generations"])
+        let allowed = Set(["request.json", "root.json", responseName, "generations"])
         let names = try FileManager.default.contentsOfDirectory(atPath: root.path)
         guard Set(names).isSubset(of: allowed) else { throw ManagementFailure.unsafeFile }
         if names.contains("request.json") {
@@ -244,6 +269,9 @@ private enum ManagementStorageDisk {
         }
         if names.contains("root.json") {
             try validateFile(root.appendingPathComponent("root.json"), maximum: rootMaximum)
+        }
+        if names.contains(responseName) {
+            try validateFile(root.appendingPathComponent(responseName), maximum: ManagementSourceReceipt.maximumBytes)
         }
         if names.contains("generations") {
             let generations = root.appendingPathComponent("generations", isDirectory: true)
@@ -375,7 +403,7 @@ private enum ManagementStorageCodec {
             throw ManagementFailure.invalidInput
         }
         switch (phase, admission) {
-        case (.adopted, .cold):
+        case (.adopted, .cold), (.adopted, .live):
             guard pid == 0, adoption != nil else { throw ManagementFailure.invalidInput }
         case (.preparing, .cold):
             guard pid == 0, adoption == nil else { throw ManagementFailure.invalidInput }
@@ -501,7 +529,8 @@ public final class ManagementStore: @unchecked Sendable {
                 }
                 guard current.phase != .adopted else { throw ManagementFailure.conflict }
                 try validateGeneration(input, record: current)
-                return ManagementPreparedSource(storeID: storeID, input: input)
+                return ManagementPreparedSource(storeID: storeID, input: input,
+                                                setupStore: setupStore, restoreStore: restoreStore)
             }
             guard !state.history.contains(where: { $0.managementID == input.request.managementID }) else {
                 throw ManagementFailure.conflict
@@ -520,6 +549,19 @@ public final class ManagementStore: @unchecked Sendable {
             guard var record = try currentRecord(state, input: prepared.input),
                   record.phase == .preparing, record.sourceAdmission == .live,
                   record.currentApp == currentApp else { throw ManagementFailure.conflict }
+            let origin = try lineageOrigin(state, request: prepared.input.request)
+            let source = try prepared.setupStore.managementEvidence(
+                setupID: prepared.input.request.sourceSetupID, app: prepared.input.request.sourceApp,
+                expectedDeviceUDID: prepared.input.request.expectedDeviceUDID,
+                teamID: prepared.input.request.teamID, requireActive: true)
+            try ensureReceiptCapacity(source.activation, targetSetupID: prepared.input.request.targetSetupID)
+            guard SetupValidation.sha256(source.rawActivation) == prepared.input.request.sourceActivationSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+            _ = try prepared.restoreStore.managementEvidence(
+                expectedSetupID: origin.setupID, expectedApp: origin.app,
+                expectedDeviceUDID: prepared.input.request.expectedDeviceUDID,
+                expectedRootSHA256: prepared.input.request.sourceRestoreRootSHA256)
             try validateGeneration(prepared.input, record: record)
             record = replace(record, phase: .ready, currentApp: currentApp, pid: pid)
             state.current = record
@@ -595,7 +637,83 @@ public final class ManagementStore: @unchecked Sendable {
             guard record.currentApp == currentApp, record.pid == pid else {
                 throw ManagementFailure.identityMismatch
             }
-            return try sourceReceipt(record)
+            let receipt = try sourceReceipt(record)
+            try receipt.bound(to: requiredInput())
+            return receipt
+        }
+    }
+
+    public func writeSourceReadback(currentApp: SetupAppIdentity,
+                                    pid: Int32) throws -> ManagementSourceReceipt? {
+        try locked {
+            guard let record = try readState().current,
+                  record.sourceAdmission == .live,
+                  record.phase != .adopted else { return nil }
+            guard record.currentApp == currentApp, record.pid == pid else {
+                throw ManagementFailure.identityMismatch
+            }
+            let input = try requiredInput()
+            let receipt = try sourceReceipt(record)
+            try receipt.bound(to: input)
+            try ManagementStorageDisk.atomicWrite(
+                try ManagementCodec.encodeSourceReceipt(receipt),
+                to: root.appendingPathComponent(ManagementStorageDisk.responseName),
+                checkpoint: checkpoint)
+            return receipt
+        }
+    }
+
+    /// Re-emits the persisted source acknowledgement after a crash. This
+    /// path never accepts a new PID or advances the source phase; it only
+    /// revalidates the durable request/evidence and publishes the original
+    /// receipt again.
+    public func replaySourceReadback(currentApp: SetupAppIdentity,
+                                     setupStore: SetupActivationStore,
+                                     restoreStore: TransferRestoreStore) throws -> ManagementSourceReceipt? {
+        try locked {
+            guard let record = try readState().current,
+                  record.sourceAdmission == .live,
+                  record.phase != .adopted else { return nil }
+            guard record.currentApp == currentApp, record.pid > 0 else {
+                throw ManagementFailure.identityMismatch
+            }
+            let input = try requiredInput()
+            guard input.rawRequestSHA256 == record.requestSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+            let hasGeneration: Bool
+            if record.phase != .released {
+                hasGeneration = true
+            } else {
+                hasGeneration = try generationExists(for: record.managementID)
+            }
+            try validateActualSourceEvidence(input: input, record: record,
+                                             setupStore: setupStore, restoreStore: restoreStore,
+                                             requireGeneration: hasGeneration)
+            let receipt = try sourceReceipt(record)
+            try receipt.bound(to: input)
+            try ManagementStorageDisk.atomicWrite(
+                try ManagementCodec.encodeSourceReceipt(receipt),
+                to: root.appendingPathComponent(ManagementStorageDisk.responseName),
+                checkpoint: checkpoint)
+            return receipt
+        }
+    }
+
+    public func writeAdoptionReadback(currentApp: SetupAppIdentity,
+                                      setupStore: SetupActivationStore,
+                                      restoreStore: TransferRestoreStore,
+                                      preferences: TransferPreferencesStore) throws -> ManagementAdoptionResult? {
+        guard let result = try reopenAdoptedProjection(currentApp: currentApp,
+                                                       setupStore: setupStore,
+                                                       restoreStore: restoreStore,
+                                                       preferences: preferences) else { return nil }
+        return try locked {
+            try ManagementStorageDisk.atomicWrite(
+                try ManagementCodec.encodeAdoptionReceipt(result.receipt),
+                to: root.appendingPathComponent(ManagementStorageDisk.responseName),
+                checkpoint: checkpoint)
+            return result
         }
     }
 
@@ -606,16 +724,39 @@ public final class ManagementStore: @unchecked Sendable {
             let input = try requiredInput()
             guard currentApp == input.request.targetApp else { throw ManagementFailure.identityMismatch }
             let state = try readState()
+            try validateIncomingSetupIfPresent(input.request, setupStore: setupStore)
             if let current = state.current,
                current.managementID == input.request.managementID,
                current.requestSHA256 == input.rawRequestSHA256 {
-                let source = try setupStore.managementEvidence(
-                    setupID: input.request.sourceSetupID, app: input.request.sourceApp,
-                    expectedDeviceUDID: input.request.expectedDeviceUDID,
-                    teamID: input.request.teamID, requireActive: true)
-                try ensureReceiptCapacity(source.activation, targetSetupID: input.request.targetSetupID)
+                let isColdPreparation = current.sourceAdmission == .cold && current.phase == .preparing
+                let isSealedSource = current.sourceAdmission == .live && current.phase == .mutationSealed
+                let isAdoptedReplay = current.phase == .adopted
+                guard isColdPreparation || isSealedSource || isAdoptedReplay else {
+                    // A released relation is terminal. Reusing its exact
+                    // management ID, or accepting a source before its
+                    // mutation cutline, would reopen a forbidden operation.
+                    throw ManagementFailure.conflict
+                }
+                let activation = try setupStore.activation()
+                if activation?.activeSetupID == input.request.targetSetupID {
+                    let target = try setupStore.managementEvidence(
+                        setupID: input.request.targetSetupID, app: input.request.targetApp,
+                        expectedDeviceUDID: input.request.expectedDeviceUDID,
+                        teamID: input.request.teamID, requireActive: true)
+                    try validateAdoptedTarget(current, target: target)
+                    _ = try validateHistoricalSource(input: input, record: current,
+                                                     setupStore: setupStore, restoreStore: restoreStore)
+                    try ensureReceiptCapacity(target.activation,
+                                              targetSetupID: input.request.targetSetupID,
+                                              allowExistingTargetReplay: true)
+                } else {
+                    try validateSourceEvidence(input: input, record: current,
+                                               setupStore: setupStore, restoreStore: restoreStore)
+                }
                 try validateGeneration(input, record: current)
-                return ManagementPreparedTarget(storeID: storeID, input: input)
+                return ManagementPreparedTarget(storeID: storeID, input: input,
+                                               managementStore: self,
+                                               setupStore: setupStore, restoreStore: restoreStore)
             }
             if let current = state.current {
                 guard [.released, .adopted].contains(current.phase) else { throw ManagementFailure.conflict }
@@ -642,7 +783,53 @@ public final class ManagementStore: @unchecked Sendable {
             next.current = makeRecord(input: input, phase: .preparing, admission: .cold,
                                       currentApp: currentApp, pid: 0)
             try writeState(next)
-            return ManagementPreparedTarget(storeID: storeID, input: input)
+            return ManagementPreparedTarget(storeID: storeID, input: input,
+                                           managementStore: self,
+                                           setupStore: setupStore, restoreStore: restoreStore)
+        }
+    }
+
+    func validateSetupAcceptance(_ prepared: ManagementPreparedTarget,
+                                 currentApp: SetupAppIdentity,
+                                 setupStore: SetupActivationStore,
+                                 restoreStore: TransferRestoreStore) throws {
+        try locked {
+            guard prepared.storeID == storeID,
+                  prepared.managementStore === self,
+                  prepared.setupStore === setupStore,
+                  prepared.restoreStore === restoreStore else {
+                throw ManagementFailure.invalidInput
+            }
+            let input = try requiredInput()
+            guard input.rawRequestSHA256 == prepared.input.rawRequestSHA256,
+                  currentApp == input.request.targetApp else {
+                throw ManagementFailure.identityMismatch
+            }
+            let state = try readState()
+            guard let record = try currentRecord(state, input: input),
+                  (record.sourceAdmission == .cold && record.phase == .preparing) ||
+                  (record.sourceAdmission == .live && record.phase == .mutationSealed) ||
+                  record.phase == .adopted else {
+                throw ManagementFailure.conflict
+            }
+            try validateIncomingSetupIfPresent(input.request, setupStore: setupStore)
+            try validateGeneration(input, record: record)
+            let activation = try setupStore.activation()
+            if activation?.activeSetupID == input.request.targetSetupID {
+                let target = try setupStore.managementEvidence(
+                    setupID: input.request.targetSetupID, app: input.request.targetApp,
+                    expectedDeviceUDID: input.request.expectedDeviceUDID,
+                    teamID: input.request.teamID, requireActive: true)
+                try validateAdoptedTarget(record, target: target)
+                _ = try validateHistoricalSource(input: input, record: record,
+                                                 setupStore: setupStore, restoreStore: restoreStore)
+                try ensureReceiptCapacity(target.activation,
+                                          targetSetupID: input.request.targetSetupID,
+                                          allowExistingTargetReplay: true)
+            } else {
+                try validateSourceEvidence(input: input, record: record,
+                                           setupStore: setupStore, restoreStore: restoreStore)
+            }
         }
     }
 
@@ -662,28 +849,19 @@ public final class ManagementStore: @unchecked Sendable {
                 setupID: input.request.targetSetupID, app: input.request.targetApp,
                 expectedDeviceUDID: input.request.expectedDeviceUDID, teamID: input.request.teamID,
                 requireActive: true)
-            try ensureReceiptCapacity(target.activation, targetSetupID: input.request.targetSetupID)
-            let generation = try generationEvidence(input, record: record)
-            let savedSource = try SetupCodec.decodeActivation(generation.activation)
-            guard let savedReceipt = savedSource.receipts.first(where: { $0.setupID == input.request.sourceSetupID }) else {
-                throw ManagementFailure.identityMismatch
-            }
-            let presentSource = try setupStore.managementEvidence(
-                setupID: input.request.sourceSetupID, app: input.request.sourceApp,
-                expectedDeviceUDID: input.request.expectedDeviceUDID, teamID: input.request.teamID,
-                requireActive: false)
-            guard presentSource.receipt == savedReceipt else { throw ManagementFailure.identityMismatch }
+            let historical = try validateHistoricalSource(input: input, record: record,
+                                                         setupStore: setupStore, restoreStore: restoreStore)
+            let savedReceipt = historical.sourceReceipt
             if input.request.kind == .renew {
                 guard target.receipt.pairingTransactionID == savedReceipt.pairingTransactionID,
                       target.receipt.pairingSHA256 == savedReceipt.pairingSHA256 else {
                     throw ManagementFailure.identityMismatch
                 }
             }
-            let origin = try lineageOrigin(state, request: input.request)
-            let transfer = try restoreStore.managementEvidence(
-                expectedSetupID: origin.setupID, expectedApp: origin.app,
-                expectedDeviceUDID: input.request.expectedDeviceUDID,
-                expectedRootSHA256: input.request.sourceRestoreRootSHA256)
+            try ensureReceiptCapacity(target.activation,
+                                      targetSetupID: input.request.targetSetupID,
+                                      allowExistingTargetReplay: true)
+            let transfer = historical.transfer
             if let settings = transfer.settings,
                transfer.projection.transferID != nil,
                try preferences.currentValues().marker != transfer.projection.transferID {
@@ -692,13 +870,17 @@ public final class ManagementStore: @unchecked Sendable {
             let projection = transfer.projection
             if record.phase == .adopted {
                 guard let receipt = record.adoptionReceipt,
-                      receipt.targetActivationSHA256 == SetupValidation.sha256(target.rawActivation) else {
+                      target.receipt.setupID == receipt.targetSetupID,
+                      target.receipt.app == receipt.targetApp,
+                      target.receipt.expectedDeviceUDID == receipt.expectedDeviceUDID,
+                      target.receipt.teamID == receipt.teamID,
+                      SetupValidation.sha256(target.rawActivation) == receipt.targetActivationSHA256 else {
                     throw ManagementFailure.identityMismatch
                 }
                 return ManagementAdoptionResult(receipt: receipt, projection: projection)
             }
             guard record.phase == .preparing || record.phase == .ready ||
-                  record.phase == .mutationSealed || record.phase == .released else {
+                  record.phase == .mutationSealed else {
                 throw ManagementFailure.conflict
             }
             let adoption = try ManagementCodec.makeAdoptionReceipt(
@@ -725,12 +907,33 @@ public final class ManagementStore: @unchecked Sendable {
             guard let record = try readState().current, record.phase == .adopted,
                   record.currentApp == currentApp, let receipt = record.adoptionReceipt else { return nil }
             let input = try requiredInput()
-            guard input.request.managementID == record.managementID else { throw ManagementFailure.identityMismatch }
+            guard input.request.managementID == record.managementID,
+                  input.rawRequestSHA256 == record.requestSHA256,
+                  receipt.managementID == input.request.managementID,
+                  receipt.nonce == input.request.nonce,
+                  receipt.requestSHA256 == input.rawRequestSHA256,
+                  receipt.sourceSetupID == input.request.sourceSetupID,
+                  receipt.targetSetupID == input.request.targetSetupID,
+                  receipt.sourceApp == input.request.sourceApp,
+                  receipt.targetApp == input.request.targetApp,
+                  receipt.expectedDeviceUDID == input.request.expectedDeviceUDID,
+                  receipt.teamID == input.request.teamID,
+                  receipt.sourceActivationSHA256 == input.request.sourceActivationSHA256,
+                  receipt.sourceRestoreRootSHA256 == input.request.sourceRestoreRootSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+            _ = try ManagementCodec.decodeAdoptionReceipt(
+                try ManagementCodec.encodeAdoptionReceipt(receipt))
+            guard try setupStore.activation()?.activeSetupID == input.request.targetSetupID else { return nil }
             let target = try setupStore.managementEvidence(
                 setupID: input.request.targetSetupID, app: currentApp,
                 expectedDeviceUDID: input.request.expectedDeviceUDID, teamID: input.request.teamID,
                 requireActive: true)
-            guard SetupValidation.sha256(target.rawActivation) == receipt.targetActivationSHA256 else {
+            guard target.receipt.setupID == receipt.targetSetupID,
+                  target.receipt.app == receipt.targetApp,
+                  target.receipt.expectedDeviceUDID == receipt.expectedDeviceUDID,
+                  target.receipt.teamID == receipt.teamID,
+                  SetupValidation.sha256(target.rawActivation) == receipt.targetActivationSHA256 else {
                 throw ManagementFailure.identityMismatch
             }
             let origin = try lineageOrigin(try readState(), request: input.request)
@@ -744,6 +947,58 @@ public final class ManagementStore: @unchecked Sendable {
                 try preferences.activate(settings: settings, transferID: transferID)
             }
             return ManagementAdoptionResult(receipt: receipt, projection: transfer.projection)
+        }
+    }
+
+    /// Reopens the current editable projection while a newer management
+    /// request has been released before target mutation. The released
+    /// request remains an evidence gate only: it cannot publish an adoption
+    /// receipt, seed Session, or replace the fixed response.
+    public func releasedSourceProjection(currentApp: SetupAppIdentity,
+                                         setupStore: SetupActivationStore,
+                                         restoreStore: TransferRestoreStore,
+                                         preferences: TransferPreferencesStore) throws -> TransferRuntimeProjection? {
+        try locked {
+            guard let record = try readState().current,
+                  record.phase == .released,
+                  record.sourceAdmission == .live,
+                  record.currentApp == currentApp else { return nil }
+            let input = try requiredInput()
+            guard record.managementID == input.request.managementID,
+                  record.nonce == input.request.nonce,
+                  record.requestSHA256 == input.rawRequestSHA256,
+                  record.sourceSetupID == input.request.sourceSetupID,
+                  record.targetSetupID == input.request.targetSetupID,
+                  record.sourceApp == input.request.sourceApp,
+                  record.targetApp == input.request.targetApp,
+                  record.expectedDeviceUDID == input.request.expectedDeviceUDID,
+                  record.teamID == input.request.teamID,
+                  record.sourceActivationSHA256 == input.request.sourceActivationSHA256,
+                  record.sourceRestoreRootSHA256 == input.request.sourceRestoreRootSHA256,
+                  input.request.sourceApp == currentApp else {
+                throw ManagementFailure.identityMismatch
+            }
+            if try generationExists(for: record.managementID) {
+                try validateGeneration(input, record: record)
+            }
+            let source = try setupStore.managementEvidence(
+                setupID: input.request.sourceSetupID, app: input.request.sourceApp,
+                expectedDeviceUDID: input.request.expectedDeviceUDID,
+                teamID: input.request.teamID, requireActive: true)
+            guard SetupValidation.sha256(source.rawActivation) == input.request.sourceActivationSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+            let origin = try lineageOrigin(try readState(), request: input.request)
+            let transfer = try restoreStore.managementEvidence(
+                expectedSetupID: origin.setupID, expectedApp: origin.app,
+                expectedDeviceUDID: input.request.expectedDeviceUDID,
+                expectedRootSHA256: input.request.sourceRestoreRootSHA256)
+            if let settings = transfer.settings,
+               let transferID = transfer.projection.transferID,
+               try preferences.currentValues().marker != transferID {
+                try preferences.activate(settings: settings, transferID: transferID)
+            }
+            return transfer.projection
         }
     }
 
@@ -821,7 +1076,8 @@ public final class ManagementStore: @unchecked Sendable {
         next.current = makeRecord(input: input, phase: .preparing, admission: .live,
                                   currentApp: input.request.sourceApp, pid: pid)
         try writeState(next)
-        return ManagementPreparedSource(storeID: storeID, input: input)
+        return ManagementPreparedSource(storeID: storeID, input: input,
+                                        setupStore: setupStore, restoreStore: restoreStore)
     }
 
     private func captureGeneration(_ input: ManagementInput,
@@ -880,15 +1136,28 @@ public final class ManagementStore: @unchecked Sendable {
         _ = try generationEvidence(input, record: record)
     }
 
-    private func validateSourceEvidence(input: ManagementInput, record: ManagementRecord,
-                                        setupStore: SetupActivationStore,
-                                        restoreStore: TransferRestoreStore) throws {
+    private func generationExists(for managementID: UUID) throws -> Bool {
+        let generation = root.appendingPathComponent("generations", isDirectory: true)
+            .appendingPathComponent(managementID.uuidString.lowercased(), isDirectory: true)
+        var info = stat()
+        if lstat(generation.path, &info) == 0 {
+            try ManagementStorageDisk.validateDirectory(generation)
+            return true
+        }
+        guard errno == ENOENT else { throw ManagementFailure.unsafeFile }
+        return false
+    }
+
+    private func validateActualSourceEvidence(input: ManagementInput,
+                                              record: ManagementRecord,
+                                              setupStore: SetupActivationStore,
+                                              restoreStore: TransferRestoreStore,
+                                              requireGeneration: Bool) throws {
         let origin = try lineageOrigin(try readState(), request: input.request)
         let source = try setupStore.managementEvidence(
             setupID: input.request.sourceSetupID, app: input.request.sourceApp,
-            expectedDeviceUDID: input.request.expectedDeviceUDID, teamID: input.request.teamID,
-            requireActive: true)
-        try ensureReceiptCapacity(source.activation, targetSetupID: input.request.targetSetupID)
+            expectedDeviceUDID: input.request.expectedDeviceUDID,
+            teamID: input.request.teamID, requireActive: true)
         guard SetupValidation.sha256(source.rawActivation) == input.request.sourceActivationSHA256 else {
             throw ManagementFailure.identityMismatch
         }
@@ -896,15 +1165,155 @@ public final class ManagementStore: @unchecked Sendable {
             expectedSetupID: origin.setupID, expectedApp: origin.app,
             expectedDeviceUDID: input.request.expectedDeviceUDID,
             expectedRootSHA256: input.request.sourceRestoreRootSHA256)
-        try validateGeneration(input, record: record)
+        if requireGeneration { try validateGeneration(input, record: record) }
+    }
+
+    private func validateSourceEvidence(input: ManagementInput, record: ManagementRecord,
+                                        setupStore: SetupActivationStore,
+                                        restoreStore: TransferRestoreStore) throws {
+        try validateActualSourceEvidence(input: input, record: record,
+                                          setupStore: setupStore, restoreStore: restoreStore,
+                                          requireGeneration: true)
+        let source = try setupStore.managementEvidence(
+            setupID: input.request.sourceSetupID, app: input.request.sourceApp,
+            expectedDeviceUDID: input.request.expectedDeviceUDID,
+            teamID: input.request.teamID, requireActive: true)
+        try ensureReceiptCapacity(source.activation, targetSetupID: input.request.targetSetupID)
+    }
+
+    private func validateHistoricalSource(input: ManagementInput,
+                                          record: ManagementRecord,
+                                          setupStore: SetupActivationStore,
+                                          restoreStore: TransferRestoreStore) throws ->
+        (sourceReceipt: SetupReceipt, transfer: ManagementTransferEvidence) {
+        let generation = try generationEvidence(input, record: record)
+        let savedActivation = try SetupCodec.decodeActivation(generation.activation)
+        guard savedActivation.activeSetupID == input.request.sourceSetupID,
+              let savedReceipt = savedActivation.receipts.first(where: {
+                  $0.setupID == input.request.sourceSetupID
+              }),
+              savedReceipt.app == input.request.sourceApp,
+              savedReceipt.expectedDeviceUDID == input.request.expectedDeviceUDID,
+              savedReceipt.teamID == input.request.teamID else {
+            throw ManagementFailure.identityMismatch
+        }
+        let presentSource = try setupStore.managementEvidence(
+            setupID: input.request.sourceSetupID, app: input.request.sourceApp,
+            expectedDeviceUDID: input.request.expectedDeviceUDID,
+            teamID: input.request.teamID, requireActive: false)
+        guard presentSource.receipt == savedReceipt else {
+            throw ManagementFailure.identityMismatch
+        }
+        let origin = try lineageOrigin(try readState(), request: input.request)
+        let transfer = try restoreStore.managementEvidence(
+            expectedSetupID: origin.setupID, expectedApp: origin.app,
+            expectedDeviceUDID: input.request.expectedDeviceUDID,
+            expectedRootSHA256: input.request.sourceRestoreRootSHA256)
+        return (savedReceipt, transfer)
+    }
+
+    private func validateAdoptedTarget(_ record: ManagementRecord,
+                                       target: ManagementSetupEvidence) throws {
+        guard record.phase == .adopted else { return }
+        guard let receipt = record.adoptionReceipt,
+              SetupValidation.sha256(target.rawActivation) == receipt.targetActivationSHA256 else {
+            throw ManagementFailure.identityMismatch
+        }
     }
 
     private func ensureReceiptCapacity(_ activation: SetupActivationRecord,
-                                       targetSetupID: UUID) throws {
-        guard activation.receipts.count < SetupActivationRecord.maximumReceipts ||
+                                       targetSetupID: UUID,
+                                       allowExistingTargetReplay: Bool = false) throws {
+        if activation.receipts.count < SetupActivationRecord.maximumReceipts { return }
+        guard activation.receipts.count == SetupActivationRecord.maximumReceipts,
+              allowExistingTargetReplay,
+              activation.activeSetupID == targetSetupID,
               activation.receipts.contains(where: { $0.setupID == targetSetupID }) else {
             throw ManagementFailure.receiptCapacity
         }
+    }
+
+    private func validateIncomingSetupIfPresent(_ request: ManagementRequest,
+                                                setupStore: SetupActivationStore) throws {
+        guard let incoming = try setupStore.readInput() else { return }
+        let manifest = incoming.manifest
+        guard manifest.expectedDeviceUDID == request.expectedDeviceUDID,
+              manifest.teamID == request.teamID else {
+            throw ManagementFailure.identityMismatch
+        }
+        if manifest.setupID == request.sourceSetupID {
+            // A source input can still be present while the target gate is
+            // being opened. It is evidence of the old setup only and never
+            // authorizes the target generation.
+            guard manifest.app == request.sourceApp else {
+                throw ManagementFailure.identityMismatch
+            }
+            return
+        }
+        guard manifest.setupID == request.targetSetupID,
+              manifest.app == request.targetApp else {
+            throw ManagementFailure.identityMismatch
+        }
+        if request.kind != .repair {
+            let source = try setupStore.managementEvidence(
+                setupID: request.sourceSetupID, app: request.sourceApp,
+                expectedDeviceUDID: request.expectedDeviceUDID,
+                teamID: request.teamID, requireActive: false)
+            guard manifest.pairingTransactionID == source.receipt.pairingTransactionID,
+                  manifest.pairingSHA256 == source.receipt.pairingSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+        }
+    }
+
+    private func validatePersistedAdoptedRecord(_ record: ManagementRecord) throws {
+        guard record.phase == .adopted, let adoption = record.adoptionReceipt else {
+            throw ManagementFailure.conflict
+        }
+        let generation = root.appendingPathComponent("generations", isDirectory: true)
+            .appendingPathComponent(record.managementID.uuidString.lowercased(), isDirectory: true)
+        guard let requestData = try ManagementStorageDisk.read(
+                generation.appendingPathComponent("request.json"), maximum: ManagementRequest.maximumBytes) else {
+            throw ManagementFailure.identityMismatch
+        }
+        let savedInput = try ManagementInput(data: requestData)
+        guard savedInput.rawRequestSHA256 == record.requestSHA256,
+              savedInput.request.managementID == record.managementID,
+              savedInput.request.nonce == record.nonce,
+              savedInput.request.sourceSetupID == record.sourceSetupID,
+              savedInput.request.targetSetupID == record.targetSetupID,
+              savedInput.request.sourceApp == record.sourceApp,
+              savedInput.request.targetApp == record.targetApp,
+              savedInput.request.expectedDeviceUDID == record.expectedDeviceUDID,
+              savedInput.request.teamID == record.teamID,
+              savedInput.request.sourceActivationSHA256 == record.sourceActivationSHA256,
+              savedInput.request.sourceRestoreRootSHA256 == record.sourceRestoreRootSHA256 else {
+            throw ManagementFailure.identityMismatch
+        }
+        let evidence = try generationEvidence(savedInput, record: record)
+        let activation = try SetupCodec.decodeActivation(evidence.activation)
+        guard activation.activeSetupID == record.sourceSetupID,
+              let sourceReceipt = activation.receipts.first(where: { $0.setupID == record.sourceSetupID }),
+              sourceReceipt.app == record.sourceApp,
+              sourceReceipt.expectedDeviceUDID == record.expectedDeviceUDID,
+              sourceReceipt.teamID == record.teamID else {
+            throw ManagementFailure.identityMismatch
+        }
+        guard adoption.managementID == record.managementID,
+              adoption.nonce == record.nonce,
+              adoption.requestSHA256 == record.requestSHA256,
+              adoption.sourceSetupID == record.sourceSetupID,
+              adoption.targetSetupID == record.targetSetupID,
+              adoption.sourceApp == record.sourceApp,
+              adoption.targetApp == record.targetApp,
+              adoption.expectedDeviceUDID == record.expectedDeviceUDID,
+              adoption.teamID == record.teamID,
+              adoption.sourceActivationSHA256 == record.sourceActivationSHA256,
+              adoption.sourceRestoreRootSHA256 == record.sourceRestoreRootSHA256 else {
+            throw ManagementFailure.identityMismatch
+        }
+        _ = try ManagementCodec.decodeAdoptionReceipt(
+            try ManagementCodec.encodeAdoptionReceipt(adoption))
     }
 
     private func currentRecord(_ state: ManagementRootState, input: ManagementInput) throws -> ManagementRecord? {
@@ -966,25 +1375,41 @@ public final class ManagementStore: @unchecked Sendable {
     private func lineageOrigin(_ state: ManagementRootState,
                                request: ManagementRequest) throws -> (setupID: UUID, app: SetupAppIdentity) {
         let records = state.history + (state.current.map { [$0] } ?? [])
-            guard !records.contains(where: {
-                $0.targetSetupID == request.targetSetupID && $0.managementID != request.managementID
-            }) else {
-            throw ManagementFailure.conflict
+        guard !records.contains(where: {
+            $0.targetSetupID == request.targetSetupID && $0.managementID != request.managementID
+        }) else { throw ManagementFailure.conflict }
+        let links = records.filter { $0.phase == .adopted }
+        var targetIDs = Set<UUID>()
+        for relation in links {
+            guard targetIDs.insert(relation.targetSetupID).inserted else {
+                throw ManagementFailure.conflict
+            }
+            try validatePersistedAdoptedRecord(relation)
         }
         var currentSetup = request.sourceSetupID
         var currentApp = request.sourceApp
-        var seen: Set<UUID> = []
-        while let relation = records.first(where: { $0.targetSetupID == currentSetup }) {
+        var seenManagement: Set<UUID> = []
+        var seenSetup: Set<UUID> = []
+        while true {
+            guard seenSetup.insert(currentSetup).inserted else { throw ManagementFailure.conflict }
+            let matching = links.filter { $0.targetSetupID == currentSetup }
+            guard matching.count <= 1 else { throw ManagementFailure.conflict }
+            guard let relation = matching.first else {
+                guard !records.contains(where: {
+                    $0.targetSetupID == currentSetup && $0.phase != .adopted
+                }) else { throw ManagementFailure.conflict }
+                break
+            }
             guard relation.targetApp == currentApp,
                   relation.expectedDeviceUDID == request.expectedDeviceUDID,
                   relation.teamID == request.teamID,
                   relation.sourceRestoreRootSHA256 == request.sourceRestoreRootSHA256 else {
                 throw ManagementFailure.identityMismatch
             }
-            guard seen.insert(relation.managementID).inserted else { throw ManagementFailure.conflict }
+            guard seenManagement.insert(relation.managementID).inserted else { throw ManagementFailure.conflict }
             currentSetup = relation.sourceSetupID
             currentApp = relation.sourceApp
-            guard seen.count <= 128 else { throw ManagementFailure.limitExceeded }
+            guard seenManagement.count <= 128 else { throw ManagementFailure.limitExceeded }
         }
         return (currentSetup, currentApp)
     }

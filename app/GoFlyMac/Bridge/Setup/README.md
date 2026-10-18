@@ -3,6 +3,26 @@
 This directory is the formal first install producer boundary. It is separate
 from `Bridge/bridge.py` and the protocol 1 LocalGo helpers.
 
+The 2026-10-18 device run completed installation, pairing import and exact
+support observation for GoFly build 22 on an iPhone 15 Pro / iOS 27.0.1, with
+an App-owned activation receipt and a normal Welcome screen. This is producer
+and phone evidence, not a claim that the entire Mac GUI or other OS versions
+have passed. Private run evidence remains under `work/gofly-ios/device-test`.
+
+USB lookup compares normalized device identities but passes the enumerated
+serial spelling to pymobiledevice3. Pairing candidates preserve its string or
+bytes remote-unlock field. Process control uses a same-device RSD tunnel with
+both autopair and remote-pairing fallback disabled; an existing App process
+returns the closed `app-running` code so the user can close it and resume.
+
+Apple support manifests have a separate 4 MiB bound. Support inventory sizes
+are bounded by the existing 4 GiB generation limit; journal and protocol JSON
+retain their 256 KiB bounds. Missing cryptex generations prefer the fixed local
+Xcode Restore directory before the download fallback, through the same strict
+copy/hash checks. Installed versions are compared to the private payload's
+`CFBundleVersion` in `Image.dmg.cryptex_info`; `Cryptex1,Version` in Apple's
+BuildManifest may be a placeholder and is not an installed-version proof.
+
 `setup_bridge.py` accepts one strict JSON request from stdin and emits one
 bounded response. The frozen request fields are `protocol`, `requestID`,
 `operation`, `action`, `setupID`, `deviceID`, and, for `preflight`/`apply`, an

@@ -10,11 +10,11 @@ struct GoFlyTransferLockView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(goFlyString("setup.transfer.title"))
+                Text(goFlyString(phase.isManagementLocked ? "setup.management.title" : "setup.transfer.title"))
                     .font(.system(size: 26, weight: .semibold))
                     .foregroundStyle(Color.primary)
                     .accessibilityIdentifier("setup.transfer.title")
-                Text(goFlyString("setup.transfer.message"))
+                Text(goFlyString(phase.isManagementLocked ? "setup.management.message" : "setup.transfer.message"))
                     .font(.system(size: 14))
                     .foregroundStyle(Color.primary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -52,6 +52,14 @@ struct GoFlyTransferLockView: View {
             statusRow("setup.transfer.phase", goFlyString(reason.transferStatusKey))
         case .transferBlocked(let failure):
             statusRow("setup.transfer.phase", goFlyString(failure.transferStatusKey))
+        case .managementWaiting:
+            Text(goFlyString("setup.management.waiting"))
+        case .managementLocked(let status):
+            Text(goFlyString(status.phase == .ready ? "setup.management.ready" :
+                             status.phase == .mutationSealed ? "setup.management.sealed" :
+                             "setup.management.waiting"))
+        case .managementBlocked(let failure):
+            Text(goFlyString(failure == .receiptCapacity ? "setup.management.capacity" : "setup.management.failed"))
         default:
             EmptyView()
         }

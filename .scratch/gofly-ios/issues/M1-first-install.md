@@ -4,7 +4,9 @@
 
 **Implementation:** complete
 
-**Device verification:** deferred-by-user（全部開發完成後集中手機驗收）。
+**Device verification:** 單機 producer／首次啟動已確認（2026-10-18，iPhone 15 Pro／iOS 27.0.1，build 22）；完整 Mac GUI、其他版本及負向實機矩陣仍待驗。
+
+**2026-10-18 實機補記：** 使用者要求先行安裝並同意保留備份後替換舊測試包。最終正式 producer 回覆 `complete/confirmed`，安裝、本次配對匯入及支援觀察三項均為真，且取得 App-owned activation receipt；正常 Welcome 畫面已核對。使用者已接手拔 USB 測試，之後不再操作手機。過程中的 USB 序號、配對欄位型別、檔案／交易大小限制、RSD、空 transfer namespace 及 Cryptex 實際版本核對問題均已修正、審查及回歸驗證。失敗交易與備份私密保留；本次人工核准的替換不宣稱為自動復原功能。手機產物為 `b2179d2` 快照加空 namespace 修正；實機與打包證據位於 `work/gofly-ios/device-test`。
 
 **Blocked by:** 無。16 已於 c44ab42 完成軟體結案提交；Root 已讀回完整 60 個不同 UI 案例的成功覆蓋，並明確交回模擬器、放行 C 的測試與建置。真機驗收仍延後，不作為開發阻擋。
 

@@ -12,7 +12,8 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
         self.pairing = pairing
     }
 
-    public func prepare(identity: @Sendable () throws -> SetupAppIdentity) throws -> SetupBootstrapResult {
+    public func prepare(identity: @Sendable () throws -> SetupAppIdentity,
+                        management: ManagementPreparedTarget? = nil) throws -> SetupBootstrapResult {
         do {
             let input = try store.readInput()
             let request = try store.readReadbackRequest()
@@ -52,7 +53,9 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
                 do { _ = try store.validateSupport(for: input) }
                 catch let failure as SetupFailure { return .blocked(failure) }
                 catch { return .blocked(.artifactMismatch) }
-                do { try pairing.prepare() }
+                try validateManagement(management, currentApp: current)
+                try pairing.prepare()
+                try validateManagement(management, currentApp: current)
                 let firstEvidence = try pairing.observe(for: input)
                 // Any malformed or mismatched v1 evidence wins over a
                 // superficially verified stored pairing. A success receipt
@@ -67,7 +70,9 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
                 // stored observation is absent or invalid; the post-consume
                 // observation is the evidence used for activation.
                 if firstEvidence.input == .exact && firstEvidence.receipt == .absent {
+                    try validateManagement(management, currentApp: current)
                     try pairing.consumeExactPending(for: input)
+                    try validateManagement(management, currentApp: current)
                     stored = try pairing.observeStoredPairing(expectedDeviceUDID: input.manifest.expectedDeviceUDID)
                 } else {
                     stored = firstEvidence.stored
@@ -75,6 +80,7 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
                 guard case .verified(let device, let hash) = stored,
                       device.lowercased() == input.manifest.expectedDeviceUDID,
                       hash == input.manifest.pairingSHA256 else { return .blocked(.pairingUnknown) }
+                try validateManagement(management, currentApp: current)
                 do {
                     let receipt = try store.commit(input)
                     return .completed(receipt)
@@ -88,7 +94,9 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
                     prior.expectedDeviceUDID != request.expectedDeviceUDID || prior.app != current) {
                     return .blocked(.identityMismatch)
                 }
+                try validateManagement(management, currentApp: current)
                 try pairing.prepare()
+                try validateManagement(management, currentApp: current)
                 let observed = try pairing.observeStoredPairing(expectedDeviceUDID: request.expectedDeviceUDID)
                 let receipt = try SetupReadbackReceipt(setupID: request.setupID, nonce: request.nonce,
                                                        expectedDeviceUDID: request.expectedDeviceUDID,
@@ -110,6 +118,26 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
             return .blocked(failure)
         } catch {
             return .blocked(.storageUnavailable)
+        }
+    }
+
+    private func validateManagement(_ management: ManagementPreparedTarget?,
+                                    currentApp: SetupAppIdentity) throws {
+        guard let management else { return }
+        do { try management.validateSetupAcceptance(currentApp: currentApp, setupStore: store) }
+        catch let failure as ManagementFailure { throw mapManagementFailure(failure) }
+    }
+
+    private func mapManagementFailure(_ failure: ManagementFailure) -> SetupFailure {
+        switch failure {
+        case .unsupportedVersion: return .unsupportedVersion
+        case .identityMismatch: return .identityMismatch
+        case .limitExceeded: return .limitExceeded
+        case .unsafeFile: return .unsafeFile
+        case .storageUnavailable: return .storageUnavailable
+        case .receiptCapacity: return .receiptCapacity
+        case .invalidInput: return .invalidInput
+        case .conflict, .unavailable: return .artifactMismatch
         }
     }
 }

@@ -88,6 +88,21 @@ public final class SessionRecoveryStore: ObservableObject {
     @discardableResult
     public func capture(_ snapshot: SessionRecoverySnapshot) -> Bool {
         guard transferHold == nil, loadState == .ready else { return false }
+        return acceptSnapshot(snapshot)
+    }
+
+    /// The admitted data-operation owner may persist the current accepted
+    /// snapshot while all ordinary writers remain held. This token comes from
+    /// this actual store; it does not grant service or movement authority.
+    @discardableResult
+    public func capture(_ snapshot: SessionRecoverySnapshot, using token: TransferHold) -> Bool {
+        guard transferHold == token, token.ownerID == transferOwnerID,
+              loadState == .ready, !isSaving, !hasUnsavedChanges,
+              pendingWrite == nil, drainTask == nil, waiters.isEmpty else { return false }
+        return acceptSnapshot(snapshot)
+    }
+
+    private func acceptSnapshot(_ snapshot: SessionRecoverySnapshot) -> Bool {
         guard latestRevision < UInt64.max else {
             block(.revisionExhausted)
             return false
@@ -129,6 +144,18 @@ public final class SessionRecoveryStore: ObservableObject {
             return !hasUnsavedChanges && pendingWrite == nil && drainTask == nil &&
                 latestRevision == lastCommittedRevision
         }
+        return await waitForLatestWrite()
+    }
+
+    /// Wait for the snapshot submitted by the same admitted owner without
+    /// releasing its hold or admitting a normal capture in the meantime.
+    public func flush(using token: TransferHold) async -> Bool {
+        guard transferHold == token, token.ownerID == transferOwnerID,
+              loadState == .ready, !invalidLatest else { return false }
+        return await waitForLatestWrite()
+    }
+
+    private func waitForLatestWrite() async -> Bool {
         let target = latestRevision
         if target <= lastCommittedRevision { return true }
         if !isSaving {

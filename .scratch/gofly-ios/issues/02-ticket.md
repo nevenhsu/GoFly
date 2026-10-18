@@ -19,10 +19,14 @@
 - [ ] 定位允許、拒絕、略過皆可前進；缺少真實 GPS 只出現可關閉小提示，不捏造位置或反覆打斷。
 - [ ] VPN 必須實際可達才可下一步；前景立即與每 5 秒探測、單次 2 秒逾時，離開取消，避免探測重疊與舊結果覆寫。
 - [ ] 手動檢查與外部返回重查共用結果；按下一步再次核對，成功或返回外部 App 均不自動啟動／送點。
+- [ ] 暫時 waiting 後 ready 可在同一 probe 成功；持續 waiting 仍依原兩秒期限失敗並關閉，不能提前判失敗或延長期限。
+- [ ] 說明頁以三張編號步驟卡呈現，區分 LocalDevVPN Connected 與 GoFly 可達；三語提供本機網路權限與重連提示。返回並檢查不跨過必要 VPN／fresh Next 確認。
 
 **Verification:** 首次流程 UI 驗收；探測逾時／取消／成功後失效測試；實機切換 LocalDevVPN。
 
 ## Implementation record
+
+2026-10-18：使用者在外拔掉 USB 測試 build 22，回報 LocalDevVPN Connected、GoFly onboarding 不可達；系統設定頁無本機網路選項，不能推定權限遭拒。已對照成功 prototype，重現 build 22 把暫時 waiting 直接當終止失敗的差異，三項回歸測試先 red 後 green；修正保留既有兩秒期限。說明頁改為三張步驟卡、正確的 GoFly 可達狀態、缺少設定開關時直接返回的提示及首次流程可用的系統設定入口。12 項 transport 與 32 項首次流程／復原測試、unsigned simulator／device build、獨立審查通過。真機故障確已觀察；修正版尚未安裝，不能標示真機修復成功。詳細離線證據：`work/gofly-ios/vpn-regression-20261018/RESULT.md`。
 
 2026-10-17：以票 01 結案後 `e1b6c5c` 為本票比對基準。沿用已核可的 public controller／probe／permission／UI 測試界線，依序 red → green 驗證略過、允許／拒絕定位、不自動跨頁、fresh Next、背景／遲到結果、五秒節奏及返回前頁。Core 不含裝置啟動能力；completion flag 只由目前世代的 fresh Next 成功 callback 同步提交。
 

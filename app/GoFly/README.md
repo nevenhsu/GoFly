@@ -1,5 +1,9 @@
 # GoFly iOS
 
+2026-10-18 VPN 回報修正：使用者拔 USB 後回報 build 22 在 LocalDevVPN Connected 時仍無法通過首次流程。已重現其 Network.framework waiting 提前失敗邏輯，修正為沿用成功 prototype 的等待語意及原兩秒期限；三語說明改為步驟卡、可達性狀態與首次流程可用的系統設定入口，沒有本機網路選項時不要求繼續尋找。離線測試與建置結果見 `work/gofly-ios/vpn-regression-20261018/RESULT.md`；手機仍是 build 22，修正版實際 VPN 連線待重新安裝後驗收。
+
+2026-10-18 使用者要求先行手機測試：已用 `b2179d2` 程式快照加上缺少 transfer namespace 的唯讀啟動修正建置並安裝 build 22；iPhone 15 Pro／iOS 27.0.1 已完成正式 Mac producer 的配對匯入、支援核對與啟用回報，且正常顯示 Welcome。既有路徑仍執行完整 no-follow 檢查；只有明確不存在的 transfer namespace 可保持空白，避免首次啟動提前進入資料錯誤鎖定。使用者已接手拔 USB 測試，其他實機項目維持待驗。這次測試包不含之後仍在開發的管理功能；證據位於 `work/gofly-ios/device-test`。
+
 2026-10-17 最新開發／驗收安排：依序持續完成全部實作與可離線驗證工作，期間不要求接 iPhone、不等待 USB、不安裝或操作手機。所有實機項目（含背景、跨端還原及全流程）最後才由使用者統一測試；前置票實作／自動驗證完成即可繼續，待實機不阻擋後續開發。實作完成與實機通過分開記錄，進度及集中驗收步驟見[本機票單](../../.scratch/gofly-ios/TRACKER.md)與[集中手機驗收](../../.scratch/gofly-ios/DEVICE-ACCEPTANCE.md)。此為執行安排更新，不宣告新增功能或實機結果。
 
 正式 GoFly 的獨立 iOS 專案，部署目標 iOS 26，App bundle `com.neven.gofly`。現有 `../LocalGo` 是 prototype；本專案逐票實作及驗收，不直接繼承其完成度。
@@ -37,7 +41,7 @@ bash app/GoFly/scripts/check.sh
 
 ## Mac 正式首次安裝與啟動交接（M1）
 
-Mac 使用正式 `com.neven.gofly` 交易完成首次安裝、一次性配對匯入與必要裝置支援。iOS 在交接有效並原子提交前保留準備畫面，不建立正常服務、任務及資料商店；完成後才進既有首次流程。沒有正式交接狀態仍可一般啟動，缺少／錯誤的正式資料不回退到舊支援。
+Mac 使用正式 `com.neven.gofly` 交易完成首次安裝、一次性配對匯入與必要裝置支援。iOS 首次啟動直接顯示 onboarding 歡迎頁，底部在「下一步」上方顯示 loading indicator；交接檢查完成前停用下一步，不建立正常服務、任務及資料商店。通過後才開放使用者按下一步，失敗或等待 Mac 時保留必要提示。沒有正式交接狀態仍可一般啟動，缺少／錯誤的正式資料不回退到舊支援。此介面更新尚未安裝至手機驗收。
 
 交接資料不代表 VPN、GPS、clear 或移動已成功。正式 activation 存在時不再消耗無關的舊 v1 輸入；消耗本次 v1 時在實際解碼後核對交易 ID，不因相同配對 bytes 接受另一筆交易。設定頁以背景唯讀觀察的快取顯示配對狀態，畫面求值不讀配對檔。共享 v1 API 只增加可選交易核對，舊呼叫格式相容，沒有新增 native FFI 或重建原生程式庫。
 

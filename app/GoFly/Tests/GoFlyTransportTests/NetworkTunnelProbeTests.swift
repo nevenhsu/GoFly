@@ -1,10 +1,40 @@
 import Darwin
 import Foundation
 import GoFlyCore
+import Network
 import Testing
 @testable import GoFlyTransport
 
 struct NetworkTunnelProbeTests {
+    @Test func temporaryNetworkWaitIsNotATerminalFailure() {
+        // Replay the actual NWConnection state used while a VPN route settles.
+        if NetworkConnection.probeState(for: .waiting(.posix(.ENETDOWN))) != nil {
+            Issue.record("A temporary VPN path wait must remain pending until ready, failure, cancellation or deadline")
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1))) func waitingThenReadyCanCompleteTheSameProbe() async throws {
+        let connection = ControlledConnection()
+        let probe = NetworkTunnelProbe(timeout: 0.5, makeConnection: { connection })
+        let task = Task { try await probe.check() }
+        defer { task.cancel() }
+        try await connection.waitForStart()
+        connection.emitNetworkState(.waiting(.posix(.ENETDOWN)))
+        connection.emitNetworkState(.ready)
+        try await task.value
+        #expect(connection.counts.cancelled == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func persistentWaitingStillTimesOutAndCloses() async throws {
+        let connection = ControlledConnection()
+        let probe = NetworkTunnelProbe(timeout: 0.03, makeConnection: { connection })
+        let task = Task { try await probe.check() }
+        defer { task.cancel() }
+        try await connection.waitForStart()
+        connection.emitNetworkState(.waiting(.posix(.ENETDOWN)))
+        await #expect(throws: TunnelProbeFailure.timedOut) { try await task.value }
+        #expect(connection.counts.cancelled == 1)
+    }
     @Test(.timeLimit(.minutes(1))) func eachCheckMakesFreshLoopbackConnection() async throws {
         let listener = try LoopbackEndpoint(listening: true)
         defer { withExtendedLifetime(listener) {} }
@@ -30,10 +60,15 @@ struct NetworkTunnelProbeTests {
     #if DEBUG
     @Test(.timeLimit(.minutes(1))) func simulatorUIFailureFixtureReallyFails() async {
         let start = ContinuousClock.now
-        await #expect(throws: TunnelProbeFailure.unavailable) {
+        do {
             try await NetworkTunnelProbe.unavailableUITestProbe.check()
-        }
-        #expect(start.duration(to: .now) < .seconds(1))
+            Issue.record("The unavailable simulator fixture must never report success")
+        } catch let failure as TunnelProbeFailure {
+            // Network.framework may wait on port zero instead of failing.
+            // That pending state must honor the production deadline too.
+            #expect(failure == .unavailable || failure == .timedOut)
+        } catch { Issue.record("Unexpected probe error: \(error)") }
+        #expect(start.duration(to: .now) < .seconds(3))
     }
     #endif
 
@@ -183,6 +218,10 @@ private final class ControlledConnection: TunnelConnection, @unchecked Sendable 
     func emit(_ state: TunnelConnectionState) {
         let callback = lock.withLock { (queue, update) }
         if let queue = callback.0, let update = callback.1 { queue.async { update(state) } }
+    }
+
+    func emitNetworkState(_ state: NWConnection.State) {
+        if let result = NetworkConnection.probeState(for: state) { emit(result) }
     }
 
     func waitForStart() async throws {

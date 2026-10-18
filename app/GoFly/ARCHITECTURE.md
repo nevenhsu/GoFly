@@ -37,8 +37,10 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 
 歡迎 → 選用定位 → VPN 通道 → 地圖。允許、拒絕與略過定位皆能繼續；此步只要求權限，不要求 GPS fix。GPS 小提示與位置有效性沿用地圖既有獨立邊界。首次／完成引導及外部返回都不啟動服務或送點。
 
+首次啟動直接顯示 onboarding 歡迎頁，不另顯示「檢查 GoFly 設定」頁。啟動檢查期間在歡迎頁底部、「下一步」上方顯示 loading indicator 與檢查訊息，並停用下一步；只有 ordinary／completed 結果建立 runtime 後才移除 loading 並開放下一步，仍由使用者點擊前進。失敗、等待 Mac 及資料交接鎖定沿用各自必要提示，不因歡迎頁提早顯示而略過驗證或提早建立 runtime。此為 2026-10-18 已實作的介面更新；手機畫面與操作仍待新版驗收。
+
 - `GoFlyCore.OnboardingController` 依公開 `TunnelProbing`／`LocationAuthorizing` 及可注入單調時鐘管理流程，Core 不知道端點、Network.framework 或 UserDefaults。權限及 VPN 各自作廢離頁舊 callback。
-- `GoFlyTransport` 單向依賴 Core，擁有 Network.framework 探測與唯一 `LocalTunnelEndpoint` 生產設定（10.7.0.1:49152、兩秒逾時）。App／同步 native reset 共用該設定；reset 仍在既有 native serial queue 執行。任意端點及短 timeout 只作 internal host-test 注入。
+- `GoFlyTransport` 單向依賴 Core，擁有 Network.framework 探測與唯一 `LocalTunnelEndpoint` 生產設定（10.7.0.1:49152、兩秒逾時）。Network.framework 的 waiting 保留同一連線直到 ready、failed、cancel 或原期限，避免 LocalDevVPN 路徑暫時未就緒時提前誤判。App／同步 native reset 共用該設定；reset 仍在既有 native serial queue 執行。任意端點及短 timeout 只作 internal host-test 注入。
 - VPN 頁可見且前景 active 時立即檢查，之後維持每五秒起始節奏；一筆尚未完成就合併檢查，不重疊或補跑積壓 tick。定時複查保留上次結果，失敗才撤銷下一步可用性。
 - 按下一步後必須新建一次 probe；若已有檢查，等待其真正返回，再執行下一步專用新 probe。只有目前頁面／scene 世代的這次成功會同步呼叫 App root，寫入 `gofly.onboarding.complete`，接著顯示 stopped 地圖。一般檢查成功不會完成引導。
 - 離頁或背景取消 probe、timer 及下一步授權；即使舊 probe 忽略取消並遲到成功，也不能更新 UI 或旗標。重新進入須等待舊操作返回後再探測。Network adapter 每次建新連線，以串行唯一終止 gate 處理 ready／failed／timeout／cancel，包含 continuation 安裝前取消，所有終止路徑關閉連線且僅 resume 一次。
@@ -231,7 +233,7 @@ Service 的 `TunnelResetState` 以真實 UUID 同步發布 running：准入先�
 
 正式首次安裝使用獨立版本化交易，Mac 的實際安裝擁有權、App 的本機資料提交、實際同機支援狀態是三份不同證據。遺失的安裝成功結果保持不明；後來相同 Bundle／nonce 不能反推擁有權，也不能授權啟動、終止、重送或移除。原 protocol1 唯讀及 install 拒絕維持；protocol2 僅 preflight／apply／status／resume。正式產物、Team、裝置、選項及單次 v1 配對交易在私密 journal 綁定，所有寫入前持久化意圖，取消不宣稱回滾。
 
-App 先保留單一 `GoFlySetupBootstrap`，以背景工作讀真實固定交接檔與當前 Bundle 摘要。沒有正式狀態時不讀不存在的描述檔，維持一般啟動；有 request／input／activation 時失敗就鎖在準備畫面。只有 ordinary／completed 決策後才一次建立並保留 `GoFlyRuntimeAssembly` 的服務、任務、商店與首次流程，偏好仍由穩定外層持有。真實輸入及全部支援檔先驗，現有 v1 importer 是唯一配對寫入者；匯入 closure 再綁定實際傳入 bytes／裝置以防檢查後替換。已完成重播不重新匯入或切回舊 generation。
+App 先保留單一 `GoFlySetupBootstrap`，以背景工作讀真實固定交接檔與當前 Bundle 摘要。沒有正式狀態時不讀不存在的描述檔，維持一般啟動；首次檢查使用歡迎頁 loading，有 request／input／activation 時失敗就顯示設定鎖定提示。只有 ordinary／completed 決策後才一次建立並保留 `GoFlyRuntimeAssembly` 的服務、任務、商店與首次流程，偏好仍由穩定外層持有。真實輸入及全部支援檔先驗，現有 v1 importer 是唯一配對寫入者；匯入 closure 再綁定實際傳入 bytes／裝置以防檢查後替換。已完成重播不重新匯入或切回舊 generation。
 
 AFC 傳輸權限與正式私密儲存分開：App 對固定 Mac 交接檔執行明確 descriptor 檢查與權限收緊，再交給嚴格 reader；不改 bytes、摘要或身份，不建立成功回報。只接受安全擁有者、regular／directory、單一檔案 link 與已知傳輸模式；symlink／特殊檔／其他權限不修復。App 自己的 activation／response 不走這條權限修復路徑。正常 reader 不因讀取而改權限。
 

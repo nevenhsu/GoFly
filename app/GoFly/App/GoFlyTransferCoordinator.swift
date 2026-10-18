@@ -6,7 +6,7 @@ import GoFlyCore
 /// lease remains retained by the bootstrap while the durable export root is
 /// preparing/ready/sealed; cancellation never drops a physical operation early.
 @MainActor
-final class GoFlyTransferLease {
+final class GoFlyDataLease {
     private let runtime: GoFlyRuntimeAssembly
     var service: TransferHold?
     var route: TransferHold?
@@ -19,6 +19,29 @@ final class GoFlyTransferLease {
     var preferences: UUID?
 
     init(runtime: GoFlyRuntimeAssembly) { self.runtime = runtime }
+
+    static func acquire(runtime: GoFlyRuntimeAssembly) -> GoFlyDataLease? {
+        let lease = GoFlyDataLease(runtime: runtime)
+        guard let service = runtime.service.acquireTransferHold() else { return nil }
+        lease.service = service
+        guard let route = runtime.movement.route.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.route = route
+        guard let joystick = runtime.movement.joystick.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.joystick = joystick
+        guard let favorites = runtime.favorites.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.favorites = favorites
+        guard let imported = runtime.importedRoutes.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.imported = imported
+        guard let favoriteRoutes = runtime.favoriteRoutes.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.favoriteRoutes = favoriteRoutes
+        guard let movementRecovery = runtime.movement.recovery.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.movementRecovery = movementRecovery
+        guard let recovery = runtime.sessionRecovery.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.recovery = recovery
+        guard let preferences = GoFlyPreferences.shared.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
+        lease.preferences = preferences
+        return lease
+    }
 
     @discardableResult
     func releaseAll() -> Bool {
@@ -65,7 +88,12 @@ final class GoFlyTransferLease {
 
 extension GoFlySetupBootstrap {
     func handle(url: URL) {
-        guard let link = try? TransferControlURL(url: url) else { return }
+        if let management = GoFlyManagementControlURL(url: url) {
+            handleManagement(management)
+            return
+        }
+        guard !phase.isManagementLocked,
+              let link = try? TransferControlURL(url: url) else { return }
         // A live physical export is never canceled by a duplicate URL. A
         // release/seal waits for the existing physical body to return before
         // observing the durable root.
@@ -73,7 +101,9 @@ extension GoFlySetupBootstrap {
         let prior = link.action == .export ? nil : transferTask
         let id = UUID()
         transferTaskID = id
+        let startup = startupTask
         transferTask = Task { [weak self] in
+            if let startup { await startup.value }
             if let prior { await prior.value }
             guard let self else { return }
             defer { self.transferDidFinish(id) }
@@ -118,9 +148,9 @@ extension GoFlySetupBootstrap {
                 let receipt = try await Task.detached(priority: .utility) {
                     try store.release(control, input: input, currentApp: currentApp)
                 }.value
-                if let lease = activeTransferLease {
+                if let lease = activeDataLease {
                     guard lease.releaseAll() else { return }
-                    activeTransferLease = nil
+                    activeDataLease = nil
                 }
                 try await writeReadback(store: store, control: control, currentApp: currentApp)
                 if receipt.phase == .released || receipt.phase == .releasedNoSnapshot {
@@ -150,7 +180,7 @@ extension GoFlySetupBootstrap {
                 if let receipt = try? store.readExport(),
                    [.preparing, .ready, .removalSealed].contains(receipt.phase) {
                     setTransferPhase(.exportLocked(receipt))
-                } else if activeTransferLease == nil {
+                } else if activeDataLease == nil {
                     setTransferPhase(.transferBlocked(failure))
                 }
                 _ = input
@@ -168,13 +198,13 @@ extension GoFlySetupBootstrap {
                                     support: support, store: store)
             return
         }
-        guard activeTransferLease == nil else { return }
+        guard activeDataLease == nil else { return }
         let priorPhase = phase
         guard runtime.movement.canExportFromMap else {
             try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: .sourceBusy)
             return
         }
-        guard let lease = acquireLease(runtime: runtime) else {
+        guard let lease = GoFlyDataLease.acquire(runtime: runtime) else {
             try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: .sourceBusy)
             setTransferPhase(priorPhase)
             return
@@ -205,7 +235,7 @@ extension GoFlySetupBootstrap {
                 try store.beginPreparation(input: input, currentApp: currentApp, cutline: cutline)
             }.value
             preparingCommitted = true
-            activeTransferLease = lease
+            activeDataLease = lease
             if let receipt = try await Task.detached(priority: .utility, operation: {
                 try store.readExport()
             }).value {
@@ -247,14 +277,14 @@ extension GoFlySetupBootstrap {
                     try store.readExport()
                 }).value
                 if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
-                    activeTransferLease = lease
+                    activeDataLease = lease
                     setTransferPhase(.exportLocked(actual))
                 } else if !preparingCommitted {
                     _ = lease.releaseAll()
                     setTransferPhase(priorPhase)
                 }
             } catch {
-                activeTransferLease = lease
+                activeDataLease = lease
                 setTransferPhase(.transferBlocked(.commitUnknown))
             }
             try? await writeReadback(store: store, control: control, currentApp: currentApp, failure: failure)
@@ -264,14 +294,14 @@ extension GoFlySetupBootstrap {
                     try store.readExport()
                 }).value
                 if let actual, [.preparing, .ready, .removalSealed].contains(actual.phase) {
-                    activeTransferLease = lease
+                    activeDataLease = lease
                     setTransferPhase(.exportLocked(actual))
                 } else if !preparingCommitted {
                     _ = lease.releaseAll()
                     setTransferPhase(priorPhase)
                 }
             } catch {
-                activeTransferLease = lease
+                activeDataLease = lease
                 setTransferPhase(.transferBlocked(.commitUnknown))
             }
             try? await writeReadback(store: store, control: control, currentApp: currentApp,
@@ -315,29 +345,6 @@ extension GoFlySetupBootstrap {
             try? await writeReadback(store: store, control: control, currentApp: currentApp,
                                      failure: .storageUnavailable)
         }
-    }
-
-    private func acquireLease(runtime: GoFlyRuntimeAssembly) -> GoFlyTransferLease? {
-        let lease = GoFlyTransferLease(runtime: runtime)
-        guard let service = runtime.service.acquireTransferHold() else { return nil }
-        lease.service = service
-        guard let route = runtime.movement.route.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.route = route
-        guard let joystick = runtime.movement.joystick.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.joystick = joystick
-        guard let favorites = runtime.favorites.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.favorites = favorites
-        guard let imported = runtime.importedRoutes.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.imported = imported
-        guard let favoriteRoutes = runtime.favoriteRoutes.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.favoriteRoutes = favoriteRoutes
-        guard let movementRecovery = runtime.movement.recovery.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.movementRecovery = movementRecovery
-        guard let recovery = runtime.sessionRecovery.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.recovery = recovery
-        guard let preferences = GoFlyPreferences.shared.acquireTransferHold() else { _ = lease.releaseAll(); return nil }
-        lease.preferences = preferences
-        return lease
     }
 
     private func writeReadback(store: TransferExportStore, control: TransferControlRequest,

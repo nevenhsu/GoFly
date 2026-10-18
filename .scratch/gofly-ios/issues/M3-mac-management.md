@@ -22,4 +22,4 @@
 
 **Backup software evidence:** Mac68項與最後受影響suite6項、Python備份4項及共用M2回歸51項通過。Root用暫存私密資料核對確認刪除、七天到期、持久意圖的中斷接續與未完成保留；實際打包入口於隔離HOME讀取清單，未操作手機。清理先核對完整manifest清單及payload實際大小／雜湊，最後才刪manifest；來源矛盾或變動就保留。實作審查與手機驗收分開，後續管理／發佈功能仍待完成。
 
-**Signing/repair progress:** 完整 v2 設計經配置的 Advisor 第2／5輪核准，見[管理決策](../decisions/M3-management.md)。Core 嚴格請求、來源回報及原始摘要綁定已完成第一分段；實際續簽／修復、持久交易、App 門檻與 Mac 入口接續實作，尚未提供可操作的管理功能或實機證據。
+**Signing/repair progress:** 完整 v5 設計經配置的 Advisor 第5／5輪核准，見[管理決策](../decisions/M3-management.md)。Core 嚴格請求、來源回報、持久化與前後資料繼承，及 App 啟動／資料持有門檻正在整合驗證；已完成實際 Core→Python→Mac 的完整 Unicode 回報／摘要核對。容量不足、當機歷史回報及後續新 M2 的優先規則一併納入。實際 Mac 管理交易、續簽／修復入口、Wi-Fi 重裝及可攜包接續，尚未提供完整可操作的管理流程或實機證據。

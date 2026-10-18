@@ -32,7 +32,7 @@ public struct NetworkTunnelProbe: TunnelProbing {
     }
 
     #if DEBUG
-    /// A real refused connection for deterministic simulator UI verification.
+    /// A real unreachable endpoint for bounded simulator UI verification.
     /// This does not expose a caller-selected endpoint or manufacture success.
     public static var unavailableUITestProbe: NetworkTunnelProbe {
         NetworkTunnelProbe(host: "127.0.0.1", port: 0, timeout: LocalTunnelEndpoint.timeoutSeconds)

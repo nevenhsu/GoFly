@@ -11,11 +11,7 @@ final class NetworkConnection: TunnelConnection, @unchecked Sendable {
 
     func start(on queue: DispatchQueue, stateUpdate: @escaping @Sendable (TunnelConnectionState) -> Void) {
         connection.stateUpdateHandler = { state in
-            switch state {
-            case .ready: stateUpdate(.ready)
-            case .failed, .waiting: stateUpdate(.unavailable)
-            default: break
-            }
+            if let result = Self.probeState(for: state) { stateUpdate(result) }
         }
         connection.start(queue: queue)
     }
@@ -23,5 +19,17 @@ final class NetworkConnection: TunnelConnection, @unchecked Sendable {
     func cancel() {
         connection.stateUpdateHandler = nil
         connection.cancel()
+    }
+
+    static func probeState(for state: NWConnection.State) -> TunnelConnectionState? {
+        switch state {
+        case .ready: .ready
+        case .failed, .cancelled: .unavailable
+        // LocalDevVPN may still be bringing up its route after app switching.
+        // Keep this connection alive so Network.framework can recover. The
+        // owning ProbeOperation still enforces its original two-second bound.
+        case .waiting: nil
+        default: nil
+        }
     }
 }

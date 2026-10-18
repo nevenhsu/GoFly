@@ -24,7 +24,7 @@ UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 UDID_RE = re.compile(r"(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})\Z")
 TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 HEX64_RE = re.compile(r"[0-9a-f]{64}\Z")
-EXPIRY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z\Z")
+EXPIRY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z\Z")
 
 _COMMON_ERROR_CODES = {
     "invalid-request", "protocol-mismatch", "configuration-invalid",
@@ -41,7 +41,7 @@ _COMMON_ERROR_CODES = {
 }
 SAFE_ERROR_CODES = frozenset(_COMMON_ERROR_CODES | {
     "identity-unverified", "update-unknown", "adoption-unknown",
-    "operation-released", "revision-conflict",
+    "operation-released", "revision-conflict", "receipt-capacity",
 })
 
 _ACTIONS = frozenset({"preflight", "apply", "query", "resume", "release"})
@@ -181,7 +181,7 @@ def _hash(value: Any, *, nullable: bool = False, code: str) -> str | None:
 
 
 def _expiry(value: Any, *, code: str) -> str:
-    if not isinstance(value, str) or EXPIRY_RE.fullmatch(value) is None:
+    if not isinstance(value, str) or len(value) > 40 or EXPIRY_RE.fullmatch(value) is None:
         raise ManagementBridgeError(code)
     try:
         date_part, time_part = value[:-1].split("T", 1)
@@ -201,7 +201,7 @@ def _path(value: Any) -> str | None:
             _invalid()
     except UnicodeError:
         _invalid()
-    if any(ord(char) < 0x20 or ord(char) == 0x7F or unicodedata.category(char) == "Cs" for char in value):
+    if any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in value):
         _invalid()
     if any(part in {"..", ""} for part in value.split("/")[1:]):
         _invalid()
@@ -318,7 +318,8 @@ def decode_request(data: bytes) -> ManagementRequest:
     request_id = _uuid(value.get("requestID"))
     management_id = _uuid(value.get("managementID"))
     selection_id = _uuid(value.get("selectionID"))
-    device_id = _device(value.get("deviceID"))
+    raw_device = value.get("deviceID")
+    device_id = _device(raw_device.strip().lower() if isinstance(raw_device, str) else raw_device)
     kind = value.get("kind")
     transport = value.get("transport")
     action = value.get("action")

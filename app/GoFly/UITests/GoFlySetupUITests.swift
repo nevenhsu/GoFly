@@ -61,6 +61,44 @@ final class GoFlySetupUITests: XCTestCase {
         #endif
     }
 
+    func testFirstLaunchShowsWelcomeWhileCheckingAndEnablesNextWhenReady() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Startup delay fixtures are scoped to the Debug simulator app.")
+        #else
+        let app = launch(fixture: nil, language: nil, delaySetup: true)
+        let next = app.buttons["onboarding.welcome.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        XCTAssertFalse(next.isEnabled)
+        XCTAssertTrue(app.progressIndicators["onboarding.welcome.loading"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["setup.preparing"].exists)
+        XCTAssertFalse(app.buttons["map.serviceControl"].exists)
+        attach(app, name: "setup-welcome-checking")
+
+        let enabled = NSPredicate(format: "enabled == true")
+        expectation(for: enabled, evaluatedWith: next)
+        waitForExpectations(timeout: 15)
+        XCTAssertFalse(app.progressIndicators["onboarding.welcome.loading"].exists)
+        next.tap()
+        XCTAssertTrue(app.buttons["onboarding.location.skip"].waitForExistence(timeout: 5))
+        #endif
+    }
+
+    func testFailedStartupNeverEnablesWelcomeNext() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Formal setup UI fixtures are scoped to the Debug simulator app.")
+        #else
+        let app = launch(fixture: "malformed-input", language: nil, delaySetup: true)
+        let next = app.buttons["onboarding.welcome.next"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        XCTAssertFalse(next.isEnabled)
+        XCTAssertTrue(app.progressIndicators["onboarding.welcome.loading"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["setup.blocked"].waitForExistence(timeout: 15))
+        XCTAssertFalse(next.exists)
+        XCTAssertTrue(app.buttons["setup.retry"].exists)
+        XCTAssertFalse(app.buttons["map.serviceControl"].exists)
+        #endif
+    }
+
     func testFormalLockSmokeAcrossSupportedLocales() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Formal setup UI fixtures are scoped to the Debug simulator app.")
@@ -93,7 +131,8 @@ final class GoFlySetupUITests: XCTestCase {
     private func launch(
         fixture: String?,
         language: (String, String)?,
-        maximumText: Bool = false
+        maximumText: Bool = false,
+        delaySetup: Bool = false
     ) -> XCUIApplication {
         let app = XCUIApplication()
         var arguments = [
@@ -106,6 +145,9 @@ final class GoFlySetupUITests: XCTestCase {
         ]
         if let fixture {
             arguments += ["-gofly-ui-setup-fixture", fixture]
+        }
+        if delaySetup {
+            arguments += ["-gofly-ui-setup-delay"]
         }
         if let (language, locale) = language {
             arguments += ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]

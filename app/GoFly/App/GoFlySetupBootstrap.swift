@@ -15,6 +15,9 @@ enum GoFlySetupBootstrapPhase: Equatable {
     case restoreLocked(TransferRestoreStatus)
     case transferWaiting(GoFlyTransferWaitReason)
     case transferBlocked(TransferFailure)
+    case managementWaiting
+    case managementLocked(ManagementStatus)
+    case managementBlocked(ManagementFailure)
 }
 
 enum GoFlyTransferWaitReason: String, Equatable, Sendable {
@@ -42,17 +45,17 @@ final class GoFlySetupBootstrap: ObservableObject {
     private(set) var runtime: GoFlyRuntimeAssembly?
     private(set) var metadata: GoFlySetupMetadata?
 
-    private var task: Task<Void, Never>?
+    var startupTask: Task<Void, Never>?
     var transferTask: Task<Void, Never>?
     var transferTaskID: UUID?
-    var activeTransferLease: GoFlyTransferLease?
+    var activeDataLease: GoFlyDataLease?
 
     init() {
         start()
     }
 
     deinit {
-        task?.cancel()
+        startupTask?.cancel()
         transferTask?.cancel()
     }
 
@@ -62,7 +65,7 @@ final class GoFlySetupBootstrap: ObservableObject {
     }
 
     private func start() {
-        task?.cancel()
+        startupTask?.cancel()
         // A retry is only available from a blocked state, which cannot have
         // constructed normal owners. Keeping these references here also makes
         // an in-flight export lock independent of SwiftUI view reconstruction.
@@ -79,12 +82,22 @@ final class GoFlySetupBootstrap: ObservableObject {
         #endif
 
         let preferencesStore = GoFlyPreferences.shared.transferStore()
-        task = Task { [weak self] in
+        startupTask = Task { [weak self] in
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("-gofly-ui-setup-delay") {
+                do { try await Task.sleep(for: .seconds(5)) }
+                catch { return }
+            }
+            #endif
             let result = await Task.detached(priority: .utility) {
                 do {
                     guard let support = FileManager.default.urls(
                         for: .applicationSupportDirectory, in: .userDomainMask
                     ).first else { return GoFlyBootstrapOutcome.transferBlocked(.storageUnavailable) }
+                    let managementStore = ManagementStore(applicationSupport: support)
+                    try managementStore.prepareIncomingFiles()
+                    let managementInput = try managementStore.readInput()
+                    let managementStatus = try managementStore.status()
                     let exportStore = TransferExportStore(applicationSupport: support)
                     let restoreStore = TransferRestoreStore(applicationSupport: support)
                     try exportStore.prepareIncomingFiles()
@@ -96,12 +109,69 @@ final class GoFlySetupBootstrap: ObservableObject {
                     let directory = try GoFlySetupPaths.directory()
                     let store = SetupActivationStore(directory: directory)
                     try store.prepareIncomingFiles()
+                    let intent = try restoreStore.readIntent()
+                    var managementTarget: ManagementPreparedTarget?
+                    var preservedProjection: TransferRuntimeProjection?
+                    if let managementInput {
+                        let request = managementInput.request
+                        let current = try GoFlySetupIdentityReader.read()
+                        let formalInput = try store.readInput()
+                        let readback = try store.readReadbackRequest()
+                        let activation = try store.activation()
+                        let targetMetadata = formalInput?.manifest.setupID == request.targetSetupID ||
+                            readback?.setupID == request.targetSetupID ||
+                            activation?.activeSetupID == request.targetSetupID
+                        let sameOperation = managementStatus?.managementID == request.managementID &&
+                            managementStatus?.requestSHA256 == managementInput.rawRequestSHA256
+                        let currentRestore = intent?.targetApp == current &&
+                            (intent?.setupID == activation?.activeSetupID ||
+                             intent?.setupID == formalInput?.manifest.setupID)
+                        if sameOperation, managementStatus?.sourceAdmission == .live,
+                           !targetMetadata, activation?.activeSetupID == request.sourceSetupID,
+                           !(managementStatus?.phase == .released && currentRestore) {
+                            // Re-emit only the persisted source PID/phase after
+                            // a crash. This is historical data, never a fresh
+                            // source admission for this newly launched process.
+                            _ = try managementStore.replaySourceReadback(
+                                currentApp: current, setupStore: store, restoreStore: restoreStore)
+                        }
+                        if targetMetadata, !(sameOperation && managementStatus?.phase == .adopted) {
+                            guard current == request.targetApp else {
+                                return GoFlyBootstrapOutcome.managementBlocked(.identityMismatch)
+                            }
+                            // Capture/recheck the exact predecessor before any
+                            // pairing consumption or formal setup commit. There
+                            // is no await between this gate and prepare below.
+                            managementTarget = try managementStore.prepareTarget(
+                                currentApp: current, setupStore: store, restoreStore: restoreStore)
+                        } else if sameOperation, managementStatus?.phase == .adopted {
+                            if !currentRestore {
+                                preservedProjection = try managementStore.writeAdoptionReadback(
+                                    currentApp: current, setupStore: store, restoreStore: restoreStore,
+                                    preferences: preferencesStore)?.projection
+                            }
+                        } else if sameOperation, managementStatus?.phase == .released {
+                            if !currentRestore {
+                                preservedProjection = try managementStore.releasedSourceProjection(
+                                    currentApp: current, setupStore: store, restoreStore: restoreStore,
+                                    preferences: preferencesStore)
+                            }
+                        } else {
+                            if let managementStatus {
+                                return GoFlyBootstrapOutcome.managementLocked(managementStatus)
+                            }
+                            return GoFlyBootstrapOutcome.managementWaiting
+                        }
+                    } else if let managementStatus,
+                              [.preparing, .ready, .mutationSealed].contains(managementStatus.phase) {
+                        return GoFlyBootstrapOutcome.managementBlocked(.conflict)
+                    }
                     let coordinator = SetupBootstrapCoordinator(
                         store: store,
                         pairing: GoFlySetupPairingAdapter()
                     )
-                    let setup = try coordinator.prepare(identity: GoFlySetupIdentityReader.read)
-                    let intent = try restoreStore.readIntent()
+                    let setup = try coordinator.prepare(identity: GoFlySetupIdentityReader.read,
+                                                        management: managementTarget)
                     if requiresMacSetup, case .ordinaryStartup = setup {
                         return GoFlyBootstrapOutcome.transferWaiting(.setup)
                     }
@@ -117,6 +187,18 @@ final class GoFlySetupBootstrap: ObservableObject {
                     case .blocked(let failure):
                         return GoFlyBootstrapOutcome.blocked(failure)
                     case .completed(let receipt):
+                        if let managementTarget {
+                            let result = try managementStore.adoptTarget(
+                                managementTarget, currentApp: receipt.app, setupStore: store,
+                                restoreStore: restoreStore, preferences: preferencesStore)
+                            _ = try managementStore.writeAdoptionReadback(
+                                currentApp: receipt.app, setupStore: store, restoreStore: restoreStore,
+                                preferences: preferencesStore)
+                            return GoFlyBootstrapOutcome.completed(receipt, result.projection)
+                        }
+                        if let preservedProjection {
+                            return GoFlyBootstrapOutcome.completed(receipt, preservedProjection)
+                        }
                         guard intent != nil else {
                             let projection = try restoreStore.currentProjection()
                             return GoFlyBootstrapOutcome.completed(receipt, projection)
@@ -141,6 +223,8 @@ final class GoFlySetupBootstrap: ObservableObject {
                             }
                         }
                     }
+                } catch let failure as ManagementFailure {
+                    return GoFlyBootstrapOutcome.managementBlocked(failure)
                 } catch let failure as SetupFailure {
                     return GoFlyBootstrapOutcome.blocked(failure)
                 } catch let failure as TransferFailure {
@@ -161,6 +245,7 @@ final class GoFlySetupBootstrap: ObservableObject {
             runtime = GoFlyRuntimeAssembly(projection: projection)
             phase = .ordinaryStartup
         case .completed(let receipt, let projection):
+            GoFlyPreferences.shared.refreshPersistedValues()
             runtime = GoFlyRuntimeAssembly(projection: projection)
             metadata = GoFlySetupMetadata(receipt: receipt)
             phase = .completed(receipt)
@@ -181,6 +266,12 @@ final class GoFlySetupBootstrap: ObservableObject {
             phase = .transferWaiting(reason)
         case .transferBlocked(let failure):
             phase = .transferBlocked(failure)
+        case .managementWaiting:
+            phase = .managementWaiting
+        case .managementLocked(let status):
+            phase = .managementLocked(status)
+        case .managementBlocked(let failure):
+            phase = .managementBlocked(failure)
         }
     }
 
@@ -200,9 +291,17 @@ final class GoFlySetupBootstrap: ObservableObject {
 }
 
 extension GoFlySetupBootstrapPhase {
+    var isManagementLocked: Bool {
+        switch self {
+        case .managementWaiting, .managementLocked, .managementBlocked: return true
+        default: return false
+        }
+    }
+
     var isTransferLocked: Bool {
         switch self {
-        case .exportLocked, .restoreLocked, .transferWaiting, .transferBlocked: return true
+        case .exportLocked, .restoreLocked, .transferWaiting, .transferBlocked,
+             .managementWaiting, .managementLocked, .managementBlocked: return true
         default: return false
         }
     }
@@ -218,6 +317,9 @@ private enum GoFlyBootstrapOutcome: Sendable {
     case restoreWaiting(TransferRestoreStatus)
     case transferWaiting(GoFlyTransferWaitReason)
     case transferBlocked(TransferFailure)
+    case managementWaiting
+    case managementLocked(ManagementStatus)
+    case managementBlocked(ManagementFailure)
 }
 
 enum GoFlySetupIdentityReader {
@@ -568,6 +670,7 @@ struct GoFlySetupLockView: View {
         case .blocked: return "setup.blocked.title"
         case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer.title"
         case .transferBlocked: return "setup.blocked.title"
+        case .managementWaiting, .managementLocked, .managementBlocked: return "setup.management.title"
         }
     }
 
@@ -580,6 +683,7 @@ struct GoFlySetupLockView: View {
         case .blocked(let failure): return failure.messageKey
         case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer.message"
         case .transferBlocked: return "setup.blocked.storage"
+        case .managementWaiting, .managementLocked, .managementBlocked: return "setup.management.message"
         }
     }
 
@@ -600,6 +704,7 @@ struct GoFlySetupLockView: View {
         case .blocked: return "setup.blocked"
         case .exportLocked, .restoreLocked, .transferWaiting: return "setup.transfer"
         case .transferBlocked: return "setup.blocked"
+        case .managementWaiting, .managementLocked, .managementBlocked: return "setup.management"
         }
     }
 }

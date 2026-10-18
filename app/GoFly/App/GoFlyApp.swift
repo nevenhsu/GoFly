@@ -22,6 +22,11 @@ struct GoFlyApp: App {
                     GoFlyTransferLockView(phase: bootstrap.phase)
                 } else if let runtime = bootstrap.runtime {
                     normalRuntimeView(runtime)
+                } else if !onboardingComplete, bootstrap.phase == .preparing {
+                    NavigationStack {
+                        GoFlyWelcomeView(isPreparing: true, onNext: {})
+                    }
+                    .tint(GoFlyStyle.primary)
                 } else {
                     GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
                 }
