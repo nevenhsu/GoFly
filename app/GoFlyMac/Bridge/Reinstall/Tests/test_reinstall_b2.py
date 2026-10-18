@@ -7,6 +7,7 @@ import plistlib
 import shutil
 import hashlib
 import json
+import copy
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -14,7 +15,7 @@ import sys
 sys.path.insert(0, str(PACKAGE_ROOT))
 
 from Reinstall.reinstall_adapters import ExportReadback, InstallObservation, SourceAppIdentity  # noqa: E402
-from Reinstall.reinstall_journal import ReinstallJournalStore  # noqa: E402
+from Reinstall.reinstall_journal import ReinstallJournalStore, is_completed_journal  # noqa: E402
 from Reinstall.reinstall_producer import ReinstallProducer  # noqa: E402
 from Reinstall.reinstall_protocol import ReinstallBridgeError, ReinstallOptions, ReinstallRequest  # noqa: E402
 from Setup.setup_adapters import (  # noqa: E402
@@ -330,6 +331,11 @@ class ReinstallB2Tests(unittest.TestCase):
             result = ReinstallProducer(config, device=device, artifact_validator=ArtifactValidator(artifact), validator=validator).apply(request(transfer, options))
             self.assertEqual(result.stage, "complete")
             self.assertTrue(result.proof["backupValidated"] if "backupValidated" in result.proof else False)
+            completed = ReinstallJournalStore(config.state_root).read()
+            self.assertTrue(is_completed_journal(completed))
+            unknown_artifact = copy.deepcopy(completed)
+            unknown_artifact["stages"]["artifact"] = {"state": "unknown"}
+            self.assertFalse(is_completed_journal(unknown_artifact))
             self.assertEqual(device.uninstall_calls, 1)
             self.assertEqual(device.copy_calls, [config.state_root / "reinstall-transactions" / transfer / "backup"])
             self.assertLess(device.calls.index("publish_restore_intent"), device.calls.index("launch"))

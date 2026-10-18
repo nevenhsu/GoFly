@@ -51,6 +51,7 @@ public final class MacAppModel {
     private enum PendingCheckAction { case mode(Bool), scenario }
     @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
     @ObservationIgnored private var backupMaintenanceStarted = false
+    @ObservationIgnored private var backupMaintenanceReinstallID: UUID?
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil,
                 backups: MacBackupModel? = nil) {
@@ -94,8 +95,8 @@ public final class MacAppModel {
 
     public func finishReinstall() async {
         guard !busy, reinstall?.snapshot?.isComplete == true || reinstall?.snapshot?.isAbandoned == true else { return }
+        let completedID = reinstall?.snapshot?.isComplete == true ? reinstall?.continuation?.transferID : nil
         reinstall?.resetSelection()
-        backupMaintenanceStarted = false
         // When M2 was restored first, M1 has not reopened the predecessor
         // which M2 may archive. Read its actual current journal only now.
         await setup?.restore()
@@ -108,6 +109,7 @@ public final class MacAppModel {
             inspection = nil
             page = .home
         }
+        maintainBackupsIfIdle(completedReinstallID: completedID)
     }
     public var ready: Bool { environment?.ready == true && !busy }
     public var selected: ConnectedDevice? {
@@ -239,9 +241,16 @@ public final class MacAppModel {
     }
 
     public func maintainBackupsIfIdle() {
-        guard !isPreview, !busy, !setupLocksDevice, !backupMaintenanceStarted,
-              let backups else { return }
+        let completedID = reinstall?.snapshot?.isComplete == true ? reinstall?.continuation?.transferID : nil
+        maintainBackupsIfIdle(completedReinstallID: completedID)
+    }
+
+    private func maintainBackupsIfIdle(completedReinstallID: UUID?) {
+        guard !isPreview, !busy, !setupLocksDevice, let backups else { return }
+        guard !backupMaintenanceStarted ||
+            (completedReinstallID != nil && completedReinstallID != backupMaintenanceReinstallID) else { return }
         backupMaintenanceStarted = true
+        if let completedReinstallID { backupMaintenanceReinstallID = completedReinstallID }
         backups.maintain()
     }
 

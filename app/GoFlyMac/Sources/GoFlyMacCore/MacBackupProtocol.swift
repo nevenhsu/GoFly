@@ -34,7 +34,7 @@ public enum MacBackupFailure: Error, Equatable, Sendable {
         case .invalidRequest, .invalidResponse: return "回覆未通過固定格式、身分或資料界線檢查。"
         case .service(let code):
             switch code {
-            case "busy": return "目前仍有未完成的 M1/M2 裝置操作；列表可讀取，維護與刪除會在操作完成後開放。"
+            case "busy": return "目前仍有未完成的裝置操作；列表可讀取，維護與刪除會在操作完成後開放。"
             case "backup-not-complete": return "只有已完成且再次核對來源的備份可以刪除。"
             case "backup-changed": return "原始交易或備份內容與記錄不符，已停止後續刪除。"
             case "configuration-invalid": return "請重新建立正式 Mac App bundle 後再試。"

@@ -1,6 +1,6 @@
 """Local M3 backup manager bridge."""
 
-from .catalog import BackupCatalog, BackupManager, BackupProducer, validate_catalog
+from .catalog import BackupCatalog, BackupManager, validate_catalog
 from .protocol import (
     BackupBridgeError,
     BackupRequest,
@@ -14,7 +14,6 @@ __all__ = [
     "BackupBridgeError",
     "BackupCatalog",
     "BackupManager",
-    "BackupProducer",
     "validate_catalog",
     "BackupRequest",
     "PROTOCOL",

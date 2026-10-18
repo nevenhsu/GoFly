@@ -25,11 +25,13 @@ from typing import Any, Callable, Iterator, Mapping
 
 try:
     from ..Reinstall.reinstall_adapters import PinnedReinstallDeviceAdapter
-    from ..Reinstall.reinstall_journal import MAX_JOURNAL_BYTES, validate_journal
+    from ..Reinstall.reinstall_adapters import MAX_BACKUP_BYTES
+    from ..Reinstall.reinstall_journal import MAX_JOURNAL_BYTES, is_completed_journal, is_terminal_journal, validate_journal
     from ..Setup.setup_protocol import normalized_device
 except ImportError:  # direct execution from the packaged Backup directory
     from Reinstall.reinstall_adapters import PinnedReinstallDeviceAdapter
-    from Reinstall.reinstall_journal import MAX_JOURNAL_BYTES, validate_journal
+    from Reinstall.reinstall_adapters import MAX_BACKUP_BYTES
+    from Reinstall.reinstall_journal import MAX_JOURNAL_BYTES, is_completed_journal, is_terminal_journal, validate_journal
     from Setup.setup_protocol import normalized_device
 
 from .protocol import BackupBridgeError
@@ -530,33 +532,11 @@ def _read_source_at(parent_fd: int, name: str, *, current: bool, path: Path) -> 
 
 
 def _is_complete(journal: Mapping[str, Any]) -> bool:
-    try:
-        stages = journal["stages"]
-        proof = journal["proof"]
-        if journal.get("outcome") != "confirmed" or stages["complete"]["state"] != "confirmed":
-            return False
-        if set(proof) != {
-            "backupValidated", "sourceSealed", "removalConfirmed", "installationConfirmed",
-            "pairingImported", "supportObserved", "restoreCommitted",
-        } or not all(proof[key] is True for key in proof):
-            return False
-        if stages["restoreReceipt"]["state"] != "confirmed" or not isinstance(journal.get("restoreReceipt"), Mapping):
-            return False
-        if stages["backup"]["state"] != "confirmed" or not isinstance(journal.get("backup"), Mapping):
-            return False
-        return isinstance(journal.get("rawManifestSHA256"), str) and HEX64_RE.fullmatch(journal["rawManifestSHA256"]) is not None
-    except (KeyError, TypeError, AttributeError):
-        return False
+    return is_completed_journal(journal)
 
 
 def _is_terminal(journal: Mapping[str, Any]) -> bool:
-    try:
-        stages = journal["stages"]
-        return journal.get("outcome") == "confirmed" and (
-            stages["complete"]["state"] == "confirmed" or stages["abandon"]["state"] == "confirmed"
-        )
-    except (KeyError, TypeError, AttributeError):
-        return False
+    return is_terminal_journal(journal)
 
 
 def _categories(journal: Mapping[str, Any]) -> list[str]:
@@ -784,7 +764,64 @@ def _open_tree_optional(root: _RootHandle, transfer_id: str) -> _TreeHandles | N
                         os.close(fd)
 
 
-def _scan_tree(handles: _TreeHandles, expected_files: set[str], categories: list[str], *, require_complete: bool = False) -> bytes | None:
+def _verify_payload_fd(
+    parent_fd: int,
+    name: str,
+    expected_size: int,
+    expected_sha: str,
+    *,
+    allow_missing: bool = False,
+) -> bool:
+    """Stream one listed payload through its retained parent descriptor."""
+    if type(expected_size) is not int or expected_size <= 0 or expected_size > MAX_BACKUP_BYTES or HEX64_RE.fullmatch(expected_sha) is None:
+        raise _error("backup-changed")
+    fd: int | None = None
+    try:
+        try:
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_fd)
+        except FileNotFoundError:
+            if allow_missing:
+                return False
+            raise
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or info.st_nlink != 1
+            or stat.S_IMODE(info.st_mode) != PRIVATE_FILE_MODE
+            or info.st_size != expected_size
+        ):
+            raise OSError("unsafe payload")
+        digest = hashlib.sha256()
+        remaining = expected_size
+        while remaining:
+            chunk = os.read(fd, min(64 * 1024, remaining))
+            if not chunk:
+                raise OSError("short payload")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        if os.read(fd, 1):
+            raise OSError("payload grew")
+        final = os.fstat(fd)
+        if final.st_size != expected_size or final.st_nlink != 1 or digest.hexdigest() != expected_sha:
+            raise OSError("payload changed")
+        return True
+    except OSError:
+        raise _error("backup-changed") from None
+    finally:
+        if fd is not None:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+
+
+def _scan_tree(
+    handles: _TreeHandles,
+    expected_files: set[str],
+    categories: list[str],
+    *,
+    expected_artifacts: Mapping[str, tuple[int, str]] | None = None,
+    require_complete: bool = False,
+) -> bytes | None:
     """Scan through retained FDs before deleting anything.
 
     The returned manifest is the exact original bytes.  Every unexpected
@@ -835,6 +872,13 @@ def _scan_tree(handles: _TreeHandles, expected_files: set[str], categories: list
                 continue
             if relative not in expected_files:
                 raise _error("backup-changed")
+            if expected_artifacts is not None:
+                expected = expected_artifacts.get(relative)
+                if expected is None:
+                    raise _error("backup-changed")
+                present = _verify_payload_fd(fd, name, expected[0], expected[1], allow_missing=not require_complete)
+                if not present:
+                    continue
             handles.files.append((fd, name, relative))
             seen_files.add(relative)
 
@@ -873,6 +917,23 @@ def _fsync_fd(fd: int) -> None:
         os.fsync(fd)
     except OSError:
         raise _error("operation-failed") from None
+
+
+def _artifact_expectations(manifest: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise _error("backup-changed")
+    result: dict[str, tuple[int, str]] = {}
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            raise _error("backup-changed")
+        path = item.get("path")
+        size = item.get("byteCount")
+        digest = item.get("sha256")
+        if not isinstance(path, str) or type(size) is not int or not isinstance(digest, str) or path in result:
+            raise _error("backup-changed")
+        result[path] = (size, digest)
+    return result
 
 
 def _remove_empty_recovery(root: _RootHandle | Path, transfer_id: str, categories: list[str]) -> None:
@@ -940,25 +1001,47 @@ def _delete_payload(
     if not isinstance(root, _RootHandle):
         with _RootHandle.open(Path(root)) as retained:
             return _delete_payload(retained, source, manifest_raw, manifest, require_complete=require_complete)
-    artifacts = manifest.get("artifacts")
-    expected_files = {item["path"] for item in artifacts} if isinstance(artifacts, list) else set()
+    expected_artifacts = _artifact_expectations(manifest)
+    expected_files = set(expected_artifacts)
     categories = _categories(source.journal)
     handles = _open_tree(root, source.transfer_id)
     try:
-        scanned_manifest = _scan_tree(handles, expected_files, categories, require_complete=require_complete)
+        scanned_manifest = _scan_tree(
+            handles,
+            expected_files,
+            categories,
+            expected_artifacts=expected_artifacts,
+            require_complete=require_complete,
+        )
         if scanned_manifest is None or scanned_manifest != manifest_raw:
             raise _error("backup-changed")
         if hashlib.sha256(scanned_manifest).hexdigest() != source.journal.get("rawManifestSHA256"):
             raise _error("backup-changed")
         # The scan completed before mutation.  Remove payload files and flush
         # each containing directory, retaining manifest.json until the end.
-        for parent_fd, name, _relative in handles.files:
+        for parent_fd, name, relative in handles.files:
             try:
+                expected = expected_artifacts.get(relative)
+                if expected is None:
+                    raise _error("backup-changed")
+                # Revalidate immediately before unlink so a payload changed
+                # after the initial inventory scan is never removed.
+                present = _verify_payload_fd(
+                    parent_fd,
+                    name,
+                    expected[0],
+                    expected[1],
+                    allow_missing=not require_complete,
+                )
+                if not present:
+                    continue
                 info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
                 if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != PRIVATE_FILE_MODE:
                     raise _error("backup-changed")
                 os.unlink(name, dir_fd=parent_fd)
             except FileNotFoundError:
+                if require_complete:
+                    raise _error("backup-changed") from None
                 continue
             except BackupBridgeError:
                 raise
@@ -1000,11 +1083,17 @@ def _delete_payload(
 
 def _validate_payload_inventory(root: _RootHandle, source: _Source, manifest_raw: bytes, manifest: Mapping[str, Any]) -> None:
     """Close the manifest inventory before admitting a new deletion intent."""
-    artifacts = manifest.get("artifacts")
-    expected_files = {item["path"] for item in artifacts} if isinstance(artifacts, list) else set()
+    expected_artifacts = _artifact_expectations(manifest)
+    expected_files = set(expected_artifacts)
     handles = _open_tree(root, source.transfer_id)
     try:
-        scanned_manifest = _scan_tree(handles, expected_files, _categories(source.journal), require_complete=True)
+        scanned_manifest = _scan_tree(
+            handles,
+            expected_files,
+            _categories(source.journal),
+            expected_artifacts=expected_artifacts,
+            require_complete=True,
+        )
         if scanned_manifest != manifest_raw or hashlib.sha256(scanned_manifest or b"").hexdigest() != source.journal.get("rawManifestSHA256"):
             raise _error("backup-changed")
     finally:
@@ -1383,6 +1472,4 @@ class BackupManager:
         raise _error("invalid-request")
 
 
-BackupProducer = BackupManager
-
-__all__ = ["BackupCatalog", "BackupManager", "BackupProducer", "CATALOG_NAME", "MAX_ENTRIES", "validate_catalog"]
+__all__ = ["BackupCatalog", "BackupManager", "CATALOG_NAME", "MAX_ENTRIES", "validate_catalog"]

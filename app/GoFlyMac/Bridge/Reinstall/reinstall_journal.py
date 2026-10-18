@@ -47,6 +47,7 @@ _STAGES = (
     "destructiveIntent", "sourceSeal", "sourceStop", "uninstall", "install",
     "setup", "restoreDelivery", "restoreReceipt", "finalSupport", "complete", "abandon",
 )
+_FORWARD_STAGES = tuple(name for name in _STAGES if name not in {"abandonIntent", "abandon"})
 _STATES = frozenset({"pending", "inflight", "confirmed", "unknown", "failed"})
 _TOP_LEVEL = {
     "version", "operation", "transferID", "deviceID", "dataSetID", "nonce", "setupID",
@@ -476,6 +477,35 @@ def validate_journal(value: Any) -> None:
         raise SetupBridgeError("storage-unavailable")
 
 
+def is_completed_journal(value: Mapping[str, Any]) -> bool:
+    """Return true only for a validated, genuinely completed M2 journal.
+
+    ``validate_journal`` supplies the proof, receipt, identity, and schema
+    checks.  Completion additionally requires every forward stage to be
+    confirmed; the two abandonment-only stages are deliberately excluded.
+    """
+    try:
+        validate_journal(value)
+        stages = value["stages"]
+        return value.get("outcome") == "confirmed" and all(
+            stages[name]["state"] == "confirmed" for name in _FORWARD_STAGES
+        )
+    except (KeyError, TypeError, AttributeError, SetupBridgeError):
+        return False
+
+
+def is_terminal_journal(value: Mapping[str, Any]) -> bool:
+    """Return true for a completed journal or a validated safe abandonment."""
+    try:
+        validate_journal(value)
+        if is_completed_journal(value):
+            return True
+        stages = value["stages"]
+        return value.get("outcome") == "confirmed" and stages["abandon"]["state"] == "confirmed"
+    except (KeyError, TypeError, AttributeError, SetupBridgeError):
+        return False
+
+
 def _new_journal(transfer_id: str, device_id: str, *, data_set_id: str, nonce: str, setup_id: str, known_source: Mapping[str, Any], options: Mapping[str, Any], predecessor: Mapping[str, Any] | None = None) -> dict[str, Any]:
     stages = {name: {"state": "pending"} for name in _STAGES}
     return {
@@ -625,11 +655,7 @@ class ReinstallJournalStore:
     def archive_completed(self, journal: Mapping[str, Any]) -> Path:
         value = copy.deepcopy(dict(journal))
         validate_journal(value)
-        terminal = value["outcome"] == "confirmed" and (
-            value["stages"]["complete"]["state"] == "confirmed"
-            or value["stages"]["abandon"]["state"] == "confirmed"
-        )
-        if not terminal:
+        if not is_terminal_journal(value):
             raise SetupBridgeError("transaction-unknown")
         parent = self.root / HISTORY_DIRECTORY
         _private_root(parent, create=True)
@@ -652,4 +678,7 @@ class ReinstallJournalStore:
         return destination
 
 
-__all__ = ["MAX_HISTORY", "MAX_JOURNAL_BYTES", "ReinstallJournalStore", "validate_journal"]
+__all__ = [
+    "MAX_HISTORY", "MAX_JOURNAL_BYTES", "ReinstallJournalStore", "is_completed_journal",
+    "is_terminal_journal", "validate_journal",
+]

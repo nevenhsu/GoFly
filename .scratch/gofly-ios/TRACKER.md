@@ -39,3 +39,5 @@
 票 15 實作／離線交付完成：基準703309e／build17，v2 經 Advisor 第2輪核准。正式 App 的完整 ID 註冊、固定256次嘗試界線、真實 ACK／明確意圖與原子背景資格門檻已接入；Core386＋Transport9共395PASS、未簽署 SDK27.1 device／simulator（arm64／x86_64）建置及單一 Scene／352key資源讀回通過，兩軸無剩餘 finding。完整 UI 45／45 PASS（runner 2105.041s；wall 2127.022s），審查修正後背景 UI 2／2、三語最大字級與淺色單項通過，皆零 runtime warning，Root 完成畫面核對。手機、真實 scheduler 與接收端集中最後驗收；可依序進入票16。
 
 票16實作／離線驗證完成：基準c606081、產品來源51b8fb8／build18；Core397＋Transport9共406PASS、雙SDK27.1未簽署建置、414key三語／格式／bundle、native verifier及兩軸零finding通過。完整UI成功覆蓋60個不同case：初次24PASS／1快照競態FAIL／1取消，throwing單一快照helper修正後單項1PASS，其餘35／35PASS；零skip／runtime warning。Root比對來源case集合無重疊／遺漏，保留原始失敗與取消，不稱原run60／60。獨立封存來源與binary雜湊已保存，M1未編譯來源不混入。手機集中最後驗收；可繼續M1／M2／17。
+
+M2／17 軟體與離線整合完成：checkpoint `cdc2203`、iOS build20、USB同機重裝與iOS匯出／O10／還原已接入，具體審查問題關閉，精確檢查與重驗紀錄見[M2票](issues/M2-reinstall.md)。票狀態verification-pending、Implementation complete，手機仍deferred-by-user。M3本機備份與LocalDevVPN查詢已接入；續簽、修復、Wi-Fi寫入與可攜DMG仍開發中，整體目標未完成。

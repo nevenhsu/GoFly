@@ -56,7 +56,7 @@ open work/gofly-mac/GoFly.app
 
 This creates a local development app, not a portable DMG. Its generated configuration contains local workspace and Python paths. It has no release signing or notarization. Read-only device checks use the existing `work/mac-setup-env/bin/python` environment; without that environment, you can still view the interface preview. The app does not install dependencies automatically.
 
-The Mac GUI cannot currently sign, install, re-pair, re-sign, back up, or reinstall an iPhone app. Preview success uses sample data and does not prove a device operation happened.
+The development Mac GUI implements formal GoFly USB first installation, selected-data same-device reinstallation, and local backup management. These flows have local/controlled-boundary checks; final iPhone acceptance is deferred. Re-signing, pairing repair, Wi-Fi writes, and the portable DMG remain in development. Preview success uses sample data and does not prove a device operation happened.
 
 For a separate **LocalGo prototype** experiment, follow the [Mac setup CLI guide](app/LocalGo/MacSetup/README.md). That tool can perform real USB signing/installation when explicitly executed. It targets `com.neven.localgo`, not the new GoFly app (`com.neven.gofly`). The prototype still prepares/downloads device support on the phone and therefore does not meet the planned GoFly installation-completion requirement.
 
@@ -88,7 +88,7 @@ Verify each result and report completed steps, pending manual steps, and blocker
 | --- | --- |
 | No DMG download | The DMG release is pending. Use the source preview; do not substitute a third-party installer. |
 | No iPhone detected | Check the USB data cable, unlock/trust state, Xcode device support, and selected device. |
-| Install/re-sign button is disabled | This is expected in the current read-only Mac version. Use previews for discussion. |
+| Install/re-sign button is disabled | Check the environment, selected device, and pending transaction. Re-signing is still in development; previews do not perform writes. |
 | The iPhone app no longer opens | Check the actual signing expiry and return to the applicable Mac signing workflow. Developer Mode does not extend signing. |
 | LocalDevVPN shows connected but GoFly cannot continue | Verify the actual VPN channel. The design provides connection checks and a channel reset after location sending has stopped; the connected label alone is not proof. |
 | A write operation is interrupted | Inspect the same device and transaction before retrying. Report uncertain results and preserve existing data. |

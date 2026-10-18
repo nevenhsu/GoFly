@@ -4,9 +4,11 @@
 
 使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
 
-原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。M1 已實作正式 `com.neven.gofly` 首次安裝；裝置管理、重新簽名、重裝與備份頁的預覽不代表這些功能已交付。自動續簽與 Wi-Fi 重裝仍不在 M1 範圍。
+原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。已接入正式 `com.neven.gofly` 首次安裝、USB 同機重裝與本機備份管理。自動／手動續簽、配對修復、Wi-Fi 寫入與可攜 DMG 仍在開發；完整 Mac 目標尚未完成。
 
-M2 正式同機重裝已接入 Mac 介面、交易與驗證器，iOS 匯出／還原整合仍在進行；尚不宣稱跨端完成。開發以 MVP 主要流程為優先，沿用既有檢查，只補阻斷流程與資料遺失風險的必要驗證。
+M2 已接入 Mac 介面、持久交易、共用驗證器、實際裝置 adapter 與 iOS 匯出／還原。受控跨端資料及模擬器啟動檢查已通過，真實手機移除、安裝與還原仍待集中驗收。開發以 MVP 主要流程為優先，沿用既有檢查，只補阻斷流程與資料遺失風險的必要驗證。
+
+本機備份頁依實際原交易列出完成／未完成及裝置身分。完成匯入的備份從首次維護確認起至少保留七天，未完成不自動刪除；提前刪除須逐筆確認。清理中斷可接續，刪除只影響本機副本。待匯入的「繼續原交易」回到原 M2 頁面，核對原手機後才可明確續行。
 
 ## 正式首次安裝（M1）
 
@@ -53,7 +55,7 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
   -s app/LocalGo/MacSetup/Tests
 ```
 
-M1 的 Mac Swift 37 項通過，最終 Python 交易／支援檢查數量見 M1 票。Swift 測試涵蓋環境門檻、USB 去重、裝置身分核對、過期／錯誤回覆、取消與程序逾時、過量輸出、預覽／真實隔離。Python 測試核對唯讀 allowlist、既有 venv、非配對式身分檢查及依賴失敗。測試假資料不代表真機驗收。
+目前 Mac Swift 68 項、M1 Python 57 項、M2 Python 51 項、唯讀 bridge 14 項及本機備份 4 項通過。另以暫存私密檔案核對備份確認刪除、七天清理、中斷接續與未完成保留；實際打包入口在隔離 HOME 下讀取空備份清單。打包的共用驗證工具已核對有效封包及拒絕流程，26 個 bundle 資源雜湊符合。iOS 未簽署建置及 4 項首次流程模擬器檢查通過；這些均非真機驗收。
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 

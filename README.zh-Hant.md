@@ -56,7 +56,7 @@ open work/gofly-mac/GoFly.app
 
 這會建立本機開發 App，並非可攜式 DMG。生成設定含本機工作目錄與 Python 路徑，未做發行簽署或 notarization。唯讀裝置檢查使用既有 `work/mac-setup-env/bin/python` 環境；沒有該環境仍可查看介面預覽，App 不會自動安裝依賴。
 
-現有 Mac GUI 尚不能簽署、安裝、重新配對、重新簽名、備份或重裝 iPhone App。預覽成功使用示意資料，不代表裝置已執行操作。
+開發版 Mac GUI 已實作正式 GoFly USB 首次安裝、所選資料同機重裝與本機備份管理，通過本機／受控邊界檢查，手機集中驗收仍待進行。重新簽名、配對修復、Wi-Fi 寫入與可攜 DMG 仍在開發。預覽成功使用示意資料，不代表裝置已執行操作。
 
 若要另外進行 **LocalGo prototype** 實驗，請讀 [Mac 設定 CLI 說明](app/LocalGo/MacSetup/README.md)。該工具在明確執行時會真正透過 USB 簽署／安裝，目標為 `com.neven.localgo`，不是新版 GoFly 的 `com.neven.gofly`。Prototype 仍在手機準備／下載裝置支援資料，尚未符合 GoFly 預定的安裝完成條件。
 
@@ -87,7 +87,7 @@ LocalGo prototype 實驗時才使用舊工具。Apple 登入、雙重認證、�
 | --- | --- |
 | 找不到 DMG | DMG 尚待發行；可從原始碼開啟預覽，不以第三方安裝包替代。 |
 | 找不到 iPhone | 檢查 USB 資料線、解鎖／信任狀態、Xcode 裝置支援及選取的手機。 |
-| 安裝／重新簽名按鈕停用 | 現有唯讀 Mac 版本的正常限制，可用預覽討論流程。 |
+| 安裝／重新簽名按鈕停用 | 核對環境、所選裝置與待續交易；重新簽名仍在開發，預覽不會寫入裝置。 |
 | 手機 App 無法開啟 | 核對實際簽署到期時間，回適用的 Mac 簽署流程處理；開發者模式不會延長簽名。 |
 | LocalDevVPN 已連線，GoFly 仍無法繼續 | 核對實際 VPN 通道。設計提供連線檢查，停止送點後可重置通道；Connected 外觀不能代替實測。 |
 | 寫入途中中斷 | 先核對同一裝置與本次交易，再決定是否重試；結果不明須如實回報並保留資料。 |

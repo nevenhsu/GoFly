@@ -1,12 +1,12 @@
 # M2：同機重新安裝與所選資料保留
 
-**Status:** in-progress
+**Status:** verification-pending
 
-**Implementation:** in-progress
+**Implementation:** complete（USB 同機重裝 MVP；手機待驗）
 
 **Device verification:** deferred-by-user（全部開發完成後集中手機驗收）。
 
-**Blocked by:** M1 軟體門檻已於 a116a3c 完成；實機延後不阻擋開發。完整 v8 與來源／接收／交易介面已核准，依序實作中。
+**Blocked by:** M1 軟體門檻已於 a116a3c 完成；實機延後不阻擋開發。完整 v8 與來源／接收／交易介面已核准並接入正式程式。
 
 **What to build:** 使用者在 Mac 明確選取最愛、路線、設定後，先取得 iOS 已停止且實際 clear 確認的安全資料快照；Mac 完整驗證、同步並重新讀回備份後，才允許同機移除及重新安裝。iPhone 在所有所選類別、簽署／準備資料與新本機復原記錄完成前保持 O10 鎖定。
 
@@ -18,8 +18,8 @@
 - [ ] 舊 App 沒有接收器時顯示需要先更新，保留原 App／資料；不宣稱有替代無損更新能力。未決 M1 阻擋 M2，不改寫未知安裝擁有權。
 - [ ] 本分段先完成 USB 同機重裝；自動續簽、Wi-Fi、配對修復、備份管理及可攜 Mac 發佈包接續於完整 Mac 開發範圍，不因本分段排除而取消。跨裝置移轉、prototype 搬遷與 iOS 下載／U19 仍不在範圍。
 
-**Implementation record:** 基礎資料格式、來源快照、協定及八個 owner 鎖定已完成分段檢查。Mac 正式重裝頁、私密交易、共用驗證器與實際裝置 adapter 已接入；checkpoint `36a51e6` 保存當時所有變更，既有 Mac67、Python Reinstall47及 M1 Python57項通過。其後修正 Swift 完整還原收據與 Python 接收格式差異，Reinstall48項通過。iOS 啟動／匯出／還原串接與持久化續傳修正正並行完成；跨語言實際收據、最終 App 建置及端到端整合仍待核對。以上均為本機與受控邊界證據，不代表手機上的移除、安裝或還原結果。
+**Implementation record:** Mac 正式重裝頁、私密交易、共用 Swift 驗證器、實際裝置 adapter 及 iOS 匯出／還原／O10 已整合。checkpoint `cdc2203` 保存主要來源。來源同步鎖定八個 owner 與偏好、preparing 失敗保留鎖、無快照取消不寫 Session、逐個解除鎖的可重試流程、完整還原收據跨語言格式、移除前重新驗備份、封存 PID 綁定及最後新觀察支援均已修正，Standards／Spec 的具體問題已複查關閉。App build 20 的 device／simulator 未簽署建置與既有首次流程 UI 4項通過；Core XCTest77項通過，Swift Testing 首次併發執行有時間等待失敗，改用既有序列執行後412項通過，最後儲存修正12項重驗通過。Mac67、M1 Python57、M2 Python51及唯讀 bridge14項通過。實際 Swift 完整收據由 Python decoder 接受且竄改被拒；實際打包驗證器的有效封包與4項拒絕流程、26個 bundle 雜湊亦核對通過。沒有操作、簽署、安裝或移除手機；上述是離線／受控邊界證據，真實跨端交易留集中驗收。
 
 **Verification:** 依使用者最新指示，先完成 MVP，沿用現有檢查驗證主要流程；僅針對阻斷流程或資料遺失風險補必要檢查，不擴大測試矩陣。核對跨語言實際資料、受控流程與未簽署建置；最終軟體結果另記，真實同機重裝與接收 App 效果留集中驗收。
 
-**Architecture review:** 第五輪 v5 回覆 PLAN_REVISE：備份失敗後若解除鎖定，後續取消可能以舊 cutline 覆寫新草稿／Session checkpoint。使用者已明確授權重新審查，新流程第3／5輪核准完整 v8：先原子提交 preparing 鎖；備份失敗保持鎖定；孤立 cutline 沒有回復／seed 權限。Root 已放行持久化與 producer 實作，App 整合接續。具體修正與原始 finding 見[未核准報告](../../../work/gofly-ios/research/m2-17-v5-nonapproval.md)。原 v5 未核准歷史不變；v8 設計核准不代表 M2 實作或實機驗收完成。
+**Architecture review:** 第五輪 v5 回覆 PLAN_REVISE：備份失敗後若解除鎖定，後續取消可能以舊 cutline 覆寫新草稿／Session checkpoint。使用者已明確授權重新審查，新流程第3／5輪核准完整 v8：先原子提交 preparing 鎖；備份失敗保持鎖定；孤立 cutline 沒有回復／seed 權限。Root 已依核准介面完成持久化、producer 與 App 整合。具體修正與原始 finding 見[未核准報告](../../../work/gofly-ios/research/m2-17-v5-nonapproval.md)。原 v5 未核准歷史不變；v8 設計核准不代表 M2 實作或實機驗收完成。

@@ -37,7 +37,7 @@ from .reinstall_adapters import (
     SwiftTransferValidator,
     TransferValidator,
 )
-from .reinstall_journal import ReinstallJournalStore
+from .reinstall_journal import ReinstallJournalStore, is_completed_journal, is_terminal_journal
 from .reinstall_protocol import CATEGORY_ORDER, ReinstallBridgeError, ReinstallOptions, ReinstallRequest
 
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -1323,7 +1323,7 @@ class ReinstallProducer:
 
     def _payload_from_journal(self, journal: Mapping[str, Any]) -> ReinstallPayload:
         stages = journal["stages"]
-        if journal.get("outcome") == "confirmed" and stages["complete"]["state"] == "confirmed":
+        if is_completed_journal(journal):
             stage, outcome = "complete", "confirmed"
         elif stages["abandon"]["state"] == "confirmed":
             stage, outcome = "abandon", "confirmed"
@@ -1429,7 +1429,7 @@ class ReinstallProducer:
 
     @staticmethod
     def _terminal(journal: Mapping[str, Any]) -> bool:
-        return journal.get("outcome") == "confirmed" and (journal.get("stages", {}).get("complete", {}).get("state") == "confirmed" or journal.get("stages", {}).get("abandon", {}).get("state") == "confirmed")
+        return is_terminal_journal(journal)
 
     def _guard_m1(self) -> None:
         current = JournalStore(self.config.state_root).read()

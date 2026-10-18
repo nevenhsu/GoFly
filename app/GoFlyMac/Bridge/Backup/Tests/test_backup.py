@@ -40,7 +40,7 @@ def _manifest() -> dict:
         "setupID": SETUP,
         "categories": ["favorites"],
         "schemas": {"favorites": 1},
-        "artifacts": [{"id": ARTIFACT, "path": "favorites/archive.json", "byteCount": 1, "sha256": "e" * 64}],
+        "artifacts": [{"id": ARTIFACT, "path": "favorites/archive.json", "byteCount": 1, "sha256": hashlib.sha256(b"x").hexdigest()}],
     }
 
 
@@ -93,6 +93,12 @@ class BackupTests(unittest.TestCase):
             package = _make_package(root, manifest=raw)
             _delete_payload(root, _source(raw), raw, _manifest())
             self.assertFalse(package.exists())
+
+            package = _make_package(root, manifest=raw)
+            (package / "favorites" / "archive.json").write_bytes(b"y")
+            with self.assertRaisesRegex(BackupBridgeError, "backup-changed"):
+                _delete_payload(root, _source(raw), raw, _manifest())
+            self.assertTrue((package / "favorites" / "archive.json").exists())
 
     def test_manifestless_recovery_only_removes_empty_closed_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
