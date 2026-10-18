@@ -58,7 +58,7 @@ Mac 收到的匯出回報即使顯示 ready／preparing，只要帶有錯誤，�
 
 2026-10-17 使用者確認：不要讓 iOS 在安裝後另外下載支援資料，也不需要 U19「在 iPhone 完成最後設定」。Mac 安裝流程自動處理真正必要的裝置準備，完成後才交接；無實際需要時略過，不為舊稿 H12 製造額外步驟。
 
-已核對現有實作：[DeveloperDiskImageService](../LocalGo/StikDebug/Services/DeveloperDiskImageService.swift) 確有 DDI 檔案下載與格式選擇；[LiveLocationEngine](../LocalGo/StikDebug/LocalGo/LiveLocationEngine.swift) 及 [DevicePreparationPolicy](../LocalGo/StikDebug/LocalGo/DevicePreparationPolicy.swift) 會先看裝置已掛載狀態，已就緒則重用，否則依需要使用支援檔。這是自動處理的必要技術資料，不是使用者必須額外設定的內容。現有手機 prepare 仍負責下載；移至 Mac 是待實作變更，不代表目前 GUI／CLI 已完成。
+已核對現有實作：先前的 LocalGo prototype `DeveloperDiskImageService` 確有 DDI 檔案下載與格式選擇；`LiveLocationEngine` 及 `DevicePreparationPolicy` 會先看裝置已掛載狀態，已就緒則重用，否則依需要使用支援檔（該 prototype 原始碼已於 2026-10-19 移除，GoFly 內另有對應裝置實作）。這是自動處理的必要技術資料，不是使用者必須額外設定的內容。現有手機 prepare 仍負責下載；移至 Mac 是待實作變更，不代表目前 GUI／CLI 已完成。
 
 - Mac 在同一安裝交易中，核對選定 iPhone 與 iOS 版本，依實際需要取得、交付及準備支援項目；已就緒的重用或略過。進度只顯示「準備裝置」，不新增資料設定頁、額外確認或獨立完成頁。
 - App 部署、配對匯入及本次必要裝置準備均驗證完成，才顯示 U18「安裝完成」。僅 App 已安裝、下載完成、檔案存在或配對回報，均不能單獨代表整體準備成功；實際裝置結果須可確認。
@@ -116,4 +116,4 @@ Mac 收到的匯出回報即使顯示 ready／preparing，只要帶有錯誤，�
 
 以上是待實作及實機驗收要求，不以預覽、文件或既有唯讀測試當作已完成。實作時需另完成 USB 與 Wi-Fi 的真實重新簽名及資料保留驗收。
 
-相關文件：[Mac App 現況](README.md)、[唯讀 bridge 契約](Bridge/PROTOCOL.md)、[首次 Mac 設定 CLI](../LocalGo/MacSetup/README.md)、[產品規格](../LocalGo/PRODUCT-SPEC.md)、[用語](../../work/gofly-planning/GLOSSARY.md)。
+相關文件：[Mac App 現況](README.md)、[唯讀 bridge 契約](Bridge/PROTOCOL.md)、[首次 Mac 設定 CLI](../LocalGo/MacSetup/README.md)、[用語](../../work/gofly-planning/GLOSSARY.md)。

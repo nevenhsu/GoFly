@@ -58,11 +58,11 @@ This creates a local development app, not a portable DMG. Its generated configur
 
 The development Mac GUI implements formal GoFly USB first installation, selected-data same-device reinstallation, and local backup management. These flows have local/controlled-boundary checks; final iPhone acceptance is deferred. Re-signing, pairing repair, Wi-Fi writes, and the portable DMG remain in development. Preview success uses sample data and does not prove a device operation happened.
 
-For a separate **LocalGo prototype** experiment, follow the [Mac setup CLI guide](app/LocalGo/MacSetup/README.md). That tool can perform real USB signing/installation when explicitly executed. It targets `com.neven.localgo`, not the new GoFly app (`com.neven.gofly`). The prototype still prepares/downloads device support on the phone and therefore does not meet the planned GoFly installation-completion requirement.
+For a separate **LocalGo prototype** experiment, follow the [Mac setup CLI guide](app/LocalGo/MacSetup/README.md). That tool can perform real USB signing/installation when explicitly executed. It targets `com.neven.localgo`, not the new GoFly app (`com.neven.gofly`). The prototype still prepares/downloads device support on the phone and therefore does not meet the planned GoFly installation-completion requirement. On 2026-10-19 the superseded LocalGo prototype app sources were removed from the tree; only this CLI, the three reused setup sources, the AGPL-3.0 license, and the upstream provenance record remain.
 
 ## Research workflow
 
-The GoFly design covers selecting locations, routes/GPX, joystick movement, device service preparation, and restoring GPS. Consult the [product specification](app/LocalGo/PRODUCT-SPEC.md) for requirements and implementation status.
+The GoFly design covers selecting locations, routes/GPX, joystick movement, device service preparation, and restoring GPS. Consult the [GoFly app notes](app/GoFly/README.md) and [iOS UI design spec](docs/IOS-UI-DESIGN.md) for requirements and implementation status.
 
 For a device experiment, record the app version, iPhone model, iOS version, connection method, and observed result. Verify location behavior in Apple Maps and another app, then stop the task, restore GPS, and verify the real location separately. Do not infer successful restoration from an installation or pairing result. Background operation, reconnects, OS updates, and device restarts need their own verification.
 
@@ -100,7 +100,6 @@ Verify each result and report completed steps, pending manual steps, and blocker
 | [app/GoFly/README.md](app/GoFly/README.md) | New native iOS app under development; English, Traditional Chinese, and Simplified Chinese resources. |
 | [app/GoFlyMac/README.md](app/GoFlyMac/README.md) | Current Mac app capabilities and development checks. |
 | [app/GoFlyMac/DEVELOPMENT.md](app/GoFlyMac/DEVELOPMENT.md) | Confirmed Mac installation and device-management requirements. |
-| [app/LocalGo/README.md](app/LocalGo/README.md) | Earlier iOS prototype, design history, and research context. |
 | [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | Installation instructions for AI assistants, in all three languages. |
 | [docs/LICENSING.md](docs/LICENSING.md) | 0BSD scope, existing upstream licenses, and release conditions. |
 | `work/` | Ignored local research evidence, build outputs, and device experiments; not public release content. |

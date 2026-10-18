@@ -21,12 +21,10 @@ extension BridgeConfiguration {
         let root = URL(fileURLWithPath: workspaceRoot).standardizedFileURL
         let formal = targetBundleID == "com.neven.gofly" && targetName == "GoFly" &&
             projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
-        let legacy = targetBundleID == "com.neven.localgo" &&
-            projectPath == root.appendingPathComponent("app/LocalGo/StikDebug.xcodeproj").path
         guard workspaceRoot.hasPrefix("/"), root.path == workspaceRoot,
               !workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
               pythonPath == root.appendingPathComponent("work/mac-setup-env/bin/python").path,
-              formal || legacy,
+              formal,
               developerDirectory == "/Applications/Xcode.app/Contents/Developer" else {
             throw CheckFailure.unavailable
         }

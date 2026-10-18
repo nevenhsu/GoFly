@@ -58,11 +58,11 @@ open work/gofly-mac/GoFly.app
 
 開發版 Mac GUI 已實作正式 GoFly USB 首次安裝、所選資料同機重裝與本機備份管理，通過本機／受控邊界檢查，手機集中驗收仍待進行。重新簽名、配對修復、Wi-Fi 寫入與可攜 DMG 仍在開發。預覽成功使用示意資料，不代表裝置已執行操作。
 
-若要另外進行 **LocalGo prototype** 實驗，請讀 [Mac 設定 CLI 說明](app/LocalGo/MacSetup/README.md)。該工具在明確執行時會真正透過 USB 簽署／安裝，目標為 `com.neven.localgo`，不是新版 GoFly 的 `com.neven.gofly`。Prototype 仍在手機準備／下載裝置支援資料，尚未符合 GoFly 預定的安裝完成條件。
+若要另外進行 **LocalGo prototype** 實驗，請讀 [Mac 設定 CLI 說明](app/LocalGo/MacSetup/README.md)。該工具在明確執行時會真正透過 USB 簽署／安裝，目標為 `com.neven.localgo`，不是新版 GoFly 的 `com.neven.gofly`。Prototype 仍在手機準備／下載裝置支援資料，尚未符合 GoFly 預定的安裝完成條件。2026-10-19 已從版本控制移除被取代的 LocalGo prototype App 原始碼，只保留此 CLI、三個被重用的 setup 來源、AGPL-3.0 授權與上游來源紀錄。
 
 ## 研究操作
 
-GoFly 設計涵蓋地點選取、路線／GPX、搖桿移動、裝置服務準備及恢復 GPS。功能要求與實作狀態見[產品規格](app/LocalGo/PRODUCT-SPEC.md)。
+GoFly 設計涵蓋地點選取、路線／GPX、搖桿移動、裝置服務準備及恢復 GPS。功能要求與實作狀態見[GoFly App 說明](app/GoFly/README.md)及 [iOS UI 設計規格](docs/IOS-UI-DESIGN.md)。
 
 實驗時記錄 App 版本、iPhone 機型、iOS 版本、連線方式及實際結果。先在 Apple 地圖與另一個 App 核對模擬位置，再停止任務、恢復 GPS，並另外核對真實位置。安裝或配對成功不能代替 GPS 恢復驗證；背景執行、斷線重連、系統更新及重啟均需分別驗證。
 
@@ -99,7 +99,6 @@ LocalGo prototype 實驗時才使用舊工具。Apple 登入、雙重認證、�
 | [app/GoFly/README.md](app/GoFly/README.md) | 開發中的新版原生 iOS App，含英文、繁中、簡中資源。 |
 | [app/GoFlyMac/README.md](app/GoFlyMac/README.md) | 現有 Mac 能力及開發檢查。 |
 | [app/GoFlyMac/DEVELOPMENT.md](app/GoFlyMac/DEVELOPMENT.md) | 已確認的 Mac 安裝及裝置管理要求。 |
-| [app/LocalGo/README.md](app/LocalGo/README.md) | 較早 iOS prototype、設計歷程與研究背景。 |
 | [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | 三語 AI 代理安裝操作說明。 |
 | [docs/LICENSING.md](docs/LICENSING.md) | 0BSD 範圍、既有上游授權與發行條件。 |
 | `work/` | 不納入版本控制的本機研究證據、建置產物及裝置實驗，不是公開發行內容。 |
