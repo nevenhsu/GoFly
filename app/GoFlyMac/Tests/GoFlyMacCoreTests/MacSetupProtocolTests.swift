@@ -114,6 +114,10 @@ import GoFlyMacCore
         #expect(unknown.stage == .install)
         #expect(!unknown.isComplete)
         #expect(unknown.failure == .service("transaction-unknown"))
+        root["code"] = "app-running"
+        let appRunning = try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request)
+        #expect(appRunning.failure == .service("app-running"))
+        #expect(appRunning.canResume && !appRunning.isComplete)
         root["code"] = "untrusted diagnostic text"
         #expect(throws: MacSetupFailure.invalidResponse) {
             try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request)

@@ -10,7 +10,21 @@ public enum ManagementKind: String, Equatable, Sendable {
 public enum ManagementSourcePhase: String, Equatable, Sendable {
     case preparing
     case ready
+    case mutationSealed
     case released
+}
+
+public enum ManagementStatusPhase: String, Equatable, Sendable {
+    case preparing
+    case ready
+    case mutationSealed
+    case released
+    case adopted
+}
+
+public enum ManagementSourceAdmission: String, Equatable, Sendable {
+    case live
+    case cold
 }
 
 /// Stable failures exposed by the management value and codec boundary.
@@ -21,6 +35,7 @@ public enum ManagementFailure: Error, Equatable, Sendable {
     case limitExceeded
     case unsafeFile
     case storageUnavailable
+    case receiptCapacity
     case conflict
     case unavailable
 }
@@ -170,5 +185,88 @@ public struct ManagementSourceReceipt: Equatable, Sendable {
               restoreRootSHA256 == request.sourceRestoreRootSHA256 else {
             throw ManagementFailure.identityMismatch
         }
+    }
+}
+
+public struct ManagementStatus: Equatable, Sendable {
+    public let phase: ManagementStatusPhase
+    public let managementID: UUID
+    public let requestSHA256: String
+    public let currentApp: SetupAppIdentity
+    public let sourceAdmission: ManagementSourceAdmission
+
+    init(phase: ManagementStatusPhase, managementID: UUID, requestSHA256: String,
+         currentApp: SetupAppIdentity, sourceAdmission: ManagementSourceAdmission) {
+        self.phase = phase
+        self.managementID = managementID
+        self.requestSHA256 = requestSHA256
+        self.currentApp = currentApp
+        self.sourceAdmission = sourceAdmission
+    }
+}
+
+public struct ManagementAdoptionReceipt: Equatable, Sendable {
+    public static let schemaVersion = 1
+    public let version: Int
+    public let managementID: UUID
+    public let nonce: UUID
+    public let requestSHA256: String
+    public let sourceSetupID: UUID
+    public let targetSetupID: UUID
+    public let sourceApp: SetupAppIdentity
+    public let targetApp: SetupAppIdentity
+    public let expectedDeviceUDID: String
+    public let teamID: String
+    public let sourceActivationSHA256: String
+    public let sourceRestoreRootSHA256: String?
+    public let targetActivationSHA256: String
+    public let receiptSHA256: String
+
+    public init(version: Int = Self.schemaVersion,
+                managementID: UUID, nonce: UUID, requestSHA256: String,
+                sourceSetupID: UUID, targetSetupID: UUID,
+                sourceApp: SetupAppIdentity, targetApp: SetupAppIdentity,
+                expectedDeviceUDID: String, teamID: String,
+                sourceActivationSHA256: String,
+                sourceRestoreRootSHA256: String?,
+                targetActivationSHA256: String,
+                receiptSHA256: String) throws {
+        guard version == Self.schemaVersion,
+              SetupValidation.isLowerHex(requestSHA256, count: 64),
+              SetupValidation.validUDID(expectedDeviceUDID),
+              ManagementRequest.validTeamID(teamID),
+              SetupValidation.isLowerHex(sourceActivationSHA256, count: 64),
+              sourceRestoreRootSHA256.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true,
+              SetupValidation.isLowerHex(targetActivationSHA256, count: 64),
+              SetupValidation.isLowerHex(receiptSHA256, count: 64),
+              sourceSetupID != targetSetupID,
+              sourceApp.bundleID == SetupAppIdentity.formalBundleID,
+              targetApp.bundleID == SetupAppIdentity.formalBundleID else {
+            throw ManagementFailure.invalidInput
+        }
+        self.version = version
+        self.managementID = managementID
+        self.nonce = nonce
+        self.requestSHA256 = requestSHA256
+        self.sourceSetupID = sourceSetupID
+        self.targetSetupID = targetSetupID
+        self.sourceApp = sourceApp
+        self.targetApp = targetApp
+        self.expectedDeviceUDID = expectedDeviceUDID
+        self.teamID = teamID
+        self.sourceActivationSHA256 = sourceActivationSHA256
+        self.sourceRestoreRootSHA256 = sourceRestoreRootSHA256
+        self.targetActivationSHA256 = targetActivationSHA256
+        self.receiptSHA256 = receiptSHA256
+    }
+}
+
+public struct ManagementAdoptionResult: Equatable, Sendable {
+    public let receipt: ManagementAdoptionReceipt
+    public let projection: TransferRuntimeProjection
+
+    init(receipt: ManagementAdoptionReceipt, projection: TransferRuntimeProjection) {
+        self.receipt = receipt
+        self.projection = projection
     }
 }

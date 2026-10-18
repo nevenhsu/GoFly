@@ -240,7 +240,7 @@ private enum ReinstallWireValues {
     static let safeCodes: Set<String> = [
         "invalid-request","protocol-mismatch","configuration-invalid","dependency-mismatch","runtime-api-mismatch",
         "environment-not-ready","device-disconnected","trust-required","developer-mode-required","unsupported-os",
-        "identity-mismatch","app-already-installed","signing-required","signature-invalid","artifact-mismatch",
+        "identity-mismatch","app-already-installed", "app-running","signing-required","signature-invalid","artifact-mismatch",
         "support-unavailable","pairing-unknown","pairing-rejected","handoff-unknown","commit-unknown",
         "transaction-unknown","transaction-conflict","busy","cancelled","timeout","storage-unavailable","operation-failed",
         "update-required","source-busy","backup-invalid","restore-unknown","export-conflict","removal-unknown","operation-abandoned"

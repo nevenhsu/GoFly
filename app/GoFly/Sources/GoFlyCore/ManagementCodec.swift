@@ -165,6 +165,79 @@ public enum ManagementCodec {
         }
     }
 
+    public static func encodeAdoptionReceipt(_ receipt: ManagementAdoptionReceipt) throws -> Data {
+        let object = adoptionObject(receipt, includeDigest: true)
+        guard try adoptionDigest(receipt) == receipt.receiptSHA256 else {
+            throw ManagementFailure.invalidInput
+        }
+        return try encode(object: object, maximum: ManagementSourceReceipt.maximumBytes)
+    }
+
+    public static func decodeAdoptionReceipt(_ data: Data) throws -> ManagementAdoptionReceipt {
+        do {
+            let value = try managementParse(data, maximum: ManagementSourceReceipt.maximumBytes)
+            try value.requireObjectKeys([
+                "version", "managementID", "nonce", "requestSHA256", "sourceSetupID",
+                "targetSetupID", "sourceApp", "targetApp", "expectedDeviceUDID", "teamID",
+                "sourceActivationSHA256", "sourceRestoreRootSHA256", "targetActivationSHA256",
+                "receiptSHA256"
+            ])
+            let receipt = try ManagementAdoptionReceipt(
+                version: try managementInt(value.object("version")),
+                managementID: try managementUUID(value.object("managementID")),
+                nonce: try managementUUID(value.object("nonce")),
+                requestSHA256: try managementHash(value.object("requestSHA256")),
+                sourceSetupID: try managementUUID(value.object("sourceSetupID")),
+                targetSetupID: try managementUUID(value.object("targetSetupID")),
+                sourceApp: try managementApp(value.object("sourceApp")),
+                targetApp: try managementApp(value.object("targetApp")),
+                expectedDeviceUDID: try managementString(value.object("expectedDeviceUDID")),
+                teamID: try managementString(value.object("teamID")),
+                sourceActivationSHA256: try managementHash(value.object("sourceActivationSHA256")),
+                sourceRestoreRootSHA256: try managementOptionalHash(value.object("sourceRestoreRootSHA256")),
+                targetActivationSHA256: try managementHash(value.object("targetActivationSHA256")),
+                receiptSHA256: try managementHash(value.object("receiptSHA256")))
+            guard try adoptionDigest(receipt) == receipt.receiptSHA256 else {
+                throw ManagementFailure.identityMismatch
+            }
+            return receipt
+        } catch let failure as ManagementFailure {
+            throw failure
+        } catch let failure as SetupFailure {
+            throw managementFailure(failure)
+        } catch {
+            throw ManagementFailure.invalidInput
+        }
+    }
+
+    static func makeAdoptionReceipt(managementID: UUID, nonce: UUID, requestSHA256: String,
+                                    sourceSetupID: UUID, targetSetupID: UUID,
+                                    sourceApp: SetupAppIdentity, targetApp: SetupAppIdentity,
+                                    expectedDeviceUDID: String, teamID: String,
+                                    sourceActivationSHA256: String,
+                                    sourceRestoreRootSHA256: String?,
+                                    targetActivationSHA256: String) throws -> ManagementAdoptionReceipt {
+        let provisional = try ManagementAdoptionReceipt(
+            managementID: managementID, nonce: nonce, requestSHA256: requestSHA256,
+            sourceSetupID: sourceSetupID, targetSetupID: targetSetupID,
+            sourceApp: sourceApp, targetApp: targetApp,
+            expectedDeviceUDID: expectedDeviceUDID, teamID: teamID,
+            sourceActivationSHA256: sourceActivationSHA256,
+            sourceRestoreRootSHA256: sourceRestoreRootSHA256,
+            targetActivationSHA256: targetActivationSHA256,
+            receiptSHA256: String(repeating: "0", count: 64))
+        return try ManagementAdoptionReceipt(
+            version: provisional.version, managementID: provisional.managementID,
+            nonce: provisional.nonce, requestSHA256: provisional.requestSHA256,
+            sourceSetupID: provisional.sourceSetupID, targetSetupID: provisional.targetSetupID,
+            sourceApp: provisional.sourceApp, targetApp: provisional.targetApp,
+            expectedDeviceUDID: provisional.expectedDeviceUDID, teamID: provisional.teamID,
+            sourceActivationSHA256: provisional.sourceActivationSHA256,
+            sourceRestoreRootSHA256: provisional.sourceRestoreRootSHA256,
+            targetActivationSHA256: provisional.targetActivationSHA256,
+            receiptSHA256: try adoptionDigest(provisional))
+    }
+
     private static func encode(object: [String: Any], maximum: Int) throws -> Data {
         guard JSONSerialization.isValidJSONObject(object) else { throw ManagementFailure.invalidInput }
         do {
@@ -177,5 +250,32 @@ public enum ManagementCodec {
         } catch {
             throw ManagementFailure.invalidInput
         }
+    }
+
+    private static func adoptionObject(_ receipt: ManagementAdoptionReceipt,
+                                       includeDigest: Bool) -> [String: Any] {
+        var object: [String: Any] = [
+            "version": receipt.version,
+            "managementID": receipt.managementID.uuidString.lowercased(),
+            "nonce": receipt.nonce.uuidString.lowercased(),
+            "requestSHA256": receipt.requestSHA256,
+            "sourceSetupID": receipt.sourceSetupID.uuidString.lowercased(),
+            "targetSetupID": receipt.targetSetupID.uuidString.lowercased(),
+            "sourceApp": SetupCodec.appObject(receipt.sourceApp),
+            "targetApp": SetupCodec.appObject(receipt.targetApp),
+            "expectedDeviceUDID": receipt.expectedDeviceUDID,
+            "teamID": receipt.teamID,
+            "sourceActivationSHA256": receipt.sourceActivationSHA256,
+            "sourceRestoreRootSHA256": receipt.sourceRestoreRootSHA256 ?? NSNull(),
+            "targetActivationSHA256": receipt.targetActivationSHA256
+        ]
+        if includeDigest { object["receiptSHA256"] = receipt.receiptSHA256 }
+        return object
+    }
+
+    private static func adoptionDigest(_ receipt: ManagementAdoptionReceipt) throws -> String {
+        let data = try encode(object: adoptionObject(receipt, includeDigest: false),
+                               maximum: ManagementSourceReceipt.maximumBytes)
+        return SetupValidation.sha256(data)
     }
 }

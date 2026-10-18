@@ -23,6 +23,9 @@ except ImportError:  # script execution from the packaged Setup directory
     from setup_protocol import SetupBridgeError, TARGET_BUNDLE_ID, TARGET_NAME, normalized_device
 
 MAX_JOURNAL_BYTES = 256 * 1024
+# Inventory byteCount values describe external support files, not JSON bytes.
+# Match the existing GoFly setup generation limit while keeping journals small.
+MAX_SUPPORT_GENERATION_BYTES = 4 * 1024 * 1024 * 1024
 _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z"
@@ -502,10 +505,10 @@ class JournalStore:
                         raise SetupBridgeError("storage-unavailable")
                     size = item.get("byteCount")
                     digest = item.get("sha256")
-                    if type(size) is not int or size <= 0 or size > MAX_JOURNAL_BYTES or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                    if type(size) is not int or size <= 0 or size > MAX_SUPPORT_GENERATION_BYTES or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
                         raise SetupBridgeError("storage-unavailable")
                     total += size
-                    if total > MAX_JOURNAL_BYTES:
+                    if total > MAX_SUPPORT_GENERATION_BYTES:
                         raise SetupBridgeError("storage-unavailable")
                     seen_names.add(filename)
         activation = value.get("activationReceipt")

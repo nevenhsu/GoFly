@@ -106,6 +106,9 @@ import GoFlyMacCore
         var root = try #require(JSONSerialization.jsonObject(with: response(request, value)) as? [String: Any]); root["status"] = "error"; root["code"] = "backup-invalid"
         let actual = try MacReinstallResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request, selectedCategories: [.favorites])
         #expect(actual.errorCode == "backup-invalid"); #expect(!actual.isComplete)
+        root["code"] = "app-running"
+        let appRunning = try MacReinstallResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request, selectedCategories: [.favorites])
+        #expect(appRunning.errorCode == "app-running" && !appRunning.isComplete)
         root["code"] = "raw secret subprocess stderr"
         #expect(throws: MacReinstallFailure.invalidResponse) { try MacReinstallResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request, selectedCategories: [.favorites]) }
     }

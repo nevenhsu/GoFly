@@ -858,6 +858,46 @@ public final class TransferRestoreStore: @unchecked Sendable {
     }
     public func status() throws -> TransferRestoreStatus? { try withLock { try statusUnlocked() } }
 
+    func managementEvidence(expectedSetupID: UUID, expectedApp: SetupAppIdentity,
+                            expectedDeviceUDID: String,
+                            expectedRootSHA256: String?) throws -> ManagementTransferEvidence {
+        try withLock {
+            let intent = try readIntentUnlocked()
+            let rootData = try TransferStorageDisk.read(
+                transferRoot.appendingPathComponent("restore-root.json"), maximum: 1_048_576)
+            guard let expectedRootSHA256 else {
+                guard intent == nil, rootData == nil else { throw TransferFailure.busy }
+                return ManagementTransferEvidence(rawRoot: nil, intent: nil, status: nil,
+                                                  projection: TransferRuntimeProjection.ordinary(applicationSupport: applicationSupport),
+                                                  settings: nil)
+            }
+            guard let intent, let rootData,
+                  SetupValidation.sha256(rootData) == expectedRootSHA256 else {
+                throw TransferFailure.identityMismatch
+            }
+            let root = try TransferStorageJSON.decodeRestoreRoot(rootData, applicationSupport: applicationSupport)
+            guard root.pending == nil,
+                  let status = root.current,
+                  status.phase == .committed,
+                  status.originalIntent == intent,
+                  intent.setupID == expectedSetupID,
+                  intent.targetApp == expectedApp,
+                  intent.sourceDeviceUDID == expectedDeviceUDID,
+                  intent.destinationDeviceUDID == expectedDeviceUDID,
+                  let projection = status.projection else {
+                throw TransferFailure.busy
+            }
+            try validateProjection(projection)
+            let settingsData = try TransferStorageDisk.read(
+                projection.sessionDirectory.deletingLastPathComponent()
+                    .appendingPathComponent("settings/preferences.json"),
+                maximum: TransferLimits.settingsBytes)
+            let settings = try settingsData.map(TransferCodec.decodeSettings)
+            return ManagementTransferEvidence(rawRoot: rootData, intent: intent, status: status,
+                                              projection: projection, settings: settings)
+        }
+    }
+
     public func restore(currentApp: SetupAppIdentity, setupStore: SetupActivationStore,
                         preferences: TransferPreferencesStore) throws -> TransferRestoreStatus {
         try withLock {

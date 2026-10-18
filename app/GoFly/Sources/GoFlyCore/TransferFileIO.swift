@@ -205,7 +205,17 @@ enum TransferFileIO {
     /// package validator; the returned descriptor remains alive for the
     /// complete read/write/rename operation.
     static func openDirectory(_ root: URL, allowMissing: Bool = false, requirePrivate: Bool = true) throws -> _TransferDirectoryHandle? {
-        try openRoot(root, allowMissing: allowMissing, requirePrivate: requirePrivate)
+        // Fresh installs have no transfer namespace. Observe that absence
+        // before walking ancestors that the iOS sandbox may not expose.
+        // Existing paths still undergo the complete no-follow validation.
+        if allowMissing {
+            var info = stat()
+            if Darwin.lstat(root.absoluteURL.path, &info) != 0 {
+                if errno == ENOENT { return nil }
+                throw errno == ELOOP || errno == ENOTDIR ? TransferFailure.unsafeFile : TransferFailure.unavailable
+            }
+        }
+        return try openRoot(root, allowMissing: allowMissing, requirePrivate: requirePrivate)
     }
 
     static func packageRoot(_ root: URL) throws {

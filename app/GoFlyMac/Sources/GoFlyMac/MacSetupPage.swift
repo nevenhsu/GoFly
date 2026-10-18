@@ -179,6 +179,7 @@ private extension MacSetupFailure {
         case .service(let code):
             switch code {
             case "app-already-installed": "已偵測到 GoFly。首次安裝不會覆蓋現有 App。"
+            case "app-running": "請在 iPhone 多工畫面將 GoFly 向上滑掉，保持手機解鎖，再按「繼續原交易」。已完成的安裝與配對會保留。"
             case "developer-mode-required": "請在 iPhone 開啟開發者模式，再查詢原交易。"
             case "trust-required": "請解鎖 iPhone 並確認已信任此 Mac。"
             case "device-disconnected": "未連接原本的 USB iPhone。"

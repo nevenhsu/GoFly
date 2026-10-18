@@ -959,14 +959,34 @@ class PinnedPymobiledeviceAdapter:
         self._modules = usbmux, lockdown, tunnel
         return self._modules
 
+    def transport_serial(self, device_id: str) -> str:
+        """Keep the USB spelling required by pymobiledevice3's exact match."""
+        usbmux, _, _ = self._load()
+        try:
+            rows = _run(usbmux.list_devices())
+        except Exception:
+            raise SetupBridgeError("device-disconnected") from None
+        for row in rows if isinstance(rows, list) else []:
+            serial = getattr(row, "serial", None) or getattr(row, "udid", None)
+            transport = getattr(row, "connection_type", None) or getattr(row, "transport", None)
+            if (
+                isinstance(serial, str)
+                and serial.lower() == device_id.lower()
+                and isinstance(transport, str)
+                and transport.upper() == USB
+            ):
+                return serial
+        raise SetupBridgeError("device-disconnected")
+
     def _open(self, serial: str, cache: Path) -> Any:
         _, lockdown, _ = self._load()
+        transport_serial = self.transport_serial(serial)
         create = lockdown.create_using_usbmux
         client = None
         try:
             client = _run(
                 create(
-                    serial=serial,
+                    serial=transport_serial,
                     label="GoFlyMac Setup",
                     autopair=False,
                     connection_type=USB,
@@ -1274,7 +1294,11 @@ class PinnedPymobiledeviceAdapter:
             if not isinstance(value, Mapping):
                 raise SetupBridgeError("pairing-unknown")
             required = {"public_key", "private_key", "remote_unlock_host_key", "identifier", "host_identifier"}
-            if not required.issubset(value) or any(not isinstance(value[key], bytes) for key in ("public_key", "private_key", "remote_unlock_host_key")):
+            if (
+                not required.issubset(value)
+                or any(not isinstance(value[key], bytes) for key in ("public_key", "private_key"))
+                or not isinstance(value["remote_unlock_host_key"], (str, bytes))
+            ):
                 raise SetupBridgeError("pairing-unknown")
             if (
                 not isinstance(value["identifier"], str)
@@ -1317,8 +1341,11 @@ class PinnedPymobiledeviceAdapter:
             private = service.ed25519_private_key.private_bytes_raw()
             public = service.ed25519_private_key.public_key().public_bytes_raw()
             remote = getattr(service, "remote_unlock_host_key", b"")
-            if not isinstance(remote, bytes):
-                remote = bytes(remote)
+            # pmd3 retains the peer's hostKey as a string (including its
+            # empty-string fallback). Preserve its plist type; bytes(str)
+            # raises after peer-side pairing, before the candidate is saved.
+            if not isinstance(remote, (str, bytes)):
+                raise ValueError("invalid remote unlock key")
             identifier = str(getattr(service, "identifier", ""))
             uuid.UUID(identifier)
             if len(public) != 32 or len(private) != 32:
@@ -2158,78 +2185,75 @@ class PinnedPymobiledeviceAdapter:
         adapter = PinnedSupportAdapter(self)
         return adapter.prepare_generation(method, restore_dir)
 
-    def launch(self, device_id: str) -> int:
-        client = None
+    @contextlib.asynccontextmanager
+    async def _process_control(self, device_id: str, transport_serial: str):
+        """iOS 26/27 DVT is exposed through same-device RSD, not Lockdown."""
+        userspace = importlib.import_module("pymobiledevice3.remote.userspace_tunnel")
+        module = importlib.import_module("pymobiledevice3.services.dvt.instruments.process_control")
+        provider_module = importlib.import_module("pymobiledevice3.services.dvt.instruments.dvt_provider")
+        tunnel_cls = getattr(userspace, "UserspaceRsdTunnel", None)
+        control_cls = getattr(module, "ProcessControl", None)
+        provider_cls = getattr(provider_module, "DvtProvider", None)
+        if tunnel_cls is None or control_cls is None or provider_cls is None:
+            raise SetupBridgeError("runtime-api-mismatch")
+        tunnel = tunnel_cls(serial=transport_serial, autopair=False, remotepairing_fallback=False)
         try:
-            with tempfile.TemporaryDirectory(prefix="gofly-setup-process-") as directory:
-                client = self._open(device_id, Path(directory))
-                module = importlib.import_module("pymobiledevice3.services.dvt.instruments.process_control")
-                provider_module = importlib.import_module("pymobiledevice3.services.dvt.instruments.dvt_provider")
-                control_cls = getattr(module, "ProcessControl", None)
-                provider_cls = getattr(provider_module, "DvtProvider", None)
-                if control_cls is None or provider_cls is None:
-                    raise SetupBridgeError("runtime-api-mismatch")
+            rsd = await tunnel.aopen()
+            if str(getattr(rsd, "udid", "")).lower() != device_id.lower():
+                raise SetupBridgeError("identity-mismatch")
+            if not re.fullmatch(r"(?:26|27)\.\d+(?:\.\d+)?", str(getattr(rsd, "product_version", ""))):
+                raise SetupBridgeError("unsupported-os")
+            async with provider_cls(rsd) as provider:
+                async with control_cls(provider) as control:
+                    yield control
+        finally:
+            await tunnel.aclose()
 
-                async def launch_checked() -> int:
-                    async with provider_cls(client) as provider:
-                        async with control_cls(provider) as control:
-                            existing = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
-                            if existing:
-                                raise SetupBridgeError("handoff-unknown")
-                            pid = await control.launch(TARGET_BUNDLE_ID, kill_existing=False)
-                            if not isinstance(pid, int) or pid <= 0:
-                                raise SetupBridgeError("handoff-unknown")
-                            return pid
+    def launch(self, device_id: str) -> int:
+        try:
+            # Resolve USB outside the async operation: all pmd services share
+            # the operation loop, and _run must not be nested inside that loop.
+            serial = self.transport_serial(device_id)
 
-                pid = _run(launch_checked())
-                self._process_pids[device_id.lower()] = pid
-                return pid
+            async def launch_checked() -> int:
+                async with self._process_control(device_id, serial) as control:
+                    existing = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
+                    if existing:
+                        raise SetupBridgeError("app-running")
+                    pid = await control.launch(TARGET_BUNDLE_ID, kill_existing=False)
+                    if type(pid) is not int or pid <= 0:
+                        raise SetupBridgeError("handoff-unknown")
+                    return pid
+
+            pid = _run(launch_checked())
+            self._process_pids[device_id.lower()] = pid
+            return pid
         except SetupBridgeError:
             raise
         except Exception:
             raise SetupBridgeError("handoff-unknown") from None
-        finally:
-            with contextlib.suppress(Exception):
-                if client is not None:
-                    _run(client.close())
 
     def stop(self, device_id: str, expected_pid: int | None = None) -> None:
         expected = self._process_pids.get(device_id.lower())
         if expected_pid is not None:
-            # A resumed bridge process may only have the PID persisted in the
-            # authoritative journal.  It is still checked against the live
-            # ProcessControl observation below before any kill.
             if expected is not None and expected_pid != expected:
                 raise SetupBridgeError("handoff-unknown")
             expected = expected_pid
-        if not isinstance(expected, int) or expected <= 0:
+        if type(expected) is not int or expected <= 0:
             raise SetupBridgeError("handoff-unknown")
-        client = None
         try:
-            with tempfile.TemporaryDirectory(prefix="gofly-setup-process-") as directory:
-                client = self._open(device_id, Path(directory))
-                module = importlib.import_module("pymobiledevice3.services.dvt.instruments.process_control")
-                provider_module = importlib.import_module("pymobiledevice3.services.dvt.instruments.dvt_provider")
-                control_cls = getattr(module, "ProcessControl", None)
-                provider_cls = getattr(provider_module, "DvtProvider", None)
-                if control_cls is None or provider_cls is None:
-                    raise SetupBridgeError("runtime-api-mismatch")
+            serial = self.transport_serial(device_id)
 
-                async def stop_checked() -> None:
-                    async with provider_cls(client) as provider:
-                        async with control_cls(provider) as control:
-                            current = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
-                            if current != expected:
-                                raise SetupBridgeError("handoff-unknown")
-                            await control.kill(expected)
+            async def stop_checked() -> None:
+                async with self._process_control(device_id, serial) as control:
+                    current = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
+                    if current != expected:
+                        raise SetupBridgeError("handoff-unknown")
+                    await control.kill(expected)
 
-                _run(stop_checked())
-                self._process_pids.pop(device_id.lower(), None)
+            _run(stop_checked())
+            self._process_pids.pop(device_id.lower(), None)
         except SetupBridgeError:
             raise
         except Exception:
             raise SetupBridgeError("handoff-unknown") from None
-        finally:
-            with contextlib.suppress(Exception):
-                if client is not None:
-                    _run(client.close())

@@ -203,6 +203,7 @@ private extension MacReinstallFailure {
         case .invalidResponse: "無法驗證交易資料，保留操作鎖定。可查詢時請先查詢原交易；讀取仍失敗請重新開啟 Mac App。"
         case .service(let code):
             switch code {
+            case "app-running": "請在 iPhone 多工畫面將 GoFly 向上滑掉，保持手機解鎖，再繼續原交易。已完成項目與備份會保留。"
             case "source-busy": "請先在 iPhone 停止移動並完成裝置清除，關閉未結束的編輯，再繼續。"
             case "update-required": "原 App 或安裝來源尚不支援這個資料交接流程。原 App 與資料不會因此被移除。"
             case "backup-invalid": "備份尚未通過完整驗證；不會進入新的移除步驟。"

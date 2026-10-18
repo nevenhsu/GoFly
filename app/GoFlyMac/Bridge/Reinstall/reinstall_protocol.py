@@ -62,7 +62,7 @@ SAFE_ERROR_CODES = frozenset(
         "developer-mode-required",
         "unsupported-os",
         "identity-mismatch",
-        "app-already-installed",
+        "app-already-installed", "app-running",
         "signing-required",
         "signature-invalid",
         "artifact-mismatch",

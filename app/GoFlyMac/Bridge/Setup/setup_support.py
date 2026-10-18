@@ -23,15 +23,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 try:
-    from .setup_adapters import MAX_ARTIFACT_BYTES, MAX_MANIFEST_BYTES, SupportObservation, _run
+    from .setup_adapters import MAX_ARTIFACT_BYTES, SupportObservation, _run
     from .setup_protocol import SetupBridgeError
     from .setup_producer import support_method
 except ImportError:  # script execution from the packaged Setup directory
-    from setup_adapters import MAX_ARTIFACT_BYTES, MAX_MANIFEST_BYTES, SupportObservation, _run
+    from setup_adapters import MAX_ARTIFACT_BYTES, SupportObservation, _run
     from setup_protocol import SetupBridgeError
     from setup_producer import support_method
 
 
+# Apple BuildManifest.plist is a support artifact, distinct from the small
+# GoFly JSON protocol manifest. The pinned cryptex bundle is about 805 KiB.
+MAX_SUPPORT_MANIFEST_BYTES = 4 * 1024 * 1024
+LOCAL_XCODE_DDI_RESTORE = Path("/Library/Developer/DeveloperDiskImages/iOS_DDI/Restore")
 _PRIVATE_DIR_MODE = 0o700
 _PRIVATE_FILE_MODE = 0o600
 _MAX_COMPONENTS = 64
@@ -437,7 +441,7 @@ def _cryptex_manifest_entries(manifest: Mapping[str, Any]) -> list[tuple[str, st
 
 
 def _read_manifest(path: Path, *, private: bool) -> tuple[bytes, Mapping[str, Any]]:
-    raw = _read_private(path, max_bytes=MAX_MANIFEST_BYTES) if private else _read_source(path, max_bytes=MAX_MANIFEST_BYTES)
+    raw = _read_private(path, max_bytes=MAX_SUPPORT_MANIFEST_BYTES) if private else _read_source(path, max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
     try:
         value = plistlib.loads(raw)
     except (ValueError, plistlib.InvalidFileException):
@@ -486,10 +490,10 @@ def _validate_actual(actual: Path, formal: Path, manifest_raw: bytes, entries: l
                     raise _failure()
 
         walk(actual_fd, ())
-        if _read_private(actual / "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES) != manifest_raw:
+        if _read_private(actual / "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES) != manifest_raw:
             raise _failure()
-        actual_manifest = _hash_private_at(actual_fd, "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES)
-        formal_manifest = _hash_private_at(formal_fd, "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES)
+        actual_manifest = _hash_private_at(actual_fd, "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
+        formal_manifest = _hash_private_at(formal_fd, "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
         if actual_manifest != formal_manifest:
             raise _failure()
         for _, normalized, parts in entries:
@@ -531,7 +535,7 @@ def _materialize_cryptex_restore(formal_dir: Path, *, require_existing: bool = F
         stage = formal_dir.parent / f".{actual.name}.{secrets.token_hex(12)}.staging"
         stage_fd = _open_dir_path(stage, create=True, private=True)
         os.close(stage_fd)
-        _copy_regular(formal_dir / "BuildManifest.plist", stage / "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES)
+        _copy_regular(formal_dir / "BuildManifest.plist", stage / "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
         for _, normalized, parts in entries:
             _copy_regular(formal_dir / normalized, stage.joinpath(*parts), max_bytes=MAX_ARTIFACT_BYTES)
         _validate_actual(stage, formal_dir, manifest_raw, entries)
@@ -578,7 +582,7 @@ def validate_generation(method: str, restore_dir: str | Path) -> SupportGenerati
         files: dict[str, tuple[int, str]] = {}
         total = 0
         for filename, label in names.items():
-            limit = 128 if filename == "MountMethod" else min(MAX_MANIFEST_BYTES if filename == "BuildManifest.plist" else MAX_ARTIFACT_BYTES, MAX_ARTIFACT_BYTES - total)
+            limit = 128 if filename == "MountMethod" else min(MAX_SUPPORT_MANIFEST_BYTES if filename == "BuildManifest.plist" else MAX_ARTIFACT_BYTES, MAX_ARTIFACT_BYTES - total)
             size, digest = _hash_private_at(root_fd, filename, max_bytes=limit)
             total += size
             if total > MAX_ARTIFACT_BYTES:
@@ -587,7 +591,7 @@ def validate_generation(method: str, restore_dir: str | Path) -> SupportGenerati
         if _read_private(root / "MountMethod", max_bytes=128) != method.encode("ascii"):
             raise _failure()
         manifest_raw, manifest = _read_manifest(root / "BuildManifest.plist", private=True)
-        if len(manifest_raw) > MAX_MANIFEST_BYTES:
+        if len(manifest_raw) > MAX_SUPPORT_MANIFEST_BYTES:
             raise _failure()
         if method == "cryptex":
             _cryptex_manifest_entries(manifest)
@@ -615,7 +619,7 @@ def _copy_fetched_cryptex(source_root: Path, stage: Path) -> None:
     manifest_raw, manifest = _read_manifest(source_root / "BuildManifest.plist", private=False)
     del manifest_raw
     entries = _cryptex_manifest_entries(manifest)
-    _copy_regular(source_root / "BuildManifest.plist", stage / "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES)
+    _copy_regular(source_root / "BuildManifest.plist", stage / "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
     for _, normalized, parts in entries:
         _copy_regular(source_root.joinpath(*parts), stage / normalized, max_bytes=MAX_ARTIFACT_BYTES)
 
@@ -625,7 +629,7 @@ def _copy_fetched_personalized(fetch_result: Any, stage: Path) -> None:
         image, manifest, trustcache = fetch_result
     except (TypeError, ValueError):
         raise _failure("runtime-api-mismatch") from None
-    _copy_regular(Path(manifest), stage / "BuildManifest.plist", max_bytes=MAX_MANIFEST_BYTES)
+    _copy_regular(Path(manifest), stage / "BuildManifest.plist", max_bytes=MAX_SUPPORT_MANIFEST_BYTES)
     _copy_regular(Path(image), stage / "Image.dmg", max_bytes=MAX_ARTIFACT_BYTES)
     _copy_regular(Path(trustcache), stage / "Image.dmg.trustcache", max_bytes=MAX_ARTIFACT_BYTES)
 
@@ -662,11 +666,14 @@ def _ensure_fetched_generation(method: str, restore_dir: Path) -> None:
                 raise _failure("runtime-api-mismatch")
             _copy_fetched_personalized(fetch(), stage)
         else:
-            module = importlib.import_module("pymobiledevice3.services.cryptexd")
-            fetch = getattr(module, "fetch_cryptex_ddi", None)
-            if not callable(fetch):
-                raise _failure("runtime-api-mismatch")
-            _copy_fetched_cryptex(Path(fetch()), stage)
+            if LOCAL_XCODE_DDI_RESTORE.is_dir():
+                _copy_fetched_cryptex(LOCAL_XCODE_DDI_RESTORE, stage)
+            else:
+                module = importlib.import_module("pymobiledevice3.services.cryptexd")
+                fetch = getattr(module, "fetch_cryptex_ddi", None)
+                if not callable(fetch):
+                    raise _failure("runtime-api-mismatch")
+                _copy_fetched_cryptex(Path(fetch()), stage)
         _write_method(stage, method)
         validate_generation(method, stage)
         if method == "cryptex":
@@ -735,7 +742,21 @@ class PinnedSupportAdapter:
         if self.restore_dir is None:
             raise _failure()
         _, manifest = _read_manifest(Path(self.restore_dir) / "BuildManifest.plist", private=True)
-        return str(_manifest_identity(manifest)["Cryptex1,Version"])
+        _manifest_identity(manifest)
+        # Cryptex1,Version can be Apple's placeholder "39.999.999.0.0,0".
+        # cryptexd reports the installed payload's CFBundleVersion instead.
+        try:
+            info = plistlib.loads(_read_private(
+                Path(self.restore_dir) / "Image.dmg.cryptex_info", max_bytes=64 * 1024
+            ))
+        except (ValueError, plistlib.InvalidFileException):
+            raise _failure() from None
+        if not isinstance(info, Mapping) or info.get("CFBundleIdentifier") != "com.apple.MobileAsset.DDI":
+            raise _failure()
+        version = info.get("CFBundleVersion")
+        if not isinstance(version, str) or not version or len(version) > _MAX_VERSION_LENGTH or "\x00" in version:
+            raise _failure()
+        return version
 
     @staticmethod
     def _require_matching_ddi(installed: Any, expected_version: str) -> tuple[str, str]:
@@ -814,7 +835,7 @@ class PinnedSupportAdapter:
             service_cls = getattr(cryptex_module, "CryptexdService", None)
             if tunnel_cls is None or service_cls is None:
                 raise _failure("runtime-api-mismatch")
-            tunnel = tunnel_cls(serial=device_id, autopair=False, remotepairing_fallback=False)
+            tunnel = tunnel_cls(serial=self.device_adapter.transport_serial(device_id), autopair=False, remotepairing_fallback=False)
             rsd = _run(tunnel.aopen())
             self._verify_rsd(rsd, device_id)
             service = service_cls(rsd)
@@ -874,7 +895,7 @@ class PinnedSupportAdapter:
             service_cls = getattr(cryptex_module, "CryptexdService", None)
             if tunnel_cls is None or service_cls is None:
                 raise _failure("runtime-api-mismatch")
-            tunnel = tunnel_cls(serial=device_id, autopair=False, remotepairing_fallback=False)
+            tunnel = tunnel_cls(serial=self.device_adapter.transport_serial(device_id), autopair=False, remotepairing_fallback=False)
             rsd = _run(tunnel.aopen())
             self._verify_rsd(rsd, device_id)
             service = service_cls(rsd)
