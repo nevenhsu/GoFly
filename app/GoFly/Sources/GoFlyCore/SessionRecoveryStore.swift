@@ -46,6 +46,8 @@ public final class SessionRecoveryStore: ObservableObject {
     private var lastTerminalResult: Result<Void, SessionRecoveryFailure>?
     private var invalidLatest = false
     private var waiters: [(id: UUID, target: UInt64, continuation: CheckedContinuation<Bool, Never>)] = []
+    private let transferOwnerID = UUID()
+    private var transferHold: TransferHold?
 
     public init(persistence: any SessionRecoveryPersistence) {
         self.persistence = persistence
@@ -85,7 +87,7 @@ public final class SessionRecoveryStore: ObservableObject {
     /// was accepted into memory and queued; it does not mean bytes are durable.
     @discardableResult
     public func capture(_ snapshot: SessionRecoverySnapshot) -> Bool {
-        guard loadState == .ready else { return false }
+        guard transferHold == nil, loadState == .ready else { return false }
         guard latestRevision < UInt64.max else {
             block(.revisionExhausted)
             return false
@@ -121,6 +123,12 @@ public final class SessionRecoveryStore: ObservableObject {
     /// Cancellation only releases this waiter; the atomic write continues.
     public func flush() async -> Bool {
         guard loadState == .ready, !invalidLatest else { return false }
+        if transferHold != nil {
+            // A held store is already clean by the acquisition predicate.  Do
+            // not create or await a writer while the cutline is in progress.
+            return !hasUnsavedChanges && pendingWrite == nil && drainTask == nil &&
+                latestRevision == lastCommittedRevision
+        }
         let target = latestRevision
         if target <= lastCommittedRevision { return true }
         if !isSaving {
@@ -151,7 +159,7 @@ public final class SessionRecoveryStore: ObservableObject {
     /// an invalid latest capture cannot be bypassed by replaying older bytes.
     @discardableResult
     public func retrySaving() -> Bool {
-        guard loadState == .ready, !invalidLatest, !isSaving, hasUnsavedChanges,
+        guard transferHold == nil, loadState == .ready, !invalidLatest, !isSaving, hasUnsavedChanges,
               let snapshot = latestSnapshot else { return false }
         isSaving = true
         error = nil
@@ -159,7 +167,26 @@ public final class SessionRecoveryStore: ObservableObject {
         return true
     }
 
-    public func clearError() { error = nil }
+    public func clearError() { guard transferHold == nil else { return }; error = nil }
+
+    public func acquireTransferHold() -> TransferHold? {
+        guard transferHold == nil, loadState == .ready, error == nil, !isSaving,
+              !hasUnsavedChanges, !invalidLatest, pendingWrite == nil,
+              drainTask == nil, waiters.isEmpty,
+              latestRevision == lastCommittedRevision else { return nil }
+        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
+        transferHold = hold
+        return hold
+    }
+
+    @discardableResult
+    public func releaseTransferHold(_ token: TransferHold) -> Bool {
+        guard transferHold == token, token.ownerID == transferOwnerID,
+              !isSaving, pendingWrite == nil, drainTask == nil,
+              waiters.isEmpty else { return false }
+        transferHold = nil
+        return true
+    }
 
     private func submit(revision: UInt64, snapshot: SessionRecoverySnapshot) {
         highestSubmittedRevision = max(highestSubmittedRevision, revision)

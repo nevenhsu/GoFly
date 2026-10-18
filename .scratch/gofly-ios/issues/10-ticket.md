@@ -4,6 +4,10 @@
 
 **Implementation:** complete
 
+**Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
+
+**Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
+
 **Blocked by:** 07（d98f8c7）、09（dcf670e）實作／離線驗證完成，手機集中驗收。
 
 **What to build:** 將手動或 GPX 路線命名保存，重開載入完整路徑，可改標籤及刪除復原。

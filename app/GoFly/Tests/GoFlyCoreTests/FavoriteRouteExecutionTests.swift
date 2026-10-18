@@ -5,6 +5,11 @@ import Testing
 
 @Suite @MainActor
 struct FavoriteRouteExecutionTests {
+    private func loadImported(_ controller: RouteExecutionController, _ snapshot: ImportedRouteSnapshot) -> Bool {
+        guard let admission = controller.beginImportedLoad() else { return false }
+        return controller.loadImportedRoute(snapshot, expectedAdmissionRevision: admission)
+    }
+
     @Test func loadRequiresAnIssuedOneUseTokenAndTheLatestRequestWinsEvenForSameRecord() throws {
         let controller = make(), snapshot = try favorite()
         #expect(!controller.loadFavoriteRoute(snapshot, expectedAdmissionRevision: 0))
@@ -23,10 +28,10 @@ struct FavoriteRouteExecutionTests {
         let original = RouteDraft(values: (0..<27).map { .place(place($0)) })!
         let controller = make(draft: original, planner: planner, commands: commands)
         let snapshot = try FavoriteRouteSnapshot(source: .manual((0..<27).map(place)))
-        let token = try #require(controller.beginFavoriteLoad())
         let speed = RouteSpeed(kilometersPerHour: 67)!
         #expect(controller.setSpeed(speed))
         #expect(controller.setRoundTripEnabled(true))
+        let token = try #require(controller.beginFavoriteLoad())
         #expect(controller.loadFavoriteRoute(snapshot, expectedAdmissionRevision: token))
         #expect(controller.draft.nodes.map(\.value) == original.nodes.map(\.value))
         #expect(Set(controller.draft.nodes.map(\.id)).isDisjoint(with: original.nodes.map(\.id)))
@@ -59,7 +64,7 @@ struct FavoriteRouteExecutionTests {
     @Test(arguments: ["dismiss", "remove", "reorder", "picker", "startFailure", "importFailure", "importSuccess", "clear"])
     func acceptedActionsPreventLateFavoritePublication(action: String) throws {
         let controller = make(draft: RouteDraft(values: [.place(place(0)), .place(place(1)), .place(place(2))])!)
-        if action == "clear" { #expect(controller.loadImportedRoute(try imported())) }
+        if action == "clear" { #expect(loadImported(controller, try imported())) }
         let token = try #require(controller.beginFavoriteLoad())
         switch action {
         case "dismiss": controller.invalidateFavoriteLoadAdmission()
@@ -74,8 +79,8 @@ struct FavoriteRouteExecutionTests {
             let fresh = try #require(controller.beginFavoriteLoad())
             #expect(!controller.start())
             #expect(!controller.loadFavoriteRoute(try favorite(), expectedAdmissionRevision: fresh))
-        case "importFailure": #expect(!controller.loadImportedRoute(try imported(gapped: true)))
-        case "importSuccess": #expect(controller.loadImportedRoute(try imported()))
+        case "importFailure": #expect(!loadImported(controller, try imported(gapped: true)))
+        case "importSuccess": #expect(loadImported(controller, try imported()))
         default: #expect(controller.clearImportedRoute())
         }
         let current = controller.draft

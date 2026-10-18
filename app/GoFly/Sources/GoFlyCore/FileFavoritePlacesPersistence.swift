@@ -17,8 +17,9 @@ public struct FileFavoritePlacesPersistence: FavoritePlacesPersistence {
 
     public init(directory: URL,
                 checkpoint: @escaping @Sendable (FavoritePlacesWriteCheckpoint) throws -> Void = { _ in }) {
-        self.directory = directory.standardizedFileURL
-        fileURL = directory.standardizedFileURL.appendingPathComponent(Self.filename)
+        let absoluteDirectory = directory.absoluteURL
+        self.directory = absoluteDirectory
+        fileURL = absoluteDirectory.appendingPathComponent(Self.filename)
         self.checkpoint = checkpoint
     }
 
@@ -27,6 +28,20 @@ public struct FileFavoritePlacesPersistence: FavoritePlacesPersistence {
             guard let archive = try SecureArchiveDirectory.open(directory, create: false, secureDirectory: false) else { return nil }
             return try archive.read(Self.filename, maximum: FavoritePlacesLimits.fileBytes)
         } catch { throw mapped(error) }
+    }
+
+    public func transferSnapshot() throws -> Data? {
+        do {
+            return try TransferFileIO.readSourceFile(
+                directory: directory, name: Self.filename, maximum: FavoritePlacesLimits.fileBytes
+            )
+        } catch let failure as TransferFailure {
+            switch failure {
+            case .unsafeFile: throw FavoritePlacesFailure.unsafeFile
+            case .limitExceeded: throw FavoritePlacesFailure.limitExceeded
+            default: throw FavoritePlacesFailure.unavailable
+            }
+        }
     }
 
     public func replaceAtomically(with data: Data) throws {

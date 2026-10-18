@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import os
 import hashlib
 import json
 import re
+import stat
 import time
 import uuid
 from dataclasses import dataclass
@@ -62,6 +65,66 @@ def support_method(os_version: str) -> str:
     if parts[0] == 26 and (len(parts) == 1 or parts[1] <= 3):
         return "personalized"
     return "cryptex"
+
+
+def _reject_unresolved_reinstall(state_root: Path) -> None:
+    """Keep protocol-2 mutations behind the shared M2 operation lease.
+
+    The M2 producer checkpoints ``reinstall-journal.json`` under the same
+    ``operation.lock``.  M1 must inspect that record while it already owns the
+    lock, and may only proceed after M2 has reached a durable terminal state.
+    This small crossguard intentionally performs no reconciliation or writes.
+    """
+    path = state_root / "reinstall-journal.json"
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise SetupBridgeError("storage-unavailable") from None
+    if stat.S_ISLNK(info.st_mode):
+        raise SetupBridgeError("storage-unavailable")
+    fd: int | None = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+        current = os.fstat(fd)
+        if not stat.S_ISREG(current.st_mode) or current.st_uid != os.getuid() or current.st_nlink != 1 or stat.S_IMODE(current.st_mode) != 0o600 or current.st_size > 2 * 1024 * 1024:
+            raise SetupBridgeError("storage-unavailable")
+        raw = bytearray()
+        while len(raw) < current.st_size:
+            chunk = os.read(fd, min(1024 * 1024, current.st_size - len(raw)))
+            if not chunk:
+                raise SetupBridgeError("storage-unavailable")
+            raw.extend(chunk)
+        if os.read(fd, 1):
+            raise SetupBridgeError("storage-unavailable")
+        value = json.loads(bytes(raw).decode("utf-8"), object_pairs_hook=lambda pairs: _strict_pairs(pairs), parse_constant=lambda _: (_ for _ in ()).throw(ValueError()), parse_float=lambda _: (_ for _ in ()).throw(ValueError()))
+    except SetupBridgeError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        raise SetupBridgeError("storage-unavailable") from None
+    finally:
+        if fd is not None:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+    if not isinstance(value, dict) or value.get("version") != 1 or value.get("operation") != "reinstall":
+        raise SetupBridgeError("storage-unavailable")
+    stages = value.get("stages")
+    terminal = value.get("outcome") == "confirmed" and isinstance(stages, dict) and (
+        isinstance(stages.get("complete"), dict) and stages["complete"].get("state") == "confirmed"
+        or isinstance(stages.get("abandon"), dict) and stages["abandon"].get("state") == "confirmed"
+    )
+    if not terminal:
+        raise SetupBridgeError("transaction-conflict")
+
+
+def _strict_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate")
+        value[key] = item
+    return value
 
 
 @dataclass(frozen=True)
@@ -169,6 +232,7 @@ class SetupProducer:
         # seams may use a temporary SetupConfiguration for controlled tests.
         self.config.ensure_state_root()
         with self.store.lock():
+            _reject_unresolved_reinstall(self.config.state_root)
             # Apply is explicit, but still rechecks the selected USB device
             # and refuses an already-installed GoFly before creating a new
             # transaction record.
@@ -326,6 +390,7 @@ class SetupProducer:
 
     def resume(self, request: SetupRequest) -> ProducerPayload:
         with self.store.lock():
+            _reject_unresolved_reinstall(self.config.state_root)
             journal = self.store.read()
             if journal is None:
                 raise SetupBridgeError("transaction-unknown")

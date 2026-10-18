@@ -3,8 +3,9 @@ import Foundation
 /// Foundation decodes values; this bounded preflight rejects duplicate keys
 /// (including escaped spellings) and a coerced protocol/journal version.
 enum SetupWireJSON {
-    static func object(_ data: Data, integerKey: String? = nil, integerValue: String? = nil) throws -> [String: Any] {
-        guard !data.isEmpty, data.count <= 262_144 else { throw MacSetupFailure.invalidResponse }
+    static func object(_ data: Data, integerKey: String? = nil, integerValue: String? = nil,
+                       maximumBytes: Int = 262_144) throws -> [String: Any] {
+        guard !data.isEmpty, data.count <= maximumBytes else { throw MacSetupFailure.invalidResponse }
         var scan = Scan(bytes: Array(data), integerKey: integerKey, integerValue: integerValue)
         _ = try scan.value(depth: 0)
         scan.whitespace()

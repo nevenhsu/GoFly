@@ -4,6 +4,10 @@
 
 **Implementation:** complete
 
+**Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
+
+**Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
+
 **Blocked by:** 04（91d0188）實作完成；依序於10（f039a95）提交後開始。
 
 **What to build:** 設定有效起點後，用方向、力度與時速控制移動，放開停止該次手勢。

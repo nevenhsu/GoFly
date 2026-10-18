@@ -18,7 +18,7 @@ public actor FileImportedRoutesPersistence: ImportedRoutesPersistence {
     private var undo: (record: ImportedRouteRecord, index: Int)?
 
     public init(directory: URL, checkpoint: @escaping @Sendable (ImportedRoutesWriteCheckpoint) throws -> Void = { _ in }) {
-        self.directory = directory.standardizedFileURL
+        self.directory = directory.absoluteURL
         self.checkpoint = checkpoint
     }
 
@@ -57,6 +57,41 @@ public actor FileImportedRoutesPersistence: ImportedRoutesPersistence {
             guard ImportedRouteArtifact.hash(data) == record.sha256 else { throw ImportedRoutesFailure.hashMismatch }
             return try ImportedRouteSnapshot(record: record, document: GPXCodec.decode(data))
         }.value
+    }
+
+    public func transferSnapshot() async throws -> TransferArchiveSnapshot {
+        let snapshot: TransferArchiveSnapshot
+        do {
+            snapshot = try TransferFileIO.captureArchive(
+                directory: directory,
+                manifestLimit: ImportedRoutesLimits.manifestBytes,
+                payloadLimit: GPXLimits.fileBytes,
+                aggregateLimit: ImportedRoutesLimits.payloadBytes,
+                emptyManifest: { try TransferArchiveCodec.encodeImportedManifest([]) },
+                payloadNames: { data in
+                    try _ImportedRouteManifestCodec.decode(data).map { $0.id.uuidString + ".gpx" }
+                })
+        } catch let failure as TransferFailure {
+            switch failure {
+            case .unsafeFile: throw ImportedRoutesFailure.unsafeFile
+            case .limitExceeded: throw ImportedRoutesFailure.limitExceeded
+            case .artifactMismatch: throw ImportedRoutesFailure.metadataMismatch
+            default: throw ImportedRoutesFailure.unavailable
+            }
+        }
+        do {
+            _ = try await Task.detached {
+                try TransferArchiveCodec.importedRoutes(snapshot)
+            }.value
+            return snapshot
+        } catch let failure as TransferFailure {
+            switch failure {
+            case .unsafeFile: throw ImportedRoutesFailure.unsafeFile
+            case .limitExceeded: throw ImportedRoutesFailure.limitExceeded
+            case .artifactMismatch: throw ImportedRoutesFailure.metadataMismatch
+            default: throw ImportedRoutesFailure.corruptArchive
+            }
+        }
     }
 
     private func validationInput(_ id: UUID) throws -> (ImportedRouteRecord, Data) {
@@ -105,47 +140,14 @@ public actor FileImportedRoutesPersistence: ImportedRoutesPersistence {
     }
     private func payloadName(_ id: UUID) -> String { id.uuidString + ".gpx" }
 
-    private struct Manifest: Codable { let schemaVersion: Int; let records: [Record] }
-    private struct Version: Decodable { let schemaVersion: Int }
-    private struct Coordinate: Codable { let latitude: Double; let longitude: Double }
-    private struct Record: Codable {
-        let id: UUID; let filename: String; let kind: GPXKind; let pointCount: Int; let byteCount: Int; let sha256: String
-        let start: Coordinate; let end: Coordinate
-        init(_ record: ImportedRouteRecord) {
-            id = record.id; filename = record.filename; kind = record.kind; pointCount = record.pointCount
-            byteCount = record.byteCount; sha256 = record.sha256
-            start = Coordinate(latitude: record.start.latitude, longitude: record.start.longitude)
-            end = Coordinate(latitude: record.end.latitude, longitude: record.end.longitude)
-        }
-        func validated() throws -> ImportedRouteRecord {
-            guard let start = GeoCoordinate(latitude: start.latitude, longitude: start.longitude),
-                  let end = GeoCoordinate(latitude: end.latitude, longitude: end.longitude) else {
-                throw ImportedRoutesFailure.corruptArchive
-            }
-            return try ImportedRouteRecord(id: id, filename: filename, kind: kind, pointCount: pointCount,
-                byteCount: byteCount, sha256: sha256, start: start, end: end)
-        }
-    }
-
     private func currentRecords(_ descriptor: SecureArchiveDirectory) throws -> [ImportedRouteRecord] {
         guard let data = try readFile(Self.manifestName, directoryFD: descriptor, maximum: ImportedRoutesLimits.manifestBytes) else {
             // A missing archive is a new namespace. Existing recognized payloads
             // are counted/cleaned only after this healthy empty manifest decision.
             return []
         }
-        let decoder = JSONDecoder()
-        let version: Version
-        do { version = try decoder.decode(Version.self, from: data) }
-        catch { throw ImportedRoutesFailure.corruptArchive }
-        guard version.schemaVersion == 1 else { throw ImportedRoutesFailure.unsupportedSchema }
-        let manifest: Manifest
-        do { manifest = try decoder.decode(Manifest.self, from: data) }
-        catch { throw ImportedRoutesFailure.corruptArchive }
-        guard manifest.records.count <= ImportedRoutesLimits.records else { throw ImportedRoutesFailure.limitExceeded }
-        var identities = Set<UUID>()
-        return try manifest.records.map { dto in
-            let record = try dto.validated()
-            guard identities.insert(record.id).inserted else { throw ImportedRoutesFailure.corruptArchive }
+        let records = try _ImportedRouteManifestCodec.decode(data)
+        return try records.map { record in
             try verifyMetadata(record, directoryFD: descriptor)
             return record
         }
@@ -159,10 +161,7 @@ public actor FileImportedRoutesPersistence: ImportedRoutesPersistence {
     }
 
     private func commit(_ records: [ImportedRouteRecord], directoryFD: SecureArchiveDirectory) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(Manifest(schemaVersion: 1, records: records.map(Record.init)))
-        guard data.count <= ImportedRoutesLimits.manifestBytes else { throw ImportedRoutesFailure.limitExceeded }
+        let data = try _ImportedRouteManifestCodec.encode(records)
         do {
             try directoryFD.replaceAtomically(data, target: Self.manifestName, staging: ".manifest-\(UUID().uuidString).staging", checkpoint: { point in
                 switch point {

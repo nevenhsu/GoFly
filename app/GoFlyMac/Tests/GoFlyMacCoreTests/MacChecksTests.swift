@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import GoFlyMacCore
+import GoFlyMacCore
 
 private struct EchoChecker: MacChecking {
     let wrongDevice: Bool
@@ -24,6 +24,21 @@ private struct SlowChecker: MacChecking {
         // Deliberately ignore cancellation to model a late child-process response.
         try? await Task.sleep(for: .milliseconds(120))
         return try await EchoChecker(wrongDevice: false).check(request)
+    }
+}
+
+private actor HeldChecker: MacChecking {
+    private var pending: [(CheckRequest, CheckedContinuation<Data, Error>)] = []
+    func check(_ request: CheckRequest) async throws -> Data {
+        try await withCheckedThrowingContinuation { pending.append((request, $0)) }
+    }
+    func entered() -> Bool { !pending.isEmpty }
+    func finish() async throws {
+        let commands = pending
+        pending = []
+        for (request, continuation) in commands {
+            continuation.resume(returning: try await EchoChecker(wrongDevice: false).check(request))
+        }
     }
 }
 
@@ -99,6 +114,42 @@ private struct SlowChecker: MacChecking {
     try await Task.sleep(for: .milliseconds(180))
     #expect(model.environment == nil)
     #expect(!model.busy)
+}
+
+@Test @MainActor func cancelledReadOnlyCheckRetainsAdmissionUntilItReturns() async throws {
+    let runner = HeldChecker()
+    let model = MacAppModel(live: runner)
+    model.checkEnvironment()
+    for _ in 0..<200 {
+        if await runner.entered() { break }
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(await runner.entered())
+    model.cancel()
+    #expect(model.busy)
+    model.navigate(.environment)
+    #expect(model.page == .home)
+    try await runner.finish()
+    try await settled(model)
+    #expect(!model.busy)
+    #expect(model.environment == nil)
+}
+
+@Test @MainActor func switchingPreviewWaitsForThePreviousLiveCheckToReturn() async throws {
+    let runner = HeldChecker()
+    let model = MacAppModel(live: runner)
+    model.checkEnvironment()
+    for _ in 0..<200 {
+        if await runner.entered() { break }
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    model.switchMode(preview: true)
+    #expect(model.busy)
+    #expect(!model.isPreview)
+    try await runner.finish()
+    try await settled(model)
+    #expect(model.isPreview)
+    #expect(model.environment?.ready == true)
 }
 
 @Test @MainActor func changingDeviceClearsEvidence() async throws {

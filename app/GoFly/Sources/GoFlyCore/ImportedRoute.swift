@@ -115,8 +115,15 @@ public protocol ImportedRoutesPersistence: Sendable {
     func read() async throws -> ImportedRoutesReceipt
     func importArtifact(_ artifact: ImportedRouteArtifact) async throws -> ImportedRoutesReceipt
     func validate(_ id: UUID) async throws -> ImportedRouteSnapshot
+    func transferSnapshot() async throws -> TransferArchiveSnapshot
     func delete(_ id: UUID) async throws -> ImportedRoutesReceipt
     func undoDelete() async throws -> ImportedRoutesReceipt
+}
+
+public extension ImportedRoutesPersistence {
+    func transferSnapshot() async throws -> TransferArchiveSnapshot {
+        throw ImportedRoutesFailure.unavailable
+    }
 }
 
 public struct UnavailableImportedRoutesPersistence: ImportedRoutesPersistence {

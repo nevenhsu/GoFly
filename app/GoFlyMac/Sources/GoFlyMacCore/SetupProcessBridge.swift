@@ -10,6 +10,27 @@ public struct MacSetupConfiguration: Decodable, Sendable {
     public let targetName: String
     public let stateRoot: String
 
+    init(verifiedData data: Data) throws {
+        guard !data.isEmpty, data.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
+        let object = try SetupWireJSON.object(data)
+        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath",
+                                   "targetBundleID", "targetName", "stateRoot"] else {
+            throw MacSetupFailure.invalidRequest
+        }
+        self = try JSONDecoder().decode(Self.self, from: data)
+        let workspace = URL(fileURLWithPath: workspaceRoot).standardizedFileURL
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("GoFlySetup").path
+        guard workspaceRoot.hasPrefix("/"), workspace.path == workspaceRoot,
+              !workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              pythonPath == workspace.appendingPathComponent("work/mac-setup-env/bin/python").path,
+              projectPath == workspace.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path,
+              developerDirectory == "/Applications/Xcode.app/Contents/Developer",
+              targetBundleID == "com.neven.gofly", targetName == "GoFly", stateRoot == support else {
+            throw MacSetupFailure.invalidRequest
+        }
+    }
+
     public init(configurationURL: URL) throws {
         do {
             guard configurationURL.isFileURL else { throw MacSetupFailure.invalidRequest }
@@ -54,6 +75,8 @@ public struct SetupProcessBridge: MacSetupRunning {
     public let configuration: MacSetupConfiguration
     private let configurationURL: URL
     private let scriptURL: URL
+    private let bundleResources: MacBundleResources
+    private let initialResourceStamp: MacBundleResourceStamp
 
     public init(configurationURL: URL, scriptURL: URL) throws {
         guard let resources = Bundle.main.resourceURL,
@@ -61,7 +84,20 @@ public struct SetupProcessBridge: MacSetupRunning {
               scriptURL.standardizedFileURL == resources.appendingPathComponent("Bridge/Setup/setup_bridge.py").standardizedFileURL else {
             throw MacSetupFailure.unavailable
         }
-        let configuration = try MacSetupConfiguration(configurationURL: configurationURL)
+        let bundleResources: MacBundleResources
+        do {
+            bundleResources = try MacBundleResources(bundleURL: Bundle.main.bundleURL)
+        } catch {
+            throw MacSetupFailure.unavailable
+        }
+        let stamp: MacBundleResourceStamp
+        let configuration: MacSetupConfiguration
+        do {
+            stamp = try bundleResources.stamp()
+            configuration = try MacSetupConfiguration(verifiedData: bundleResources.read(.setupConfiguration))
+        } catch {
+            throw MacSetupFailure.unavailable
+        }
         guard scriptURL.isFileURL, scriptURL.lastPathComponent == "setup_bridge.py",
               scriptURL.deletingLastPathComponent().lastPathComponent == "Setup",
               (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
@@ -74,11 +110,14 @@ public struct SetupProcessBridge: MacSetupRunning {
         self.configuration = configuration
         self.configurationURL = configurationURL
         self.scriptURL = scriptURL
+        self.bundleResources = bundleResources
+        self.initialResourceStamp = stamp
     }
 
     public func run(_ request: MacSetupRequest) async throws -> Data {
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
+        do { try bundleResources.revalidate() } catch { throw MacSetupFailure.unavailable }
         let process = BoundedProcess()
         do {
             return try await withTaskCancellationHandler {

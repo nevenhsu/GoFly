@@ -31,7 +31,7 @@ Start 只驗證裝置、必要支援及定位服務可用，不接收座標也�
 
 在執行前由獨立 reviewer 作 Advisor 審查，要求同 session 身分、不可取消的 clear、真正完成與 watchdog 分開、target 分離及來源 allowlist；以上已納入。測試界線沿用票 01 的 service public interface 及 device 系統邊界，不測私有欄位。
 
-自動化測試只證明 host 狀態／故障注入。device build、simulator build、模擬器畫面與實機定位效果分開記錄；沒有裝置結果不結票。沿用 setup 來源見 `NativeSources.json`；正式 native 來源固定 idevice commit `3854a5df4a5a6dee71ffce4d8befc2ea356a8065` 加窄幅安全 patch，重建證據另記 commit／lockfile／patch／header／archive hash。Swift 只匯入 allowlist shim，不匯入完整 generated header。舊 archive 的通過建置不能代替這份安全修正版的重新建置或裝置驗收。
+自動化測試只證明 host 狀態／故障注入。device build、simulator build、模擬器畫面與實機定位效果分開記錄；沒有裝置結果不標 done，但可標 Implementation: complete 並維持 verification-pending／deferred-by-user；前置實作與自動驗證完成即可繼續後續票。依使用者安排，開發期間不要求接 iPhone、不等待 USB、不安裝或操作實機，全部完成後才由使用者集中測試，含背景與跨端項目。沿用 setup 來源見 `NativeSources.json`；正式 native 來源固定 idevice commit `3854a5df4a5a6dee71ffce4d8befc2ea356a8065` 加窄幅安全 patch，重建證據另記 commit／lockfile／patch／header／archive hash。Swift 只匯入 allowlist shim，不匯入完整 generated header。舊 archive 的通過建置不能代替這份安全修正版的重新建置或裝置驗收。
 
 ## 首次流程（票 02）
 
@@ -240,3 +240,7 @@ active support pointer 與 bounded receipt history 位於同一份原子提交�
 正式 pointer 存在時，NativeDeviceService 不再消耗舊 v1 輸入；本次 v1 在實際解碼後核對預期交易 ID。配對狀態採背景唯讀觀察快取，C01／C06 畫面求值不做檔案 IO。Python 在首次啟動前持久化完整 manifest／檔案摘要；只有已核實發布的 formalPublished 階段可讀 activation 或進入第二次啟動，每次重連與寫入仍重新核對裝置、OS、Developer Mode 與信任。
 
 最終軟體檢查與已知限制見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)。Core458、Mac37、LocalGo52、App聚焦6及受影響既有UI8均通過；build19未簽署裝置建置、三語428鍵、native verifier及雙軸審查已完成。開發未連接、列出、簽署、安裝或操作手機，硬體驗收保持未驗。
+
+## 同機重新安裝與資料還原（M2／17，開發中）
+
+M2 在獨立 protocol3 與同一操作鎖下，先原子提交引用已同步 cutline 的 preparing 紀錄並持續鎖住正常 runtime；複製失敗不解除鎖定，孤立未提交 cutline 沒有 seed／恢復權限。完整來源資料驗證後才轉 ready，由 Mac 完整驗證及同步備份後，才建立移除意圖。完整 owner 鎖定、實體工作排空、nonce／當前程序回報、移除前封存、未知安裝不可接管，以及每類別指標與收據原子提交，均是分段實作的必要條件。不可攜入位置、任務、clear／ACK／GPS 或背景資格。還原意圖與 M1 門檻共同阻擋正常 runtime，全部完成才可進地圖。詳見 [M2 決策](../../.scratch/gofly-ios/decisions/M2-reinstall.md)；目前未宣稱整體交付或裝置結果。

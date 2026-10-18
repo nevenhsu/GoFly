@@ -30,7 +30,10 @@ public final class MacAppModel {
     public private(set) var inspection: DeviceInspection?
     public private(set) var selectedID: String?
     private var checkingBusy = false
+    public private(set) var isCancellingCheck = false
+    public var isChecking: Bool { checkingBusy }
     public let setup: MacSetupModel?
+    public let reinstall: MacReinstallModel?
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
     public private(set) var previewStage = 0
@@ -42,12 +45,37 @@ public final class MacAppModel {
     @ObservationIgnored private let live: any MacChecking
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
+    @ObservationIgnored private var activeCheckID: UUID?
+    private enum PendingCheckAction { case mode(Bool), scenario }
+    @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
 
-    public init(live: any MacChecking, setup: MacSetupModel? = nil) { self.live = live; self.setup = setup }
-    public var busy: Bool { checkingBusy || (!isPreview && setup?.isBusy == true) }
-    public var setupLocksDevice: Bool { !isPreview && setup?.locksDevice == true }
+    public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil) {
+        self.live = live
+        self.setup = setup
+        self.reinstall = reinstall
+    }
+    public var busy: Bool {
+        checkingBusy || (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true))
+    }
+    public var setupLocksDevice: Bool {
+        !isPreview && (setup?.locksDevice == true || reinstall?.locksDevice == true)
+    }
+    private var activeOperationPage: MacPage {
+        reinstall?.locksDevice == true ? .reinstall : .install
+    }
 
     public func restoreSetup() async {
+        await reinstall?.restore()
+        if let identity = reinstall?.continuation {
+            selectedID = identity.deviceID
+            firstInstall = false
+            page = .reinstall
+            return
+        } else if reinstall?.failure != nil {
+            firstInstall = false
+            page = .reinstall
+            return
+        }
         await setup?.restore()
         if let identity = setup?.continuation {
             selectedID = identity.deviceID
@@ -56,6 +84,23 @@ public final class MacAppModel {
         } else if setup?.failure != nil {
             firstInstall = true
             page = .install
+        }
+    }
+
+    public func finishReinstall() async {
+        guard !busy, reinstall?.snapshot?.isComplete == true || reinstall?.snapshot?.isAbandoned == true else { return }
+        reinstall?.resetSelection()
+        // When M2 was restored first, M1 has not reopened the predecessor
+        // which M2 may archive. Read its actual current journal only now.
+        await setup?.restore()
+        if setup?.locksDevice == true {
+            firstInstall = true
+            selectedID = setup?.continuation?.deviceID
+            page = .install
+        } else {
+            selectedID = nil
+            inspection = nil
+            page = .home
         }
     }
     public var ready: Bool { environment?.ready == true && !busy }
@@ -72,11 +117,13 @@ public final class MacAppModel {
 
     public func navigate(_ destination: MacPage) {
         guard !busy else { return }
-        if setupLocksDevice && destination != .home && destination != .install && destination != .environment {
-            page = .install; return
+        if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment {
+            page = activeOperationPage; return
         }
         if !isPreview && destination != .home && destination != .environment &&
-            !(destination == .install && (setup?.hasRecordedTransaction == true || setupLocksDevice)) && environment?.ready != true {
+            !(destination == activeOperationPage && setupLocksDevice) &&
+            !(destination == .install && setup?.hasRecordedTransaction == true) &&
+            !(destination == .reinstall && reinstall?.hasRecordedTransaction == true) && environment?.ready != true {
             page = .environment; return
         }
         page = destination; failure = nil; previewMessage = nil
@@ -84,7 +131,13 @@ public final class MacAppModel {
 
     public func switchMode(preview: Bool) {
         guard !setupLocksDevice else { return }
+        if checkingBusy {
+            pendingCheckAction = .mode(preview)
+            cancel()
+            return
+        }
         setup?.resetSelection()
+        reinstall?.resetSelection()
         cancel()
         isPreview = preview; environment = nil; devices = []; inspection = nil
         selectedID = nil; page = .home; previewStage = 0; previewMessage = nil; failure = nil
@@ -93,18 +146,23 @@ public final class MacAppModel {
 
     public func select(_ id: String) {
         guard !busy, !setupLocksDevice, visibleDevices.contains(where: { $0.id == id }) else { return }
-        if selectedID?.lowercased() != id.lowercased() { setup?.resetSelection() }
+        if selectedID?.lowercased() != id.lowercased() {
+            setup?.resetSelection()
+            reinstall?.resetSelection()
+        }
         selectedID = id; inspection = nil; failure = nil
     }
 
     public func openDevices(firstInstall: Bool) {
         guard ready, !setupLocksDevice else { return }
         setup?.resetSelection()
+        reinstall?.resetSelection()
         self.firstInstall = firstInstall; selectedID = nil; inspection = nil
         page = .devices; refreshDevices()
     }
 
     public func checkEnvironment() {
+        guard !busy else { return }
         environment = nil
         perform(.environment) { data, request in
             self.environment = try ResponseDecoder.decode(data, for: request, as: MacEnvironment.self)
@@ -112,8 +170,9 @@ public final class MacAppModel {
     }
 
     public func refreshDevices() {
-        guard !setupLocksDevice else { return }
+        guard !busy, !setupLocksDevice else { return }
         setup?.resetSelection()
+        reinstall?.resetSelection()
         devices = []; selectedID = nil; inspection = nil
         perform(.devices) { data, request in
             self.devices = ConnectedDevice.unique(try ResponseDecoder.decode(data, for: request, as: DeviceList.self).devices,
@@ -134,13 +193,20 @@ public final class MacAppModel {
     }
 
     public func cancel() {
-        generation = UUID(); task?.cancel(); task = nil; checkingBusy = false
+        generation = UUID()
+        if checkingBusy { isCancellingCheck = true }
+        task?.cancel()
         // A cancelled refresh cannot leave apparently current device evidence.
         inspection = nil
     }
 
     public func applyScenario() {
         guard isPreview else { return }
+        if checkingBusy {
+            pendingCheckAction = .scenario
+            cancel()
+            return
+        }
         cancel(); failure = nil; inspection = nil; selectedID = nil; devices = []
         page = .home; checkEnvironment()
     }
@@ -171,10 +237,12 @@ public final class MacAppModel {
                          apply: @escaping @MainActor (Data, CheckRequest) throws -> Void) {
         guard !busy else { return }
         checkingBusy = true; failure = nil
-        let token = UUID(); generation = token
+        isCancellingCheck = false
+        let token = UUID(); generation = token; activeCheckID = token
         let request = CheckRequest(action: action, deviceID: deviceID)
         let checker: any MacChecking = isPreview ? PreviewChecker(scenario: previewScenario) : live
         task = Task {
+            defer { self.finishCheck(token) }
             do {
                 let result = try await checker.check(request)
                 guard !Task.isCancelled, self.generation == token else { return }
@@ -184,8 +252,21 @@ public final class MacAppModel {
                 self.inspection = nil
                 self.failure = error as? CheckFailure ?? .invalidResponse
             }
-            guard self.generation == token else { return }
-            self.checkingBusy = false; self.task = nil
+        }
+    }
+
+    private func finishCheck(_ token: UUID) {
+        guard activeCheckID == token else { return }
+        activeCheckID = nil
+        checkingBusy = false
+        isCancellingCheck = false
+        task = nil
+        let pending = pendingCheckAction
+        pendingCheckAction = nil
+        switch pending {
+        case .mode(let preview): switchMode(preview: preview)
+        case .scenario: applyScenario()
+        case nil: break
         }
     }
 }

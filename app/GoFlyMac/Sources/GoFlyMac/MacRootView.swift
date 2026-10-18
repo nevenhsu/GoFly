@@ -37,6 +37,7 @@ struct MacRootView: View {
             }
         }
         .background(.white).foregroundStyle(.black)
+        .tint(.black)
         .font(GoFlyStyle.font(14))
     }
 
@@ -54,7 +55,9 @@ struct MacRootView: View {
             PillButton(title: "首次安裝", primary: true, width: 400, height: 56, enabled: model.ready) { model.openDevices(firstInstall: true) }
                 .accessibilityIdentifier("first-install")
             if !model.isPreview, model.setup?.hasRecordedTransaction == true || model.setupLocksDevice {
-                Button("查看安裝狀態") { model.navigate(.install) }.padding(.top, 12).disabled(model.busy)
+                Button(model.reinstall?.hasRecordedTransaction == true ? "查看重新安裝狀態" : "查看安裝狀態") {
+                    model.navigate(model.reinstall?.hasRecordedTransaction == true || model.reinstall?.locksDevice == true ? .reinstall : .install)
+                }.padding(.top, 12).disabled(model.busy)
             }
             PillButton(title: "裝置管理", width: 400, height: 56, enabled: model.ready) { model.openDevices(firstInstall: false) }
                 .padding(.top, 20).accessibilityIdentifier("manage-devices")
@@ -154,13 +157,13 @@ struct MacRootView: View {
         VStack(spacing: 20) {
             Rule()
             HStack(spacing: 24) {
-                if model.page == .install && !model.isPreview && model.setup != nil {
+                if !model.isPreview && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil)) {
                     pageActions
                 } else if model.busy {
                     ProgressView().controlSize(.small)
-                    Text("正在檢查，請保持手機連接…").font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
+                    Text(model.isCancellingCheck ? "正在結束檢查…" : "正在檢查，請保持手機連接…").font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
                     Spacer()
-                    PillButton(title: "取消檢查") { model.cancel() }
+                    PillButton(title: "取消檢查", enabled: !model.isCancellingCheck) { model.cancel() }
                 } else { pageActions }
             }
             HStack {
@@ -201,12 +204,13 @@ struct MacRootView: View {
         case .channel: "裝置連接與配對正常時，依手機提示確認 LocalDevVPN 與服務。"
         case .install: model.isPreview ? "使用 Xcode 中已設定的開發團隊（介面預覽）。" : "先檢查原裝置與簽名來源，再明確開始本次安裝。"
         case .handoff: "App、配對匯入及必要裝置支援均已確認；可拔除 USB。"
-        case .reinstall: "備份完成 → 重新安裝 → 自動匯入；目前為介面預覽。"
+        case .reinstall: model.isPreview ? "備份完成 → 重新安裝 → 自動匯入；目前為介面預覽。" : "明確選取保留資料，完整驗證備份後，同機重新安裝並核對匯入回報。"
         case .backups: "成功匯入後保留七天；未完成匯入的備份不自動刪除。"
         }
     }
 
     private var pageCheckFailure: CheckFailure? {
-        model.page == .install && !model.isPreview && model.setup != nil ? nil : model.failure
+        !model.isPreview && ((model.page == .install && model.setup != nil) ||
+            (model.page == .reinstall && model.reinstall != nil)) ? nil : model.failure
     }
 }

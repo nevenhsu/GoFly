@@ -194,9 +194,16 @@ public protocol FavoriteRoutesPersistence: Sendable {
     func read() async throws -> FavoriteRoutesReceipt
     func save(_ candidate: FavoriteRouteSaveCandidate, label: String?) async throws -> FavoriteRouteSaveReceipt
     func validate(_ id: UUID) async throws -> FavoriteRouteSnapshot
+    func transferSnapshot() async throws -> TransferArchiveSnapshot
     func updateLabel(_ id: UUID, label: String?) async throws -> FavoriteRoutesReceipt
     func delete(_ id: UUID) async throws -> FavoriteRoutesReceipt
     func undoDelete() async throws -> FavoriteRoutesReceipt
+}
+
+public extension FavoriteRoutesPersistence {
+    func transferSnapshot() async throws -> TransferArchiveSnapshot {
+        throw FavoriteRoutesFailure.unavailable
+    }
 }
 public struct UnavailableFavoriteRoutesPersistence: FavoriteRoutesPersistence {
     public init() {}

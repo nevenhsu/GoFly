@@ -34,6 +34,12 @@ public final class RouteExecutionController: ObservableObject {
     private let clock: any RouteClock
     public private(set) var favoriteLoadAdmissionRevision: UInt64 = 0
     private var issuedFavoriteLoadAdmission: UInt64?
+    private var issuedImportedLoadAdmission: UInt64?
+    private let transferOwnerID = UUID()
+    private var transferHold: TransferHold?
+    /// IDs represent route planner/native transitions that have actually
+    /// entered their async body. Completed Task handles do not block a cutline.
+    private var physicalOperations: Set<UUID> = []
     private var revision: UInt64 = 0
     private var task: Task<Void, Never>?
     private var transition: Task<Void, Never>?
@@ -67,10 +73,32 @@ public final class RouteExecutionController: ObservableObject {
         }
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
-    public var canEdit: Bool { phase == .editing }
+    public var canEdit: Bool { phase == .editing && transferHold == nil }
     public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canClearImportedRoute: Bool { canEdit && draft.gpxSource != nil }
+    private func beginPhysicalOperation() -> UUID {
+        let id = UUID(); physicalOperations.insert(id); return id
+    }
+    private func finishPhysicalOperation(_ id: UUID) { physicalOperations.remove(id) }
+
+    public func acquireTransferHold() -> TransferHold? {
+        guard transferHold == nil, phase == .editing, picker == nil,
+              intent == nil, continuationIdentity == nil, !recoveryProbePending,
+              physicalOperations.isEmpty else { return nil }
+        invalidateFavoriteLoadAdmission()
+        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
+        transferHold = hold
+        return hold
+    }
+    @discardableResult
+    public func releaseTransferHold(_ token: TransferHold) -> Bool {
+        guard transferHold == token, token.ownerID == transferOwnerID,
+              physicalOperations.isEmpty, phase == .editing, picker == nil,
+              intent == nil, continuationIdentity == nil else { return false }
+        transferHold = nil
+        return true
+    }
     /// Capture before asynchronous archive validation; only this outstanding request may replace the draft.
     public func beginFavoriteLoad() -> UInt64? {
         guard canEdit, picker == nil else { return nil }
@@ -78,9 +106,16 @@ public final class RouteExecutionController: ObservableObject {
         issuedFavoriteLoadAdmission = favoriteLoadAdmissionRevision
         return favoriteLoadAdmissionRevision
     }
+    public func beginImportedLoad() -> UInt64? {
+        guard canEdit, picker == nil else { return nil }
+        invalidateFavoriteLoadAdmission()
+        issuedImportedLoadAdmission = favoriteLoadAdmissionRevision
+        return favoriteLoadAdmissionRevision
+    }
     public func invalidateFavoriteLoadAdmission() {
         favoriteLoadAdmissionRevision &+= 1
         issuedFavoriteLoadAdmission = nil
+        issuedImportedLoadAdmission = nil
     }
     @discardableResult public func loadFavoriteRoute(_ snapshot: FavoriteRouteSnapshot, expectedAdmissionRevision: UInt64) -> Bool {
         guard canEdit, picker == nil, issuedFavoriteLoadAdmission == expectedAdmissionRevision,
@@ -103,9 +138,11 @@ public final class RouteExecutionController: ObservableObject {
         plannedRoute = preview
         return true
     }
-    @discardableResult public func loadImportedRoute(_ snapshot: ImportedRouteSnapshot) -> Bool {
-        guard canEdit else { return false }
-        invalidateFavoriteLoadAdmission()
+    @discardableResult public func loadImportedRoute(_ snapshot: ImportedRouteSnapshot,
+                                                     expectedAdmissionRevision: UInt64) -> Bool {
+        guard canEdit, picker == nil,
+              issuedImportedLoadAdmission == expectedAdmissionRevision,
+              favoriteLoadAdmissionRevision == expectedAdmissionRevision else { return false }
         let preview: PlannedRoute
         do { preview = try PlannedRoute(imported: snapshot.document) }
         catch {
@@ -121,10 +158,10 @@ public final class RouteExecutionController: ObservableObject {
         applyDraft(RouteDraft(speed: draft.speed))
         return true
     }
-    public var canPause: Bool { phase == .running }
-    public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
+    public var canPause: Bool { transferHold == nil && phase == .running }
+    public var canSetRoundTrip: Bool { transferHold == nil && [.editing, .running, .paused].contains(phase) }
     public var canToggleHeading: Bool {
-        guard roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
+        guard transferHold == nil, roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
         return heading == .forward ? progress.committedDistanceMeters > 0 : progress.committedDistanceMeters < intent.route.totalDistanceMeters
     }
     public var currentTargetCoordinate: GeoCoordinate? {
@@ -133,6 +170,7 @@ public final class RouteExecutionController: ObservableObject {
     }
     @discardableResult public func setRoundTripEnabled(_ enabled: Bool) -> Bool {
         guard canSetRoundTrip else { return false }
+        invalidateFavoriteLoadAdmission()
         roundTripEnabled = enabled
         if enabled, phase == .running || phase == .paused { usesPositionAxis = true }
         if phase == .running, let intent { requestContinuationIfEligible(for: intent) }
@@ -147,7 +185,7 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     public var canResume: Bool {
-        sceneActive && connectionAvailable && !recoveryProbePending && phase == .paused && commands.canBeginRoute
+        transferHold == nil && sceneActive && connectionAvailable && !recoveryProbePending && phase == .paused && commands.canBeginRoute
     }
 
     /// Recovery blocks a paused resume until its fresh probe settles without
@@ -155,7 +193,7 @@ public final class RouteExecutionController: ObservableObject {
     func recoveryProbeDidStart() { recoveryProbePending = true; objectWillChange.send() }
     func recoveryProbeDidFinish() { recoveryProbePending = false; objectWillChange.send() }
     public var canCancel: Bool {
-        [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
+        transferHold == nil && [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
     }
     @discardableResult public func openPicker(for nodeID: RouteNodeID) -> Bool {
         guard canEdit, let node = draft.nodes.first(where: { $0.id == nodeID }) else { return false }
@@ -252,6 +290,7 @@ public final class RouteExecutionController: ObservableObject {
     }
     @discardableResult public func setSpeed(_ speed: RouteSpeed) -> Bool {
         guard canEdit else { return false }
+        invalidateFavoriteLoadAdmission()
         draft = draft.replacing(speed: speed)
         return true
     }
@@ -276,7 +315,9 @@ public final class RouteExecutionController: ObservableObject {
         accumulatedElapsed = .zero; activeStartedAt = nil
         heading = .forward; usesPositionAxis = roundTripEnabled
         let planner = planner
+        let physicalID = beginPhysicalOperation()
         task = Task { [weak self] in
+            defer { Task { @MainActor [weak self] in self?.finishPhysicalOperation(physicalID) } }
             do {
                 let route: PlannedRoute
                 if let imported = snapshot.gpxSource { route = try PlannedRoute(imported: imported.document) }
@@ -351,7 +392,9 @@ public final class RouteExecutionController: ObservableObject {
         phase = .pausing
         let token = revision, running = task
         running?.cancel()
+        let physicalID = beginPhysicalOperation()
         transition = Task { [weak self] in
+            defer { Task { @MainActor [weak self] in self?.finishPhysicalOperation(physicalID) } }
             guard let self else { return }
             let settlement = await self.commands.waitForRouteIdle(executionID: intent.id, lease: intent.lease)
             await running?.value
@@ -372,7 +415,11 @@ public final class RouteExecutionController: ObservableObject {
         phase = .running; activeStartedAt = clock.now; suspensionReason = nil
         requestContinuationIfEligible(for: intent)
         let token = revision
-        task = Task { [weak self] in await self?.run(intent, token: token) }
+        let physicalID = beginPhysicalOperation()
+        task = Task { [weak self] in
+            defer { Task { @MainActor [weak self] in self?.finishPhysicalOperation(physicalID) } }
+            await self?.run(intent, token: token)
+        }
         return true
     }
     @discardableResult public func cancel() -> Bool {
@@ -390,7 +437,9 @@ public final class RouteExecutionController: ObservableObject {
         let token = revision, running = task
         commands.endRoute(executionID: intent.id, lease: intent.lease)
         running?.cancel()
+        let physicalID = beginPhysicalOperation()
         transition = Task { [weak self] in
+            defer { Task { @MainActor [weak self] in self?.finishPhysicalOperation(physicalID) } }
             guard let self else { return }
             let settlement = await self.commands.waitForRouteIdle(executionID: intent.id, lease: intent.lease)
             await running?.value
@@ -407,10 +456,17 @@ public final class RouteExecutionController: ObservableObject {
         }
         return true
     }
-    public func dismissCompletion(executionID: UUID) { if completion?.executionID == executionID { completion = nil } }
+    public func dismissCompletion(executionID: UUID) {
+        guard transferHold == nil else { return }
+        if completion?.executionID == executionID { completion = nil }
+    }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         sceneActive = false
+        guard transferHold == nil else {
+            objectWillChange.send()
+            return
+        }
         if let intent, phase == .running, continuingLease == intent.lease {
             objectWillChange.send()
             return
@@ -420,11 +476,19 @@ public final class RouteExecutionController: ObservableObject {
 
     public func sceneDidBecomeActive() {
         sceneActive = true
+        guard transferHold == nil else {
+            objectWillChange.send()
+            return
+        }
         objectWillChange.send()
     }
 
     public func connectionDidBecomeUnavailable() {
         connectionAvailable = false
+        guard transferHold == nil else {
+            objectWillChange.send()
+            return
+        }
         releaseForUnavailable(reason: .connectionUnavailable)
     }
 
@@ -434,6 +498,7 @@ public final class RouteExecutionController: ObservableObject {
     }
 
     public func continuationDidBecomeUnavailable() {
+        guard transferHold == nil else { return }
         releaseForUnavailable(reason: .backgroundUnavailable)
     }
 

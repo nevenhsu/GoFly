@@ -2,8 +2,16 @@ import Foundation
 
 public protocol FavoritePlacesPersistence: Sendable {
     func read() throws -> Data?
+    /// Captures the current owner archive without invoking the normal reader's
+    /// cleanup or normalization behavior. Unsupported conformers remain
+    /// unavailable for transfer.
+    func transferSnapshot() throws -> Data?
     /// Throwing guarantees that the previously authoritative bytes remain unchanged.
     func replaceAtomically(with data: Data) throws
+}
+
+public extension FavoritePlacesPersistence {
+    func transferSnapshot() throws -> Data? { throw FavoritePlacesFailure.unavailable }
 }
 
 /// The on-disk DTO is deliberately separate from validated runtime coordinates.

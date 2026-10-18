@@ -22,7 +22,11 @@ struct GoFlyApp: App {
         let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("GoFlySetup")
         let setup = MacSetupModel(runner: setupRunner, journal: MacSetupJournalReader(stateRoot: stateRoot))
-        _model = State(initialValue: MacAppModel(live: checker, setup: setup))
+        let reinstallRunner: any MacReinstallRunning = (try? ReinstallProcessBridge(
+            configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
+            scriptURL: resources.appendingPathComponent("Bridge/Reinstall/reinstall_bridge.py"))) ?? UnavailableReinstallRunner()
+        let reinstall = MacReinstallModel(runner: reinstallRunner, journal: MacReinstallJournalReader(stateRoot: stateRoot))
+        _model = State(initialValue: MacAppModel(live: checker, setup: setup, reinstall: reinstall))
     }
 
     var body: some Scene {

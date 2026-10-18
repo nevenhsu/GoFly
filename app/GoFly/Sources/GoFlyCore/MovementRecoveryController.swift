@@ -34,6 +34,8 @@ public final class MovementRecoveryController: ObservableObject {
     private var admittingOwnedReset = false
     private var revisionQueued = false
     private var subscriptions: [AnyCancellable] = []
+    private let transferOwnerID = UUID()
+    private var transferHold: TransferHold?
 
     public init(
         service: ServiceController,
@@ -109,17 +111,41 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     public var canCheck: Bool {
-        sceneActive && !isChecking && checkTask == nil && isManualProbeEligible
+        transferHold == nil && sceneActive && !isChecking && checkTask == nil && isManualProbeEligible
     }
 
     public var canResetTunnel: Bool {
-        sceneActive && service.canResetTunnel && !isChecking &&
+        transferHold == nil && sceneActive && service.canResetTunnel && !isChecking &&
             !isResettingTunnel && resetConsentID == nil && currentResetID == nil && resetTask == nil
+    }
+
+    public func acquireTransferHold() -> TransferHold? {
+        guard transferHold == nil, !isChecking, checkTask == nil,
+              !isResettingTunnel, resetConsentID == nil, currentResetID == nil,
+              physicalResetTaskID == nil, resetTask == nil,
+              service.phase == .stopped, service.clearState == .confirmed,
+              !service.nativeBusy, !service.coldRecoveryHeld,
+              service.recoveryUncertainty == nil, !requiresColdConfirmation,
+              unverifiedMovement == nil, unverifiedUncertainty == nil,
+              route.phase == .editing, route.intent == nil,
+              joystick.phase == .neutral, joystick.intent == nil else { return nil }
+        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
+        transferHold = hold
+        return hold
+    }
+
+    @discardableResult
+    public func releaseTransferHold(_ token: TransferHold) -> Bool {
+        guard transferHold == token, token.ownerID == transferOwnerID,
+              !isChecking, checkTask == nil, !isResettingTunnel,
+              physicalResetTaskID == nil, resetTask == nil else { return false }
+        transferHold = nil
+        return true
     }
 
     @discardableResult
     public func resetTunnel() -> Bool {
-        guard canResetTunnel else { return false }
+        guard transferHold == nil, canResetTunnel else { return false }
         let consentID = UUID()
         let physicalID = UUID()
         resetConsentID = consentID
@@ -154,6 +180,10 @@ public final class MovementRecoveryController: ObservableObject {
     public func sceneDidBecomeActive() {
         guard !sceneActive else { return }
         sceneActive = true
+        guard transferHold == nil else {
+            objectWillChange.send()
+            return
+        }
         route.sceneDidBecomeActive()
         joystick.sceneDidBecomeActive()
         // A foreground return is an explicit freshness boundary. It bypasses
@@ -163,6 +193,11 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
+        if transferHold != nil {
+            sceneActive = false
+            objectWillChange.send()
+            return
+        }
         retirePendingReset()
         sceneActive = false
         generation &+= 1
@@ -183,6 +218,7 @@ public final class MovementRecoveryController: ObservableObject {
 
     /// A manual check joins an in-flight check; it never starts a second probe.
     public func checkConnection() {
+        guard transferHold == nil else { return }
         monitorTask?.cancel()
         monitorTask = nil
         guard sceneActive, isManualProbeEligible else { return }
@@ -193,6 +229,7 @@ public final class MovementRecoveryController: ObservableObject {
     /// This forgets the visible old-task summary. The service cold hold remains
     /// until an actual clear acknowledgement releases it.
     public func discardUnverifiedMovement() {
+        guard transferHold == nil else { return }
         retainedSnapshot = nil
         coldSummaryDiscarded = true
         if service.coldRecoveryHeld {
@@ -296,6 +333,7 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     private func beginProbe(manual: Bool = false, showCheckingNotice: Bool = false) {
+        guard transferHold == nil else { return }
         let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
         guard sceneActive, eligible, checkTask == nil else { return }
         monitorTask?.cancel()
@@ -460,22 +498,25 @@ public final class MovementRecoveryController: ObservableObject {
     }
 
     private func observeDomainMutation() {
+        guard transferHold == nil else { return }
         queueCheckpointRevision()
         let token = generation
         Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, self.generation == token else { return }
+            guard let self, self.transferHold == nil, self.generation == token else { return }
             self.evaluateServiceState()
         }
     }
 
     private func queueCheckpointRevision() {
+        guard transferHold == nil else { return }
         guard !revisionQueued else { return }
         revisionQueued = true
         Task { @MainActor [weak self] in
             await Task.yield()
             guard let self else { return }
             self.revisionQueued = false
+            guard self.transferHold == nil else { return }
             if self.checkpointRevision < UInt64.max { self.checkpointRevision += 1 }
         }
     }

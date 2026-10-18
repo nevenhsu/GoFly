@@ -5,6 +5,11 @@ import Testing
 
 @Suite @MainActor
 struct ImportedRouteExecutionTests {
+    private func loadImported(_ controller: RouteExecutionController, _ snapshot: ImportedRouteSnapshot) -> Bool {
+        guard let admission = controller.beginImportedLoad() else { return false }
+        return controller.loadImportedRoute(snapshot, expectedAdmissionRevision: admission)
+    }
+
     @Test func aLoadedGPXPreviewSurvivesImmediatePlanningCancellationAndOnlyExplicitClearRemovesIt() async throws {
         let commands = ImportedCommandSpy(), planner = ImportedPlannerSpy()
         let controller = RouteExecutionController(planner: planner, commands: commands, search: ImportedSearch())
@@ -12,7 +17,7 @@ struct ImportedRouteExecutionTests {
         let speed = RouteSpeed(kilometersPerHour: 42)!
         #expect(controller.setSpeed(speed))
         #expect(controller.setRoundTripEnabled(true))
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(controller.plannedRoute == expected)
         #expect(controller.start())
         #expect(controller.phase == .planning)
@@ -35,7 +40,7 @@ struct ImportedRouteExecutionTests {
         let service = ServiceController(service: device)
         let controller = RouteExecutionController(planner: planner, commands: service, search: ImportedSearch())
         let imported = try snapshot(), expected = try PlannedRoute(imported: imported.document)
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(controller.start())
         for _ in 1...3 {
             await wait { await device.waiting }
@@ -61,10 +66,10 @@ struct ImportedRouteExecutionTests {
         service.observeRealLocation(RealLocationObservation(latitude: 0, longitude: 0, horizontalAccuracy: 5, observedAt: Date()))
         #expect(controller.setSpeed(speed))
         #expect(controller.setRoundTripEnabled(true))
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(await device.coordinates.isEmpty)
         #expect(controller.start())
-        #expect(!controller.loadImportedRoute(imported))
+        #expect(!loadImported(controller, imported))
         #expect(!controller.clearImportedRoute())
         await wait { await device.waiting }
         #expect(await planner.calls == 0)
@@ -78,14 +83,14 @@ struct ImportedRouteExecutionTests {
         await wait { controller.phase == .running && clock.sleepingCount == 1 }
         #expect(controller.progress?.committedDistanceMeters == 0)
         #expect(service.confirmedSimulatedLocation == coordinate(0))
-        #expect(!controller.loadImportedRoute(imported))
+        #expect(!loadImported(controller, imported))
         clock.advance(by: .milliseconds(500))
         await wait { await device.waiting }; await device.finish(.acknowledged)
         await wait { controller.progress?.committedDistanceMeters == 5 && clock.sleepingCount == 1 }
         let confirmed = service.confirmedSimulatedLocation
         #expect(controller.pause())
         await wait { controller.phase == .paused }
-        #expect(!controller.loadImportedRoute(imported))
+        #expect(!loadImported(controller, imported))
         #expect(!controller.clearImportedRoute())
         #expect(controller.resume())
         if ending == "cancel" {
@@ -105,7 +110,7 @@ struct ImportedRouteExecutionTests {
             #expect(await device.claim())
             await device.finish(.unconfirmed(.serviceUnavailable))
             await wait { controller.phase == .unknown }
-            #expect(!controller.loadImportedRoute(imported))
+            #expect(!loadImported(controller, imported))
             #expect(!controller.clearImportedRoute())
             #expect(!controller.canStart)
             #expect(service.stop())
@@ -123,7 +128,7 @@ struct ImportedRouteExecutionTests {
         let commands = ImportedCommandSpy(), planner = ImportedPlannerSpy(), clock = RouteTestClock()
         let controller = RouteExecutionController(planner: planner, commands: commands, search: ImportedSearch(), clock: clock)
         let imported = try snapshot()
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(controller.canStart)
         #expect(controller.start())
         await wait { controller.phase == .running }
@@ -139,7 +144,7 @@ struct ImportedRouteExecutionTests {
         let commands = ImportedCommandSpy(), planner = ImportedPlannerSpy()
         let controller = RouteExecutionController(planner: planner, commands: commands, search: ImportedSearch())
         let imported = try snapshot()
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(controller.start())
         commands.routeAdmissionRevision &+= 1
         await wait { controller.phase == .editing }
@@ -180,7 +185,7 @@ struct ImportedRouteExecutionTests {
         #expect(repeated.pointCount == 10_000)
         let imported = try ImportedRouteSnapshot(document: document, filename: "ten-thousand.gpx")
         let controller = RouteExecutionController(planner: ImportedPlannerSpy(), commands: ImportedCommandSpy(), search: ImportedSearch())
-        #expect(controller.loadImportedRoute(imported))
+        #expect(loadImported(controller, imported))
         #expect(controller.draft.nodes.isEmpty)
         #expect(controller.draft.gpxSource?.document.pointCount == 10_000)
         #expect(controller.canStart)
@@ -192,10 +197,10 @@ struct ImportedRouteExecutionTests {
         let controller = RouteExecutionController(draft: draft, planner: planner, commands: commands, search: ImportedSearch())
         #expect(controller.start())
         await wait { await planner.waiting }
-        #expect(!controller.loadImportedRoute(try snapshot()))
+        #expect(!loadImported(controller, try snapshot()))
         #expect(controller.draft == draft)
         #expect(controller.cancel())
-        #expect(controller.loadImportedRoute(try snapshot()))
+        #expect(loadImported(controller, try snapshot()))
         let loaded = controller.draft
         await planner.finish()
         await wait { await planner.returned }
@@ -238,7 +243,8 @@ struct ImportedRouteExecutionTests {
         #expect(controller.openPicker(for: controller.draft.nodes[0].id))
         let stale = try #require(controller.picker)
         let snapshot = try snapshot()
-        #expect(controller.loadImportedRoute(snapshot))
+        controller.cancelPicker(id: stale.id)
+        #expect(loadImported(controller, snapshot))
         #expect(controller.draft.source == .gpx(snapshot.source))
         #expect(controller.draft.gpxSource == snapshot.source)
         #expect(!controller.draft.isManual)
@@ -279,7 +285,7 @@ struct ImportedRouteExecutionTests {
         let original = controller.draft
         let document = try GPXDocument(content: .routes([GPXRoute(points: [coordinate(0), coordinate(1)]), GPXRoute(points: [coordinate(2), coordinate(3)])]))
         let invalid = try ImportedRouteSnapshot(document: document, filename: "gap.gpx")
-        #expect(!controller.loadImportedRoute(invalid))
+        #expect(!loadImported(controller, invalid))
         #expect(controller.error == .imported(.disconnectedSegments))
         #expect(controller.draft == original)
         #expect(controller.intent == nil)

@@ -18,7 +18,7 @@ public actor FileFavoriteRoutesPersistence: FavoriteRoutesPersistence {
     private var undo: (record: FavoriteRouteRecord, index: Int)?
 
     public init(directory: URL, checkpoint: @escaping @Sendable (FavoriteRoutesWriteCheckpoint) throws -> Void = { _ in }) {
-        self.directory = directory.standardizedFileURL
+        self.directory = directory.absoluteURL
         self.checkpoint = checkpoint
     }
 
@@ -65,6 +65,41 @@ public actor FileFavoriteRoutesPersistence: FavoriteRoutesPersistence {
             guard FavoriteRoutePayload.hash(data) == record.sha256 else { throw FavoriteRoutesFailure.hashMismatch }
             return try FavoriteRouteSnapshot(record: record, source: FavoriteRoutePayload.decode(data, record: record))
         }.value
+    }
+
+    public func transferSnapshot() async throws -> TransferArchiveSnapshot {
+        let snapshot: TransferArchiveSnapshot
+        do {
+            snapshot = try TransferFileIO.captureArchive(
+                directory: directory,
+                manifestLimit: FavoriteRoutesLimits.manifestBytes,
+                payloadLimit: FavoriteRoutesLimits.fileBytes,
+                aggregateLimit: FavoriteRoutesLimits.payloadBytes,
+                emptyManifest: { try TransferArchiveCodec.encodeFavoriteRouteManifest([]) },
+                payloadNames: { data in
+                    try _FavoriteRouteManifestCodec.decode(data).map { $0.id.uuidString + ".route" }
+                })
+        } catch let failure as TransferFailure {
+            switch failure {
+            case .unsafeFile: throw FavoriteRoutesFailure.unsafeFile
+            case .limitExceeded: throw FavoriteRoutesFailure.limitExceeded
+            case .artifactMismatch: throw FavoriteRoutesFailure.metadataMismatch
+            default: throw FavoriteRoutesFailure.unavailable
+            }
+        }
+        do {
+            _ = try await Task.detached {
+                try TransferArchiveCodec.favoriteRoutes(snapshot)
+            }.value
+            return snapshot
+        } catch let failure as TransferFailure {
+            switch failure {
+            case .unsafeFile: throw FavoriteRoutesFailure.unsafeFile
+            case .limitExceeded: throw FavoriteRoutesFailure.limitExceeded
+            case .artifactMismatch: throw FavoriteRoutesFailure.metadataMismatch
+            default: throw FavoriteRoutesFailure.corruptArchive
+            }
+        }
     }
 
     private func validationInput(_ id: UUID) throws -> (FavoriteRouteRecord, Data) {
@@ -126,52 +161,14 @@ public actor FileFavoriteRoutesPersistence: FavoriteRoutesPersistence {
     }
     private func payloadName(_ id: UUID) -> String { id.uuidString + ".route" }
 
-    private struct Manifest: Codable { let schemaVersion: Int; let records: [Record] }
-    private struct Version: Decodable { let schemaVersion: Int }
-    private struct Coordinate: Codable { let latitude: Double; let longitude: Double }
-    private struct Record: Codable {
-        let id: UUID; let label: String?; let sourceKind: FavoriteRouteSourceKind; let count: Int
-        let start: Coordinate; let end: Coordinate; let startTitle: String?; let endTitle: String?
-        let displayFilename: String?; let byteCount: Int; let sha256: String
-        init(_ record: FavoriteRouteRecord) {
-            id = record.id; label = record.label; sourceKind = record.sourceKind; count = record.count
-            byteCount = record.byteCount; sha256 = record.sha256; displayFilename = record.displayFilename
-            start = Coordinate(latitude: record.start.latitude, longitude: record.start.longitude)
-            end = Coordinate(latitude: record.end.latitude, longitude: record.end.longitude)
-            startTitle = record.startTitle; endTitle = record.endTitle
-        }
-        func validated() throws -> FavoriteRouteRecord {
-            guard let start = GeoCoordinate(latitude: start.latitude, longitude: start.longitude),
-                  let end = GeoCoordinate(latitude: end.latitude, longitude: end.longitude) else {
-                throw FavoriteRoutesFailure.corruptArchive
-            }
-            do {
-                return try FavoriteRouteRecord(id: id, label: label, sourceKind: sourceKind, count: count,
-                    start: start, end: end, startTitle: startTitle, endTitle: endTitle,
-                    displayFilename: displayFilename, byteCount: byteCount, sha256: sha256)
-            } catch { throw FavoriteRoutesFailure.corruptArchive }
-        }
-    }
-
     private func currentRecords(_ descriptor: SecureArchiveDirectory) throws -> [FavoriteRouteRecord] {
         guard let data = try readFile(Self.manifestName, directoryFD: descriptor, maximum: FavoriteRoutesLimits.manifestBytes) else {
             // A missing archive is a new namespace. Existing recognized payloads
             // are counted/cleaned only after this healthy empty manifest decision.
             return []
         }
-        let decoder = JSONDecoder()
-        let version: Version
-        do { version = try decoder.decode(Version.self, from: data) }
-        catch { throw FavoriteRoutesFailure.corruptArchive }
-        guard version.schemaVersion == 1 else { throw FavoriteRoutesFailure.unsupportedSchema }
-        let manifest: Manifest
-        do { manifest = try decoder.decode(Manifest.self, from: data) }
-        catch { throw FavoriteRoutesFailure.corruptArchive }
-        guard manifest.records.count <= FavoriteRoutesLimits.records else { throw FavoriteRoutesFailure.limitExceeded }
-        var identities = Set<UUID>()
-        return try manifest.records.map { dto in
-            let record = try dto.validated()
-            guard identities.insert(record.id).inserted else { throw FavoriteRoutesFailure.corruptArchive }
+        let records = try _FavoriteRouteManifestCodec.decode(data)
+        return try records.map { record in
             try verifyMetadata(record, directoryFD: descriptor)
             return record
         }
@@ -185,10 +182,7 @@ public actor FileFavoriteRoutesPersistence: FavoriteRoutesPersistence {
     }
 
     private func commit(_ records: [FavoriteRouteRecord], directoryFD: SecureArchiveDirectory) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(Manifest(schemaVersion: 1, records: records.map(Record.init)))
-        guard data.count <= FavoriteRoutesLimits.manifestBytes else { throw FavoriteRoutesFailure.limitExceeded }
+        let data = try _FavoriteRouteManifestCodec.encode(records)
         do {
             try directoryFD.replaceAtomically(data, target: Self.manifestName, staging: ".manifest-\(UUID().uuidString).staging", checkpoint: { point in
                 switch point {

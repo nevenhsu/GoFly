@@ -2,9 +2,15 @@
 
 **Status:** ready-for-agent
 
-**Blocked by:** 15、17、M1（其餘功能已由這兩票的傳遞依賴涵蓋）。
+**Implementation:** not-started
 
-**What to build:** 在目標 iPhone 上完成正式 GoFly 全流程，留下可追溯的 UI、服務與接收端結果。
+**Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
+
+**Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
+
+**Blocked by:** 15、17 的實作／自動驗證；M1 的實機結果只阻擋最終驗收，不阻擋整合回歸與驗收包準備（其餘功能由傳遞依賴涵蓋）。
+
+**What to build:** 開發階段完成跨流程整合、自動化回歸、最終建置與集中驗收包（逐項步驟、預期結果、build、證據欄位及已知限制）。全部實作完成後一次交由使用者在 iPhone 測試，再記錄 UI、服務與接收端結果；不得在本票準備階段要求先接手機。
 
 **Design reference:** 01–12 全部現行 iOS 流程（05 已撤下）。
 

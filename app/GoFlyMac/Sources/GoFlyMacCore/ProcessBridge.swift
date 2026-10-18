@@ -10,10 +10,35 @@ public struct BridgeConfiguration: Codable, Sendable {
     public let targetName: String
 }
 
+extension BridgeConfiguration {
+    init(verifiedData data: Data) throws {
+        guard !data.isEmpty, data.count <= 32_768 else { throw CheckFailure.unavailable }
+        let object = try SetupWireJSON.object(data)
+        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath", "targetBundleID", "targetName"] else {
+            throw CheckFailure.unavailable
+        }
+        self = try JSONDecoder().decode(Self.self, from: data)
+        let root = URL(fileURLWithPath: workspaceRoot).standardizedFileURL
+        let formal = targetBundleID == "com.neven.gofly" && targetName == "GoFly" &&
+            projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
+        let legacy = targetBundleID == "com.neven.localgo" &&
+            projectPath == root.appendingPathComponent("app/LocalGo/StikDebug.xcodeproj").path
+        guard workspaceRoot.hasPrefix("/"), root.path == workspaceRoot,
+              !workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              pythonPath == root.appendingPathComponent("work/mac-setup-env/bin/python").path,
+              formal || legacy,
+              developerDirectory == "/Applications/Xcode.app/Contents/Developer" else {
+            throw CheckFailure.unavailable
+        }
+    }
+}
+
 public struct ProcessBridge: MacChecking {
     private let configurationURL: URL
     private let scriptURL: URL
     private let configuration: BridgeConfiguration
+    private let bundleResources: MacBundleResources
+    private let initialResourceStamp: MacBundleResourceStamp
 
     public init(configurationURL: URL, scriptURL: URL) throws {
         guard let resources = Bundle.main.resourceURL,
@@ -23,44 +48,45 @@ public struct ProcessBridge: MacChecking {
               (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
                   $0.isRegularFile == true && $0.isSymbolicLink != true
               }) == true else { throw CheckFailure.unavailable }
-        let file = open(configurationURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        guard file >= 0 else { throw CheckFailure.unavailable }
-        defer { close(file) }
-        var info = stat()
-        guard fstat(file, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
-              info.st_size > 0, info.st_size <= 32_768 else { throw CheckFailure.unavailable }
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 4_096)
-        while true {
-            let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
-            if count < 0, errno == EINTR { continue }
-            guard count >= 0, data.count + count <= 32_768 else { throw CheckFailure.unavailable }
-            if count == 0 { break }
-            data.append(contentsOf: buffer.prefix(count))
-        }
-        guard data.count == info.st_size else { throw CheckFailure.unavailable }
-        let object = try SetupWireJSON.object(data)
-        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath", "targetBundleID", "targetName"] else {
+        let bundleURL = Bundle.main.bundleURL
+        let bundleResources: MacBundleResources
+        do {
+            bundleResources = try MacBundleResources(bundleURL: bundleURL)
+        } catch {
             throw CheckFailure.unavailable
         }
-        let configuration = try JSONDecoder().decode(BridgeConfiguration.self, from: data)
-        let expected = URL(fileURLWithPath: configuration.workspaceRoot)
-            .appendingPathComponent("work/mac-setup-env/bin/python").standardizedFileURL.path
-        let root = URL(fileURLWithPath: configuration.workspaceRoot).standardizedFileURL
-        let formal = configuration.targetBundleID == "com.neven.gofly" && configuration.targetName == "GoFly" &&
-            configuration.projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
-        let legacy = configuration.targetBundleID == "com.neven.localgo" &&
-            configuration.projectPath == root.appendingPathComponent("app/LocalGo/StikDebug.xcodeproj").path
-        guard configuration.pythonPath == expected, formal || legacy,
-              configuration.developerDirectory == "/Applications/Xcode.app/Contents/Developer",
-              scriptURL.isFileURL, FileManager.default.fileExists(atPath: scriptURL.path),
-              FileManager.default.isExecutableFile(atPath: expected) else { throw CheckFailure.unavailable }
-        self.configurationURL = configurationURL; self.scriptURL = scriptURL; self.configuration = configuration
+        let initialResourceStamp: MacBundleResourceStamp
+        do {
+            initialResourceStamp = try bundleResources.stamp()
+            let verifiedConfiguration = try bundleResources.read(.localConfiguration)
+            self = try ProcessBridge(verifiedConfigurationData: verifiedConfiguration,
+                                      configurationURL: configurationURL,
+                                      scriptURL: scriptURL,
+                                      bundleResources: bundleResources,
+                                      initialResourceStamp: initialResourceStamp)
+        } catch let error as CheckFailure {
+            throw error
+        } catch {
+            throw CheckFailure.unavailable
+        }
+    }
+
+    private init(verifiedConfigurationData data: Data, configurationURL: URL, scriptURL: URL,
+                 bundleResources: MacBundleResources, initialResourceStamp: MacBundleResourceStamp) throws {
+        self.configuration = try BridgeConfiguration(verifiedData: data)
+        guard FileManager.default.isExecutableFile(atPath: configuration.pythonPath) else {
+            throw CheckFailure.unavailable
+        }
+        self.configurationURL = configurationURL
+        self.scriptURL = scriptURL
+        self.bundleResources = bundleResources
+        self.initialResourceStamp = initialResourceStamp
     }
 
     public func check(_ request: CheckRequest) async throws -> Data {
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw CheckFailure.invalidResponse }
+        do { try bundleResources.revalidate() } catch { throw CheckFailure.unavailable }
         let runner = BoundedProcess()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -75,35 +101,41 @@ public struct ProcessBridge: MacChecking {
 }
 
 /// Owns one child. No shell, no logs, bounded output, and group termination on cancellation.
-final class BoundedProcess: @unchecked Sendable {
+public final class BoundedProcess: @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
     private var failure: CheckFailure?
     private var finished = false
 
-    func cancel(reason: CheckFailure) {
+    public init() {}
+
+    public func cancel(reason: CheckFailure) {
         lock.lock()
         guard !finished else { lock.unlock(); return }
         if failure == nil { failure = reason }
         let child = process
         lock.unlock()
-        guard let child, child.isRunning else { return }
+        guard let child else { return }
         let pid = child.processIdentifier
         kill(-pid, SIGTERM)
-        kill(pid, SIGTERM)
+        if child.isRunning { kill(pid, SIGTERM) }
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
             self.lock.lock()
             let active = !self.finished
             self.lock.unlock()
-            if active { kill(-pid, SIGKILL); kill(pid, SIGKILL) }
+            if active {
+                kill(-pid, SIGKILL)
+                if child.isRunning { kill(pid, SIGKILL) }
+            }
         }
     }
 
-    func run(executable: String, arguments: [String], developerDirectory: String, input: Data,
+    public func run(executable: String, arguments: [String], developerDirectory: String, input: Data,
              timeout: TimeInterval) throws -> Data {
         let child = Process()
         let output = Pipe()
         let stdin = Pipe()
+        let diagnostics = Pipe()
         child.executableURL = URL(fileURLWithPath: executable)
         child.arguments = arguments
         // Keep system services available, but do not forward the user's Python or library search paths.
@@ -111,9 +143,10 @@ final class BoundedProcess: @unchecked Sendable {
                              "DEVELOPER_DIR": developerDirectory, "PYTHONDONTWRITEBYTECODE": "1"]
         child.standardInput = stdin
         child.standardOutput = output
-        child.standardError = FileHandle.nullDevice
+        child.standardError = diagnostics
         lock.lock()
         if let failure { lock.unlock(); throw failure }
+        guard !finished, process == nil else { lock.unlock(); throw CheckFailure.unavailable }
         process = child
         // Starting under the same lock closes cancellation's launch race.
         do { try child.run() } catch { finished = true; lock.unlock(); throw CheckFailure.unavailable }
@@ -125,9 +158,35 @@ final class BoundedProcess: @unchecked Sendable {
             lock.lock(); finished = true; process = nil; lock.unlock()
             try? output.fileHandleForReading.close()
             try? stdin.fileHandleForWriting.close()
+            try? diagnostics.fileHandleForReading.close()
         }
-        do { try stdin.fileHandleForWriting.write(contentsOf: input); try stdin.fileHandleForWriting.close() }
-        catch { cancel(reason: .invalidResponse) }
+        let streams = DispatchGroup()
+        // Drain stderr while stdout is read below. Diagnostic bytes never
+        // become response content, and excessive diagnostics fail closed.
+        streams.enter()
+        DispatchQueue.global().async {
+            defer { streams.leave() }
+            var size = 0
+            while true {
+                let chunk = diagnostics.fileHandleForReading.availableData
+                if chunk.isEmpty { break }
+                guard size <= 65_536 - chunk.count else {
+                    self.cancel(reason: .invalidResponse)
+                    break
+                }
+                size += chunk.count
+            }
+        }
+        // A child may write before reading stdin. Concurrent input prevents
+        // either pipe's capacity from deadlocking the operation.
+        streams.enter()
+        DispatchQueue.global().async {
+            defer { streams.leave() }
+            do {
+                try stdin.fileHandleForWriting.write(contentsOf: input)
+                try stdin.fileHandleForWriting.close()
+            } catch { self.cancel(reason: .invalidResponse) }
+        }
         var data = Data()
         while true {
             let chunk = output.fileHandleForReading.availableData
@@ -136,6 +195,7 @@ final class BoundedProcess: @unchecked Sendable {
             data.append(chunk)
         }
         child.waitUntilExit()
+        streams.wait()
         lock.lock(); let finalFailure = failure; lock.unlock()
         if let finalFailure { throw finalFailure }
         // Structured error envelopes may deliberately use a nonzero exit status.

@@ -4,6 +4,10 @@
 
 **Implementation:** complete
 
+**Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
+
+**Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
+
 **Blocked by:** 13 的實作／自動驗證、14 的方案／設計審查與離線驗證交付；14 的延後實機驗收不阻擋本票開發。
 
 **What to build:** 正式 App 取得實際執行資格時，讓健康路線、來回與自動漫步在背景持續；受限時安全暫停，保留同一任務及進度，回前景明確繼續。

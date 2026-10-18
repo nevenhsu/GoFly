@@ -33,6 +33,7 @@ extension MacRootView {
         case .install:
             if !model.isPreview, let setup = model.setup {
                 MacSetupPage(setup: setup, deviceID: model.selectedID)
+                    .disabled(model.isChecking)
             } else {
             StatusCard {
                 StatusRow(title: "目標裝置", detail: connectionDetail)
@@ -59,7 +60,7 @@ extension MacRootView {
                 StatusRow(title: "簽名身分不符？", detail: "重新安裝前先選擇保留資料；只有安裝與選取資料匯入都完成，才顯示整體完成。")
                 if !model.isPreview {
                     Rule()
-                    StatusRow(title: "本版不執行簽名或重裝", detail: "沒有取得已安裝 App 的描述檔時，不推測到期日或宣告簽名相容。")
+                    StatusRow(title: "重新安裝與資料保留", detail: "簽名相容性尚未確認時，可明確選擇資料保留流程。備份完整驗證後才會移除原 App。")
                 }
             }
         case .repair:
@@ -92,6 +93,10 @@ extension MacRootView {
                 StatusRow(title: "簽名到期日", detail: signatureDetail)
             }
         case .reinstall:
+            if !model.isPreview, let reinstall = model.reinstall {
+                MacReinstallPage(reinstall: reinstall, device: model.selected) { await model.finishReinstall() }
+                    .disabled(model.isChecking)
+            } else {
             StatusCard {
                 StatusRow(title: "選擇重新安裝後要保留的資料", detail: "只備份勾選項目；重新安裝後自動匯入。這裡僅預覽資料選擇，不讀取或移除手機資料。")
                 Toggle(isOn: $model.preserveFavorites) {
@@ -106,6 +111,7 @@ extension MacRootView {
                 Rule()
                 Text("未勾選資料將不保留。所有項目取消時，代表全新安裝的預覽情境。")
                     .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+            }
             }
         case .backups:
             StatusCard {
@@ -163,7 +169,8 @@ extension MacRootView {
     }
 
     @ViewBuilder var pageActions: some View {
-        if model.failure != nil && !(model.page == .install && !model.isPreview && model.setup != nil) {
+        if model.failure != nil && !(!model.isPreview &&
+            ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil))) {
             PillButton(title: "返回裝置清單", enabled: model.environment?.ready == true) { model.openDevices(firstInstall: model.firstInstall) }
             Spacer(minLength: 0)
             PillButton(title: "重新檢查", primary: true) { retry() }
@@ -210,8 +217,9 @@ extension MacRootView {
             case .reinstall:
                 PillButton(title: "返回簽名管理") { model.navigate(.signing) }
                 Spacer(minLength: 0)
-                PillButton(title: model.isPreview ? "預覽備份與重新安裝" : "本版不重裝 App", primary: true,
-                           enabled: model.isPreview) { model.previewAdvance() }
+                if model.isPreview {
+                    PillButton(title: "預覽備份與重新安裝", primary: true) { model.previewAdvance() }
+                }
             case .backups:
                 PillButton(title: "返回裝置狀態") { model.navigate(.device) }
                 Spacer(minLength: 0)
