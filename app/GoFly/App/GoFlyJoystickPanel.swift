@@ -14,7 +14,7 @@ struct GoFlyJoystickPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let error = controller.error {
-                    Label(goFlyString(error.localizationKey), systemImage: "exclamationmark.triangle")
+                    Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.errorForeground)
                         .padding(12)
@@ -26,12 +26,13 @@ struct GoFlyJoystickPanel: View {
                 if let error = controller.wanderError {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top, spacing: 8) {
-                            Label(goFlyString(error.localizationKey), systemImage: "exclamationmark.triangle")
+                            Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
                                 .font(.footnote)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .accessibilityIdentifier("joystick.wanderError.message")
                             Button(action: controller.clearWanderError) {
-                                Image(systemName: "xmark")
+                                Image(systemName: GoFlySymbols.close)
+                                    .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
                                     .frame(width: 44, height: 44)
                                     .contentShape(Rectangle())
                             }
@@ -61,7 +62,7 @@ struct GoFlyJoystickPanel: View {
                         .accessibilityIdentifier("joystick.settings")
                 } else if needsOriginEntry {
                     Button(action: onSetOrigin) {
-                        Label(goFlyString("joystick.setOrigin"), systemImage: "mappin.and.ellipse")
+                        Label(goFlyString("joystick.setOrigin"), systemImage: GoFlySymbols.place)
                             .font(.body)
                             .padding(.horizontal, 16)
                             .frame(minWidth: 44, minHeight: 44)
@@ -78,6 +79,7 @@ struct GoFlyJoystickPanel: View {
                             Spacer(minLength: 12)
                             Text(goFlyLocalizedFormat(goFlyString("route.speedValue"),
                                                                  controller.speed.kilometersPerHour))
+                                .font(.title3.weight(.bold))
                                 .monospacedDigit()
                                 .accessibilityIdentifier("joystick.speed.value")
                         }
@@ -103,10 +105,7 @@ struct GoFlyJoystickPanel: View {
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
         .frame(height: min(contentHeight, max(76, maximumHeight)))
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("joystick.panel")
     }
@@ -135,7 +134,7 @@ struct GoFlyJoystickPanel: View {
                 set: { _ = controller.setWanderEnabled($0) }
             )) {
                 Label(goFlyString("joystick.wander"),
-                      systemImage: controller.wanderEnabled ? "checkmark.square.fill" : "square")
+                      systemImage: controller.wanderEnabled ? GoFlySymbols.checked : GoFlySymbols.unchecked)
                     .font(.body)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 44, minHeight: 44, alignment: .leading)
@@ -183,11 +182,21 @@ private struct GoFlyManualJoystickPad: View {
     var body: some View {
         ZStack {
             Circle().fill(GoFlyStyle.secondarySurface)
-            Circle().strokeBorder(GoFlyStyle.border, lineWidth: 1)
+            Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 1)
+            Circle().strokeBorder(GoFlyStyle.subtleBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 5]))
+                .padding(20)
+            ForEach(0..<4) { direction in
+                Capsule()
+                    .fill(GoFlyStyle.secondary.opacity(0.5))
+                    .frame(width: 2, height: 8)
+                    .offset(y: -diameter / 2 + 12)
+                    .rotationEffect(.degrees(Double(direction) * 90))
+            }
             Circle()
                 .fill(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
                 .frame(width: thumbDiameter, height: thumbDiameter)
                 .overlay { Circle().strokeBorder(GoFlyStyle.surface, lineWidth: 1) }
+                .shadow(color: .black.opacity(isEnabled ? 0.18 : 0), radius: 5, y: 3)
                 .offset(thumbOffset)
         }
         .frame(width: diameter, height: diameter)

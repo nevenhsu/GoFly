@@ -18,18 +18,15 @@ struct GoFlyApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if bootstrap.phase.isTransferLocked {
-                    GoFlyTransferLockView(phase: bootstrap.phase)
-                } else if let runtime = bootstrap.runtime {
-                    normalRuntimeView(runtime)
-                } else if !onboardingComplete, bootstrap.phase == .preparing {
-                    NavigationStack {
-                        GoFlyWelcomeView(isPreparing: true, onNext: {})
-                    }
-                    .tint(GoFlyStyle.primary)
+                #if DEBUG && targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-icon-preview") {
+                    GoFlyIconPreview()
                 } else {
-                    GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
+                    startupContent
                 }
+                #else
+                startupContent
+                #endif
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
@@ -46,6 +43,22 @@ struct GoFlyApp: App {
             .onOpenURL { url in
                 bootstrap.handle(url: url)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var startupContent: some View {
+        if bootstrap.phase.isTransferLocked {
+            GoFlyTransferLockView(phase: bootstrap.phase)
+        } else if let runtime = bootstrap.runtime {
+            normalRuntimeView(runtime)
+        } else if !onboardingComplete, bootstrap.phase == .preparing {
+            NavigationStack {
+                GoFlyWelcomeView(isPreparing: true, onNext: {})
+            }
+            .tint(GoFlyStyle.primary)
+        } else {
+            GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
         }
     }
 

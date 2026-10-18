@@ -21,10 +21,14 @@ public typealias MacManagementSource = MacSetupSource
 public enum MacManagementFailure: Error, Equatable, Sendable {
     case invalidRequest
     case invalidResponse
+    case unavailable, cancelled, timeout
     case service(String)
 
     public var title: String {
         switch self {
+        case .unavailable: return "管理工具尚未就緒"
+        case .cancelled: return "已停止等待這次操作"
+        case .timeout: return "等待裝置回覆逾時"
         case .invalidRequest: return "Invalid management request"
         case .invalidResponse: return "Invalid management response"
         case .service(let code):
@@ -41,6 +45,9 @@ public enum MacManagementFailure: Error, Equatable, Sendable {
     }
     public var detail: String {
         switch self {
+        case .unavailable: return "請確認 Mac 執行環境可用，再接續原操作。"
+        case .cancelled: return "裝置操作可能尚未確認。原進度會保留，重新核對後才能繼續。"
+        case .timeout: return "請保持原 iPhone 連線並解鎖，再手動接續；不會自動重送未知的裝置操作。"
         case .invalidRequest: return "The management request did not satisfy the protocol."
         case .invalidResponse: return "The management service returned an invalid response."
         case .service(let code):
@@ -320,8 +327,15 @@ public struct MacManagementPayload: Equatable, Sendable {
 
     fileprivate func validate(for request: MacManagementRequest) throws {
         guard operationKind == request.kind,
-              (0...31).contains(connectionRevision), connectionRevision >= request.connectionRevision,
-              currentTransport == request.transport else { throw MacManagementFailure.invalidRequest }
+              (0...31).contains(connectionRevision), connectionRevision >= request.connectionRevision else {
+            throw MacManagementFailure.invalidRequest
+        }
+        // The envelope retains the immutable initial selection. A later
+        // committed revision may use another transport; the journal/model
+        // verifies that revision independently of this data-only codec.
+        if connectionRevision == 0, currentTransport != request.transport {
+            throw MacManagementFailure.invalidRequest
+        }
         if let teamID {
             guard expiresAt != nil, MacManagementWire.validTeamID(teamID), MacManagementWire.validDate(expiresAt!) else {
                 throw MacManagementFailure.invalidRequest
@@ -568,7 +582,7 @@ public func errorResponse(for request: MacManagementRequest?, code: String) thro
     try MacManagementResponseEncoder.errorResponse(for: request, code: code)
 }
 
-private enum MacManagementWire {
+enum MacManagementWire {
     static let safeCodes: Set<String> = [
         "invalid-request", "protocol-mismatch", "configuration-invalid", "dependency-mismatch",
         "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "trust-required",

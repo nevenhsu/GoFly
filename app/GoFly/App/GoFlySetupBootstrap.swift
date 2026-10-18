@@ -86,7 +86,7 @@ final class GoFlySetupBootstrap: ObservableObject {
         startupTask = Task { [weak self] in
             #if DEBUG && targetEnvironment(simulator)
             if ProcessInfo.processInfo.arguments.contains("-gofly-ui-setup-delay") {
-                do { try await Task.sleep(for: .seconds(5)) }
+                do { try await Task.sleep(for: .seconds(10)) }
                 catch { return }
             }
             #endif
@@ -690,9 +690,9 @@ struct GoFlySetupLockView: View {
 
     private var iconName: String {
         switch phase {
-        case .blocked: return "lock.shield"
+        case .blocked: return GoFlySymbols.locked
         case .waitingForMac: return "desktopcomputer"
-        case .exportLocked, .restoreLocked, .transferWaiting: return "lock.shield"
+        case .exportLocked, .restoreLocked, .transferWaiting: return GoFlySymbols.locked
         default: return "checkmark.shield"
         }
     }

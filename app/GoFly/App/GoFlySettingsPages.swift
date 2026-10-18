@@ -30,24 +30,38 @@ private struct GoFlySettingsStatusCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            GoFlySettingsValueRow {
-                Text(goFlyString(titleKey))
-                    .font(.headline)
-            } value: {
-                Text(status)
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: symbol)
+                    .goFlyControlSymbol(size: 22, weight: .medium)
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .frame(width: 44, height: 44)
+                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(goFlyString(titleKey))
+                        .font(.headline)
+                    Text(status)
+                        .font(.subheadline)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
+    }
+
+    private var symbol: String {
+        switch titleKey {
+        case "settings.location": GoFlySymbols.location
+        case "settings.background": GoFlySymbols.background
+        case "settings.vpn": GoFlySymbols.network
+        default: GoFlySymbols.device
+        }
     }
 }
 
@@ -289,7 +303,8 @@ struct GoFlyDeviceSettingsPage: View {
                 .font(.subheadline)
                 .foregroundStyle(GoFlyStyle.secondary)
         }
-        .frame(minHeight: 44)
+        .frame(minHeight: 48)
+        .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
     }
@@ -298,56 +313,56 @@ struct GoFlyDeviceSettingsPage: View {
 struct GoFlyHelpSettingsPage: View {
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.help", rootIdentifier: "settings.help.page") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(goFlyString("settings.help.manualTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.manual"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.wanderTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.wander"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.arrowTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.arrow"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.recenterTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.recenter"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.mapPinTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.mapPin"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.favoritesTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.favorites"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyString("settings.help.waitingTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.help.waiting"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 0) {
+                helpTopic("manual", symbol: GoFlySymbols.manualMovement)
+                helpDivider
+                helpTopic("wander", symbol: GoFlySymbols.walking)
+                helpDivider
+                helpTopic("arrow", symbol: GoFlySymbols.heading)
             }
             .settingsCard()
+
+            VStack(alignment: .leading, spacing: 0) {
+                helpTopic("recenter", symbol: GoFlySymbols.recenter)
+                helpDivider
+                helpTopic("mapPin", symbol: GoFlySymbols.place)
+                helpDivider
+                helpTopic("favorites", symbol: GoFlySymbols.favorite)
+                helpDivider
+                helpTopic("waiting", symbol: GoFlySymbols.waiting)
+            }
+            .settingsCard()
+        }
+    }
+
+    private var helpDivider: some View {
+        Divider().padding(.leading, 38).padding(.vertical, 16)
+    }
+
+    private func helpTopic(_ topic: String, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: symbol)
+                .goFlyControlSymbol(size: 20, weight: .medium)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(goFlyString("settings.help.\(topic)Title"))
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Text(goFlyString("settings.help.\(topic)"))
+                    .font(.body)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
 
 private extension View {
     func settingsCard() -> some View {
-        padding(16)
+        padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                    .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-            }
+            .goFlyCard()
     }
 }

@@ -43,11 +43,7 @@ struct GoFlyOperationPanel: View {
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
         .frame(height: min(contentHeight, max(100, maximumHeight)))
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .accessibilityIdentifier("operation.panel")
     }
 
@@ -148,7 +144,7 @@ struct GoFlyOperationPanel: View {
 
     private func reason(_ failure: DeviceServiceFailure) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
+            Image(systemName: GoFlySymbols.warning).accessibilityHidden(true)
             Text(goFlyString(failure.rawValue))
                 .accessibilityIdentifier(reasonIdentifier)
         }

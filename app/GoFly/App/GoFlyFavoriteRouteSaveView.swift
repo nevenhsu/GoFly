@@ -20,7 +20,7 @@ struct GoFlySaveFavoriteRouteView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if let saved = savedOmittingCurrent {
-                        Label(goFlyString("favoriteRoutes.savedOmittingCurrent"), systemImage: "checkmark.circle")
+                        Label(goFlyString("favoriteRoutes.savedOmittingCurrent"), systemImage: GoFlySymbols.success)
                             .font(.body)
                             .accessibilityIdentifier("favoriteRoutes.save.omittedResult")
                         Text(goFlyFavoriteRouteEndpoints(saved)).font(.body)
@@ -40,10 +40,10 @@ struct GoFlySaveFavoriteRouteView: View {
                         TextField(goFlyString("favoriteRoutes.label"), text: $label)
                             .font(.body)
                             .textFieldStyle(.plain)
-                            .frame(minHeight: 44)
-                            .padding(.horizontal, 8)
-                            .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
-                            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                            .frame(minHeight: 52)
+                            .padding(.horizontal, 16)
+                            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
+                            .overlay { fieldBorder }
                             .focused($focused)
                             .submitLabel(.done)
                             .onSubmit { focused = false }
@@ -152,6 +152,13 @@ struct GoFlySaveFavoriteRouteView: View {
         }
     }
 
+    private var fieldBorder: some View {
+        RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
+            .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
+                          lineWidth: focused ? 1.5 : 0.75)
+            .allowsHitTesting(false)
+    }
+
     @ViewBuilder private var viewportMetrics: some View {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
@@ -190,10 +197,10 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                     TextField(goFlyString("favoriteRoutes.label"), text: $label)
                         .font(.body)
                         .textFieldStyle(.plain)
-                        .frame(minHeight: 44)
-                        .padding(.horizontal, 8)
-                        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                        .frame(minHeight: 52)
+                        .padding(.horizontal, 16)
+                        .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
+                        .overlay { fieldBorder }
                         .focused($focused)
                         .submitLabel(.done)
                         .onSubmit { focused = false }
@@ -248,6 +255,13 @@ struct GoFlyFavoriteRouteLabelEditor: View {
         .buttonStyle(GoFlyActionStyle(primary: true))
         .disabled(saving || !favorites.canMutate || !favorites.records.contains(where: { $0.id == record.id }))
         .accessibilityIdentifier("favoriteRoutes.editor.save")
+    }
+
+    private var fieldBorder: some View {
+        RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
+            .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
+                          lineWidth: focused ? 1.5 : 0.75)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder private var viewportMetrics: some View {

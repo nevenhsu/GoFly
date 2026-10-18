@@ -47,7 +47,7 @@ struct GoFlyRoutePickerView: View {
                         if session.allowsCurrent {
                             Toggle(isOn: $usesCurrent) {
                                 Label(goFlyString("route.useCurrentLocation"),
-                                      systemImage: usesCurrent ? "checkmark.square.fill" : "square")
+                                      systemImage: usesCurrent ? GoFlySymbols.checked : GoFlySymbols.unchecked)
                                     .font(.body)
                                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                                     .contentShape(Rectangle())
@@ -106,10 +106,7 @@ struct GoFlyRoutePickerView: View {
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { actionHeight = $0 }
         }
         .padding(16)
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .overlay(alignment: .topLeading) { viewportMetrics }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.picker")

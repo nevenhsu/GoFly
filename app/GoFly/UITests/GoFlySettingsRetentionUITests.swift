@@ -3,6 +3,30 @@ import UIKit
 
 @MainActor
 final class GoFlySettingsRetentionUITests: XCTestCase {
+    func testAddressLanguageTracksPreferenceWithoutReplacingMapOrCamera() throws {
+        try simulatorOnly()
+        let app = makeApp()
+        app.launchArguments += ["-gofly-ui-map-metrics"]
+        app.launch()
+        let query = app.textFields["search.query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 10))
+        query.tap()
+        query.typeText("25.0478, 121.5170")
+        if app.keyboards.buttons["Done"].exists { app.keyboards.buttons["Done"].tap() }
+        let mapID = element("map.instanceID", in: app).label
+        let camera = element("map.camera.state", in: app).label
+        XCTAssertFalse(mapID.isEmpty)
+        for (choice, expected) in [("繁體中文", "zh-Hant"), ("简体中文", "zh-Hans"),
+                                   ("English", "en"), ("System", "system")] {
+            openSettings(app)
+            choose(choice, row: "settings.language", in: app)
+            goBack(app)
+            XCTAssertEqual(element("map.address.requestLocale", in: app).label, expected)
+            XCTAssertEqual(element("map.instanceID", in: app).label, mapID)
+            XCTAssertEqual(element("map.camera.state", in: app).label, camera)
+        }
+    }
+
     func testAppearanceChoicePersistsAcrossRelaunchWithActualMapTrait() throws {
         try simulatorOnly()
         let app = makeApp()

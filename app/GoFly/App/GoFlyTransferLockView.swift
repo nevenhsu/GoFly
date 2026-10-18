@@ -10,16 +10,25 @@ struct GoFlyTransferLockView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                Image(systemName: phase.isManagementLocked ? GoFlySymbols.locked : GoFlySymbols.storage)
+                    .goFlyControlSymbol(size: 32, maximum: 36, weight: .regular)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .frame(width: 72, height: 72)
+                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 20))
+                    .accessibilityHidden(true)
                 Text(goFlyString(phase.isManagementLocked ? "setup.management.title" : "setup.transfer.title"))
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.title2.weight(.bold))
                     .foregroundStyle(Color.primary)
                     .accessibilityIdentifier("setup.transfer.title")
                 Text(goFlyString(phase.isManagementLocked ? "setup.management.message" : "setup.transfer.message"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.primary)
+                    .font(.body)
+                    .foregroundStyle(GoFlyStyle.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("setup.transfer.message")
                 status
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .goFlyCard()
             }
             .padding(24)
             .frame(maxWidth: 560, alignment: .leading)
@@ -66,11 +75,13 @@ struct GoFlyTransferLockView: View {
     }
 
     private func statusRow(_ key: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        GoFlySettingsValueRow {
             Text(goFlyString(key))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
+        } value: {
             Text(value)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.subheadline)
+                .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityValue(value)
         }
         .foregroundStyle(Color.primary)

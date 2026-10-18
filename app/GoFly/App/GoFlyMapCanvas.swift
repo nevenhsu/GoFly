@@ -118,7 +118,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         coordinator.applyColorScheme(colorScheme, on: map)
-        coordinator.applyPresentationLocale(locale, on: map)
+        coordinator.applyAnnotationLocale(locale, on: map)
         coordinator.updateMarker(on: map)
         coordinator.updateRoute(on: map)
         coordinator.refreshAppearance(on: map)
@@ -142,7 +142,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var routePoints: [GeoCoordinate] = []
         private var routeOverlay: MKPolyline?
         private var routeRenderer: MKPolylineRenderer?
-        private var presentationLocaleIdentifier = ""
+        private var annotationLocaleIdentifier = ""
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
 
@@ -164,9 +164,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             routeRenderer?.setNeedsDisplay()
         }
 
-        func applyPresentationLocale(_ locale: Locale, on map: MKMapView) {
-            guard presentationLocaleIdentifier != locale.identifier else { return }
-            presentationLocaleIdentifier = locale.identifier
+        func applyAnnotationLocale(_ locale: Locale, on map: MKMapView) {
+            guard annotationLocaleIdentifier != locale.identifier else { return }
+            annotationLocaleIdentifier = locale.identifier
             updateMarkerAppearance(on: map)
         }
 
@@ -206,7 +206,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         private func updateMarkerAppearance(on map: MKMapView) {
             guard let marker = parent.marker, let annotation = positionAnnotation,
-                  let view = map.view(for: annotation) as? PositionAnnotationView else { return }
+                  let view = map.view(for: annotation) as? GoFlyPositionArrowView else { return }
             view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: map.camera.heading)
         }
 
@@ -317,8 +317,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
             guard annotation is PositionAnnotation, let marker = parent.marker else { return nil }
-            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "position") as? PositionAnnotationView
-                ?? PositionAnnotationView(annotation: annotation, reuseIdentifier: "position")
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: "position") as? GoFlyPositionArrowView
+                ?? GoFlyPositionArrowView(annotation: annotation, reuseIdentifier: "position")
             view.annotation = annotation
             view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: mapView.camera.heading)
             return view
@@ -371,53 +371,6 @@ private final class PositionAnnotation: NSObject, MKAnnotation {
     init(_ coordinate: CLLocationCoordinate2D) { self.coordinate = coordinate }
 }
 
-private final class PositionAnnotationView: MKAnnotationView {
-    private let fill = UIImageView(image: UIImage(systemName: "location.north.fill"))
-    private let edge = UIImageView(image: UIImage(systemName: "location.north"))
-
-    override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 36, height: 36)
-        let configuration = UIImage.SymbolConfiguration(textStyle: .title2)
-            .applying(UIImage.SymbolConfiguration(weight: .semibold))
-        for image in [fill, edge] {
-            image.preferredSymbolConfiguration = configuration
-            image.contentMode = .scaleAspectFit
-            image.frame = bounds
-            image.isAccessibilityElement = false
-            addSubview(image)
-        }
-        applySemanticColors()
-        isAccessibilityElement = true
-        accessibilityIdentifier = "map.positionMarker"
-        canShowCallout = false
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    func apply(_ marker: PositionMarker, bearingDegrees: Double?, cameraHeadingDegrees: Double) {
-        applySemanticColors()
-        alpha = marker.freshness == .waiting ? 0.5 : 1
-        let angle = bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0
-        for image in [fill, edge] {
-            image.transform = CGAffineTransform(rotationAngle: CGFloat(angle))
-        }
-        let key: String
-        switch (marker.source, marker.freshness) {
-        case (.gps, .fresh): key = "map.realLocation"
-        case (.gps, .waiting): key = "map.realLocationWaiting"
-        case (.simulation, .fresh): key = "map.simulatedLocation"
-        case (.simulation, .waiting): key = "map.simulatedLocationWaiting"
-        }
-        accessibilityLabel = goFlyString(key)
-        accessibilityValue = marker.coordinate.displayText
-    }
-
-    private func applySemanticColors() {
-        fill.tintColor = .label
-        edge.tintColor = .systemBackground
-    }
-}
 
 extension GeoCoordinate {
     var clLocationCoordinate: CLLocationCoordinate2D {

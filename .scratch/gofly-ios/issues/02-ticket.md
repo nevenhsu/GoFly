@@ -4,6 +4,8 @@
 
 **Implementation:** complete
 
+**2026-10-18 歡迎頁 loading 更新驗證：** 初次啟動共用歡迎頁已實作；啟動 UI 6／6（含 loading 停用／完成可前進／失敗鎖定）、既有 onboarding UI 4／4、Swift 514 項及 unsigned iPhone build 通過。完整 `check.sh` 在既有 `NativeBridge/tests/check-error-mapping.sh` 漏列 continuation 來源檔時失敗，不宣稱整體檢查全通過。初次 UI run 的 loading 元件類型查詢與測試延遲已修正並重跑，保留原失敗紀錄。證據見 `work/gofly-ios/welcome-loading-verification.md`；尚未安裝到手機。
+
 **Device verification:** deferred-by-user（全部實作完成後，由使用者統一用 iPhone 驗收）。
 
 **Development policy:** 依序持續開發至全部實作完成；開發期間不要求使用者連接 iPhone、不等待 USB、不安裝或操作實機。先完成本票實作、建置、自動化／模擬器驗證及必要審查，再繼續下一票；所有實機項目交由使用者最後依[集中手機驗收清單](../DEVICE-ACCEPTANCE.md)測試。前置票實作完成即可解除開發依賴，deferred-by-user 不阻擋後續實作；實機未驗不標 done。
@@ -16,6 +18,7 @@
 
 **Acceptance criteria:**
 
+- [ ] 初次啟動直接顯示歡迎頁，無獨立檢查畫面；底部 loading 期間下一步停用，檢查通過後才可手動前進；失敗仍顯示設定提示。此為 2026-10-18 已實作更新，新版手機驗收待執行。
 - [ ] 定位允許、拒絕、略過皆可前進；缺少真實 GPS 只出現可關閉小提示，不捏造位置或反覆打斷。
 - [ ] VPN 必須實際可達才可下一步；前景立即與每 5 秒探測、單次 2 秒逾時，離開取消，避免探測重疊與舊結果覆寫。
 - [ ] 手動檢查與外部返回重查共用結果；按下一步再次核對，成功或返回外部 App 均不自動啟動／送點。

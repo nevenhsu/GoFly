@@ -16,16 +16,20 @@ struct GoFlySearchPanel: View {
     @State private var inputHeight: CGFloat = 44
     @State private var favoritesHeight: CGFloat = 44
     @State private var contentHeight: CGFloat = 180
+    @ScaledMetric(relativeTo: .body) private var symbolSize: CGFloat = 18
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").accessibilityHidden(true)
+                    Image(systemName: GoFlySymbols.search)
+                        .font(.system(size: min(symbolSize, 22), weight: .medium))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .accessibilityHidden(true)
                     TextField(goFlyString("search.placeholder"), text: Binding(
                         get: { search.query }, set: { search.updateQuery($0) }
-                    ))
+                    ), prompt: Text(goFlyString("search.placeholder")).foregroundStyle(GoFlyStyle.secondary))
                     .font(.body)
                     .focused($focused)
                     .textInputAutocapitalization(.never)
@@ -35,7 +39,9 @@ struct GoFlySearchPanel: View {
                     .accessibilityIdentifier("search.query")
                     if !search.query.isEmpty {
                         Button { search.updateQuery("") } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            Image(systemName: GoFlySymbols.clearSearch)
+                                .goFlyControlSymbol(size: 20, weight: .medium)
+                                .foregroundStyle(GoFlyStyle.secondary)
                                 .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
@@ -44,13 +50,15 @@ struct GoFlySearchPanel: View {
                         .accessibilityIdentifier("search.clear")
                     }
                 }
-                .frame(minHeight: 44)
+                .padding(.trailing, search.query.isEmpty ? 16 : 0)
+                .frame(minHeight: 52)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { inputHeight = $0 }
-                .padding(.leading, 12)
-                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.leading, 16)
+                .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(inputIsEmphasized ? GoFlyStyle.primary : .clear, lineWidth: 2)
+                    RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
+                        .strokeBorder(inputIsEmphasized || focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
+                                      lineWidth: inputIsEmphasized || focused ? 1.5 : 0.75)
                         .allowsHitTesting(false)
                 }
 
@@ -89,7 +97,7 @@ struct GoFlySearchPanel: View {
                     focused = false
                     onFavorites()
                 } label: {
-                    Label(goFlyString("favorites.title"), systemImage: "star")
+                    Label(goFlyString("favorites.title"), systemImage: GoFlySymbols.favorite)
                 }
                 .buttonStyle(GoFlyActionStyle())
                 .accessibilityIdentifier("favorites.open")
@@ -103,10 +111,7 @@ struct GoFlySearchPanel: View {
         .scrollBounceBehavior(.basedOnSize)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.panel")
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .onChange(of: focusRequest) { _, request in
             if request != nil { focused = true }
         }

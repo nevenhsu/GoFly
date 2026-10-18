@@ -8,8 +8,8 @@ struct GoFlyFavoriteStar: View {
 
     var body: some View {
         Button { _ = favorites.toggle(place) } label: {
-            Image(systemName: favorites.isFavorite(place) ? "star.fill" : "star")
-                .font(.system(size: 20, weight: .semibold))
+            Image(systemName: favorites.isFavorite(place) ? GoFlySymbols.favoriteSelected : GoFlySymbols.favorite)
+                .goFlyControlSymbol(size: 20, weight: .semibold)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -32,6 +32,7 @@ struct GoFlyPlaceOptionCard: View {
     var starIdentifier: String
     var onSelect: () -> Void
     var onLongPress: (() -> Void)? = nil
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         HStack(spacing: 0) {
@@ -63,19 +64,20 @@ struct GoFlyPlaceOptionCard: View {
         }
         .frame(minHeight: 56)
         .background(selected ? GoFlyStyle.secondarySurface : GoFlyStyle.surface,
-                    in: RoundedRectangle(cornerRadius: 12))
+                    in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(selected ? GoFlyStyle.primary : GoFlyStyle.border, lineWidth: selected ? 1.5 : 0.5)
+            RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
+                .strokeBorder(selected ? GoFlyStyle.primary : GoFlyStyle.subtleBorder, lineWidth: selected ? 1.5 : 0.5)
+                .allowsHitTesting(false)
         }
     }
 
     private var titleView: some View {
         Text(title ?? place.title)
-            .font(.body)
-            .lineLimit(1)
+            .font(.body.weight(selected ? .semibold : .regular))
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(.leading, 12)
+            .padding(.leading, 16)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
     }
@@ -103,14 +105,15 @@ struct GoFlyFavoriteFailureNotice: View {
 
     private func notice(_ failure: FavoritePlacesFailure) -> some View {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
+                Image(systemName: GoFlySymbols.warning).accessibilityHidden(true)
                 Text(goFlyString(failure.rawValue))
                     .font(.footnote)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("favorites.error")
                 if favorites.canMutate {
                     Button { favorites.clearError() } label: {
-                        Image(systemName: "xmark")
+                        Image(systemName: GoFlySymbols.close)
+                            .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
                             .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)

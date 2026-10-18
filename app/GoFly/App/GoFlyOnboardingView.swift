@@ -46,10 +46,12 @@ struct GoFlyOnboardingView: View {
     }
 
     private var location: some View {
-        GoFlyOnboardingPage(title: "onboarding.location.title") {
+        GoFlyOnboardingPage(title: "onboarding.location.title", symbol: "location.fill") {
             Text(goFlyString("onboarding.location.message"))
-                .font(.body)
+                .font(.title3)
                 .foregroundStyle(GoFlyStyle.secondary)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("onboarding.location")
         } actions: {
             Button {
@@ -84,10 +86,12 @@ struct GoFlyWelcomeView: View {
     let onNext: @MainActor () -> Void
 
     var body: some View {
-        GoFlyOnboardingPage(title: "onboarding.welcome.title") {
+        GoFlyOnboardingPage(title: "onboarding.welcome.title", symbol: "paperplane.fill") {
             Text(goFlyString("onboarding.welcome.message"))
-                .font(.body)
+                .font(.title3)
                 .foregroundStyle(GoFlyStyle.secondary)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("onboarding.welcome")
         } actions: {
             if isPreparing {
@@ -111,14 +115,21 @@ struct GoFlyWelcomeView: View {
 
 private struct GoFlyOnboardingPage<Content: View, Actions: View>: View {
     let title: String
+    let symbol: String
     @ViewBuilder let content: () -> Content
     @ViewBuilder let actions: () -> Actions
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) { content() }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(24)
+            VStack(alignment: .leading, spacing: 28) {
+                GoFlyOnboardingEmblem(symbol: symbol)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                content()
+            }
+            .frame(maxWidth: 520, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(24)
         }
         .background(GoFlyStyle.surface)
         .navigationTitle(goFlyString(title))
@@ -127,7 +138,40 @@ private struct GoFlyOnboardingPage<Content: View, Actions: View>: View {
             VStack(spacing: 12) { actions() }
                 .padding(24)
                 .background(GoFlyStyle.surface)
+                .overlay(alignment: .top) { Divider() }
         }
+    }
+}
+
+/// A static, decorative emblem keeps first launch calm and respects Reduce Motion.
+private struct GoFlyOnboardingEmblem: View {
+    let symbol: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(GoFlyStyle.border, lineWidth: 0.5)
+                .frame(width: 190, height: 190)
+            Circle()
+                .stroke(GoFlyStyle.border.opacity(0.7), lineWidth: 0.5)
+                .frame(width: 142, height: 142)
+            Circle()
+                .fill(GoFlyStyle.secondarySurface)
+                .frame(width: 100, height: 100)
+            Image(systemName: symbol)
+                .font(.system(size: 38, weight: .medium))
+                .foregroundStyle(GoFlyStyle.primary)
+            Circle()
+                .fill(GoFlyStyle.primary)
+                .frame(width: 8, height: 8)
+                .offset(x: 79, y: -53)
+            Circle()
+                .fill(GoFlyStyle.secondary)
+                .frame(width: 5, height: 5)
+                .offset(x: -60, y: 39)
+        }
+        .frame(width: 208, height: 208)
+        .accessibilityHidden(true)
     }
 }
 
@@ -146,18 +190,25 @@ private struct GoFlyVPNOnboardingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(goFlyString("onboarding.vpn.title"))
-                        .font(.body)
-                    Spacer(minLength: 8)
-                    Text(goFlyString(statusKey))
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .multilineTextAlignment(.trailing)
-                        .accessibilityIdentifier("onboarding.vpn.status")
+                HStack(alignment: .center, spacing: 14) {
+                    Image(systemName: GoFlySymbols.network)
+                        .goFlyControlSymbol(size: 24, weight: .medium)
+                        .frame(width: 48, height: 48)
+                        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(goFlyString("onboarding.vpn.title"))
+                            .font(.headline)
+                        Text(goFlyString(statusKey))
+                            .font(.subheadline)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("onboarding.vpn.status")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(16)
-                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                .padding(20)
+                .goFlyCard()
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(goFlyString("onboarding.vpn.stepsTitle"))
@@ -165,6 +216,8 @@ private struct GoFlyVPNOnboardingView: View {
                     Text(goFlyString("onboarding.vpn.steps"))
                         .font(.body)
                         .foregroundStyle(GoFlyStyle.secondary)
+                        .lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Button {
@@ -179,18 +232,18 @@ private struct GoFlyVPNOnboardingView: View {
                     Button {
                         openStore()
                     } label: {
-                        externalRow("onboarding.vpn.appStore", icon: "arrow.up.right")
+                        externalRow("onboarding.vpn.appStore", icon: GoFlySymbols.externalLink)
                     }
-                    Divider()
+                    Divider().padding(.leading, 16)
                     Button {
                         showingHelp = true
                     } label: {
-                        externalRow("onboarding.vpn.help", icon: "chevron.forward")
+                        externalRow("onboarding.vpn.help", icon: GoFlySymbols.disclosure)
                     }
                     .accessibilityIdentifier("onboarding.vpn.help.open")
                 }
                 .buttonStyle(.plain)
-                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                .goFlyCard()
 
                 if controller.vpnState == .unavailable || controller.vpnState == .timedOut {
                     errorMessage(controller.vpnState == .timedOut
@@ -203,7 +256,7 @@ private struct GoFlyVPNOnboardingView: View {
             }
             .padding(24)
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("onboarding.vpn.title"))
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -235,6 +288,7 @@ private struct GoFlyVPNOnboardingView: View {
             }
             .padding(24)
             .background(GoFlyStyle.surface)
+            .overlay(alignment: .top) { Divider() }
         }
         .onAppear {
             isVisible = true
@@ -265,7 +319,7 @@ private struct GoFlyVPNOnboardingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "network")
+                    Image(systemName: GoFlySymbols.network)
                         .font(.largeTitle)
                         .accessibilityHidden(true)
                     Text(goFlyString("onboarding.vpn.help.heading"))
@@ -286,7 +340,7 @@ private struct GoFlyVPNOnboardingView: View {
                     Text(goFlyString("onboarding.vpn.help.confirmation"))
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "info.circle")
+                    Image(systemName: GoFlySymbols.information)
                         .accessibilityHidden(true)
                 }
                 .font(.subheadline)
@@ -299,15 +353,15 @@ private struct GoFlyVPNOnboardingView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         helpTip("onboarding.vpn.help.permission", symbol: "hand.raised")
                         Button(action: openSystemSettings) {
-                            Label(goFlyString("onboarding.vpn.help.openSettings"), systemImage: "gear")
+                            Label(goFlyString("onboarding.vpn.help.openSettings"), systemImage: GoFlySymbols.settings)
                         }
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("onboarding.vpn.help.openSettings")
                         Divider()
-                        helpTip("onboarding.vpn.help.reconnect", symbol: "arrow.clockwise")
+                        helpTip("onboarding.vpn.help.reconnect", symbol: GoFlySymbols.retry)
                     }
                     .padding(16)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
+                    .goFlyCard()
                 }
 
                 if externalOpenFailed {
@@ -316,7 +370,7 @@ private struct GoFlyVPNOnboardingView: View {
 
                 VStack(spacing: 12) {
                     Button(action: openLocalDevVPN) {
-                        Label(goFlyString("onboarding.vpn.open"), systemImage: "arrow.up.right")
+                        Label(goFlyString("onboarding.vpn.open"), systemImage: GoFlySymbols.externalLink)
                     }
                     .buttonStyle(GoFlyActionStyle(primary: true))
                     .accessibilityIdentifier("onboarding.vpn.help.openVPN")
@@ -334,7 +388,7 @@ private struct GoFlyVPNOnboardingView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("onboarding.vpn.help"))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -356,7 +410,7 @@ private struct GoFlyVPNOnboardingView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
+        .goFlyCard()
     }
 
     private func helpTip(_ key: String, symbol: String) -> some View {
@@ -410,18 +464,21 @@ private struct GoFlyVPNOnboardingView: View {
         HStack(spacing: 12) {
             Text(goFlyString(key))
             Spacer(minLength: 8)
-            Image(systemName: icon).font(.footnote)
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(GoFlyStyle.secondary)
+                .accessibilityHidden(true)
         }
         .font(.body)
         .foregroundStyle(GoFlyStyle.primary)
         .frame(minHeight: 44)
-        .contentShape(Rectangle())
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 
     private func errorMessage(_ key: String) -> some View {
-        Label(goFlyString(key), systemImage: "exclamationmark.triangle")
+        Label(goFlyString(key), systemImage: GoFlySymbols.warning)
             .font(.footnote)
             .foregroundStyle(GoFlyStyle.errorForeground)
             .padding(12)

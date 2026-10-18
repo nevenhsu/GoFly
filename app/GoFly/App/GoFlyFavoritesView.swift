@@ -19,9 +19,7 @@ struct GoFlyFavoritesView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         GoFlyFavoriteFailureNotice()
                         if favorites.loadState == .ready, favorites.favorites.isEmpty {
-                            Text(goFlyString("favorites.empty"))
-                                .font(.body)
-                                .foregroundStyle(GoFlyStyle.secondary)
+                            GoFlyEmptyState(symbol: GoFlySymbols.favorite, message: goFlyString("favorites.empty"))
                                 .accessibilityIdentifier("favorites.empty")
                         }
                         ForEach(favorites.favorites) { favorite in
@@ -40,6 +38,7 @@ struct GoFlyFavoritesView: View {
                     }
                     .padding(16)
                 }
+                .background(GoFlyStyle.canvas)
                 .navigationTitle(goFlyString("favorites.title"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.visible, for: .navigationBar)
@@ -80,8 +79,17 @@ private struct GoFlyFavoriteLabelEditor: View {
                 }
                 Text(favorite.place.title).font(.body)
                 TextField(goFlyString("favorites.label"), text: $draft)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .font(.body)
+                    .frame(minHeight: 52)
+                    .padding(.horizontal, 16)
+                    .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
+                            .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
+                                          lineWidth: focused ? 1.5 : 0.75)
+                            .allowsHitTesting(false)
+                    }
                     .focused($focused)
                     .submitLabel(.done)
                     .onSubmit { focused = false }

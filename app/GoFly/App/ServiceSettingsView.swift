@@ -22,7 +22,7 @@ struct ServiceSettingsView: View {
                             Text(goFlyString(key))
                                 .fixedSize(horizontal: false, vertical: true)
                         } icon: {
-                            Image(systemName: "exclamationmark.triangle")
+                            Image(systemName: GoFlySymbols.warning)
                         }
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.errorForeground)
@@ -35,7 +35,7 @@ struct ServiceSettingsView: View {
                         Label {
                             Text(goFlyString(error.rawValue))
                         } icon: {
-                            Image(systemName: "exclamationmark.triangle")
+                            Image(systemName: GoFlySymbols.warning)
                         }
                         .font(.body)
                         .foregroundStyle(GoFlyStyle.errorForeground)
@@ -81,6 +81,7 @@ struct ServiceSettingsView: View {
                     value: locationSummary,
                     destination: { GoFlyLocationSettingsPage() }
                 )
+                settingsDivider
                 settingsLink(
                     title: "settings.background",
                     value: backgroundSummary,
@@ -94,6 +95,7 @@ struct ServiceSettingsView: View {
                     value: goFlyString(recovery.connectionState.settingsStatusKey),
                     destination: { GoFlyVPNSettingsPage(recovery: recovery) }
                 )
+                settingsDivider
                 settingsLink(
                     title: "settings.device",
                     value: systemStatus.deviceSnapshot(service: service, setupMetadata: setupMetadata).pairingStatus,
@@ -103,6 +105,7 @@ struct ServiceSettingsView: View {
 
             settingsSection("settings.preferences") {
                 languagePicker
+                settingsDivider
                 appearancePicker
             }
 
@@ -128,15 +131,12 @@ struct ServiceSettingsView: View {
             Text(goFlyString(titleKey))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(GoFlyStyle.secondary)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 16)
+                .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
                 content()
             }
-            .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                    .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-            }
+            .goFlyCard()
         }
     }
 
@@ -156,6 +156,12 @@ struct ServiceSettingsView: View {
 
     private func settingsRow(titleKey: String, value: String?) -> some View {
         HStack(spacing: 12) {
+            Image(systemName: settingsSymbol(for: titleKey))
+                .goFlyControlSymbol(size: 18, weight: .medium)
+                .foregroundStyle(GoFlyStyle.primary)
+                .frame(width: 32, height: 32)
+                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
             GoFlySettingsValueRow {
                 Text(goFlyString(titleKey))
                     .font(.body)
@@ -168,15 +174,32 @@ struct ServiceSettingsView: View {
                         .foregroundStyle(GoFlyStyle.secondary)
                 }
             }
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
+            Image(systemName: GoFlySymbols.disclosure)
+                .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
                 .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.vertical, 4)
         .padding(.horizontal, 16)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private var settingsDivider: some View {
+        Divider().padding(.leading, 60)
+    }
+
+    private func settingsSymbol(for key: String) -> String {
+        switch key {
+        case "settings.location": GoFlySymbols.location
+        case "settings.background": GoFlySymbols.background
+        case "settings.vpn": GoFlySymbols.network
+        case "settings.device": GoFlySymbols.device
+        case "settings.language": GoFlySymbols.language
+        case "settings.appearance": GoFlySymbols.appearance
+        default: GoFlySymbols.help
+        }
     }
 
     private var languagePicker: some View {
@@ -222,19 +245,20 @@ struct ServiceSettingsView: View {
     }
 
     private var serviceCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: GoFlySymbols.service)
+                    .goFlyControlSymbol(size: 22, weight: .medium)
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .frame(width: 44, height: 44)
+                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
                     Text(goFlyString("service.title")).font(.headline)
-                    Spacer(minLength: 12)
                     status
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(goFlyString("service.title")).font(.headline)
-                    status
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
             Button {
                 if offersStop {
                     _ = service.stop()
@@ -265,7 +289,7 @@ struct ServiceSettingsView: View {
 
             Divider()
             VStack(alignment: .leading, spacing: 8) {
-                Text(goFlyString("gps.title"))
+                Label(goFlyString("gps.title"), systemImage: "location.circle")
                     .font(.subheadline.weight(.semibold))
                 Text(goFlyString(service.gpsStatusKey))
                     .font(.subheadline)
@@ -281,12 +305,8 @@ struct ServiceSettingsView: View {
                 }
             }
         }
-        .padding(16)
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .padding(20)
+        .goFlyCard()
     }
 
     private var status: some View {

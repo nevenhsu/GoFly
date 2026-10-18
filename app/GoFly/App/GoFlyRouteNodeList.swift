@@ -96,8 +96,8 @@ struct GoFlyRouteNodeList: View {
     private func row(_ node: RouteNode) -> some View {
         let role = draft.role(of: node.id) ?? .start
         return HStack(spacing: 0) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 18, weight: .semibold))
+            Image(systemName: GoFlySymbols.reorder)
+                .goFlyControlSymbol(size: 18, weight: .semibold)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .gesture(dragGesture(for: node.id))
@@ -112,8 +112,10 @@ struct GoFlyRouteNodeList: View {
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(goFlyRouteRoleTitle(role)).font(.caption).foregroundStyle(GoFlyStyle.secondary).lineLimit(1)
-                    Text(title(node.value)).font(.body.weight(.semibold)).lineLimit(1)
+                    Text(goFlyRouteRoleTitle(role)).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    Text(title(node.value)).font(.body.weight(.semibold))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.vertical, 12)
@@ -125,8 +127,8 @@ struct GoFlyRouteNodeList: View {
             .accessibilityValue(title(node.value))
             .accessibilityIdentifier(editIdentifier(role))
             Button { if isEditable { onDelete(node.id) } } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 18))
+                Image(systemName: GoFlySymbols.delete)
+                    .goFlyControlSymbol(size: 18, weight: .regular)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

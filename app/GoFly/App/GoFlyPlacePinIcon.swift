@@ -1,11 +1,11 @@
 import SwiftUI
 
-enum GoFlyWanderPinKind {
+enum GoFlyPlacePinKind {
     case destination, candidate
 }
 
-struct GoFlyWanderPinIcon: View {
-    let kind: GoFlyWanderPinKind
+struct GoFlyPlacePinIcon: View {
+    let kind: GoFlyPlacePinKind
 
     var body: some View {
         Group {
@@ -14,18 +14,25 @@ struct GoFlyWanderPinIcon: View {
                 ZStack(alignment: .top) {
                     DestinationPinOutline()
                         .fill(GoFlyStyle.surface)
+                        .overlay { DestinationPinOutline().stroke(GoFlyStyle.surface, lineWidth: 4) }
                         .overlay { DestinationPinOutline().stroke(GoFlyStyle.primary, lineWidth: 2) }
                     Circle()
                         .stroke(GoFlyStyle.primary, lineWidth: 2)
-                        .frame(width: 8, height: 8)
-                        .padding(.top, 7)
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 8)
                 }
                 .frame(width: 23, height: 34)
             case .candidate:
-                VStack(spacing: 0) {
-                    Circle().fill(GoFlyStyle.primary).frame(width: 8, height: 8)
-                    Rectangle().fill(GoFlyStyle.primary).frame(width: 1.5, height: 26)
+                ZStack(alignment: .top) {
+                    Capsule().fill(GoFlyStyle.surface)
+                        .frame(width: 5, height: 28).padding(.top, 7)
+                    Capsule().fill(GoFlyStyle.primary)
+                        .frame(width: 2, height: 27).padding(.top, 7)
+                    Circle().fill(GoFlyStyle.primary)
+                        .frame(width: 10, height: 10)
+                        .overlay { Circle().strokeBorder(GoFlyStyle.surface, lineWidth: 1.5) }
                 }
+                .frame(width: 14, height: 35)
             }
         }
         .frame(width: 24, height: 36, alignment: .bottom)

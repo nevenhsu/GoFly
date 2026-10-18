@@ -39,7 +39,7 @@ struct GoFlyContinuationStatus: View {
                 Label {
                     Text(goFlyString("background.runtimeAvailable"))
                 } icon: {
-                    Image(systemName: "checkmark.circle")
+                    Image(systemName: GoFlySymbols.success)
                 }
                 .font(.footnote)
                 .foregroundStyle(GoFlyStyle.secondary)
@@ -50,7 +50,7 @@ struct GoFlyContinuationStatus: View {
                 Label {
                     Text(goFlyString(key))
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(systemName: GoFlySymbols.warning)
                 }
                 .font(.footnote)
                 .foregroundStyle(GoFlyStyle.errorForeground)
@@ -59,11 +59,7 @@ struct GoFlyContinuationStatus: View {
             }
         }
         .padding(16)
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("background.card")
     }
@@ -111,7 +107,7 @@ struct GoFlyContinuationNotice: View {
                     Text(goFlyString(key))
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(systemName: GoFlySymbols.warning)
                 }
                 .font(.subheadline)
                 .accessibilityIdentifier("background.notice")
@@ -126,11 +122,7 @@ struct GoFlyContinuationNotice: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-            .overlay {
-                RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                    .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-            }
+            .goFlyCard(floating: true)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("background.notice.panel")
         }

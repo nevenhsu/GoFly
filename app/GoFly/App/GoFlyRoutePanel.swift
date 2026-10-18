@@ -37,10 +37,7 @@ struct GoFlyRoutePanel: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
             .accessibilityIdentifier("route.panel.content")
         }
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius).strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .overlay(alignment: .topLeading) { nodeMetrics }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
@@ -88,11 +85,13 @@ struct GoFlyRoutePanel: View {
     private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(goFlyString("route.title")).font(.headline)
+                Text(goFlyString("route.title"))
+                    .font(.title3.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
                 Button { showingSaveFavorite = true } label: {
-                    Image(systemName: "star")
-                        .font(.system(size: 20))
+                    Image(systemName: GoFlySymbols.favorite)
+                        .goFlyControlSymbol(size: 20, weight: .regular)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -101,8 +100,8 @@ struct GoFlyRoutePanel: View {
                 .accessibilityLabel(goFlyString("favoriteRoutes.add"))
                 .accessibilityIdentifier("route.favorite.add")
                 Button { showingDetails = true } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 20, weight: .semibold))
+                    Image(systemName: GoFlySymbols.adjustments)
+                        .goFlyControlSymbol(size: 20, weight: .semibold)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -135,8 +134,9 @@ struct GoFlyRoutePanel: View {
                     onScroll: scrollTo
                 )
                 Button { _ = controller.openNewPicker() } label: {
-                    Text(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
-                                    (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")))
+                    Label(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
+                                    (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")),
+                          systemImage: GoFlySymbols.add)
                         .font(.system(size: addFontSize))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
@@ -148,7 +148,7 @@ struct GoFlyRoutePanel: View {
                 .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             }
             Button { showingFavoriteRoutes = true } label: {
-                Label(goFlyString("favoriteRoutes.title"), systemImage: "star")
+                Label(goFlyString("favoriteRoutes.title"), systemImage: GoFlySymbols.favorite)
             }
             .buttonStyle(GoFlyActionStyle())
             .disabled(!controller.canEdit)
@@ -207,7 +207,7 @@ struct GoFlyRoutePanel: View {
                     Button { _ = controller.toggleHeading() } label: {
                         HStack(spacing: 8) {
                             Image(systemName: controller.heading == .forward ? "arrow.right" : "arrow.left")
-                                .font(.system(size: 22))
+                                .goFlyControlSymbol(size: 22, weight: .regular)
                             Text(goFlyString("route.direction.\(controller.heading.rawValue)"))
                                 .font(.body)
                         }
@@ -267,7 +267,7 @@ struct GoFlyRoutePanel: View {
     }
 
     private func failure(_ error: RouteExecutionFailure) -> some View {
-        Label(goFlyString(error.localizationKey), systemImage: "exclamationmark.triangle")
+        Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
             .font(.footnote)
             .foregroundStyle(GoFlyStyle.errorForeground)
             .padding(12)
@@ -304,7 +304,7 @@ private struct GoFlyRouteDetailsView: View {
                         HStack {
                             Text(goFlyString("imports.title"))
                             Spacer(minLength: 12)
-                            Image(systemName: "chevron.right")
+                            Image(systemName: GoFlySymbols.disclosure)
                         }
                     }
                     .buttonStyle(GoFlyActionStyle())
@@ -313,7 +313,7 @@ private struct GoFlyRouteDetailsView: View {
                     GoFlyRoundTripControl(controller: controller)
                     Text(goFlyString("route.speed")).font(.headline)
                     Text(goFlyLocalizedFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
-                        .font(.title2.monospacedDigit())
+                        .font(.largeTitle.weight(.bold).monospacedDigit())
                         .accessibilityIdentifier("route.speed.value")
                     Slider(value: Binding(
                         get: { Double(controller.draft.speed.kilometersPerHour) },
@@ -328,6 +328,7 @@ private struct GoFlyRouteDetailsView: View {
                         Text("100")
                     }
                     .disabled(!controller.canEdit)
+                    .tint(GoFlyStyle.primary)
                     .accessibilityValue(goFlyLocalizedFormat(
                         goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour
                     ))
@@ -378,7 +379,7 @@ private struct GoFlyRoundTripControl: View {
             set: { _ = controller.setRoundTripEnabled($0) }
         )) {
             Label(goFlyString("route.roundTrip"),
-                  systemImage: controller.roundTripEnabled ? "checkmark.square.fill" : "square")
+                  systemImage: controller.roundTripEnabled ? GoFlySymbols.checked : GoFlySymbols.unchecked)
                 .font(.body)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())

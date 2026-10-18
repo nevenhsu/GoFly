@@ -54,9 +54,7 @@ struct GoFlyImportedRoutesView: View {
                 if imports.loadState == .loading {
                     ProgressView(goFlyString("imports.loading"))
                 } else if imports.loadState == .ready, imports.records.isEmpty {
-                    Text(goFlyString("imports.empty"))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                    GoFlyEmptyState(symbol: GoFlySymbols.importEmpty, message: goFlyString("imports.empty"))
                         .accessibilityIdentifier("imports.empty")
                 }
                 ForEach(imports.records) { record in recordCard(record) }
@@ -85,7 +83,7 @@ struct GoFlyImportedRoutesView: View {
                 .padding(16)
                 .background(GoFlyStyle.surface)
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("imports.title"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -159,7 +157,7 @@ struct GoFlyImportedRoutesView: View {
                 else { showingImporter = true }
             } catch { presentFileError(error) }
         } label: {
-            Label(goFlyString("imports.import"), systemImage: "square.and.arrow.down")
+            Label(goFlyString("imports.import"), systemImage: GoFlySymbols.importFile)
         }
         .buttonStyle(GoFlyActionStyle())
         .disabled(isBusy || !imports.canMutate)
@@ -168,7 +166,7 @@ struct GoFlyImportedRoutesView: View {
 
     private var exportButton: some View {
         Button(action: exportSelected) {
-            Label(goFlyString("imports.export"), systemImage: "square.and.arrow.up")
+            Label(goFlyString("imports.export"), systemImage: GoFlySymbols.exportFile)
         }
         .buttonStyle(GoFlyActionStyle())
         .disabled(isBusy || selectedSnapshot == nil)
@@ -203,8 +201,8 @@ struct GoFlyImportedRoutesView: View {
             Button {
                 Task { _ = await imports.delete(record.id) }
             } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 20))
+                Image(systemName: GoFlySymbols.delete)
+                    .goFlyControlSymbol(size: 20, weight: .regular)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -225,7 +223,7 @@ struct GoFlyImportedRoutesView: View {
     }
 
     private func notice(_ key: String, identifier: String) -> some View {
-        Label(goFlyString(key), systemImage: "exclamationmark.triangle")
+        Label(goFlyString(key), systemImage: GoFlySymbols.warning)
             .font(.footnote)
             .foregroundStyle(GoFlyStyle.errorForeground)
             .padding(12)

@@ -465,6 +465,8 @@ def _validate_payload(payload: Any, request: ManagementRequest) -> dict[str, Any
     transport = payload.get("currentTransport")
     if not isinstance(transport, str) or transport not in _TRANSPORTS:
         _failed()
+    if revision == 0 and transport != request.transport:
+        _failed()
     proof = payload.get("proof")
     if not isinstance(proof, Mapping) or set(proof) != set(_PROOF_KEYS) or any(type(proof[key]) is not bool for key in proof):
         _failed()

@@ -69,6 +69,14 @@ struct LocalGoSetupHandoff {
 }
 enum TunnelProbe { static func run() throws { state.event("probe") } }
 
+// The legacy-handoff harness must never read the host's real activation store.
+// A unique absent namespace selects the ordinary-installation branch.
+enum GoFlySetupPaths {
+    private static let isolatedDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("gofly-native-session-check-\(UUID().uuidString)", isDirectory: true)
+    static func directory() throws -> URL { isolatedDirectory }
+}
+
 @main struct NativeSessionLifetimeCheck {
     static let coordinate = GeoCoordinate(latitude: 37.5, longitude: -122.25)!
     static func events() -> [String] { state.read { $0.events } }

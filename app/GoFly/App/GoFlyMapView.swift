@@ -240,7 +240,7 @@ struct GoFlyMapView: View {
                         HStack {
                             Spacer()
                             Button(action: recenter) {
-                                Image(systemName: "location.viewfinder")
+                                Image(systemName: GoFlySymbols.recenter)
                             }
                             .buttonStyle(GoFlyIconStyle())
                             .accessibilityLabel(goFlyString("map.recenter"))
@@ -538,17 +538,18 @@ struct GoFlyMapView: View {
 
     private var modeSelector: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 modeButton(.teleport, key: "mode.teleport")
                 modeButton(.route, key: "mode.route")
                 modeButton(.joystick, key: "mode.joystick")
             }
             .padding(4)
-            .background(GoFlyStyle.surface, in: Capsule())
+            .background(GoFlyStyle.secondarySurface, in: Capsule())
+            .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
             Menu {
                 ForEach(GoFlyMapMode.allCases, id: \.self) { value in
                     Button { selectMode(value) } label: {
-                        if mode == value { Label(goFlyString(value.localizationKey), systemImage: "checkmark") }
+                        if mode == value { Label(goFlyString(value.localizationKey), systemImage: GoFlySymbols.selected) }
                         else { Text(goFlyString(value.localizationKey)) }
                     }
                     .accessibilityIdentifier(value.localizationKey)
@@ -557,7 +558,7 @@ struct GoFlyMapView: View {
                 HStack {
                     Text(goFlyString(mode.localizationKey))
                     Spacer(minLength: 12)
-                    Image(systemName: "chevron.down")
+                    Image(systemName: GoFlySymbols.expand)
                 }
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 16)
@@ -603,11 +604,7 @@ struct GoFlyMapView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .padding(.horizontal, 8)
                 .foregroundStyle(mode == value ? GoFlyStyle.surface : GoFlyStyle.primary)
-                .background(mode == value ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(mode == value ? .clear : GoFlyStyle.border, lineWidth: 0.5)
-                        .allowsHitTesting(false)
-                }
+                .background(mode == value ? GoFlyStyle.primary : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(mode == value ? .isSelected : [])
@@ -639,7 +636,7 @@ struct GoFlyMapView: View {
                 if route.phase == .pausing || joystick.phase == .pausing || service.phase == .preparing {
                     ProgressView()
                 } else {
-                    Image(systemName: route.canPause || joystick.canPause ? "pause.fill" : "play.fill")
+                    Image(systemName: route.canPause || joystick.canPause ? GoFlySymbols.pause : GoFlySymbols.play)
                 }
             }
             .disabled(!route.canPause && !route.canResume && !joystick.canPause && !joystick.canResume
@@ -659,15 +656,14 @@ struct GoFlyMapView: View {
             Button {
                 showingSettings = true
             } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: GoFlySymbols.settings)
             }
             .buttonStyle(GoFlyIconStyle())
             .accessibilityLabel(goFlyString("settings.title"))
             .accessibilityIdentifier("map.settings")
         }
         .padding(dynamicTypeSize.isAccessibilitySize ? 8 : 16)
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        .goFlyCard(floating: true)
     }
 
     private var positionSourceTitle: String {
@@ -743,7 +739,7 @@ struct GoFlyMapView: View {
     }
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
             if route.picker == nil { goButton(candidate) }
             pinButton(candidate)
         }
@@ -765,7 +761,7 @@ struct GoFlyMapView: View {
             } label: {
                 Text(goFlyString("map.go"))
             }
-            .buttonStyle(GoFlyActionStyle(primary: true))
+            .buttonStyle(GoFlyActionStyle(primary: true, compactAtAccessibilitySizes: true))
             .frame(width: goWidth)
             .disabled(isWanderMap ? (!wanderSearch.canGo || !joystick.canApplyWanderTarget) : (!search.canGo || !service.canTeleport))
             .accessibilityIdentifier("map.candidate.go")
@@ -776,10 +772,7 @@ struct GoFlyMapView: View {
                 dismissKeyboard()
                 presentedSheet = GoFlyMapSheet(content: .details(candidate.place))
             } label: {
-                Group {
-                    if isWanderMap { GoFlyWanderPinIcon(kind: .candidate) }
-                    else { Image(systemName: "mappin").font(.system(size: 24, weight: .bold)) }
-                }
+                GoFlyPlacePinIcon(kind: .candidate)
                 .frame(width: 44, height: 44, alignment: .bottom)
                 .contentShape(Rectangle())
             }
@@ -795,7 +788,7 @@ struct GoFlyMapView: View {
             dismissKeyboard()
             presentedSheet = GoFlyMapSheet(content: .details(place))
         } label: {
-            GoFlyWanderPinIcon(kind: .destination)
+            GoFlyPlacePinIcon(kind: .destination)
                 .frame(width: 44, height: 44, alignment: .bottom)
                 .contentShape(Rectangle())
         }
@@ -860,6 +853,11 @@ struct GoFlyMapView: View {
     @ViewBuilder private func mapMetrics(origin: CGPoint) -> some View {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
+            // Inspect the real configured SDK request without starting network work.
+            Text(mapPlaces.makeRequest(at: GeoCoordinate(latitude: 25.0478, longitude: 121.5170)!)?
+                .preferredLocale?.identifier ?? "system")
+                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
+                .accessibilityIdentifier("map.address.requestLocale")
             Text(sessionPersistenceStatus)
                 .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
                 .accessibilityIdentifier("session.persistence.status")
@@ -931,8 +929,8 @@ struct GoFlyMapView: View {
             Button {
                 location.dismissNotice()
             } label: {
-                Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
+                Image(systemName: GoFlySymbols.close)
+                    .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
@@ -947,7 +945,7 @@ struct GoFlyMapView: View {
 
     private func serviceFailureNotice(_ error: DeviceServiceFailure) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: GoFlySymbols.warning)
                 .padding(.top, 12)
                 .accessibilityHidden(true)
             Text(goFlyString(error.rawValue))
@@ -958,8 +956,8 @@ struct GoFlyMapView: View {
             Button {
                 serviceNoticeDismissed = true
             } label: {
-                Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
+                Image(systemName: GoFlySymbols.close)
+                    .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }

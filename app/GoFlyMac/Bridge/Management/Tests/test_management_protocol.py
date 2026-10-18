@@ -135,6 +135,13 @@ class ManagementProtocolTests(unittest.TestCase):
         payload = _complete_payload(request)
         encoded = encode_response(request, payload)
         self.assertEqual(json.loads(encoded)["payload"]["adoptionReceipt"]["receiptSHA256"], payload["adoptionReceipt"]["receiptSHA256"])  # type: ignore[index]
+        moved = copy.deepcopy(payload)
+        moved["connectionRevision"] = 1
+        moved["currentTransport"] = "Network"
+        self.assertEqual(json.loads(encode_response(request, moved))["payload"]["currentTransport"], "Network")
+        moved["connectionRevision"] = 0
+        with self.assertRaisesRegex(ManagementBridgeError, "operation-failed"):
+            encode_response(request, moved)
 
         changed_hash = copy.deepcopy(payload)
         changed_hash["adoptionReceipt"]["receiptSHA256"] = "0" * 64  # type: ignore[index]

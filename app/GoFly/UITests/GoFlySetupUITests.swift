@@ -69,7 +69,7 @@ final class GoFlySetupUITests: XCTestCase {
         let next = app.buttons["onboarding.welcome.next"]
         XCTAssertTrue(next.waitForExistence(timeout: 3))
         XCTAssertFalse(next.isEnabled)
-        XCTAssertTrue(app.progressIndicators["onboarding.welcome.loading"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding.welcome.loading"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["setup.preparing"].exists)
         XCTAssertFalse(app.buttons["map.serviceControl"].exists)
         attach(app, name: "setup-welcome-checking")
@@ -77,7 +77,7 @@ final class GoFlySetupUITests: XCTestCase {
         let enabled = NSPredicate(format: "enabled == true")
         expectation(for: enabled, evaluatedWith: next)
         waitForExpectations(timeout: 15)
-        XCTAssertFalse(app.progressIndicators["onboarding.welcome.loading"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["onboarding.welcome.loading"].exists)
         next.tap()
         XCTAssertTrue(app.buttons["onboarding.location.skip"].waitForExistence(timeout: 5))
         #endif
@@ -91,7 +91,7 @@ final class GoFlySetupUITests: XCTestCase {
         let next = app.buttons["onboarding.welcome.next"]
         XCTAssertTrue(next.waitForExistence(timeout: 3))
         XCTAssertFalse(next.isEnabled)
-        XCTAssertTrue(app.progressIndicators["onboarding.welcome.loading"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["onboarding.welcome.loading"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["setup.blocked"].waitForExistence(timeout: 15))
         XCTAssertFalse(next.exists)
         XCTAssertTrue(app.buttons["setup.retry"].exists)

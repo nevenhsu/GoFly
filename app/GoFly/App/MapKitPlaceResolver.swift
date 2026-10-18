@@ -5,11 +5,27 @@ import MapKit
 /// Enriches a selected point; the caller retains the exact tapped coordinate.
 @MainActor
 final class MapKitPlaceResolver: PlaceResolving {
-    func resolve(at coordinate: GeoCoordinate) async throws -> MapPlace? {
-        try Task.checkCancellation()
+    private let preferredLocale: @MainActor () -> Locale?
+
+    init(preferredLocale: @escaping @MainActor () -> Locale? = {
+        GoFlyPreferences.shared.language == .system ? nil : GoFlyPreferences.shared.locale
+    }) {
+        self.preferredLocale = preferredLocale
+    }
+
+    /// MapKit exposes address locale, not a per-map base-label language override.
+    /// Read the preference for every new request, so switching language needs no map recreation.
+    func makeRequest(at coordinate: GeoCoordinate) -> MKReverseGeocodingRequest? {
         guard let request = MKReverseGeocodingRequest(location: CLLocation(
             latitude: coordinate.latitude, longitude: coordinate.longitude
         )) else { return nil }
+        request.preferredLocale = preferredLocale()
+        return request
+    }
+
+    func resolve(at coordinate: GeoCoordinate) async throws -> MapPlace? {
+        try Task.checkCancellation()
+        guard let request = makeRequest(at: coordinate) else { return nil }
         let operation = ReversePlaceOperation(request: request)
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()

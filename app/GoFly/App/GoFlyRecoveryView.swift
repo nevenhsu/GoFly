@@ -28,7 +28,7 @@ struct GoFlyRecoveryView: View {
                 }
                 if let key = recovery.noticeKey {
                     Label(goFlyString(key), systemImage: recovery.requiresColdConfirmation
-                          ? "exclamationmark.triangle" : "network")
+                          ? GoFlySymbols.warning : GoFlySymbols.network)
                         .font(.subheadline)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("recovery.notice")
@@ -45,7 +45,7 @@ struct GoFlyRecoveryView: View {
                     action("operation.settings", id: "recovery.settings", perform: onSettings)
                 }
                 if let failure = storageFailure {
-                    Label(goFlyString(failure.localizationKey), systemImage: "exclamationmark.triangle")
+                    Label(goFlyString(failure.localizationKey), systemImage: GoFlySymbols.warning)
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.errorForeground)
                         .padding(12)
@@ -73,11 +73,7 @@ struct GoFlyRecoveryView: View {
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
         .frame(height: min(contentHeight, max(44, maximumHeight)))
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius)
-                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-        }
+        .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("recovery.panel")
     }

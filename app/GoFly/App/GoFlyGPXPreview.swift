@@ -104,7 +104,7 @@ private struct GPXDocumentMap: UIViewRepresentable {
             if let marker = view as? MKMarkerAnnotationView {
                 marker.markerTintColor = .label
                 marker.glyphTintColor = .systemBackground
-                marker.glyphImage = UIImage(systemName: "mappin")
+                marker.glyphImage = UIImage(systemName: GoFlySymbols.sample)
                 marker.clusteringIdentifier = "gpx.samples"
                 marker.canShowCallout = false
             }

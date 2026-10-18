@@ -5,15 +5,11 @@ project_dir="$(cd "$bridge_dir/../../.." && pwd)"
 output="$project_dir/work/gofly-ios/native-error-mapping-check"
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 mkdir -p "$output"
-# Compile the real enum and exact mapper source without any iOS FFI module.
+# Compile the production core module so the harness follows its current type
+# dependencies (including continued-processing grants), without any iOS FFI.
 xcrun --sdk macosx swiftc -emit-module -emit-library -parse-as-library \
   -module-cache-path "$output/module-cache" -module-name GoFlyCore -swift-version 6 \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/DeviceService.swift" \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/GeoCoordinate.swift" \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/TeleportModels.swift" \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/MovementTaskAuthority.swift" \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/PointDispatchGate.swift" \
-  "$project_dir/app/GoFly/Sources/GoFlyCore/VerifiedDeviceSession.swift" \
+  "$project_dir/app/GoFly/Sources/GoFlyCore/"*.swift \
   -emit-module-path "$output/GoFlyCore.swiftmodule" -o "$output/libGoFlyCore.dylib"
 xcrun --sdk macosx swiftc -parse-as-library -module-cache-path "$output/module-cache" \
   -swift-version 6 -I "$output" -L "$output" -lGoFlyCore \

@@ -38,7 +38,7 @@ struct MacManagementProtocolTests {
         let request = try MacManagementRequest(
             action: .query, managementID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
             deviceID: device, selectionID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
-            kind: .renew, transport: .network, connectionRevision: 2,
+            kind: .renew, transport: .usb, connectionRevision: 2,
             requestID: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!)
         let sourceApp = try MacManagementAppIdentity(bundleID: "com.neven.gofly", build: "19",
                                                       profileSHA256: profile, executableSHA256: executable)

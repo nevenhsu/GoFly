@@ -19,9 +19,7 @@ struct GoFlyFavoriteRoutesView: View {
                     if favorites.loadState == .loading {
                         ProgressView(goFlyString("favoriteRoutes.loading"))
                     } else if favorites.loadState == .ready, favorites.records.isEmpty {
-                        Text(goFlyString("favoriteRoutes.empty"))
-                            .font(.body)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                        GoFlyEmptyState(symbol: GoFlySymbols.route, message: goFlyString("favoriteRoutes.empty"))
                             .accessibilityIdentifier("favoriteRoutes.empty")
                     }
                     if favorites.isBusy || favorites.isValidatingSelection {
@@ -63,7 +61,7 @@ struct GoFlyFavoriteRoutesView: View {
                 .padding(16)
                 .background(GoFlyStyle.surface)
             }
-            .background(GoFlyStyle.surface)
+            .background(GoFlyStyle.canvas)
             .navigationTitle(goFlyString("favoriteRoutes.title"))
             .navigationBarTitleDisplayMode(.inline)
             .overlay(alignment: .topLeading) { viewportMetrics }
@@ -118,8 +116,8 @@ struct GoFlyFavoriteRoutesView: View {
                 invalidateLoad()
                 Task { _ = await favorites.delete(record.id) }
             } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 20))
+                Image(systemName: GoFlySymbols.delete)
+                    .goFlyControlSymbol(size: 20, weight: .regular)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -190,7 +188,7 @@ struct GoFlyFavoriteRouteFailureNotice: View {
 
     var body: some View {
         if let key {
-            Label(goFlyString(key), systemImage: "exclamationmark.triangle")
+            Label(goFlyString(key), systemImage: GoFlySymbols.warning)
                 .font(.footnote)
                 .foregroundStyle(GoFlyStyle.errorForeground)
                 .padding(12)

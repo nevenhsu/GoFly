@@ -8,6 +8,8 @@
 
 完成旗標由 App root 在有效的下一步結果回來時同步寫入，再顯示地圖。已有旗標時直接顯示地圖，服務仍為 stopped。
 
+2026-10-18 歡迎頁更新：首次啟動直接顯示 onboarding 第一頁，移除獨立啟動檢查畫面。歡迎頁底部、「下一步」上方顯示 loading indicator；啟動檢查未通過前停用下一步，通過後移除 loading 並等待使用者手動前進。檢查失敗、等待 Mac 與交接鎖定仍使用必要提示；不提早建立正常 runtime。介面已實作，新版手機驗收仍待執行。
+
 ## 探測與生命週期
 
 - Core 的 TunnelProbing 不知道生產端點；iOS 層只定義一份 10.7.0.1:49152，供 onboarding、native session 與 reset 使用。
