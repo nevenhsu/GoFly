@@ -165,6 +165,8 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 ### C4. iOS：恢復／背景層合併
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
+- **C5-5 延後**：移除 picker `objectWillChange` 轉發會改動 RouteExecutionController 的既有通知契約與 UI 刷新；依規則先跳過，併入 B2 後再處理。
+- **C5-7 ✅**：mode 按鈕最小 44×44；`GoFlyModeUITestSupport` 加回 44pt 斷言。
 - **C5-3 ✅**：漫步改為單一隨機方向＋固定十分鐘距離，刪 32 樣本與最近 100 點排除。
 - **C5-2 ✅**：`ContinuedProcessingRegistrationBook` 已隨 C4-1 刪除，啟動只註冊一次。
 - **C4-1 背景 driver 精簡 ✅**：保留 Grant／`MovementContinuationController` 授權模型；driver 縮到 143 行、刪 `ContinuedProcessingRegistrationBook` 與 `GoFlyContinuationView`，啟動只註冊一次；沿用既有 `setTaskCompleted` 與 progress 回報。

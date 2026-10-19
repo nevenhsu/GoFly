@@ -593,12 +593,14 @@ struct GoFlyMapView: View {
             Text(goFlyString(key))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(maxWidth: .infinity, minHeight: 44)
+                .frame(minWidth: 44, minHeight: 44)
                 .padding(.horizontal, 8)
                 .foregroundStyle(mode == value ? GoFlyStyle.surface : GoFlyStyle.primary)
                 .background(mode == value ? GoFlyStyle.primary : .clear, in: Capsule())
         }
         .buttonStyle(.plain)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
         .accessibilityAddTraits(mode == value ? .isSelected : [])
         .accessibilityIdentifier(key)
     }

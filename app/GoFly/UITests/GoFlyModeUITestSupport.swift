@@ -13,6 +13,8 @@ extension XCUIApplication {
         let option = buttons["mode." + name]
         XCTAssertTrue(option.waitForExistence(timeout: 5), file: file, line: line)
         XCTAssertTrue(option.isHittable, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(option.frame.width, 44, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(option.frame.height, 44, file: file, line: line)
         option.tap()
     }
 }
