@@ -160,7 +160,7 @@ struct MacRootView: View {
     private var sidebarItems: [(String, MacPage)] {
         if model.page == .environment { return [("Mac 環境", .environment)] }
         if model.firstInstall {
-            return [("連接 iPhone", .devices), ("安裝 GoFly", .install)]
+            return [("選擇 iPhone", .devices), ("確認與安裝", .install)]
         }
         return [(model.selected?.displayName ?? "我的 iPhone", .device)]
     }

@@ -73,10 +73,7 @@ extension MacRootView {
             } else if let setup = model.setup {
                 MacSetupPage(setup: setup, deviceID: model.selectedID,
                              detectedTeamID: model.selectedTeam?.teamID,
-                             vpnInstalled: model.inspection?.vpnInstalled,
-                             vpnConfirmed: model.setupVPNConfirmed,
-                             checkingDevice: model.isChecking,
-                             verifyDevice: { model.verifySetupDevice() })
+                             selectedDevice: model.selected)
                     .disabled(model.isChecking)
             } else {
                 EmptyView()
@@ -175,7 +172,7 @@ extension MacRootView {
                     PillButton(title: "返回裝置清單", enabled: !model.busy) { model.returnToDevices() }
                 } else if let setup = model.setup {
                     PillButton(title: setup.snapshot?.isComplete == true ? "前往裝置管理" : "返回裝置清單",
-                               enabled: !model.busy && !setup.locksDevice && (setup.snapshot?.isComplete != true || model.setupVPNConfirmed)) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
+                               enabled: !model.busy && !setup.locksDevice) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
                 }
             case .home: EmptyView()
             }

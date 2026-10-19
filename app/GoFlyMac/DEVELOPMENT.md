@@ -15,7 +15,11 @@
 ## 首次安裝（USB）
 
 - 安裝只從本機 GoFly 專案建置；不提供已簽署 App 匯入來源，也不顯示介面預覽。
+- 首次安裝只保留 4 步：選擇 iPhone → 確認 → 安裝進度 → 完成。
 - 使用者明確選取同一支 USB iPhone，確認頁使用 Mac 環境已選的 Team；按下開始後才建立私密交易與寫入權限。描述檔更新預設不勾選。
+- 確認頁不顯示 Team ID 欄位或安裝來源，只顯示裝置名稱、iOS 版本、目前 Team 與「開始安裝」。進入確認頁時自動執行 preflight，不提供「唯讀檢查」按鈕。
+- 有尚未完成的安裝交易時，確認頁顯示「繼續上次安裝」；查詢不會重新安裝。
+- 完成頁顯示簽名到期日與手機上的下一步：開啟 LocalDevVPN，再開啟 GoFly。
 - 交易固定正式 `com.neven.gofly`／`GoFly`、裝置、選項與本次配對，保存在單一私密 journal 與 `operation.lock`。每次可能修改前先持久化意圖。重開只接續原交易，不自動新建交易繞過未決結果。
 - Mac 在同一交易中驗證產物、簽署、安裝、私密交付配對，並依實際 OS 準備必要裝置支援。已完成且仍有效的支援重用，不重複下載或掛載。
 - 完成條件：App 部署、本次配對匯入、新觀察到的同機支援三者都確認，且取得 iOS 的 activation receipt，才顯示「Mac 安裝完成」（U18）。只看到 App 圖示、下載完成或檔案存在都不算完成。
@@ -23,7 +27,7 @@
 - 首次安裝 inspect 若確認這部 iPhone 已安裝 GoFly，顯示「此 iPhone 已安裝 GoFly，請到裝置管理重新簽名」，並提供前往該裝置頁的按鈕；不顯示通用安裝錯誤，也不因此自動開始 `renew`。
 - setup 狀態查詢在沒有 journal 時回 `transaction-unknown`，必須視為「沒有待接續交易」，不得因此鎖住安裝頁或把首頁導向安裝頁。
 - 狀態回報 `stage=complete`、`outcome=confirmed` 代表交易已完成，不得鎖住任何頁面或顯示續接；只有尚未完成的交易才顯示續接入口。舊 journal header 沒有 `mode` 時一律視為 `install`。
-- 既有電腦上的 GoFly 執行中時回報 `app-running`，提示使用者關閉手機 App 後繼續原交易，不強制停止或重裝。
+- 既有電腦上的 GoFly 執行中時回報 `app-running`，提示使用者關閉手機 App 後繼續上次安裝，不強制停止或重裝。
 - 技術界線：Apple BuildManifest 讀取上限 4 MiB、支援檔總量 4 GiB、交易 JSON 256 KiB，分開計算。Cryptex 已安裝版本取自受雜湊保護的 `Image.dmg.cryptex_info` 的 `CFBundleVersion`，不以 BuildManifest 的 `Cryptex1,Version` 佔位值代替。
 - iOS 在交接資料驗證並原子提交前不建立正常服務、任務或資料商店。提交不代表 VPN 已連線、GPS 已取得、clear 已完成或移動已授權。完成後可拔 USB；手機不另行下載支援資料，也不出現 U19 或 H12。
 

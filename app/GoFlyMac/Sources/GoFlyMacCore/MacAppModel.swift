@@ -14,7 +14,6 @@ public final class MacAppModel {
     public private(set) var selectedID: String?
     public private(set) var selectedTransport: ConnectedDevice.Transport?
     private var checkingBusy = false
-    private var verifiedSetupID: UUID?
     public private(set) var isCancellingCheck = false
     public var isChecking: Bool { checkingBusy }
     public let setup: MacSetupModel?
@@ -77,27 +76,7 @@ public final class MacAppModel {
     public var installedOnFirstInstall: Bool {
         firstInstall && inspection?.installed == true
     }
-    public var setupVPNConfirmed: Bool {
-        guard setup?.snapshot?.isComplete == true, let identity = setup?.continuation,
-              verifiedSetupID == identity.setupID,
-              inspection?.device.id.lowercased() == identity.deviceID.lowercased() else { return false }
-        return inspection?.vpnInstalled == true
-    }
 
-    public func verifySetupDevice() {
-        guard !busy, setup?.snapshot?.isComplete == true,
-              let identity = setup?.continuation else { return }
-        verifiedSetupID = nil
-        inspection = nil
-        perform(.inspect, deviceID: identity.deviceID) { data, request in
-            let result = try ResponseDecoder.decode(data, for: request, as: DeviceInspection.self)
-            guard result.device.id.lowercased() == identity.deviceID.lowercased(),
-                  result.device.transport == .usb, result.installed == true else { throw CheckFailure.invalidResponse }
-            self.selectedID = identity.deviceID
-            self.inspection = result
-            self.verifiedSetupID = identity.setupID
-        }
-    }
     public var installStatus: String {
         guard let inspection else { return "尚未檢查" }
         switch inspection.installed { case true: return "已偵測到 App"; case false: return "未偵測到 App"; default: return "安裝狀態待確認" }
