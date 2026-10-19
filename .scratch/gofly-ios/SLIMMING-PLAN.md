@@ -134,6 +134,8 @@ Swift 端對應：
 
 ### C1-d. 裝置 adapter／support 精簡（手機驗收後）
 
+狀態：C1-a／C1-b／C1-c1／C1-c2／C3／C4-1／C4-1b／C4-2／C4-3／C5-3／C5-7／B2 完成；C5-1／C5-5 延後；C1-d／C2 手機驗收後。
+
 暫不實作，等使用者集中手機驗收後再處理：
 - `setup_adapters.py` 的 Protocol seam 只有 3 個小類別，拿掉省不到行數，保留不動。
 - `setup_support.py` 改直接用 pymobiledevice3 mounter（原 D-G），以及 `setup_adapters.py` 實際 adapter 的精簡，一併延後。原因：M1 是目前唯一在實機驗證過的流程，開發期間無法驗證裝置行為，現在改會把未驗證的風險帶進主要安裝路徑。
@@ -165,6 +167,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 ### C4. iOS：恢復／背景層合併
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
+- **C5-1 延後至 B2 後**：一次嘗試＋手動重試會改動多個 attempt 2/3 時序測試；B2 後再單獨做。
 - **C5-5 延後**：移除 picker `objectWillChange` 轉發會改動 RouteExecutionController 的既有通知契約與 UI 刷新；依規則先跳過，併入 B2 後再處理。
 - **B2 ✅**：Core 測試 11,568 → **5,999** 行；保留一個「自動重試最終成功」case。
 - **C5-7 ✅**：mode 按鈕最小 44×44；`GoFlyModeUITestSupport` 加回 44pt 斷言。
