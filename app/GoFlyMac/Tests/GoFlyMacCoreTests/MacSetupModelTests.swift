@@ -380,6 +380,16 @@ import GoFlyMacCore
         #expect(try await reader.readContinuation() == nil)
     }
 
+    @Test @MainActor func completedJournalDoesNotLockRetainedState() async throws {
+        let runner = CompletedLegacyStatusRunner()
+        let reader = BridgeStatusJournalReader(runner: runner)
+        #expect(try await reader.readContinuation() == nil)
+        let model = MacSetupModel(runner: runner, journal: reader)
+        await model.restore()
+        #expect(model.continuation == nil)
+        #expect(!model.locksDevice)
+    }
+
     private func waitForAppCheck(_ app: MacAppModel, attempts: Int = 400) async -> Bool {
         for _ in 0..<attempts {
             if !app.isChecking { return true }
@@ -441,6 +451,26 @@ private struct TransactionUnknownStatusRunner: MacSetupRunning {
         try JSONSerialization.data(withJSONObject: [
             "requestID": request.requestID.uuidString, "action": "status", "status": "error",
             "code": "transaction-unknown",
+        ])
+    }
+}
+
+private struct CompletedLegacyStatusRunner: MacSetupRunning {
+    func run(_ request: MacSetupRequest) async throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "requestID": request.requestID.uuidString, "action": "status", "status": "ok",
+            "setupID": "4b21f244-9f20-4ece-b1ae-7811f6ff6b3d",
+            "deviceID": "00008110-001234567890abcd",
+            "payload": [
+                "stage": "complete", "outcome": "confirmed", "canResume": false,
+                "proof": ["installationConfirmed": true, "pairingImported": true,
+                          "supportObserved": true],
+                "app": ["bundleID": "com.neven.gofly", "build": "22",
+                        "executableSHA256": String(repeating: "a", count: 64),
+                        "profileSHA256": String(repeating: "b", count: 64)],
+                "teamID": "ABCDE12345", "expiresAt": "2027-10-17T09:06:10Z",
+                "receiptSHA256": String(repeating: "c", count: 64),
+            ],
         ])
     }
 }

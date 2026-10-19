@@ -221,9 +221,25 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
             }
             guard root["status"] as? String == "ok",
                   let rawID = root["setupID"] as? String, let id = UUID(uuidString: rawID),
-                  let device = root["deviceID"] as? String,
-                  let rawMode = root["mode"] as? String, let mode = MacSetupMode(rawValue: rawMode) else {
+                  let device = root["deviceID"] as? String else {
                 throw MacSetupFailure.invalidResponse
+            }
+            let mode: MacSetupMode
+            if let rawMode = root["mode"] as? String {
+                guard let parsed = MacSetupMode(rawValue: rawMode) else {
+                    throw MacSetupFailure.invalidResponse
+                }
+                mode = parsed
+            } else {
+                // Older journals predate the mode header.  They are installs.
+                mode = .install
+            }
+            if let payload = root["payload"] as? [String: Any],
+               payload["stage"] as? String == "complete",
+               payload["outcome"] as? String == "confirmed" {
+                // A completed journal has nothing to resume and must never lock
+                // the app.  Its result remains available through the producer.
+                return nil
             }
             return try MacSetupContinuation(setupID: id, deviceID: device, mode: mode)
         } catch MacSetupFailure.service("transaction-unknown") {

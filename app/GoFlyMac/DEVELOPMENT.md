@@ -12,6 +12,7 @@
 - 結果不明就保持未知：不接管、不啟動、不終止、不重送，也不自動移除資料。取消仍等待實際程序返回。首次安裝不覆蓋既有 GoFly。
 - 首次安裝 inspect 若確認這部 iPhone 已安裝 GoFly，顯示「此 iPhone 已安裝 GoFly，請到裝置管理重新簽名」，並提供前往該裝置頁的按鈕；不顯示通用安裝錯誤，也不因此自動開始 `renew`。
 - setup 狀態查詢在沒有 journal 時回 `transaction-unknown`，必須視為「沒有待接續交易」，不得因此鎖住安裝頁或把首頁導向安裝頁。
+- 狀態回報 `stage=complete`、`outcome=confirmed` 代表交易已完成，不得鎖住任何頁面或顯示續接；只有尚未完成的交易才顯示續接入口。舊 journal header 沒有 `mode` 時一律視為 `install`。
 - 既有電腦上的 GoFly 執行中時回報 `app-running`，提示使用者關閉手機 App 後繼續原交易，不強制停止或重裝。
 - 技術界線：Apple BuildManifest 讀取上限 4 MiB、支援檔總量 4 GiB、交易 JSON 256 KiB，分開計算。Cryptex 已安裝版本取自受雜湊保護的 `Image.dmg.cryptex_info` 的 `CFBundleVersion`，不以 BuildManifest 的 `Cryptex1,Version` 佔位值代替。
 - iOS 在交接資料驗證並原子提交前不建立正常服務、任務或資料商店。提交不代表 VPN 已連線、GPS 已取得、clear 已完成或移動已授權。完成後可拔 USB；手機不另行下載支援資料，也不出現 U19 或 H12。
@@ -53,5 +54,6 @@
 | 既有 GoFly 已安裝 | 首次安裝顯示「請到裝置管理重新簽名」與前往該裝置頁的按鈕；不接管或移除既有 App |
 | 環境／bridge 無法使用 | 首頁與環境頁顯示 Bundle 或 Python 原因；首頁與返回裝置清單導覽仍可用 |
 | 沒有 setup journal | `transaction-unknown` 視為無待接續交易，首頁不被導向安裝頁 |
+| 已完成 setup journal | `complete`＋`confirmed` 不鎖任何頁面；header 無 `mode` 視為 `install` |
 | 已就緒的裝置支援 | 重用，不重複下載或掛載；下載成功但裝置驗證失敗仍不算完成 |
 | 模擬器／預覽 | 只驗介面，不產生裝置寫入或完成證據 |
