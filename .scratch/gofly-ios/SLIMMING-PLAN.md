@@ -164,7 +164,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 
 ### C4. iOS：恢復／背景層合併
 
-- `MovementTaskAuthority`（lease／snapshot 版本比較）併入 `ServiceController` 的 FIFO 內部狀態；對外只保留 `PointDispatchGate`。
+- **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
 - `SessionRecovery*`（Models＋Codec 435＋Store＋Persistence＋App `GoFlySessionRecovery`）只保留「保存草稿與設定，下次開啟還原草稿」。刪除冷啟動 hold（「必須實際 clear ACK 後才可建立新任務」）——改成：冷啟動若上次有 active 任務，Start 前自動排一次 clear，失敗就顯示錯誤，不做持久化的不確定狀態機。
 - `MovementRecoveryController`（584）與 `TunnelResetState` 合併為一個前景連線檢查＋Reset 的小 controller。
 - 背景（`ContinuedProcessing*`、`MovementContinuation*`、`GoFlyContinuedProcessingDriver` 422、`GoFlyContinuationView`）：照 D-E 縮成最小 driver。
@@ -178,7 +178,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 | 漫步「最近 100 個成功目的地 1m 內排除」「32 方向樣本」 | 改為隨機方向＋固定距離，刪排除記憶 |
 | 路線 50m 端點吸附＋10,000 點驗證、admission revision | 保留上限檢查，刪除 admission revision（新規劃直接取消舊 Task 即可） |
 | `RouteExecutionController` 轉發 picker candidates 的 objectWillChange 訂閱 | 改由 View 直接觀察 picker 的 `CandidateController` |
-| `GoFlyMapView`（988）＋`GoFlyMapCanvas`：實測面板高度防震盪、短 viewport 精簡模式 | 刪除「依保留實測高度判斷精簡」邏輯，固定 padding；隨 B1 刪除 map-metrics 量測 |
+| `GoFlyMapView`（988）＋`GoFlyMapCanvas`：實測面板高度防震盪、短 viewport 精簡模式 | **不做（2026-10-19 決定）**：這是使用者要求的 UI 精修，小螢幕與最大字級需要；手機驗收前不改。 |
 | mode pill 點擊區域實測 42×18 | 改成至少 44×44，並把 `GoFlyModeUITestSupport` 的 44pt 斷言加回去 |
 
 ---
