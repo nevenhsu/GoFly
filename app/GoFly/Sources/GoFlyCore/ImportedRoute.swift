@@ -107,23 +107,19 @@ public enum ImportedRoutesLoadState: Equatable, Sendable {
 
 public struct ImportedRoutesReceipt: Equatable, Sendable {
     public let records: [ImportedRouteRecord]
-    public let canUndo: Bool
-    public init(records: [ImportedRouteRecord], canUndo: Bool) { self.records = records; self.canUndo = canUndo }
+    public let unavailable: [UUID: ImportedRoutesFailure]
+    public init(records: [ImportedRouteRecord], unavailable: [UUID: ImportedRoutesFailure] = [:]) {
+        self.records = records; self.unavailable = unavailable
+    }
 }
 
 public protocol ImportedRoutesPersistence: Sendable {
     func read() async throws -> ImportedRoutesReceipt
     func importArtifact(_ artifact: ImportedRouteArtifact) async throws -> ImportedRoutesReceipt
     func validate(_ id: UUID) async throws -> ImportedRouteSnapshot
-    func transferSnapshot() async throws -> TransferArchiveSnapshot
+    func payload(_ id: UUID) async throws -> Data
     func delete(_ id: UUID) async throws -> ImportedRoutesReceipt
-    func undoDelete() async throws -> ImportedRoutesReceipt
-}
-
-public extension ImportedRoutesPersistence {
-    func transferSnapshot() async throws -> TransferArchiveSnapshot {
-        throw ImportedRoutesFailure.unavailable
-    }
+    func restore(_ record: ImportedRouteRecord, payload: Data, at index: Int) async throws -> ImportedRoutesReceipt
 }
 
 public struct UnavailableImportedRoutesPersistence: ImportedRoutesPersistence {
@@ -131,6 +127,7 @@ public struct UnavailableImportedRoutesPersistence: ImportedRoutesPersistence {
     public func read() async throws -> ImportedRoutesReceipt { throw ImportedRoutesFailure.unavailable }
     public func importArtifact(_ artifact: ImportedRouteArtifact) async throws -> ImportedRoutesReceipt { throw ImportedRoutesFailure.unavailable }
     public func validate(_ id: UUID) async throws -> ImportedRouteSnapshot { throw ImportedRoutesFailure.unavailable }
+    public func payload(_ id: UUID) async throws -> Data { throw ImportedRoutesFailure.unavailable }
     public func delete(_ id: UUID) async throws -> ImportedRoutesReceipt { throw ImportedRoutesFailure.unavailable }
-    public func undoDelete() async throws -> ImportedRoutesReceipt { throw ImportedRoutesFailure.unavailable }
+    public func restore(_ record: ImportedRouteRecord, payload: Data, at index: Int) async throws -> ImportedRoutesReceipt { throw ImportedRoutesFailure.unavailable }
 }

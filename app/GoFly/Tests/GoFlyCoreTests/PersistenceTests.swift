@@ -1,0 +1,115 @@
+import Foundation
+import Testing
+@testable import GoFlyCore
+
+@Suite @MainActor struct PersistenceTests {
+    private func directory() throws -> URL {
+        let url = URL(fileURLWithPath: "/private/tmp/gofly-c3-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test func favoritePlacesReadsTheExistingSchemaOneFileUnchanged() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let old = Data(#"{"schemaVersion":1,"favorites":[{"identity":{"kind":"coordinate","value":null},"coordinate":{"latitude":25,"longitude":121},"title":"25.000000, 121.000000","address":null,"label":"home"}]}"#.utf8)
+        try old.write(to: root.appendingPathComponent("favorites.json"))
+        let disk = FileFavoritePlacesPersistence(directory: root)
+        let data = try #require(try disk.read())
+        #expect(data == old)
+        let favorites = try FavoritePlacesArchive.decode(data)
+        #expect(favorites.count == 1)
+        #expect(favorites[0].label == "home")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == ["favorites.json"])
+    }
+
+    @Test func sessionReadsTheExistingSchemaOneFileUnchanged() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let old = Data(#"{"activeMovement":null,"draft":{"gpxData":null,"gpxFilename":null,"nodes":[{"id":"00000000-0000-0000-0000-000000000001","kind":"current","place":null}],"sourceKind":"manual","speed":20},"joystickSpeed":20,"mode":"teleport","position":{"coordinate":{"latitude":25,"longitude":121},"source":"gps"},"revision":9,"roundTripEnabled":false,"schemaVersion":1,"uncertainty":null}"#.utf8)
+        try old.write(to: root.appendingPathComponent("session.json"))
+        let data = try #require(try FileSessionRecoveryPersistence(directory: root).read())
+        #expect(data == old)
+        #expect(try SessionRecoveryCodec.decodeRecord(data).revision == 9)
+    }
+
+    @Test func favoritePlacesRoundTripKeepsPrivatePermissions() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = FileFavoritePlacesPersistence(directory: root)
+        let coordinate = GeoCoordinate(latitude: 25, longitude: 121)!
+        let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
+        let store = FavoritePlacesStore(persistence: disk)
+        #expect(store.toggle(place))
+        let data = try #require(try disk.read())
+        #expect(try FavoritePlacesArchive.decode(data).count == 1)
+        #expect((try FileManager.default.attributesOfItem(atPath: disk.fileURL.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        #expect((try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber)?.intValue == 0o700)
+    }
+
+    @Test func corruptFavoritePlacesBlocksMutationAndKeepsTheOriginalBytes() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("favorites.json")
+        let corrupt = Data(#"{"schemaVersion":1,"favorites":"not-an-array"}"#.utf8)
+        try corrupt.write(to: file)
+        let store = FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: root))
+        #expect(store.loadState == .blocked(.corruptArchive))
+        let coordinate = GeoCoordinate(latitude: 25, longitude: 121)!
+        #expect(!store.toggle(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)))
+        #expect(try Data(contentsOf: file) == corrupt)
+    }
+
+    @Test func importedRouteDeleteAndUndoAreStoreMemoryOnly() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = FileImportedRoutesPersistence(directory: root)
+        let artifact = try importedArtifact()
+        _ = try await disk.importArtifact(artifact)
+        let store = ImportedRoutesStore(persistence: disk)
+        await store.load()
+        let record = try #require(store.records.first)
+        #expect(await store.delete(record.id))
+        #expect(store.canUndo)
+        #expect(store.records.isEmpty)
+        let relaunched = ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: root))
+        await relaunched.load()
+        #expect(!relaunched.canUndo)
+        #expect(await store.undoDelete())
+        #expect(store.records.map(\.id) == [record.id])
+        #expect(!store.canUndo)
+    }
+
+    @Test func corruptManifestBlocksReadAndMutationWithoutRewriting() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let manifest = root.appendingPathComponent("manifest.json")
+        let corrupt = Data(#"{"schemaVersion":99,"records":[]}"#.utf8)
+        try corrupt.write(to: manifest)
+        let store = ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: root))
+        await store.load()
+        #expect(store.loadState == .blocked(.unsupportedSchema))
+        #expect(!store.canMutate)
+        #expect(try Data(contentsOf: manifest) == corrupt)
+    }
+
+    @Test func missingPayloadIsUnavailableAndNeverRemovedFromTheManifest() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = FileImportedRoutesPersistence(directory: root)
+        let artifact = try importedArtifact()
+        let receipt = try await disk.importArtifact(artifact)
+        let record = try #require(receipt.records.first)
+        try FileManager.default.removeItem(at: root.appendingPathComponent(record.id.uuidString + ".gpx"))
+        let reread = try await disk.read()
+        #expect(reread.records.map(\.id) == [record.id])
+        #expect(reread.unavailable[record.id] == .unavailable)
+        #expect(try Data(contentsOf: root.appendingPathComponent("manifest.json")).isEmpty == false)
+        let store = ImportedRoutesStore(persistence: disk)
+        await store.load()
+        await store.select(record.id)
+        #expect(store.unavailable[record.id] == .unavailable)
+        #expect(await store.delete(record.id))
+        #expect(try await disk.read().records.isEmpty)
+    }
+
+    private func importedArtifact() throws -> ImportedRouteArtifact {
+        let a = GeoCoordinate(latitude: 25, longitude: 121)!
+        let b = GeoCoordinate(latitude: 25.001, longitude: 121.001)!
+        let document = try GPXDocument(content: .tracks([GPXTrack(segments: [[a, b]])]))
+        return try ImportedRouteArtifact(document: document, filename: "fixture.gpx")
+    }
+}

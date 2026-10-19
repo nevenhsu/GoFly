@@ -11,7 +11,9 @@ public final class FavoriteRoutesStore: ObservableObject {
     @Published public private(set) var loadState: FavoriteRoutesLoadState = .loading
     @Published public private(set) var error: FavoriteRoutesFailure?
     @Published public private(set) var canUndo = false
+    @Published public private(set) var unavailable: [UUID: FavoriteRoutesFailure] = [:]
     private let persistence: any FavoriteRoutesPersistence
+    private var undo: (record: FavoriteRouteRecord, payload: Data, index: Int)?
     private var selectionRevision: UInt64 = 0
     /// Retained until each entered persistence or detached parse call returns.
     private var physicalOperations: Set<UUID> = []
@@ -107,8 +109,12 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
+            guard let index = records.firstIndex(where: { $0.id == id }) else { throw FavoriteRoutesFailure.notFound }
+            let record = records[index]
+            let payload = try? await persistence.payload(id)
             let receipt = try await persistence.delete(id)
-                        publish(receipt)
+            undo = payload.map { (record, $0, index) }
+            publish(receipt)
             if selectedID == id { await select(nil) }
             error = nil
             return true
@@ -122,13 +128,19 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
-            let receipt = try await persistence.undoDelete()
-                        publish(receipt); error = nil; return true
+            guard let undo else { throw FavoriteRoutesFailure.nothingToUndo }
+            let receipt = try await persistence.restore(undo.record, payload: undo.payload, at: undo.index)
+            self.undo = nil
+            publish(receipt); error = nil; return true
         }
         catch is CancellationError { return false }
         catch { recordFailure(error); return false }
     }
-    private func publish(_ receipt: FavoriteRoutesReceipt) { records = receipt.records; canUndo = receipt.canUndo }
+    private func publish(_ receipt: FavoriteRoutesReceipt) {
+        records = receipt.records
+        unavailable = receipt.unavailable
+        canUndo = undo != nil
+    }
     private func recordFailure(_ error: any Error, display: Bool = true, validatingPayload: Bool = false) {
         let failure = FavoriteRoutesFailure.mapped(error)
         if display { self.error = failure }

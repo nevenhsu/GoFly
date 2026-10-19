@@ -11,7 +11,9 @@ public final class ImportedRoutesStore: ObservableObject {
     @Published public private(set) var loadState: ImportedRoutesLoadState = .loading
     @Published public private(set) var error: ImportedRoutesFailure?
     @Published public private(set) var canUndo = false
+    @Published public private(set) var unavailable: [UUID: ImportedRoutesFailure] = [:]
     private let persistence: any ImportedRoutesPersistence
+    private var undo: (record: ImportedRouteRecord, payload: Data, index: Int)?
     private var selectionRevision: UInt64 = 0
     /// IDs represent calls that have actually entered persistence/parsing.
     /// They are removed only after the physical async body has returned.
@@ -114,8 +116,12 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
+            guard let index = records.firstIndex(where: { $0.id == id }) else { throw ImportedRoutesFailure.notFound }
+            let record = records[index]
+            let payload = try? await persistence.payload(id)
             let receipt = try await persistence.delete(id)
-                        publish(receipt)
+            undo = payload.map { (record, $0, index) }
+            publish(receipt)
             if selectedID == id { await select(nil) }
             error = nil
             return true
@@ -129,8 +135,10 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
-            let receipt = try await persistence.undoDelete()
-                        publish(receipt)
+            guard let undo else { throw ImportedRoutesFailure.nothingToUndo }
+            let receipt = try await persistence.restore(undo.record, payload: undo.payload, at: undo.index)
+            self.undo = nil
+            publish(receipt)
             error = nil
             return true
         } catch { recordFailure(error); return false }
@@ -155,7 +163,9 @@ public final class ImportedRoutesStore: ObservableObject {
     }
 
     private func publish(_ receipt: ImportedRoutesReceipt) {
-        records = receipt.records; canUndo = receipt.canUndo
+        records = receipt.records
+        unavailable = receipt.unavailable
+        canUndo = undo != nil
     }
     private func recordFailure(_ error: any Error) {
         let failure = ImportedRoutesFailure.mapped(error)

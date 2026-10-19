@@ -175,8 +175,10 @@ public enum FavoriteRoutesFailure: Error, Equatable, Sendable {
 public enum FavoriteRoutesLoadState: Equatable, Sendable { case loading, ready, blocked(FavoriteRoutesFailure) }
 public struct FavoriteRoutesReceipt: Equatable, Sendable {
     public let records: [FavoriteRouteRecord]
-    public let canUndo: Bool
-    public init(records: [FavoriteRouteRecord], canUndo: Bool) { self.records = records; self.canUndo = canUndo }
+    public let unavailable: [UUID: FavoriteRoutesFailure]
+    public init(records: [FavoriteRouteRecord], unavailable: [UUID: FavoriteRoutesFailure] = [:]) {
+        self.records = records; self.unavailable = unavailable
+    }
 }
 public struct FavoriteRouteSaveResult: Equatable, Sendable {
     public let record: FavoriteRouteRecord
@@ -194,25 +196,20 @@ public protocol FavoriteRoutesPersistence: Sendable {
     func read() async throws -> FavoriteRoutesReceipt
     func save(_ candidate: FavoriteRouteSaveCandidate, label: String?) async throws -> FavoriteRouteSaveReceipt
     func validate(_ id: UUID) async throws -> FavoriteRouteSnapshot
-    func transferSnapshot() async throws -> TransferArchiveSnapshot
+    func payload(_ id: UUID) async throws -> Data
     func updateLabel(_ id: UUID, label: String?) async throws -> FavoriteRoutesReceipt
     func delete(_ id: UUID) async throws -> FavoriteRoutesReceipt
-    func undoDelete() async throws -> FavoriteRoutesReceipt
-}
-
-public extension FavoriteRoutesPersistence {
-    func transferSnapshot() async throws -> TransferArchiveSnapshot {
-        throw FavoriteRoutesFailure.unavailable
-    }
+    func restore(_ record: FavoriteRouteRecord, payload: Data, at index: Int) async throws -> FavoriteRoutesReceipt
 }
 public struct UnavailableFavoriteRoutesPersistence: FavoriteRoutesPersistence {
     public init() {}
     public func read() async throws -> FavoriteRoutesReceipt { throw FavoriteRoutesFailure.unavailable }
     public func save(_ candidate: FavoriteRouteSaveCandidate, label: String?) async throws -> FavoriteRouteSaveReceipt { throw FavoriteRoutesFailure.unavailable }
     public func validate(_ id: UUID) async throws -> FavoriteRouteSnapshot { throw FavoriteRoutesFailure.unavailable }
+    public func payload(_ id: UUID) async throws -> Data { throw FavoriteRoutesFailure.unavailable }
     public func updateLabel(_ id: UUID, label: String?) async throws -> FavoriteRoutesReceipt { throw FavoriteRoutesFailure.unavailable }
     public func delete(_ id: UUID) async throws -> FavoriteRoutesReceipt { throw FavoriteRoutesFailure.unavailable }
-    public func undoDelete() async throws -> FavoriteRoutesReceipt { throw FavoriteRoutesFailure.unavailable }
+    public func restore(_ record: FavoriteRouteRecord, payload: Data, at index: Int) async throws -> FavoriteRoutesReceipt { throw FavoriteRoutesFailure.unavailable }
 }
 
 enum FavoriteRoutePayload {

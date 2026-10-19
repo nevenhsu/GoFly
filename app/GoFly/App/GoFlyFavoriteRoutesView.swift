@@ -85,6 +85,12 @@ struct GoFlyFavoriteRoutesView: View {
                     Text(goFlyFavoriteRouteEndpoints(record))
                         .font(.footnote).foregroundStyle(GoFlyStyle.secondary).lineLimit(2)
                 }
+                if let failure = favorites.unavailable[record.id] {
+                    Text(goFlyString(failure.localizationKey))
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.errorForeground)
+                        .accessibilityIdentifier("favoriteRoutes.unavailable.\(record.id.uuidString)")
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .padding(12)
@@ -96,8 +102,8 @@ struct GoFlyFavoriteRoutesView: View {
                     case .second: load(record)
                     }
                 })
-            .allowsHitTesting(canSelect)
-            .disabled(!canSelect)
+            .allowsHitTesting(canSelect && favorites.unavailable[record.id] == nil)
+            .disabled(!canSelect || favorites.unavailable[record.id] != nil)
             .foregroundStyle(canSelect ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(record.label.map { $0 + ", " + goFlyFavoriteRouteEndpoints(record) }

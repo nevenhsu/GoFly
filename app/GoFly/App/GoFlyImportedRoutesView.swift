@@ -170,13 +170,19 @@ struct GoFlyImportedRoutesView: View {
                     Text(goFlyImportedRouteMetadata(record))
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
+                    if let failure = imports.unavailable[record.id] {
+                        Text(goFlyString(failure.localizationKey))
+                            .font(.footnote)
+                            .foregroundStyle(GoFlyStyle.errorForeground)
+                            .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
+                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(12)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(isBusy || imports.loadState != .ready)
+            .disabled(isBusy || imports.loadState != .ready || imports.unavailable[record.id] != nil)
             .accessibilityAddTraits(imports.selectedID == record.id ? .isSelected : [])
             .accessibilityIdentifier("imports.record.\(record.id.uuidString)")
             Button {
