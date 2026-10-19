@@ -52,7 +52,7 @@
 
 ## Phase B：測試與驗證流程精簡
 
-### B1. UI tests：19 檔 → 5 檔煙霧測試
+### B1. UI tests：19 檔 → 5 檔煙霧測試 ✅ done (d3fada6)
 
 保留（每個主要 mode 一條 happy path）：
 - `GoFlyOnboardingUITests`（首次流程）
@@ -85,7 +85,7 @@
 
 隨 Phase C1 合併重寫：一個 `Bridge/Tests/test_bridge.py`（wire codec 共用測試）＋每個 action 一個檔（setup／renew…），每個 action 只測 preflight、apply 成功、中斷後 status、一個典型失敗。總量目標 ≤1,500 行（現 ~5,840）。刪除 `test_setup_usb_serial.py`、`test_setup_process_control.py` 這類單點 regression 檔，必要斷言併回 action 測試。
 
-### B4. 驗證腳本
+### B4. 驗證腳本 ✅ done (d3fada6)
 
 | 動作 | 位置 |
 | --- | --- |
