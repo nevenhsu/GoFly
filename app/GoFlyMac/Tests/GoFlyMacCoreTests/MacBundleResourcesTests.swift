@@ -13,6 +13,34 @@ import Testing
         try resources.revalidate()
     }
 
+    @Test func manifestKeySetMustMatchAllowlistExactly() throws {
+        do {
+            let fixture = try BundleFixture()
+            defer { fixture.remove() }
+            _ = try MacBundleResources(bundleURL: fixture.root)
+        }
+        do {
+            let fixture = try BundleFixture()
+            defer { fixture.remove() }
+            var files = try fixture.manifestFiles()
+            files["Contents/Resources/Bridge/extra.py"] = String(repeating: "0", count: 64)
+            try fixture.writeManifest(files)
+            #expect(throws: MacBundleResourceError.invalidManifest) {
+                _ = try MacBundleResources(bundleURL: fixture.root)
+            }
+        }
+        do {
+            let fixture = try BundleFixture()
+            defer { fixture.remove() }
+            var files = try fixture.manifestFiles()
+            files.removeValue(forKey: "Contents/Resources/Bridge/Device/__init__.py")
+            try fixture.writeManifest(files)
+            #expect(throws: MacBundleResourceError.invalidManifest) {
+                _ = try MacBundleResources(bundleURL: fixture.root)
+            }
+        }
+    }
+
     @Test func contentMutationInvalidatesTheRetainedStamp() throws {
         let fixture = try BundleFixture()
         defer { fixture.remove() }
@@ -95,6 +123,15 @@ private final class BundleFixture {
         for entry in MacBundleResourceEntry.allCases {
             files[entry.rawValue] = Self.sha256(Data(entry.rawValue.utf8))
         }
+        try writeManifest(files)
+    }
+
+    func manifestFiles() throws -> [String: String] {
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any]
+        return object?["files"] as? [String: String] ?? [:]
+    }
+
+    func writeManifest(_ files: [String: String]) throws {
         let manifest: [String: Any] = ["version": MacBundleResources.manifestVersion, "files": files]
         try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys]).write(to: manifestURL)

@@ -19,6 +19,7 @@ public enum MacBundleResourceEntry: String, CaseIterable, Sendable {
     case setupProtocol = "Contents/Resources/Bridge/Setup/setup_protocol.py"
     case setupSupport = "Contents/Resources/Bridge/Setup/setup_support.py"
     case setupConfiguration = "Contents/Resources/SetupConfiguration.json"
+    case deviceInit = "Contents/Resources/Bridge/Device/__init__.py"
     case deviceBoundary = "Contents/Resources/Bridge/Device/gofly_device.py"
 }
 

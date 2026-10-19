@@ -35,6 +35,7 @@ cp "$APP_SOURCE/Bridge/Device/__init__.py" "$APP_SOURCE/Bridge/Device/gofly_devi
 import json
 import hashlib
 import plistlib
+import re
 import sys
 from pathlib import Path
 
@@ -123,6 +124,24 @@ manifest_path.chmod(0o644)
 readback = json.loads(manifest_path.read_text())
 if readback != manifest or any(sha256(bundle / relative) != digest for relative, digest in files.items()):
     raise SystemExit("staged bundle resource manifest readback mismatch")
+
+# The Swift verifier only accepts this exact key set.  Parse the closed
+# MacBundleResourceEntry allowlist so a newly packaged file cannot silently
+# diverge from the app's manifest validation again.
+swift_source = (root / "app/GoFlyMac/Sources/GoFlyMacCore/MacBundleResources.swift").read_text()
+swift_entries = set(re.findall(r'case\s+\w+\s*=\s*"(Contents/Resources/[^"]+)"', swift_source))
+if not swift_entries:
+    raise SystemExit("could not parse MacBundleResourceEntry from Swift source")
+manifest_entries = set(readback["files"])
+missing = sorted(swift_entries - manifest_entries)
+extra = sorted(manifest_entries - swift_entries)
+if missing or extra:
+    details = []
+    if missing:
+        details.append("missing from manifest: " + ", ".join(missing))
+    if extra:
+        details.append("not in Swift allowlist: " + ", ".join(extra))
+    raise SystemExit("Swift allowlist and bundle manifest differ\n  " + "\n  ".join(details))
 PY
 
 # Replace only this script's generated development artifact, after staging is complete.
