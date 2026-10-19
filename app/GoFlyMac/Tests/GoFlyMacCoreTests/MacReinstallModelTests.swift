@@ -28,18 +28,6 @@ private struct CompletedReinstallStatus: MacReinstallRunning {
     }
 }
 
-private actor RecordingBackupRunner: MacBackupRunning {
-    private var actions: [MacBackupAction] = []
-    func run(_ request: MacBackupRequest) async throws -> Data {
-        actions.append(request.action)
-        return try JSONSerialization.data(withJSONObject: [
-            "protocol": 4, "requestID": request.requestID.uuidString.lowercased(), "status": "ok",
-            "payload": ["entries": [], "pendingDeletion": false]
-        ])
-    }
-    func observedActions() -> [MacBackupAction] { actions }
-}
-
 private struct MismatchedReinstallStatus: MacReinstallRunning {
     func run(_ request: MacReinstallRequest) async throws -> Data {
         try JSONSerialization.data(withJSONObject: [
@@ -117,42 +105,6 @@ private actor HeldReinstallProgressRunner: MacReinstallRunning {
 }
 
 @Suite @MainActor struct MacReinstallModelTests {
-    @Test func completedReinstallStartsRetentionWithoutReopeningOrDuplicatingMaintenance() async throws {
-        let identity = try MacReinstallContinuation(transferID: UUID(), deviceID: String(repeating: "a", count: 40), categories: [])
-        let reinstall = MacReinstallModel(runner: CompletedReinstallStatus(), journal: FixedReinstallJournal(identity: identity))
-        let runner = RecordingBackupRunner()
-        let backups = MacBackupModel(runner: runner)
-        let app = MacAppModel(live: UnavailableChecker(), reinstall: reinstall, backups: backups)
-        app.maintainBackupsIfIdle()
-        for _ in 0..<200 {
-            if !backups.isBusy { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(await runner.observedActions() == [.maintain])
-        await app.restoreSetup()
-        reinstall.status()
-        for _ in 0..<200 {
-            if !reinstall.isBusy { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(reinstall.snapshot?.isComplete == true)
-        app.maintainBackupsIfIdle()
-        for _ in 0..<200 {
-            if !backups.isBusy { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        await app.finishReinstall()
-        for _ in 0..<200 {
-            if !backups.isBusy { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(await runner.observedActions() == [.maintain, .maintain])
-        #expect(backups.failure == nil)
-        app.maintainBackupsIfIdle()
-        #expect(!backups.isBusy)
-        #expect(await runner.observedActions() == [.maintain, .maintain])
-    }
-
     @Test func cancellationWaitsForTheReadOnlyProgressProcessAsWell() async throws {
         let journal = ChangingReinstallJournal()
         let runner = HeldReinstallProgressRunner(journal: journal)

@@ -147,7 +147,6 @@ struct MacRootView: View {
         case .install: GoFlyMacSymbols.install
         case .handoff: GoFlyMacSymbols.completed
         case .reinstall: GoFlyMacSymbols.reinstall
-        case .backups: GoFlyMacSymbols.backups
         }
     }
 
@@ -161,7 +160,7 @@ struct MacRootView: View {
     }
     private var selectedSidebar: MacPage {
         switch model.page {
-        case .reinstall, .backups: .signing
+        case .reinstall: .signing
         case .channel: .repair
         default: model.page
         }
@@ -195,7 +194,7 @@ struct MacRootView: View {
         VStack(spacing: 20) {
             Rule()
             HStack(spacing: 24) {
-                if !model.isPreview && !model.isChecking && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) || (model.page == .backups && model.backups != nil) ||
+                if !model.isPreview && !model.isChecking && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) ||
                     ((model.page == .signing || model.page == .repair) && model.management != nil)) {
                     pageActions
                 } else if model.busy {
@@ -229,7 +228,6 @@ struct MacRootView: View {
         case .install: "確認 GoFly 簽名與安裝"
         case .handoff: "Mac 安裝完成"
         case .reinstall: "選擇重新安裝後保留的資料"
-        case .backups: "備份管理"
         }
     }
     private var pageSubtitle: String {
@@ -244,7 +242,6 @@ struct MacRootView: View {
         case .install: model.isPreview ? "使用 Xcode 中已設定的開發團隊（介面預覽）。" : "先檢查原裝置與簽名來源，再明確開始本次安裝。"
         case .handoff: "App、配對匯入及必要裝置支援均已確認；可拔除 USB。"
         case .reinstall: model.isPreview ? "備份完成 → 重新安裝 → 自動匯入；目前為介面預覽。" : "明確選取保留資料，完整驗證備份後，同機重新安裝並核對匯入回報。"
-        case .backups: "成功匯入後保留七天；未完成匯入的備份不自動刪除。"
         }
     }
 

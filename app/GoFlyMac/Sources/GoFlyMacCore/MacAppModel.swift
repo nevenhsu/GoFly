@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 public enum MacPage: String, CaseIterable, Sendable {
-    case home, environment, devices, device, signing, repair, channel, install, handoff, reinstall, backups
+    case home, environment, devices, device, signing, repair, channel, install, handoff, reinstall
 }
 
 public enum PreviewScenario: String, CaseIterable, Identifiable, Sendable {
@@ -37,7 +37,6 @@ public final class MacAppModel {
     public var isChecking: Bool { checkingBusy }
     public let setup: MacSetupModel?
     public let reinstall: MacReinstallModel?
-    public let backups: MacBackupModel?
     public let management: MacManagementModel?
     private var automaticManagementBusy = false
     private var restoringOperations = false
@@ -55,21 +54,18 @@ public final class MacAppModel {
     @ObservationIgnored private var activeCheckID: UUID?
     private enum PendingCheckAction { case mode(Bool), scenario }
     @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
-    @ObservationIgnored private var backupMaintenanceStarted = false
-    @ObservationIgnored private var backupMaintenanceReinstallID: UUID?
     @ObservationIgnored private var automaticManagementTask: Task<Void, Never>?
     @ObservationIgnored private var dispatchedManagementSelection: UUID?
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil, reinstall: MacReinstallModel? = nil,
-                backups: MacBackupModel? = nil, management: MacManagementModel? = nil) {
+                management: MacManagementModel? = nil) {
         self.live = live
         self.setup = setup
         self.reinstall = reinstall
-        self.backups = backups
         self.management = management
     }
     public var busy: Bool {
-        checkingBusy || automaticManagementBusy || restoringOperations || backups?.isBusy == true ||
+        checkingBusy || automaticManagementBusy || restoringOperations ||
             (!isPreview && (setup?.isBusy == true || reinstall?.isBusy == true || management?.isBusy == true))
     }
     public var setupLocksDevice: Bool {
@@ -148,13 +144,11 @@ public final class MacAppModel {
                 firstInstall = false
                 page = .device
             } else { page = selectedID == nil ? .home : .device }
-            maintainBackupsIfIdle()
         }
     }
 
     public func finishReinstall() async {
         guard !busy, reinstall?.snapshot?.isComplete == true || reinstall?.snapshot?.isAbandoned == true else { return }
-        let completedID = reinstall?.snapshot?.isComplete == true ? reinstall?.continuation?.transferID : nil
         reinstall?.resetSelection()
         // When M2 was restored first, M1 has not reopened the predecessor
         // which M2 may archive. Read its actual current journal only now.
@@ -168,7 +162,6 @@ public final class MacAppModel {
             inspection = nil
             page = .home
         }
-        maintainBackupsIfIdle(completedReinstallID: completedID)
     }
     public var ready: Bool { environment?.ready == true && !busy }
     public var selected: ConnectedDevice? {
@@ -209,10 +202,10 @@ public final class MacAppModel {
 
     public func navigate(_ destination: MacPage) {
         guard !busy else { return }
-        if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment && destination != .backups {
+        if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment {
             page = activeOperationPage; return
         }
-        if !isPreview && destination != .home && destination != .environment && destination != .backups &&
+        if !isPreview && destination != .home && destination != .environment &&
             !(destination == activeOperationPage && setupLocksDevice) &&
             !(destination == .install && setup?.hasRecordedTransaction == true) &&
             !(destination == .reinstall && reinstall?.hasRecordedTransaction == true) &&
@@ -236,7 +229,7 @@ public final class MacAppModel {
     }
 
     public func switchMode(preview: Bool) {
-        guard !setupLocksDevice, backups?.isBusy != true else { return }
+        guard !setupLocksDevice else { return }
         if checkingBusy {
             pendingCheckAction = .mode(preview)
             cancel()
@@ -360,30 +353,6 @@ public final class MacAppModel {
         page = .home; checkEnvironment()
     }
 
-    public func maintainBackupsIfIdle() {
-        let completedID = reinstall?.snapshot?.isComplete == true ? reinstall?.continuation?.transferID : nil
-        maintainBackupsIfIdle(completedReinstallID: completedID)
-    }
-
-    private func maintainBackupsIfIdle(completedReinstallID: UUID?) {
-        guard !isPreview, !busy, !setupLocksDevice, let backups else { return }
-        guard !backupMaintenanceStarted ||
-            (completedReinstallID != nil && completedReinstallID != backupMaintenanceReinstallID) else { return }
-        backupMaintenanceStarted = true
-        if let completedReinstallID { backupMaintenanceReinstallID = completedReinstallID }
-        backups.maintain()
-    }
-
-    public func openBackup(_ entry: MacBackupEntry) {
-        guard !isPreview, !busy, entry.canContinue,
-              let identity = reinstall?.continuation,
-              identity.transferID == entry.transferID,
-              identity.deviceID.lowercased() == entry.deviceID.lowercased() else { return }
-        selectedID = identity.deviceID
-        firstInstall = false
-        page = .reinstall
-    }
-
     /// These transitions are presentation only and never call the live checker.
     public func previewAdvance() {
         guard isPreview, !busy else { return }
@@ -401,7 +370,6 @@ public final class MacAppModel {
             let selected = [preserveFavorites ? "最愛地點與標籤" : nil,
                             preserveRoutes ? "路線" : nil, preserveSettings ? "設定" : nil].compactMap { $0 }
             previewMessage = selected.isEmpty ? "預覽：已完成全新安裝。" : "預覽：備份 → 重新安裝 → \(selected.joined(separator: "、")) 自動匯入完成。"
-        case .backups: previewMessage = "預覽：沒有刪除或匯入任何真實資料。"
         default: break
         }
     }

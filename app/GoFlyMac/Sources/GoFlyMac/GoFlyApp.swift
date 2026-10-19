@@ -22,16 +22,12 @@ struct GoFlyApp: App {
             configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/Reinstall/reinstall_bridge.py"))) ?? UnavailableReinstallRunner()
         let reinstall = MacReinstallModel(runner: reinstallRunner, journal: MacReinstallJournalReader(stateRoot: stateRoot))
-        let backupRunner: any MacBackupRunning = (try? BackupProcessBridge(
-            configurationURL: resources.appendingPathComponent("SetupConfiguration.json"),
-            scriptURL: resources.appendingPathComponent("Bridge/Backup/bridge.py"))) ?? UnavailableBackupRunner()
-        let backups = MacBackupModel(runner: backupRunner)
         let managementRunner: any MacManagementRunning = (try? ManagementProcessBridge(
             configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/Management/management_bridge.py"))) ?? UnavailableManagementRunner()
         let management = MacManagementModel(runner: managementRunner, journal: MacManagementJournalReader(stateRoot: stateRoot))
         let appModel = MacAppModel(live: checker, setup: setup, reinstall: reinstall,
-                                   backups: backups, management: management)
+                                   management: management)
         if CommandLine.arguments.contains("--preview") { appModel.switchMode(preview: true) }
         _model = State(initialValue: appModel)
     }
@@ -43,9 +39,6 @@ struct GoFlyApp: App {
                 .task {
                     if !model.isPreview { await model.restoreSetup() }
                     model.checkEnvironment()
-                }
-                .onChange(of: model.busy) { _, busy in
-                    if !busy { model.maintainBackupsIfIdle() }
                 }
                 .toolbar {
                     ToolbarItem(placement: .automatic) {

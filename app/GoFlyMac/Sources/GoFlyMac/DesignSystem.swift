@@ -35,7 +35,6 @@ enum GoFlyMacSymbols {
     static let connection = "network"
     static let completed = "checkmark.circle.fill"
     static let reinstall = "arrow.triangle.2.circlepath"
-    static let backups = "externaldrive"
     static let usb = "cable.connector"
     static let wifi = "wifi"
 }

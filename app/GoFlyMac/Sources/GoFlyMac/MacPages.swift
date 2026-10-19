@@ -134,19 +134,6 @@ extension MacRootView {
                     .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
             }
             }
-        case .backups:
-            if !model.isPreview, let backups = model.backups {
-                MacBackupsPage(backup: backups) { model.openBackup($0) }
-                    .disabled(model.isChecking)
-                    .task { if !model.busy { backups.list() } }
-            } else {
-            StatusCard {
-                StatusRow(title: model.isPreview ? "我的 iPhone · 最愛、路線、設定（預覽）" : "沒有讀取手機備份",
-                          detail: model.isPreview ? "已成功匯入 · 七天後可刪除（示意）" : "本版不建立備份、不讀取既有備份，也不刪除任何備份。")
-                Rule()
-                StatusRow(title: "尚未完成匯入", detail: model.isPreview ? "測試 iPhone · 上次未完成（預覽）\n保留備份，重新確認原裝置後再由使用者繼續。" : "正式資料格式、原裝置綁定與手機回報協定，待 iOS flow 確認後再接入。")
-            }
-            }
         case .home: EmptyView()
         }
     }
@@ -231,7 +218,6 @@ extension MacRootView {
                 PillButton(title: "檢查裝置", primary: true, enabled: model.mayInspect) { model.inspectSelected() }
                     .accessibilityIdentifier("inspect-device")
             case .device:
-                PillButton(title: "備份管理") { model.navigate(.backups) }
                 Spacer(minLength: 0)
                 PillButton(title: "重新檢查狀態", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
             case .install:
@@ -266,12 +252,6 @@ extension MacRootView {
                 Spacer(minLength: 0)
                 if model.isPreview {
                     PillButton(title: "預覽備份與重新安裝", primary: true) { model.previewAdvance() }
-                }
-            case .backups:
-                PillButton(title: "返回裝置狀態") { model.navigate(.device) }
-                Spacer(minLength: 0)
-                if model.isPreview {
-                    PillButton(title: "預覽待匯入資料", primary: true) { model.previewAdvance() }
                 }
             case .home: EmptyView()
             }
