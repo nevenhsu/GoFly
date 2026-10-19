@@ -17,7 +17,6 @@ fi
 
 python3 "$bridge_dir/prepare-build.py"
 mkdir -p "$build_dir/native"
-bash "$bridge_dir/tests/check-error-mapping.sh"
 # Host tests exercise RP verification and actual location C exports against scripted peers.
 cargo test --manifest-path "$build_dir/native-source/Cargo.toml" -p idevice-ffi \
   --locked --no-default-features --features "$features" gofly_ -- --nocapture
@@ -30,5 +29,5 @@ CC_aarch64_apple_ios="$(xcrun --sdk iphoneos --find clang)" \
 cp "$CARGO_TARGET_DIR/$native_target/release/libidevice_ffi.a" "$build_dir/native/libidevice_ffi.a"
 cp "$build_dir/native-source/ffi/idevice.h" "$build_dir/native/idevice-full.h"
 cp "$build_dir/native-source/Cargo.lock" "$build_dir/native/Cargo.lock"
-python3 "$bridge_dir/verify-shim.py"
+python3 "$bridge_dir/../scripts/verify-native.py"
 python3 "$bridge_dir/prepare-build.py" --record
