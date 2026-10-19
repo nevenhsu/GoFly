@@ -28,14 +28,14 @@ import GoFlyMacCore
         let outsideScript = directory.appendingPathComponent("Bridge/not-the-entry.py")
         try FileManager.default.createDirectory(at: outsideScript.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("# controlled fixture; never executed\n".utf8).write(to: outsideScript)
-        #expect(throws: MacSetupFailure.unavailable) {
+        #expect(throws: CheckFailure.bundleInvalid) {
             try ProcessBridge(configurationURL: url, scriptURL: outsideScript)
         }
         var formalCheck = expected
         formalCheck.removeValue(forKey: "stateRoot")
         let checkURL = directory.appendingPathComponent("LocalConfiguration.json")
         try JSONSerialization.data(withJSONObject: formalCheck).write(to: checkURL)
-        #expect(throws: MacSetupFailure.unavailable) {
+        #expect(throws: CheckFailure.bundleInvalid) {
             try ProcessBridge(configurationURL: checkURL, scriptURL: outsideScript)
         }
         for (key, invalid) in [

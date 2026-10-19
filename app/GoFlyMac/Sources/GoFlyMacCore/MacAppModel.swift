@@ -85,6 +85,9 @@ public final class MacAppModel {
     public var visibleDevices: [ConnectedDevice] { ConnectedDevice.unique(devices, usbOnly: firstInstall) }
     public var availableConnections: [ConnectedDevice] { ConnectedDevice.connectionChoices(devices, usbOnly: firstInstall) }
     public var mayInspect: Bool { ready && selected != nil }
+    public var installedOnFirstInstall: Bool {
+        !isPreview && firstInstall && inspection?.installed == true
+    }
     public var setupVPNConfirmed: Bool {
         guard setup?.snapshot?.isComplete == true, let identity = setup?.continuation,
               verifiedSetupID == identity.setupID,
@@ -163,10 +166,35 @@ public final class MacAppModel {
     }
 
     public func openDevices(firstInstall: Bool) {
-        guard ready, !setupLocksDevice else { return }
+        showDevices(firstInstall: firstInstall, ignoreSetupLock: false)
+    }
+
+    /// Pure navigation back to the device list.  An unavailable environment or
+    /// a blocked journal must not strand the user on an error page.
+    public func returnToDevices() {
+        showDevices(firstInstall: false, ignoreSetupLock: true)
+    }
+
+    private func showDevices(firstInstall: Bool, ignoreSetupLock: Bool) {
+        guard !busy, ignoreSetupLock || !setupLocksDevice else { return }
         setup?.resetSelection()
         self.firstInstall = firstInstall; selectedID = nil; selectedTransport = nil; inspection = nil
-        page = .devices; refreshDevices()
+        page = .devices
+        if environment?.ready == true { refreshDevices() }
+    }
+
+    /// Moves from the first-install refusal to the selected phone's management
+    /// page without running another inspection or starting setup.
+    public func openSelectedDevicePage() {
+        guard !busy, !setupLocksDevice, let device = selected else { return }
+        setup?.resetSelection()
+        firstInstall = false
+        selectedID = device.id
+        selectedTransport = device.transport
+        page = .device
+        failure = nil
+        previewMessage = nil
+        renewTriggeredSelection = nil
     }
 
     public func checkEnvironment() {

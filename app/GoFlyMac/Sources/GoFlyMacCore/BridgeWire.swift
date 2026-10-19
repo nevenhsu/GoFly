@@ -188,12 +188,14 @@ public struct DeviceInspection: Codable, Equatable, Sendable {
 public struct DeviceList: Codable, Sendable { public let devices: [ConnectedDevice] }
 
 public enum CheckFailure: Error, Equatable, Sendable {
-    case unavailable, invalidResponse, timeout, cancelled, service(String)
+    case bundleInvalid, pythonUnavailable, unavailable, invalidResponse, timeout, cancelled, service(String)
 
     public var title: String {
         switch self {
         case .cancelled: "檢查已取消"
         case .timeout: "檢查逾時"
+        case .bundleInvalid: "Bundle 驗證失敗"
+        case .pythonUnavailable: "Python 環境無法使用"
         case .unavailable: "檢查工具尚未就緒"
         case .invalidResponse: "無法確認檢查結果"
         case .service(let code):
@@ -210,6 +212,8 @@ public enum CheckFailure: Error, Equatable, Sendable {
     }
     public var detail: String {
         switch self {
+        case .bundleInvalid: "App 內的 Bridge 檔案與 manifest 不一致。請重新執行 bash app/GoFlyMac/build-app.sh。"
+        case .pythonUnavailable: "找不到或無法執行 LocalConfiguration.json 指定的 Python。請確認 work/mac-setup-env 後重新執行 build-app.sh。"
         case .unavailable: "請使用 build-app.sh 建立本機開發版，確認專案的 Python 檢查環境可用。"
         case .timeout: "沒有取得完整回覆。請確認連線與手機解鎖狀態，再手動重新檢查。"
         case .cancelled: "這次唯讀檢查已結束，可重新選擇裝置或再檢查。"

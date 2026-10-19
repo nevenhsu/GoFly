@@ -72,7 +72,11 @@ struct MacRootView: View {
             Button("查看 Mac 環境") { model.navigate(.environment) }
                 .buttonStyle(.link).font(GoFlyStyle.font(12)).padding(.top, 22).disabled(model.busy)
             if let failure = model.failure {
-                Text(failure.title).font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted).padding(.top, 12)
+                VStack(spacing: 4) {
+                    Text(failure.title).font(GoFlyStyle.font(13, bold: true))
+                    Text(failure.detail).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        .multilineTextAlignment(.center)
+                }.padding(.top, 12).frame(maxWidth: 620)
             }
             }
             .frame(maxWidth: .infinity)

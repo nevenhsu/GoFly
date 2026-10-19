@@ -4,15 +4,16 @@ import GoFlyMacCore
 
 private struct EchoChecker: MacChecking {
     let wrongDevice: Bool
+    var installed: Bool? = nil
     func check(_ request: CheckRequest) async throws -> Data {
         let payload: [String: Any]
         switch request.action {
-        case .environment: payload = ["ready": true, "checks": [], "teamID": NSNull()]
+        case .environment: payload = ["ready": true, "checks": [], "teamID": "ABCDE12345"]
         case .devices: payload = ["devices": [["id": "device-a", "name": "iPhone", "transport": "usb"],
                                               ["id": "device-a", "name": "iPhone", "transport": "wifi"]]]
         case .inspect:
             payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": request.transport?.rawValue ?? "usb"],
-                       "developerMode": true, "installed": NSNull(), "vpnInstalled": NSNull()]
+                       "developerMode": true, "installed": installed.map { $0 as Any } ?? NSNull(), "vpnInstalled": NSNull()]
         }
         return try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
                                                            "status": "ok", "payload": payload])
@@ -112,6 +113,21 @@ private actor HeldChecker: MacChecking {
     #expect(model.inspection == nil)
     #expect(model.failure == .invalidResponse)
     #expect(model.page == .devices)
+}
+
+@Test @MainActor func installedPhoneOnFirstInstallOffersDevicePage() async throws {
+    let model = MacAppModel(live: EchoChecker(wrongDevice: false, installed: true))
+    model.checkEnvironment(); try await settled(model)
+    model.openDevices(firstInstall: true); try await settled(model)
+    model.select("device-a", transport: .usb)
+    model.inspectSelected(); try await settled(model)
+    #expect(model.installedOnFirstInstall)
+    #expect(model.page == .install)
+    model.openSelectedDevicePage()
+    #expect(!model.firstInstall)
+    #expect(model.page == .device)
+    #expect(model.selectedID == "device-a")
+    #expect(model.selectedTransport == .usb)
 }
 
 @Test @MainActor func cancellationDiscardsLateResult() async throws {

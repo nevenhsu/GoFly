@@ -375,6 +375,11 @@ import GoFlyMacCore
         #expect(try await reader.readContinuation() == nil)
     }
 
+    @Test func bridgeStatusReaderMapsTransactionUnknownResponseToNoContinuation() async throws {
+        let reader = BridgeStatusJournalReader(runner: TransactionUnknownStatusRunner())
+        #expect(try await reader.readContinuation() == nil)
+    }
+
     private func waitForAppCheck(_ app: MacAppModel, attempts: Int = 400) async -> Bool {
         for _ in 0..<attempts {
             if !app.isChecking { return true }
@@ -428,6 +433,15 @@ private struct StatusRunner: MacSetupRunning {
 private struct MissingStatusRunner: MacSetupRunning {
     func run(_ request: MacSetupRequest) async throws -> Data {
         throw MacSetupFailure.service("transaction-unknown")
+    }
+}
+
+private struct TransactionUnknownStatusRunner: MacSetupRunning {
+    func run(_ request: MacSetupRequest) async throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "requestID": request.requestID.uuidString, "action": "status", "status": "error",
+            "code": "transaction-unknown",
+        ])
     }
 }
 

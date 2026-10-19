@@ -6,6 +6,7 @@ import GoFlyMacCore
 struct MacSetupPage: View {
     @Bindable var setup: MacSetupModel
     let deviceID: String?
+    let detectedTeamID: String?
     let vpnInstalled: Bool?
     let vpnConfirmed: Bool
     let checkingDevice: Bool
@@ -100,12 +101,25 @@ struct MacSetupPage: View {
                 Label("開發簽署", systemImage: "signature")
                     .font(GoFlyStyle.font(13, bold: true))
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("開發團隊 Team ID")
-                        .font(GoFlyStyle.font(12, bold: true))
-                    TextField("輸入 10 碼 Team ID", text: $teamID)
-                        .goFlyInput().accessibilityIdentifier("setup.team")
-                        .accessibilityLabel("開發團隊 Team ID（10 碼）")
-                        .frame(maxWidth: 360)
+                    if let detectedTeamID {
+                        Text("Xcode 開發團隊：\(detectedTeamID)")
+                            .font(GoFlyStyle.font(14, bold: true))
+                            .accessibilityIdentifier("setup.team")
+                            .accessibilityLabel("Xcode 開發團隊 \(detectedTeamID)")
+                        Text("使用環境檢查偵測到的 Personal Team。")
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("開發團隊 Team ID")
+                            .font(GoFlyStyle.font(12, bold: true))
+                        TextField("輸入 10 碼 Team ID", text: $teamID)
+                            .goFlyInput().accessibilityIdentifier("setup.team")
+                            .accessibilityLabel("開發團隊 Team ID（10 碼）")
+                            .frame(maxWidth: 360)
+                        Text("Xcode → Settings → Accounts 可以查看。")
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if source == .project {
                     VStack(alignment: .leading, spacing: 6) {
@@ -172,11 +186,15 @@ struct MacSetupPage: View {
             guard let deviceID else { return }
             if setup.options == nil {
                 let options = try MacSetupOptions(source: source, artifactPath: source == .signedApp ? artifactPath : nil,
-                                                  teamID: teamID, allowProvisioningUpdates: source == .project && allowProvisioningUpdates)
+                                                  teamID: detectedTeamID ?? teamID, allowProvisioningUpdates: source == .project && allowProvisioningUpdates)
                 try setup.configure(deviceID: deviceID, options: options)
             }
             setup.preflight()
-        } catch { validationMessage = "請確認 10 碼 Team ID 與安裝來源。" }
+        } catch {
+            validationMessage = detectedTeamID == nil
+                ? "請確認 10 碼 Team ID 與安裝來源。"
+                : "請確認安裝來源與 App 路徑。"
+        }
     }
 
     private func chooseApp() {

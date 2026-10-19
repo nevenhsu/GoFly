@@ -106,35 +106,42 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
               scriptURL.standardizedFileURL == resources.appendingPathComponent("Bridge/bridge.py").standardizedFileURL,
               (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
                   $0.isRegularFile == true && $0.isSymbolicLink != true
-              }) == true else { throw MacSetupFailure.unavailable }
+              }) == true else { throw CheckFailure.bundleInvalid }
         let setup = configurationURL.standardizedFileURL == resources.appendingPathComponent("SetupConfiguration.json").standardizedFileURL
         let readOnly = configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL
-        guard setup || readOnly else { throw MacSetupFailure.unavailable }
+        guard setup || readOnly else { throw CheckFailure.bundleInvalid }
+        let resourcesBundle: MacBundleResources
+        let stamp: MacBundleResourceStamp
         do {
-            let resourcesBundle = try MacBundleResources(bundleURL: Bundle.main.bundleURL)
-            let stamp = try resourcesBundle.stamp()
-            if setup {
-                let config = try MacSetupConfiguration(verifiedData: resourcesBundle.read(.setupConfiguration))
+            resourcesBundle = try MacBundleResources(bundleURL: Bundle.main.bundleURL)
+            stamp = try resourcesBundle.stamp()
+        } catch { throw CheckFailure.bundleInvalid }
+        if setup {
+            let config: MacSetupConfiguration
+            do {
+                config = try MacSetupConfiguration(verifiedData: resourcesBundle.read(.setupConfiguration))
                 try MacSetupConfiguration.validate(config, failure: MacSetupFailure.unavailable)
-                guard FileManager.default.isExecutableFile(atPath: config.pythonPath),
-                      FileManager.default.fileExists(atPath: config.projectPath) else {
-                    throw MacSetupFailure.unavailable
-                }
-                self.init(role: .setup, configurationURL: configurationURL, scriptURL: scriptURL,
-                          pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
-                          bundleResources: resourcesBundle, initialResourceStamp: stamp)
-            } else {
-                let config = try BridgeConfiguration(verifiedData: resourcesBundle.read(.localConfiguration))
-                guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
-                    throw MacSetupFailure.unavailable
-                }
-                self.init(role: .readOnly, configurationURL: configurationURL, scriptURL: scriptURL,
-                          pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
-                          bundleResources: resourcesBundle, initialResourceStamp: stamp)
+            } catch { throw CheckFailure.bundleInvalid }
+            guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
+                throw CheckFailure.pythonUnavailable
             }
-        } catch let error as CheckFailure { throw error }
-        catch let error as MacSetupFailure { throw error }
-        catch { throw MacSetupFailure.unavailable }
+            guard FileManager.default.fileExists(atPath: config.projectPath) else {
+                throw CheckFailure.unavailable
+            }
+            self.init(role: .setup, configurationURL: configurationURL, scriptURL: scriptURL,
+                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
+                      bundleResources: resourcesBundle, initialResourceStamp: stamp)
+        } else {
+            let config: BridgeConfiguration
+            do { config = try BridgeConfiguration(verifiedData: resourcesBundle.read(.localConfiguration)) }
+            catch { throw CheckFailure.bundleInvalid }
+            guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
+                throw CheckFailure.pythonUnavailable
+            }
+            self.init(role: .readOnly, configurationURL: configurationURL, scriptURL: scriptURL,
+                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
+                      bundleResources: resourcesBundle, initialResourceStamp: stamp)
+        }
     }
 
     private init(role: Role, configurationURL: URL, scriptURL: URL, pythonPath: String,
@@ -203,6 +210,15 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
         do {
             let data = try await runner.run(request)
             let root = try SetupWireJSON.object(data)
+            if root["status"] as? String == "error" {
+                guard root["action"] as? String == "status",
+                      let rawID = root["requestID"] as? String,
+                      UUID(uuidString: rawID) == request.requestID,
+                      root["code"] as? String == "transaction-unknown" else {
+                    throw MacSetupFailure.invalidResponse
+                }
+                return nil
+            }
             guard root["status"] as? String == "ok",
                   let rawID = root["setupID"] as? String, let id = UUID(uuidString: rawID),
                   let device = root["deviceID"] as? String,
@@ -221,8 +237,9 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
 }
 
 public struct UnavailableChecker: MacChecking, MacSetupRunning {
-    public init() {}
-    public func check(_ request: CheckRequest) async throws -> Data { throw CheckFailure.unavailable }
+    public let reason: CheckFailure
+    public init(reason: CheckFailure = .unavailable) { self.reason = reason }
+    public func check(_ request: CheckRequest) async throws -> Data { throw reason }
     public func run(_ request: MacSetupRequest) async throws -> Data { throw MacSetupFailure.unavailable }
 }
 

@@ -34,8 +34,22 @@ extension MacRootView {
                 StatusRow(title: "LocalDevVPN", detail: vpnDetail)
             }
         case .install:
-            if !model.isPreview, let setup = model.setup {
+            if model.installedOnFirstInstall {
+                StatusCard {
+                    StatusRow(title: "此 iPhone 已安裝 GoFly，請到裝置管理重新簽名",
+                              detail: "首次安裝不會覆蓋現有 App。請前往這部 iPhone 的裝置頁，確認目前簽名狀態後再選擇「重新簽名」。")
+                    Rule()
+                    HStack {
+                        Spacer()
+                        PillButton(title: "前往裝置頁", primary: true,
+                                   enabled: !model.busy && !model.setupLocksDevice) {
+                            model.openSelectedDevicePage()
+                        }.accessibilityIdentifier("manage-installed-device")
+                    }
+                }
+            } else if !model.isPreview, let setup = model.setup {
                 MacSetupPage(setup: setup, deviceID: model.selectedID,
+                             detectedTeamID: model.environment?.teamID,
                              vpnInstalled: model.inspection?.vpnInstalled,
                              vpnConfirmed: model.setupVPNConfirmed,
                              checkingDevice: model.isChecking,
@@ -134,7 +148,7 @@ extension MacRootView {
 
     @ViewBuilder var pageActions: some View {
         if model.failure != nil && !(!model.isPreview && model.page == .install && model.setup != nil) {
-            PillButton(title: "返回裝置清單", enabled: model.environment?.ready == true) { model.openDevices(firstInstall: model.firstInstall) }
+            PillButton(title: "返回裝置清單") { model.returnToDevices() }
             Spacer(minLength: 0)
             PillButton(title: "重新檢查", primary: true) { retry() }
         } else {
@@ -157,7 +171,9 @@ extension MacRootView {
                 PillButton(title: "重新檢查狀態", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
             case .install:
                 Spacer()
-                if !model.isPreview, let setup = model.setup {
+                if model.installedOnFirstInstall {
+                    PillButton(title: "返回裝置清單", enabled: !model.busy) { model.returnToDevices() }
+                } else if !model.isPreview, let setup = model.setup {
                     PillButton(title: setup.snapshot?.isComplete == true ? "前往裝置管理" : "返回裝置清單",
                                enabled: !model.busy && !setup.locksDevice && (setup.snapshot?.isComplete != true || model.setupVPNConfirmed)) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
                 } else {
