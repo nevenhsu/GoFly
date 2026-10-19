@@ -47,7 +47,7 @@ extension MacRootView {
                         }.accessibilityIdentifier("manage-installed-device")
                     }
                 }
-            } else if !model.isPreview, let setup = model.setup {
+            } else if let setup = model.setup {
                 MacSetupPage(setup: setup, deviceID: model.selectedID,
                              detectedTeamID: model.environment?.teamID,
                              vpnInstalled: model.inspection?.vpnInstalled,
@@ -56,30 +56,7 @@ extension MacRootView {
                              verifyDevice: { model.verifySetupDevice() })
                     .disabled(model.isChecking)
             } else {
-            StatusCard {
-                StatusRow(title: "目標裝置", detail: connectionDetail)
-                Rule()
-                if model.inspection?.developerMode != true {
-                    StatusRow(title: "開發者模式", detail: developerDetail)
-                    Rule()
-                }
-                StatusRow(title: "簽名身分", detail: model.isPreview ? "Personal Team · 已選取（預覽）" : model.environment?.teamID.map { "Xcode Personal Team · \($0)；尚未用於簽署" } ?? "尚未選取。可至 Xcode → Settings → Apple Accounts 查看。")
-                Rule()
-                StatusRow(title: "有效期限", detail: "安裝後須依實際核發的描述檔確認。本版不會申請描述檔或簽署 App。")
-                if !model.isPreview {
-                    Rule()
-                    StatusRow(title: "目前僅提供介面與檢查", detail: "正式 iOS flow 仍在討論。安裝、簽名與配對寫入尚未開放。")
-                }
-            }
-            }
-        case .handoff:
-            StatusCard {
-                StatusRow(title: model.isPreview ? "Mac 已完成（預覽）" : "Mac 交接條件待確認",
-                          detail: model.isPreview ? "App 安裝、本次配對匯入與必要裝置支援完成（示意）。本次沒有寫入手機。" : "必須驗證 App 安裝與本次配對匯入回報；唯讀檢查不會產生安裝成功結果。")
-                Rule()
-                StatusRow(title: "可以拔除 USB", detail: "首次安裝流程到此結束。VPN 與定位操作依 iPhone 內的正常提示完成。")
-                Rule()
-                StatusRow(title: "簽名到期日", detail: signatureDetail)
+                EmptyView()
             }
         case .home: EmptyView()
         }
@@ -147,7 +124,7 @@ extension MacRootView {
     }
 
     @ViewBuilder var pageActions: some View {
-        if model.failure != nil && !(!model.isPreview && model.page == .install && model.setup != nil) {
+        if model.failure != nil && !(model.page == .install && model.setup != nil) {
             PillButton(title: "返回裝置清單") { model.returnToDevices() }
             Spacer(minLength: 0)
             PillButton(title: "重新檢查", primary: true) { retry() }
@@ -173,17 +150,10 @@ extension MacRootView {
                 Spacer()
                 if model.installedOnFirstInstall {
                     PillButton(title: "返回裝置清單", enabled: !model.busy) { model.returnToDevices() }
-                } else if !model.isPreview, let setup = model.setup {
+                } else if let setup = model.setup {
                     PillButton(title: setup.snapshot?.isComplete == true ? "前往裝置管理" : "返回裝置清單",
                                enabled: !model.busy && !setup.locksDevice && (setup.snapshot?.isComplete != true || model.setupVPNConfirmed)) { model.openDevices(firstInstall: setup.snapshot?.isComplete != true) }
-                } else {
-                    PillButton(title: "返回裝置清單") { model.openDevices(firstInstall: true) }
-                    PillButton(title: "預覽簽名與安裝", primary: true,
-                               enabled: model.isPreview && model.inspection?.developerMode == true) { model.previewAdvance() }
                 }
-            case .handoff:
-                Spacer()
-                PillButton(title: "前往裝置管理", primary: true) { model.openDevices(firstInstall: false) }
             case .home: EmptyView()
             }
         }

@@ -89,21 +89,18 @@ class ProtocolB1Tests(unittest.TestCase):
         valid = request(
             "apply",
             options={
-                "source": "project",
-                "artifactPath": None,
                 "teamID": "ABCDEFGHIJ",
                 "allowProvisioningUpdates": False,
             },
         )
         decoded = decode_request(json.dumps(valid).encode())
-        self.assertEqual(decoded.options.source, "project")
+        self.assertEqual(decoded.options.team_id, "ABCDEFGHIJ")
         with self.assertRaisesRegex(SetupBridgeError, "invalid-request"):
             decode_request(
                 json.dumps(
                     request(
                         "apply",
                         options={
-                            "source": "project",
                             "artifactPath": "/tmp/GoFly.app",
                             "teamID": "ABCDEFGHIJ",
                             "allowProvisioningUpdates": False,
@@ -142,7 +139,6 @@ class JournalB1Tests(unittest.TestCase):
                                         "com.neven.gofly", "GoFly", state)
             store = JournalStore(state)
             journal = store.create(SETUP_ID, DEVICE, {
-                "source": "project", "artifactPath": None,
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
                 "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
                 "deviceObservation": {
@@ -164,7 +160,6 @@ class JournalB1Tests(unittest.TestCase):
             state = root / "state"
             store = JournalStore(state)
             journal = store.create(SETUP_ID, DEVICE, {
-                "source": "project", "artifactPath": None,
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
                 "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
             })
@@ -198,8 +193,6 @@ class JournalB1Tests(unittest.TestCase):
                 "apply",
                 setupID=str(uuid.uuid4()),
                 options={
-                    "source": "project",
-                    "artifactPath": None,
                     "teamID": "ABCDEFGHIJ",
                     "allowProvisioningUpdates": False,
                 },
@@ -212,7 +205,6 @@ class JournalB1Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = JournalStore(Path(directory))
             journal = store.create(SETUP_ID, DEVICE, {
-                "source": "project", "artifactPath": None,
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
                 "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
             })
@@ -239,21 +231,21 @@ class JournalB1Tests(unittest.TestCase):
             producer = SetupProducer(
                 config,
                 device=device,
+                process=FakeProcess(root / "state"),
                 artifact_validator=FakeArtifactValidator(),
             )
             apply_request = request(
                 "apply",
                 options={
-                    "source": "signedApp",
-                    "artifactPath": str(root / "GoFly.app"),
                     "teamID": "ABCDEFGHIJ",
                     "allowProvisioningUpdates": False,
                 },
             )
             # The validator is controlled, so no filesystem artifact or Apple
             # tool is reached by this test.
-            with self.assertRaisesRegex(Exception, "runtime-api-mismatch"):
-                producer.handle(decode_request(json.dumps(apply_request).encode()))
+            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
+                with self.assertRaisesRegex(Exception, "runtime-api-mismatch"):
+                    producer.handle(decode_request(json.dumps(apply_request).encode()))
             journal = JournalStore(root / "state").read()
             self.assertEqual(journal["stages"]["pairing"]["state"], "unknown")
 
@@ -279,6 +271,16 @@ class FakeArtifactValidator:
             {},
             "19",
         )
+
+
+class FakeProcess:
+    def __init__(self, state_root: Path) -> None:
+        self.state_root = state_root
+
+    def build(self, setup_id: str, *_args, **_kwargs) -> Path:
+        path = self.state_root / "transactions" / setup_id / "build" / "GoFly.app"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
 
 class UnknownInstallDevice:
@@ -405,12 +407,11 @@ class RenewB1Tests(unittest.TestCase):
             root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
             "com.neven.gofly", "GoFly", root / "state",
         )
-        return SetupProducer(config, device=device, artifact_validator=FakeArtifactValidator())
+        return SetupProducer(config, device=device, process=FakeProcess(root / "state"),
+                             artifact_validator=FakeArtifactValidator())
 
     def options(self, root: Path) -> dict[str, object]:
         return {
-            "source": "signedApp",
-            "artifactPath": str(root / "GoFly.app"),
             "teamID": "ABCDEFGHIJ",
             "allowProvisioningUpdates": False,
         }
@@ -571,9 +572,10 @@ class InstallApplyTests(unittest.TestCase):
             (root / "python").touch()
             config = SetupConfiguration(root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
                                         "com.neven.gofly", "GoFly", root / "state")
-            producer = SetupProducer(config, device=InstallDevice(), artifact_validator=FakeArtifactValidator())
-            options = {"source": "signedApp", "artifactPath": str(root / "GoFly.app"),
-                       "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False}
+            producer = SetupProducer(config, device=InstallDevice(),
+                                     process=FakeProcess(root / "state"),
+                                     artifact_validator=FakeArtifactValidator())
+            options = {"teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False}
             def fake_handoff(journal, *_args, **_kwargs):
                 journal = producer.store.checkpoint(journal, "support", "confirmed", proof={"supportObserved": True})
                 return producer.store.checkpoint(journal, "handoff", "confirmed", proof={"pairingImported": True})

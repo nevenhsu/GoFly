@@ -27,15 +27,13 @@ bash app/GoFlyMac/build-app.sh
 open work/gofly-mac/GoFly.app
 ```
 
-需要 Xcode 與 macOS 15 以上。本機開發產物放在 `work/gofly-mac/GoFly.app`，未做發行簽署或 notarization。這個開發版綁定目前工作目錄與現有 `work/mac-setup-env/bin/python`，不是可攜式安裝包。缺少檢查環境時仍可開啟介面預覽；不會自行安裝依賴。
+需要 Xcode 與 macOS 15 以上。本機開發產物放在 `work/gofly-mac/GoFly.app`，未做發行簽署或 notarization。這個開發版綁定目前工作目錄與現有 `work/mac-setup-env/bin/python`，不是可攜式安裝包。缺少檢查環境時會顯示實際原因與處理入口，不會自行安裝依賴。
 
-## 真實流程與預覽
+## 真實流程
 
 真實環境檢查沿用唯讀 bridge 裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用同一個 bridge 的 setup action，仍只限 USB；唯讀 action 不接受安裝。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
-介面預覽持續顯示預覽標示，使用示意裝置與日期；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
-
-純介面檢查可用 `open work/gofly-mac/GoFly.app --args --preview` 啟動。此模式不讀取真實操作紀錄，也不執行實際裝置檢查；完整流程仍須在實際操作模式驗收。
+Mac App 不提供介面預覽，也不匯入已簽署的 GoFly.app；安裝只從本機 GoFly 專案建置。
 
 建置腳本產生固定 `LocalConfiguration.json` 與 `SetupConfiguration.json`，綁定此工作目錄、既有 Python 與正式 GoFly 專案；生成的絕對路徑設定不追蹤進版控。實際程序入口只接受隨 Mac App 附帶的固定 Bridge 腳本與設定。沒有手機不等於環境檢查失敗；本輪開發不偵測或操作實體手機。
 

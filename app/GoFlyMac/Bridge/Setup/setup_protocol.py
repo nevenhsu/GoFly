@@ -58,7 +58,6 @@ TARGET_BUNDLE_ID = "com.neven.gofly"
 TARGET_NAME = "GoFly"
 _ACTIONS = frozenset({"preflight", "apply", "status", "resume"})
 _MODES = frozenset({"install", "renew"})
-_SOURCES = frozenset({"signedApp", "project"})
 _STAGES = frozenset({"preflight", "artifact", "pairing", "install", "support", "handoff", "complete"})
 _OUTCOMES = frozenset({"ready", "inProgress", "confirmed", "unknown", "failed"})
 
@@ -74,15 +73,11 @@ def normalized_device(value: Any) -> str:
 
 @dataclass(frozen=True)
 class SetupOptions:
-    source: str
-    artifact_path: str | None
     team_id: str
     allow_provisioning_updates: bool
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "source": self.source,
-            "artifactPath": self.artifact_path,
             "teamID": self.team_id,
             "allowProvisioningUpdates": self.allow_provisioning_updates,
         }
@@ -113,26 +108,16 @@ class SetupRequest:
 def _decode_options(value: Any) -> SetupOptions:
     if not isinstance(value, dict):
         raise SetupBridgeError("invalid-request")
-    expected = {"source", "artifactPath", "teamID", "allowProvisioningUpdates"}
+    expected = {"teamID", "allowProvisioningUpdates"}
     if set(value) != expected:
         raise SetupBridgeError("invalid-request")
-    source = value.get("source")
-    artifact = value.get("artifactPath")
     team = value.get("teamID")
     allow = value.get("allowProvisioningUpdates")
-    if source not in _SOURCES or type(allow) is not bool:
+    if type(allow) is not bool:
         raise SetupBridgeError("invalid-request")
     if not isinstance(team, str) or TEAM_RE.fullmatch(team) is None:
         raise SetupBridgeError("invalid-request")
-    if source == "project":
-        if artifact is not None:
-            raise SetupBridgeError("invalid-request")
-    else:
-        if not isinstance(artifact, str) or not artifact.startswith("/") or not artifact.endswith(".app"):
-            raise SetupBridgeError("invalid-request")
-        if allow is not False:
-            raise SetupBridgeError("invalid-request")
-    return SetupOptions(source, artifact, team, allow)
+    return SetupOptions(team, allow)
 
 
 def decode_request(data: Any) -> SetupRequest:

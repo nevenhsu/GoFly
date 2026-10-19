@@ -272,7 +272,6 @@ func setupFullMatch(_ value: String, _ pattern: String) -> Bool {
 }
 
 public enum MacSetupAction: String, Codable, Sendable { case preflight, apply, status, resume }
-public enum MacSetupSource: String, Codable, Sendable { case signedApp, project }
 public enum MacSetupMode: String, Codable, Sendable { case install, renew }
 
 public enum MacSetupFailure: Error, Equatable, Sendable {
@@ -281,46 +280,27 @@ public enum MacSetupFailure: Error, Equatable, Sendable {
 }
 
 public struct MacSetupOptions: Codable, Equatable, Sendable {
-    public let source: MacSetupSource
-    public let artifactPath: String?
     public let teamID: String
     public let allowProvisioningUpdates: Bool
 
-    public init(source: MacSetupSource, artifactPath: String? = nil, teamID: String,
-                allowProvisioningUpdates: Bool = false) throws {
+    public init(teamID: String, allowProvisioningUpdates: Bool = false) throws {
         guard setupFullMatch(teamID, "^[A-Z0-9]{10}$") else {
             throw MacSetupFailure.invalidRequest
         }
-        switch source {
-        case .project:
-            guard artifactPath == nil else { throw MacSetupFailure.invalidRequest }
-        case .signedApp:
-            guard let artifactPath, artifactPath.utf8.count <= 4_096,
-                  artifactPath.hasPrefix("/"), !artifactPath.contains("\0"),
-                  URL(fileURLWithPath: artifactPath).pathExtension == "app",
-                  !allowProvisioningUpdates else { throw MacSetupFailure.invalidRequest }
-        }
-        self.source = source
-        self.artifactPath = artifactPath
         self.teamID = teamID
         self.allowProvisioningUpdates = allowProvisioningUpdates
     }
 
-    private enum CodingKeys: String, CodingKey { case source, artifactPath, teamID, allowProvisioningUpdates }
+    private enum CodingKeys: String, CodingKey { case teamID, allowProvisioningUpdates }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        try self.init(source: values.decode(MacSetupSource.self, forKey: .source),
-                      artifactPath: values.decodeIfPresent(String.self, forKey: .artifactPath),
-                      teamID: values.decode(String.self, forKey: .teamID),
+        try self.init(teamID: values.decode(String.self, forKey: .teamID),
                       allowProvisioningUpdates: values.decode(Bool.self, forKey: .allowProvisioningUpdates))
     }
 
     public func encode(to encoder: any Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(source, forKey: .source)
-        if let artifactPath { try values.encode(artifactPath, forKey: .artifactPath) }
-        else { try values.encodeNil(forKey: .artifactPath) }
         try values.encode(teamID, forKey: .teamID)
         try values.encode(allowProvisioningUpdates, forKey: .allowProvisioningUpdates)
     }

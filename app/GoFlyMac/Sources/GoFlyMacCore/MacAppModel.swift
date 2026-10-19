@@ -2,29 +2,12 @@ import Foundation
 import Observation
 
 public enum MacPage: String, CaseIterable, Sendable {
-    case home, environment, devices, device, install, handoff
-}
-
-public enum PreviewScenario: String, CaseIterable, Identifiable, Sendable {
-    case ready, missingEnvironment, noDevices, trustRequired, developerMode, expired, disconnected
-    public var id: String { rawValue }
-    public var title: String {
-        switch self {
-        case .ready: "正常連接"
-        case .missingEnvironment: "Mac 環境未就緒"
-        case .noDevices: "沒有裝置"
-        case .trustRequired: "等待信任"
-        case .developerMode: "開發者模式關閉"
-        case .expired: "簽名已過期"
-        case .disconnected: "裝置中斷"
-        }
-    }
+    case home, environment, devices, device, install
 }
 
 @MainActor @Observable
 public final class MacAppModel {
     public private(set) var page: MacPage = .home
-    public private(set) var isPreview = false
     public private(set) var environment: MacEnvironment?
     public private(set) var devices: [ConnectedDevice] = []
     public private(set) var inspection: DeviceInspection?
@@ -38,15 +21,10 @@ public final class MacAppModel {
     private var restoringOperations = false
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
-    public private(set) var previewStage = 0
-    public private(set) var previewMessage: String?
-    public var previewScenario: PreviewScenario = .ready
     @ObservationIgnored private let live: any MacChecking
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var activeCheckID: UUID?
-    private enum PendingCheckAction { case mode(Bool), scenario }
-    @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
     @ObservationIgnored private var renewTriggeredSelection: String?
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil) {
@@ -55,10 +33,10 @@ public final class MacAppModel {
     }
 
     public var busy: Bool {
-        checkingBusy || restoringOperations || (!isPreview && setup?.isBusy == true)
+        checkingBusy || restoringOperations || setup?.isBusy == true
     }
     public var setupLocksDevice: Bool {
-        restoringOperations || (!isPreview && setup?.locksDevice == true)
+        restoringOperations || setup?.locksDevice == true
     }
     private var activeOperationPage: MacPage { .install }
 
@@ -86,7 +64,7 @@ public final class MacAppModel {
     public var availableConnections: [ConnectedDevice] { ConnectedDevice.connectionChoices(devices, usbOnly: firstInstall) }
     public var mayInspect: Bool { ready && selected != nil }
     public var installedOnFirstInstall: Bool {
-        !isPreview && firstInstall && inspection?.installed == true
+        firstInstall && inspection?.installed == true
     }
     public var setupVPNConfirmed: Bool {
         guard setup?.snapshot?.isComplete == true, let identity = setup?.continuation,
@@ -119,39 +97,17 @@ public final class MacAppModel {
         if setupLocksDevice && destination != .home && destination != activeOperationPage && destination != .environment {
             page = activeOperationPage; return
         }
-        if !isPreview && destination != .home && destination != .environment &&
+        if destination != .home && destination != .environment &&
             !(destination == activeOperationPage && setupLocksDevice) &&
             !(destination == .install && setup?.hasRecordedTransaction == true) &&
             environment?.ready != true {
             page = .environment; return
         }
-        page = destination; failure = nil; previewMessage = nil
+        page = destination; failure = nil
     }
 
     public func openRecordedOperation() {
         navigate(.install)
-    }
-
-    public func switchMode(preview: Bool) {
-        guard !setupLocksDevice else { return }
-        if checkingBusy {
-            pendingCheckAction = .mode(preview)
-            cancel()
-            return
-        }
-        setup?.resetSelection()
-        cancel()
-        isPreview = preview; environment = nil; devices = []; inspection = nil
-        selectedID = nil; selectedTransport = nil
-        page = .home; previewStage = 0; previewMessage = nil; failure = nil
-        if !preview && setup?.isRestored == false {
-            restoringOperations = true
-            Task {
-                await restoreSetup()
-                restoringOperations = false
-                checkEnvironment()
-            }
-        } else { checkEnvironment() }
     }
 
     public func select(_ id: String, transport: ConnectedDevice.Transport? = nil) {
@@ -193,7 +149,6 @@ public final class MacAppModel {
         selectedTransport = device.transport
         page = .device
         failure = nil
-        previewMessage = nil
         renewTriggeredSelection = nil
     }
 
@@ -229,11 +184,11 @@ public final class MacAppModel {
     }
 
     private func triggerAutomaticRenewIfNeeded(_ device: ConnectedDevice) {
-        guard !isPreview, !firstInstall, inspection?.installed == true,
+        guard !firstInstall, inspection?.installed == true,
               renewTriggeredSelection != device.connectionID,
               let setup, setup.isRestored, !setup.isBusy, !setup.hasRecordedTransaction,
               let team = environment?.teamID,
-              let options = try? MacSetupOptions(source: .project, teamID: team) else { return }
+              let options = try? MacSetupOptions(teamID: team) else { return }
         renewTriggeredSelection = device.connectionID
         do {
             try setup.beginRenew(deviceID: device.id, options: options)
@@ -246,7 +201,7 @@ public final class MacAppModel {
         guard !busy, let device = selected, inspection?.installed == true,
               let setup, setup.isRestored, !setup.isBusy,
               let team = environment?.teamID,
-              let options = try? MacSetupOptions(source: .project, teamID: team) else { return }
+              let options = try? MacSetupOptions(teamID: team) else { return }
         if setup.hasRecordedTransaction && setup.snapshot?.isComplete != true {
             page = .install
             return
@@ -266,30 +221,6 @@ public final class MacAppModel {
         inspection = nil
     }
 
-    public func applyScenario() {
-        guard isPreview else { return }
-        if checkingBusy {
-            pendingCheckAction = .scenario
-            cancel()
-            return
-        }
-        cancel(); failure = nil; inspection = nil; selectedID = nil; selectedTransport = nil; devices = []
-        page = .home; checkEnvironment()
-    }
-
-    /// These transitions are presentation only and never call the live checker.
-    public func previewAdvance() {
-        guard isPreview, !busy else { return }
-        failure = nil
-        switch page {
-        case .install:
-            previewStage = 1
-            previewMessage = "預覽：App 安裝、本次配對匯入與必要裝置支援均已確認。"
-            page = .handoff
-        default: break
-        }
-    }
-
     private func perform(_ action: CheckAction, deviceID: String? = nil, transport: ConnectedDevice.Transport? = nil,
                          apply: @escaping @MainActor (Data, CheckRequest) throws -> Void) {
         guard !busy else { return }
@@ -297,11 +228,10 @@ public final class MacAppModel {
         isCancellingCheck = false
         let token = UUID(); generation = token; activeCheckID = token
         let request = CheckRequest(action: action, deviceID: deviceID, transport: transport)
-        let checker: any MacChecking = isPreview ? PreviewChecker(scenario: previewScenario) : live
         task = Task {
             defer { self.finishCheck(token) }
             do {
-                let result = try await checker.check(request)
+                let result = try await live.check(request)
                 guard !Task.isCancelled, self.generation == token else { return }
                 try apply(result, request)
             } catch {
@@ -318,12 +248,5 @@ public final class MacAppModel {
         checkingBusy = false
         isCancellingCheck = false
         task = nil
-        let pending = pendingCheckAction
-        pendingCheckAction = nil
-        switch pending {
-        case .mode(let preview): switchMode(preview: preview)
-        case .scenario: applyScenario()
-        case nil: break
-        }
     }
 }

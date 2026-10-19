@@ -117,7 +117,7 @@ class SupportSourceTests(unittest.TestCase):
             store = JournalStore(Path(directory) / "state")
             setup_id = str(uuid.uuid4())
             journal = store.create(setup_id, "0" * 40, {
-                "source": "project", "artifactPath": None, "teamID": "ABCDEFGHIJ",
+                "teamID": "ABCDEFGHIJ",
                 "allowProvisioningUpdates": False, "targetBundleID": "com.neven.gofly",
                 "targetName": "GoFly", "artifact": None,
             })

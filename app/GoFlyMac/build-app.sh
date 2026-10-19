@@ -31,15 +31,13 @@ cp "$APP_SOURCE/Bridge/Setup/__init__.py" "$APP_SOURCE"/Bridge/Setup/setup_*.py 
 cp "$APP_SOURCE/Bridge/Device/__init__.py" "$APP_SOURCE/Bridge/Device/gofly_device.py" \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Device/"
 
-/usr/bin/python3 - "$WORKSPACE_ROOT" "$STAGING_BUNDLE" "$APP_BUNDLE" <<'PY'
+/usr/bin/python3 - "$WORKSPACE_ROOT" "$STAGING_BUNDLE" <<'PY'
 import json
-import hashlib
 import plistlib
-import re
 import sys
 from pathlib import Path
 
-root, bundle, final_bundle = map(Path, sys.argv[1:])
+root, bundle = map(Path, sys.argv[1:])
 config = {
     "workspaceRoot": str(root),
     "pythonPath": str(root / "work/mac-setup-env/bin/python"),
@@ -64,84 +62,6 @@ info = {
     "NSPrincipalClass": "NSApplication",
 }
 (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
-assert sorted(p.name for p in (bundle / "Contents/Resources/Bridge/Device").iterdir()) == ["__init__.py", "gofly_device.py"]
-
-# The manifest is intentionally closed: every Python source copied into the
-# bundle and the generated bridge configuration are fixed inputs. Reopen each
-# staged copy and compare it to its exact source before replacing a previous
-# generated app.
-setup_names = [
-    "__init__.py", "setup_adapters.py", "setup_config.py",
-    "setup_delivery.py", "setup_journal.py", "setup_producer.py",
-    "setup_protocol.py", "setup_support.py",
-]
-if sorted(p.name for p in (root / "app/GoFlyMac/Bridge").glob("*.py")) != ["bridge.py", "wire.py"]:
-    raise SystemExit("unexpected Bridge root Python inventory")
-if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Device").glob("*.py")) != ["__init__.py", "gofly_device.py"]:
-    raise SystemExit("unexpected Device bridge Python inventory")
-if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Setup").glob("*.py")) != sorted(setup_names):
-    raise SystemExit("unexpected Setup bridge Python inventory")
-source_files = {
-    "Contents/Resources/Bridge/bridge.py": root / "app/GoFlyMac/Bridge/bridge.py",
-    "Contents/Resources/Bridge/wire.py": root / "app/GoFlyMac/Bridge/wire.py",
-    "Contents/Resources/Bridge/Device/__init__.py": root / "app/GoFlyMac/Bridge/Device/__init__.py",
-    "Contents/Resources/Bridge/Device/gofly_device.py": root / "app/GoFlyMac/Bridge/Device/gofly_device.py",
-}
-for name in setup_names:
-    source_files[f"Contents/Resources/Bridge/Setup/{name}"] = root / "app/GoFlyMac/Bridge/Setup" / name
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(64 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-files = {}
-for relative, source in sorted(source_files.items()):
-    target = bundle / relative
-    if source.is_symlink() or not source.is_file():
-        raise SystemExit(f"source is not a regular non-symlink file: {source}")
-    if target.is_symlink() or not target.is_file():
-        raise SystemExit(f"staged file is not a regular non-symlink file: {target}")
-    if source.read_bytes() != target.read_bytes():
-        raise SystemExit(f"staged copy differs from source: {relative}")
-    files[relative] = sha256(target)
-
-for relative in [
-    "Contents/Resources/LocalConfiguration.json",
-    "Contents/Resources/SetupConfiguration.json",
-]:
-    target = bundle / relative
-    if target.is_symlink() or not target.is_file():
-        raise SystemExit(f"generated config is not a regular non-symlink file: {target}")
-    files[relative] = sha256(target)
-
-manifest = {"version": 1, "files": dict(sorted(files.items()))}
-manifest_path = bundle / "Contents/Resources/GoFlyBundleManifest.json"
-manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
-manifest_path.chmod(0o644)
-readback = json.loads(manifest_path.read_text())
-if readback != manifest or any(sha256(bundle / relative) != digest for relative, digest in files.items()):
-    raise SystemExit("staged bundle resource manifest readback mismatch")
-
-# The Swift verifier only accepts this exact key set.  Parse the closed
-# MacBundleResourceEntry allowlist so a newly packaged file cannot silently
-# diverge from the app's manifest validation again.
-swift_source = (root / "app/GoFlyMac/Sources/GoFlyMacCore/MacBundleResources.swift").read_text()
-swift_entries = set(re.findall(r'case\s+\w+\s*=\s*"(Contents/Resources/[^"]+)"', swift_source))
-if not swift_entries:
-    raise SystemExit("could not parse MacBundleResourceEntry from Swift source")
-manifest_entries = set(readback["files"])
-missing = sorted(swift_entries - manifest_entries)
-extra = sorted(manifest_entries - swift_entries)
-if missing or extra:
-    details = []
-    if missing:
-        details.append("missing from manifest: " + ", ".join(missing))
-    if extra:
-        details.append("not in Swift allowlist: " + ", ".join(extra))
-    raise SystemExit("Swift allowlist and bundle manifest differ\n  " + "\n  ".join(details))
 PY
 
 # Replace only this script's generated development artifact, after staging is complete.

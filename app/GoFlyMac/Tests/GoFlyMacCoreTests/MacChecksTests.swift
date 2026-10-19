@@ -158,23 +158,6 @@ private actor HeldChecker: MacChecking {
     #expect(model.environment == nil)
 }
 
-@Test @MainActor func switchingPreviewWaitsForThePreviousLiveCheckToReturn() async throws {
-    let runner = HeldChecker()
-    let model = MacAppModel(live: runner)
-    model.checkEnvironment()
-    for _ in 0..<200 {
-        if await runner.entered() { break }
-        try await Task.sleep(for: .milliseconds(5))
-    }
-    model.switchMode(preview: true)
-    #expect(model.busy)
-    #expect(!model.isPreview)
-    try await runner.finish()
-    try await settled(model)
-    #expect(model.isPreview)
-    #expect(model.environment?.ready == true)
-}
-
 @Test @MainActor func changingDeviceClearsEvidence() async throws {
     let model = MacAppModel(live: EchoChecker(wrongDevice: false))
     model.checkEnvironment(); try await settled(model)
@@ -192,26 +175,6 @@ private actor HeldChecker: MacChecking {
     model.refreshDevices(); try await settled(model)
     #expect(model.inspection == nil)
     #expect(model.selectedID == nil)
-}
-
-@Test @MainActor func previewDoesNotInvokeLiveChecker() async throws {
-    let model = MacAppModel(live: UnavailableChecker())
-    model.switchMode(preview: true); try await settled(model)
-    #expect(model.ready)
-    model.openDevices(firstInstall: true); try await settled(model)
-    #expect(model.visibleDevices.count == 1)
-    model.select(model.visibleDevices[0].id)
-    model.inspectSelected(); try await settled(model)
-    #expect(model.page == .install)
-    model.previewAdvance()
-    #expect(model.page == .handoff)
-    #expect(model.previewMessage?.contains("裝置支援") == true)
-    model.previewAdvance()
-    #expect(model.page == .handoff)
-    model.switchMode(preview: false); try await settled(model)
-    #expect(model.failure == .unavailable)
-    #expect(model.inspection == nil)
-    #expect(model.previewStage == 0)
 }
 
 @Test func boundedProcessStopsOnTimeout() throws {

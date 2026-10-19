@@ -1,6 +1,4 @@
-import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import GoFlyMacCore
 
 struct MacSetupPage: View {
@@ -11,9 +9,7 @@ struct MacSetupPage: View {
     let vpnConfirmed: Bool
     let checkingDevice: Bool
     let verifyDevice: () -> Void
-    @State private var source = MacSetupSource.project
     @State private var teamID = ""
-    @State private var artifactPath = ""
     @State private var allowProvisioningUpdates = false
     @State private var validationMessage: String?
 
@@ -37,6 +33,9 @@ struct MacSetupPage: View {
                 }
                 Text("安裝完成不代表 VPN 已連線、GPS 已取得或定位服務已啟動。")
                     .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                Rule()
+                StatusRow(title: "可以拔除 USB",
+                          detail: "首次安裝流程到此結束。手機上的下一步：先開啟 LocalDevVPN，再開啟 GoFly。")
             } else if setup.hasRecordedTransaction {
                 StatusRow(title: "繼續原交易", detail: "使用原本的 iPhone。查詢不會重新安裝；不確定的步驟會保留待確認狀態。")
                 progress
@@ -71,33 +70,6 @@ struct MacSetupPage: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("安裝來源", systemImage: "shippingbox")
-                    .font(GoFlyStyle.font(13, bold: true))
-                Picker("安裝來源", selection: $source) {
-                    Text("從本機 GoFly 專案建置").tag(MacSetupSource.project)
-                    Text("選擇已簽署的 GoFly.app").tag(MacSetupSource.signedApp)
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                .accessibilityLabel("安裝來源")
-                if source == .signedApp {
-                    HStack(alignment: .center, spacing: 12) {
-                        Image(systemName: "app.dashed")
-                            .font(.system(size: 22)).foregroundStyle(GoFlyStyle.muted)
-                            .accessibilityHidden(true)
-                        Text(artifactPath.isEmpty ? "尚未選擇 GoFly.app" : artifactPath)
-                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                            .lineLimit(3).truncationMode(.middle)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button("選擇 App…", action: chooseApp)
-                            .controlSize(.large)
-                    }
-                    .goFlyInset()
-                }
-            }
-            Rule()
-            VStack(alignment: .leading, spacing: 12) {
                 Label("開發簽署", systemImage: "signature")
                     .font(GoFlyStyle.font(13, bold: true))
                 VStack(alignment: .leading, spacing: 6) {
@@ -121,16 +93,14 @@ struct MacSetupPage: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if source == .project {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("允許 Xcode 連線 Apple 更新開發簽署資料", isOn: $allowProvisioningUpdates)
-                            .toggleStyle(.checkbox)
-                        Text("只有勾選並開始安裝後，才允許這次建置更新簽署資料。")
-                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .goFlyInset()
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("允許 Xcode 連線 Apple 更新開發簽署資料", isOn: $allowProvisioningUpdates)
+                        .toggleStyle(.checkbox)
+                    Text("只有勾選並開始安裝後，才允許這次建置更新簽署資料。")
+                        .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .goFlyInset()
             }
         }
         .foregroundStyle(GoFlyStyle.ink)
@@ -185,27 +155,16 @@ struct MacSetupPage: View {
         do {
             guard let deviceID else { return }
             if setup.options == nil {
-                let options = try MacSetupOptions(source: source, artifactPath: source == .signedApp ? artifactPath : nil,
-                                                  teamID: detectedTeamID ?? teamID, allowProvisioningUpdates: source == .project && allowProvisioningUpdates)
+                let options = try MacSetupOptions(teamID: detectedTeamID ?? teamID,
+                                                  allowProvisioningUpdates: allowProvisioningUpdates)
                 try setup.configure(deviceID: deviceID, options: options)
             }
             setup.preflight()
         } catch {
             validationMessage = detectedTeamID == nil
-                ? "請確認 10 碼 Team ID 與安裝來源。"
-                : "請確認安裝來源與 App 路徑。"
+                ? "請確認 10 碼 Team ID。"
+                : "請確認安裝選項。"
         }
-    }
-
-    private func chooseApp() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowedContentTypes = [.applicationBundle]
-        panel.treatsFilePackagesAsDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.message = "選擇已簽署的 GoFly.app"
-        if panel.runModal() == .OK, let url = panel.url, url.pathExtension == "app" { artifactPath = url.path }
     }
 }
 

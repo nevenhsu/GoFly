@@ -145,21 +145,11 @@ class SetupProducer:
                 raise SetupBridgeError("app-not-installed")
         elif existing.present:
             raise SetupBridgeError("app-already-installed")
-        artifact = None
-        if options.source == "signedApp":
-            assert options.artifact_path is not None
-            artifact = self.artifact_validator.inspect(
-                options.artifact_path,
-                device_id=request.device_id,
-                team_id=options.team_id,
-            )
-        elif options.source != "project":
-            raise SetupBridgeError("invalid-request")
         return self._payload(
             stage="preflight",
             outcome="ready",
             can_resume=False,
-            artifact=artifact,
+            artifact=None,
             team_id=options.team_id,
             observed=observed,
         )
@@ -200,8 +190,6 @@ class SetupProducer:
                 request.setup_id,
                 request.device_id,
                 {
-                    "source": options.source,
-                    "artifactPath": options.artifact_path,
                     "teamID": options.team_id,
                     "allowProvisioningUpdates": options.allow_provisioning_updates,
                     "targetBundleID": self.config.target_bundle_id,
@@ -516,9 +504,6 @@ class SetupProducer:
     def _build_or_validate(self, request: SetupRequest, observed: DeviceObservation) -> ArtifactIdentity:
         options = request.options
         assert options is not None
-        if options.source == "signedApp":
-            assert options.artifact_path is not None
-            return self.artifact_validator.inspect(options.artifact_path, device_id=request.device_id, team_id=options.team_id)
         if self.process is None:
             raise SetupBridgeError("configuration-invalid")
         try:
@@ -1443,12 +1428,10 @@ class SetupProducer:
 
     def _resume_artifact(self, journal: dict[str, Any], request: SetupRequest) -> dict[str, Any]:
         intent = journal.get("intent", {})
-        source = intent.get("source")
-        artifact_path = intent.get("artifactPath")
         team_id = intent.get("teamID")
-        if source not in {"project", "signedApp"} or not isinstance(team_id, str):
+        if not isinstance(team_id, str):
             raise SetupBridgeError("transaction-unknown")
-        options = SetupOptions(source, artifact_path, team_id, intent.get("allowProvisioningUpdates") is True)
+        options = SetupOptions(team_id, intent.get("allowProvisioningUpdates") is True)
         rebound = SetupRequest(request.request_id, "apply", request.setup_id, request.device_id, request.mode, options)
         try:
             observed = self._observe_device(request.device_id)

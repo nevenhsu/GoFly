@@ -418,21 +418,12 @@ class JournalStore:
         proofs = value.get("proof")
         if not isinstance(intent, dict) or not isinstance(stages, dict) or not isinstance(proofs, dict):
             raise SetupBridgeError("storage-unavailable")
-        source = intent.get("source")
-        artifact_path = intent.get("artifactPath")
         team_id = intent.get("teamID")
-        if source not in {"signedApp", "project"} or not isinstance(team_id, str) or _TEAM_RE.fullmatch(team_id) is None:
+        if not isinstance(team_id, str) or _TEAM_RE.fullmatch(team_id) is None:
             raise SetupBridgeError("storage-unavailable")
         if intent.get("targetBundleID") != TARGET_BUNDLE_ID or intent.get("targetName") != TARGET_NAME:
             raise SetupBridgeError("storage-unavailable")
         if type(intent.get("allowProvisioningUpdates")) is not bool:
-            raise SetupBridgeError("storage-unavailable")
-        if source == "project":
-            if artifact_path is not None:
-                raise SetupBridgeError("storage-unavailable")
-        elif not isinstance(artifact_path, str) or not artifact_path.startswith("/") or not artifact_path.endswith(".app"):
-            raise SetupBridgeError("storage-unavailable")
-        if source == "signedApp" and intent.get("allowProvisioningUpdates") is not False:
             raise SetupBridgeError("storage-unavailable")
         observation = intent.get("deviceObservation")
         if observation is not None:

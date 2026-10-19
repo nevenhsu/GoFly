@@ -11,9 +11,9 @@ Requests carry a UUID `requestID` and an `action`:
 - `preflight`, `apply`, `status`, `resume`: formal setup or renewal.
 
 Setup requests add UUID `setupID`, a `deviceID`, `mode` (`install` or `renew`),
-and, for `preflight`/`apply`, an exact `options` object (`source`,
-`artifactPath`, `teamID`, `allowProvisioningUpdates`). `inspect` accepts an
-optional `transport` of `usb` or `wifi`; no transport is guessed.
+and, for `preflight`/`apply`, an exact `options` object (`teamID`,
+`allowProvisioningUpdates`). `inspect` accepts an optional `transport` of `usb`
+or `wifi`; no transport is guessed.
 
 Successful responses have `status: "ok"` and a `payload`; failures have
 `status: "error"` and a stable `code`. The `requestID` and `action` are echoed.

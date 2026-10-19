@@ -97,8 +97,6 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
     private let scriptURL: URL
     private let pythonPath: String
     private let developerDirectory: String
-    private let bundleResources: MacBundleResources
-    private let initialResourceStamp: MacBundleResourceStamp
 
     public init(configurationURL: URL, scriptURL: URL) throws {
         guard let resources = Bundle.main.resourceURL,
@@ -110,16 +108,13 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
         let setup = configurationURL.standardizedFileURL == resources.appendingPathComponent("SetupConfiguration.json").standardizedFileURL
         let readOnly = configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL
         guard setup || readOnly else { throw CheckFailure.bundleInvalid }
-        let resourcesBundle: MacBundleResources
-        let stamp: MacBundleResourceStamp
-        do {
-            resourcesBundle = try MacBundleResources(bundleURL: Bundle.main.bundleURL)
-            stamp = try resourcesBundle.stamp()
-        } catch { throw CheckFailure.bundleInvalid }
+        let data: Data
+        do { data = try Self.boundedConfiguration(configurationURL) }
+        catch { throw CheckFailure.bundleInvalid }
         if setup {
             let config: MacSetupConfiguration
             do {
-                config = try MacSetupConfiguration(verifiedData: resourcesBundle.read(.setupConfiguration))
+                config = try MacSetupConfiguration(verifiedData: data)
                 try MacSetupConfiguration.validate(config, failure: MacSetupFailure.unavailable)
             } catch { throw CheckFailure.bundleInvalid }
             guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
@@ -129,38 +124,43 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
                 throw CheckFailure.unavailable
             }
             self.init(role: .setup, configurationURL: configurationURL, scriptURL: scriptURL,
-                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
-                      bundleResources: resourcesBundle, initialResourceStamp: stamp)
+                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory)
         } else {
             let config: BridgeConfiguration
-            do { config = try BridgeConfiguration(verifiedData: resourcesBundle.read(.localConfiguration)) }
+            do { config = try BridgeConfiguration(verifiedData: data) }
             catch { throw CheckFailure.bundleInvalid }
             guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
                 throw CheckFailure.pythonUnavailable
             }
             self.init(role: .readOnly, configurationURL: configurationURL, scriptURL: scriptURL,
-                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
-                      bundleResources: resourcesBundle, initialResourceStamp: stamp)
+                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory)
         }
     }
 
     private init(role: Role, configurationURL: URL, scriptURL: URL, pythonPath: String,
-                 developerDirectory: String, bundleResources: MacBundleResources,
-                 initialResourceStamp: MacBundleResourceStamp) {
+                 developerDirectory: String) {
         self.role = role
         self.configurationURL = configurationURL
         self.scriptURL = scriptURL
         self.pythonPath = pythonPath
         self.developerDirectory = developerDirectory
-        self.bundleResources = bundleResources
-        self.initialResourceStamp = initialResourceStamp
+    }
+
+    private static func boundedConfiguration(_ url: URL) throws -> Data {
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize, size > 0, size <= 32_768 else {
+            throw CheckFailure.bundleInvalid
+        }
+        let data = try Data(contentsOf: url)
+        guard data.count == size else { throw CheckFailure.bundleInvalid }
+        return data
     }
 
     public func check(_ request: CheckRequest) async throws -> Data {
         guard role == .readOnly else { throw CheckFailure.unavailable }
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw CheckFailure.invalidResponse }
-        do { try bundleResources.revalidate() } catch { throw CheckFailure.unavailable }
         let runner = BoundedProcess()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -177,7 +177,6 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
         guard role == .setup else { throw MacSetupFailure.unavailable }
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
-        do { try bundleResources.revalidate() } catch { throw MacSetupFailure.unavailable }
         let process = BoundedProcess()
         do {
             return try await withTaskCancellationHandler {

@@ -5,8 +5,8 @@ import GoFlyMacCore
 @Suite struct MacSetupProtocolTests {
     private let device = "00008110-001234567890abcd"
 
-    @Test func projectRequestContainsTheClosedWireIdentityAndExplicitNullArtifact() throws {
-        let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+    @Test func projectRequestContainsTheClosedWireIdentityAndOptions() throws {
+        let options = try MacSetupOptions(teamID: "ABCDE12345")
         let id = UUID()
         let request = try MacSetupRequest(action: .preflight, setupID: id, deviceID: device, options: options)
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
@@ -14,23 +14,14 @@ import GoFlyMacCore
         #expect(object["mode"] as? String == "install")
         #expect(object["setupID"] as? String == id.uuidString)
         let encodedOptions = try #require(object["options"] as? [String: Any])
-        #expect(encodedOptions["artifactPath"] is NSNull)
+        #expect(Set(encodedOptions.keys) == ["teamID", "allowProvisioningUpdates"])
+        #expect(encodedOptions["teamID"] as? String == "ABCDE12345")
         #expect(encodedOptions["allowProvisioningUpdates"] as? Bool == false)
     }
 
     @Test func invalidAuthorityCannotBecomeARequest() throws {
         #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupOptions(source: .project, teamID: "")
-        }
-        #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupOptions(source: .project, artifactPath: "/tmp/GoFly.app", teamID: "ABCDE12345")
-        }
-        #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupOptions(source: .signedApp, artifactPath: "/tmp/GoFly.app", teamID: "ABCDE12345",
-                                allowProvisioningUpdates: true)
-        }
-        #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupOptions(source: .signedApp, artifactPath: "relative.app", teamID: "ABCDE12345")
+            try MacSetupOptions(teamID: "")
         }
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .apply, setupID: UUID(), deviceID: device)
@@ -38,7 +29,7 @@ import GoFlyMacCore
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .status, setupID: UUID(), deviceID: "other")
         }
-        let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+        let options = try MacSetupOptions(teamID: "ABCDE12345")
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .resume, setupID: UUID(), deviceID: device, options: options)
         }
@@ -122,7 +113,7 @@ import GoFlyMacCore
 
     @Test func readOnlyPreflightCannotReportAnInstallCompletion() throws {
         let request = try MacSetupRequest(action: .preflight, setupID: UUID(), deviceID: device,
-                                         options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+                                         options: MacSetupOptions(teamID: "ABCDE12345"))
         #expect(throws: MacSetupFailure.invalidResponse) {
             try MacSetupResponseDecoder.decode(response(for: request), for: request)
         }
@@ -163,7 +154,7 @@ import GoFlyMacCore
 
     @Test func identityAndDigestFieldsRejectControlSuffixes() throws {
         #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupOptions(source: .project, teamID: "ABCDE12345\n")
+            try MacSetupOptions(teamID: "ABCDE12345\n")
         }
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device + "\n")

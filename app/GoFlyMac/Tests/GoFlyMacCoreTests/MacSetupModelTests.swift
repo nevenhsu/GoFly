@@ -18,7 +18,7 @@ import GoFlyMacCore
         #expect(!model.canApply)
         #expect(throws: MacSetupFailure.service("transaction-conflict")) {
             try model.configure(deviceID: "00008110-ffffffffffffffff",
-                                options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+                                options: MacSetupOptions(teamID: "ABCDE12345"))
         }
         #expect(model.continuation == original)
     }
@@ -29,7 +29,7 @@ import GoFlyMacCore
         #expect(model.failure == .invalidResponse)
         #expect(throws: MacSetupFailure.invalidResponse) {
             try model.configure(deviceID: device,
-                                options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+                                options: MacSetupOptions(teamID: "ABCDE12345"))
         }
         #expect(!model.canApply)
     }
@@ -41,7 +41,7 @@ import GoFlyMacCore
             let runner = HeldSetupRunner()
             let model = MacSetupModel(runner: runner, journal: ModelJournal(nil))
             await model.restore()
-            let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+            let options = try MacSetupOptions(teamID: "ABCDE12345")
             try model.configure(deviceID: device, options: options)
             let identity = model.continuation
             model.preflight()
@@ -77,7 +77,7 @@ import GoFlyMacCore
         let journal = ModelJournal(nil)
         let model = MacSetupModel(runner: runner, journal: journal)
         await model.restore()
-        let options = try MacSetupOptions(source: .project, teamID: "ABCDE12345")
+        let options = try MacSetupOptions(teamID: "ABCDE12345")
         try model.configure(deviceID: device, options: options)
         let original = try #require(model.continuation)
         model.apply()
@@ -141,7 +141,7 @@ import GoFlyMacCore
         #expect(model.snapshot == nil, "A failed observation cannot leave apparently current progress evidence.")
     }
 
-    @Test func restoredSetupCannotBeHiddenByDeviceSelectionOrPreview() async throws {
+    @Test func restoredSetupCannotBeHiddenByDeviceSelection() async throws {
         let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
         let runner = HeldSetupRunner()
         let setup = MacSetupModel(runner: runner, journal: ModelJournal(original))
@@ -155,8 +155,6 @@ import GoFlyMacCore
         app.select("00008110-ffffffffffffffff")
         app.refreshDevices()
         app.navigate(.devices)
-        app.switchMode(preview: true)
-        #expect(!app.isPreview)
         #expect(app.page == .install && app.selectedID == original.deviceID)
         #expect(await runner.requests.isEmpty)
         setup.status()
@@ -179,8 +177,6 @@ import GoFlyMacCore
         #expect(app.page == .home)
         app.navigate(.install)
         #expect(app.page == .install, "A corrupt transaction must remain reachable without environment readiness.")
-        app.switchMode(preview: true)
-        #expect(!app.isPreview)
     }
 
     @Test func devicePickerRetiresUnappliedPreflight() async throws {
@@ -190,7 +186,7 @@ import GoFlyMacCore
         await app.restoreSetup()
         app.checkEnvironment()
         for _ in 0..<200 where app.busy { try await Task.sleep(for: .milliseconds(5)) }
-        try setup.configure(deviceID: device, options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        try setup.configure(deviceID: device, options: MacSetupOptions(teamID: "ABCDE12345"))
         setup.preflight()
         guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
         let request = try #require(await runner.requests.last)
@@ -230,7 +226,7 @@ import GoFlyMacCore
         #expect(setup.continuation == nil && !setup.hasRecordedTransaction)
         #expect(try await journal.readContinuation() == original, "UI retirement must not archive or erase the authoritative journal.")
         try setup.configure(deviceID: "00008110-ffffffffffffffff",
-                            options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+                            options: MacSetupOptions(teamID: "ABCDE12345"))
         #expect(setup.continuation?.deviceID == "00008110-ffffffffffffffff")
         #expect(!setup.canApply, "The new choice still requires its own actual preflight.")
         setup.preflight()
@@ -253,7 +249,7 @@ import GoFlyMacCore
         let journal = ModelJournal(nil)
         let setup = MacSetupModel(runner: runner, journal: journal)
         await setup.restore()
-        try setup.configure(deviceID: device, options: MacSetupOptions(source: .project, teamID: "ABCDE12345"))
+        try setup.configure(deviceID: device, options: MacSetupOptions(teamID: "ABCDE12345"))
         let original = try #require(setup.continuation)
         setup.preflight()
         guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
