@@ -46,8 +46,6 @@ public final class SessionRecoveryStore: ObservableObject {
     private var lastTerminalResult: Result<Void, SessionRecoveryFailure>?
     private var invalidLatest = false
     private var waiters: [(id: UUID, target: UInt64, continuation: CheckedContinuation<Bool, Never>)] = []
-    private let transferOwnerID = UUID()
-    private var transferHold: TransferHold?
 
     public init(persistence: any SessionRecoveryPersistence) {
         self.persistence = persistence
@@ -87,7 +85,7 @@ public final class SessionRecoveryStore: ObservableObject {
     /// was accepted into memory and queued; it does not mean bytes are durable.
     @discardableResult
     public func capture(_ snapshot: SessionRecoverySnapshot) -> Bool {
-        guard transferHold == nil, loadState == .ready else { return false }
+        guard loadState == .ready else { return false }
         return acceptSnapshot(snapshot)
     }
 
@@ -95,12 +93,6 @@ public final class SessionRecoveryStore: ObservableObject {
     /// snapshot while all ordinary writers remain held. This token comes from
     /// this actual store; it does not grant service or movement authority.
     @discardableResult
-    public func capture(_ snapshot: SessionRecoverySnapshot, using token: TransferHold) -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              loadState == .ready, !isSaving, !hasUnsavedChanges,
-              pendingWrite == nil, drainTask == nil, waiters.isEmpty else { return false }
-        return acceptSnapshot(snapshot)
-    }
 
     private func acceptSnapshot(_ snapshot: SessionRecoverySnapshot) -> Bool {
         guard latestRevision < UInt64.max else {
@@ -138,22 +130,11 @@ public final class SessionRecoveryStore: ObservableObject {
     /// Cancellation only releases this waiter; the atomic write continues.
     public func flush() async -> Bool {
         guard loadState == .ready, !invalidLatest else { return false }
-        if transferHold != nil {
-            // A held store is already clean by the acquisition predicate.  Do
-            // not create or await a writer while the cutline is in progress.
-            return !hasUnsavedChanges && pendingWrite == nil && drainTask == nil &&
-                latestRevision == lastCommittedRevision
-        }
         return await waitForLatestWrite()
     }
 
     /// Wait for the snapshot submitted by the same admitted owner without
     /// releasing its hold or admitting a normal capture in the meantime.
-    public func flush(using token: TransferHold) async -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              loadState == .ready, !invalidLatest else { return false }
-        return await waitForLatestWrite()
-    }
 
     private func waitForLatestWrite() async -> Bool {
         let target = latestRevision
@@ -186,7 +167,7 @@ public final class SessionRecoveryStore: ObservableObject {
     /// an invalid latest capture cannot be bypassed by replaying older bytes.
     @discardableResult
     public func retrySaving() -> Bool {
-        guard transferHold == nil, loadState == .ready, !invalidLatest, !isSaving, hasUnsavedChanges,
+        guard loadState == .ready, !invalidLatest, !isSaving, hasUnsavedChanges,
               let snapshot = latestSnapshot else { return false }
         isSaving = true
         error = nil
@@ -194,26 +175,10 @@ public final class SessionRecoveryStore: ObservableObject {
         return true
     }
 
-    public func clearError() { guard transferHold == nil else { return }; error = nil }
+    public func clearError() { error = nil }
 
-    public func acquireTransferHold() -> TransferHold? {
-        guard transferHold == nil, loadState == .ready, error == nil, !isSaving,
-              !hasUnsavedChanges, !invalidLatest, pendingWrite == nil,
-              drainTask == nil, waiters.isEmpty,
-              latestRevision == lastCommittedRevision else { return nil }
-        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
-        transferHold = hold
-        return hold
-    }
 
     @discardableResult
-    public func releaseTransferHold(_ token: TransferHold) -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              !isSaving, pendingWrite == nil, drainTask == nil,
-              waiters.isEmpty else { return false }
-        transferHold = nil
-        return true
-    }
 
     private func submit(revision: UInt64, snapshot: SessionRecoverySnapshot) {
         highestSubmittedRevision = max(highestSubmittedRevision, revision)

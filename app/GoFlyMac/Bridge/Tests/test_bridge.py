@@ -100,7 +100,7 @@ class BridgeTests(unittest.TestCase):
             bridge._validate_request({"protocol": 1, "requestID": RID, "action": "inspect",
                                       "deviceID": UDID, "transport": ["wifi"]})
 
-    def test_inspect_uses_exact_usb_autopair_false_and_unknown_capabilities(self):
+    def test_inspect_uses_exact_usb_autopair_false_and_developer_mode(self):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID.upper(), connection_type="USB")], client)
@@ -109,8 +109,6 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(result["device"]["transport"], "usb")
         self.assertTrue(result["developerMode"])
         self.assertIsNone(result["vpnInstalled"])
-        self.assertFalse(result["canInstall"])
-        self.assertFalse(result["canRenew"])
 
     def test_handle_reuses_one_asyncio_runner_for_open_read_and_close(self):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}

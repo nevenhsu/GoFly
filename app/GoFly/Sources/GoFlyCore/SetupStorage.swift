@@ -88,34 +88,6 @@ public final class SetupActivationStore: @unchecked Sendable {
         }
     }
 
-    func managementEvidence(setupID: UUID, app: SetupAppIdentity,
-                            expectedDeviceUDID: String, teamID: String,
-                            requireActive: Bool) throws -> ManagementSetupEvidence {
-        try mapStorage {
-            guard let bytes = try readRoot(Self.activationName, maximum: 256 * 1_024) else {
-                throw SetupFailure.artifactMismatch
-            }
-            let record = try SetupCodec.decodeActivation(bytes)
-            if requireActive { guard record.activeSetupID == setupID else { throw SetupFailure.identityMismatch } }
-            guard let receipt = record.receipts.first(where: { $0.setupID == setupID }),
-                  receipt.app == app,
-                  receipt.expectedDeviceUDID == expectedDeviceUDID,
-                  receipt.teamID == teamID else {
-                throw SetupFailure.identityMismatch
-            }
-            let manifest = try SetupManifest(
-                setupID: receipt.setupID, nonce: receipt.nonce,
-                expectedDeviceUDID: receipt.expectedDeviceUDID,
-                pairingTransactionID: receipt.pairingTransactionID,
-                pairingSHA256: receipt.pairingSHA256, app: receipt.app,
-                teamID: receipt.teamID, signingExpiry: receipt.signingExpiry,
-                deviceOS: receipt.deviceOS, method: receipt.method,
-                artifacts: receipt.artifacts)
-            _ = try validateSupportInternal(manifest: manifest)
-            return ManagementSetupEvidence(rawActivation: bytes, activation: record, receipt: receipt)
-        }
-    }
-
     /// Streams and verifies every immutable support artifact. The returned URL
     /// points only at the derived generation directory owned by this store.
     public func validateSupport(for input: SetupInput) throws -> URL {

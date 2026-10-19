@@ -21,31 +21,18 @@ struct GoFlyApp: App {
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
-            .task(id: scenePhase) {
-                guard scenePhase == .active else { return }
-                await bootstrap.observeMacCommands()
-            }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
-                    preferences.refreshSystemPreferences()
-                } else {
-                    bootstrap.invalidateMacCommandObservation()
-                }
+                if phase == .active { preferences.refreshSystemPreferences() }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()
-            }
-            .onOpenURL { url in
-                bootstrap.handle(url: url)
             }
         }
     }
 
     @ViewBuilder
     private var startupContent: some View {
-        if bootstrap.phase.isTransferLocked {
-            GoFlyTransferLockView(phase: bootstrap.phase)
-        } else if let runtime = bootstrap.runtime {
+        if let runtime = bootstrap.runtime {
             normalRuntimeView(runtime)
         } else if !onboardingComplete, bootstrap.phase == .preparing {
             NavigationStack {

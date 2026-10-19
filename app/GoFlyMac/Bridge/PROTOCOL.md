@@ -44,46 +44,6 @@ OS version, and developer mode are checked. Installed LocalGo metadata is
 looked up through InstallationProxy when available. Signing evidence,
 LocalDevVPN's bundle ID, and expiry are not guessed, so the corresponding
 fields remain `null` when unavailable; an unsupported developer-mode key also
-remains `null`. Capability fields are always `false` in this read-only build.
+remains `null`.
 The GUI creates a fresh selection identity only from an explicit user selection;
 discovery, refresh and repeated inspection do not create another selection.
-Protocol 5 independently authenticates the selected connection before renewal.
-
-## Protocol 5 management
-
-`Bridge/Management/management_bridge.py` is the separate in-place renewal and
-pairing-repair entry point. It uses the verified reinstall configuration,
-private `management-journal.json` and shared `operation.lock`; protocol 1
-remains read-only. Requests are bounded to 32 KiB and responses to 256 KiB.
-Actions are `preflight`, `apply`, `query`, `resume`, and `release`. Original
-management/device/selection/kind/transport/options are immutable. An explicit
-same-device Resume may add a connection revision only after read-only evidence
-resolves all old submitted effects. Refresh and query never create a revision
-or a new automatic renewal.
-
-`query` reads private journal evidence only. It re-decodes the complete saved
-source/target activation records, exact formal input, pairing/support binding
-and Core adoption response before exposing positive proofs. Stage labels,
-installed presence, metadata publication and artifact validation cannot alone
-establish completion. Public stages use the closed protocol vocabulary;
-internal identity-readback and launch checkpoints are shown under pairing or
-adoption. A release before publication is a local cancellation, not an App,
-GPS, VPN or native-clear receipt.
-
-Every target effect has a durable intent. Persistent identity-readback
-metadata additionally retains at most 32 publication attempts with original
-revision/hash, audit timestamp, prior outcome and terminal reason. Only an
-explicit Resume with a fresh absence observation may retry the identical
-request on the original revision. Unknown Upgrade, pairing delivery and
-formal-input effects are never resent by this rule. Exhaustion remains a
-retained operation and permits read-only reconciliation only.
-
-A lost first-readback PID never authorizes adopting or killing another
-process. Exact original App response plus two genuine PID-zero observations
-may establish the separate identity-phase absence checkpoint. A running
-unowned process stays pending until the user closes GoFly. This alternative
-cannot create formal-launch intent or clear/GPS authority. Final activation
-requires a previously submitted formal launch, full actual App receipt, Core
-adoption and a fresh same-device support observation; the final normal App
-may remain open. Hardware acceptance remains deferred until development is
-complete.

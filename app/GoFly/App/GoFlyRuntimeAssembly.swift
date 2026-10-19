@@ -6,7 +6,6 @@ import SwiftUI
 /// setup bootstrap admits ordinary or completed startup.
 @MainActor
 final class GoFlyRuntimeAssembly: ObservableObject {
-    let projection: TransferRuntimeProjection
     let service: ServiceController
     let sessionRecovery: SessionRecoveryStore
     let movement: GoFlyMovementModel
@@ -15,11 +14,11 @@ final class GoFlyRuntimeAssembly: ObservableObject {
     let favoriteRoutes: FavoriteRoutesStore
     let onboarding: OnboardingController
 
-    init(projection: TransferRuntimeProjection) {
-        self.projection = projection
-        let useUITestNamespaces = projection.transferID == nil
-        let recovery = goFlySessionRecoveryStore(directory: projection.sessionDirectory,
-                                                  allowUITestNamespace: useUITestNamespaces)
+    init() {
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let recovery = goFlySessionRecoveryStore()
         let service = ServiceController(service: Self.deviceService())
         let snapshot = recovery.initialSnapshot
         _ = service.restoreColdRecovery(
@@ -31,12 +30,15 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         self.service = service
         self.sessionRecovery = recovery
         self.movement = GoFlyMovementModel(service: service, recoveryStore: recovery)
-        self.favorites = Self.favoritePlacesStore(directory: projection.favoritesDirectory,
-                                                  allowUITestNamespace: useUITestNamespaces)
-        self.importedRoutes = Self.importedRoutesStore(directory: projection.importedRoutesDirectory,
-                                                       allowUITestNamespace: useUITestNamespaces)
-        self.favoriteRoutes = Self.favoriteRoutesStore(directory: projection.favoriteRoutesDirectory,
-                                                        allowUITestNamespace: useUITestNamespaces)
+        self.favorites = Self.favoritePlacesStore(
+            directory: support.appendingPathComponent("FavoritePlaces", isDirectory: true),
+            allowUITestNamespace: true)
+        self.importedRoutes = Self.importedRoutesStore(
+            directory: support.appendingPathComponent("ImportedRoutes", isDirectory: true),
+            allowUITestNamespace: true)
+        self.favoriteRoutes = Self.favoriteRoutesStore(
+            directory: support.appendingPathComponent("FavoriteRoutes", isDirectory: true),
+            allowUITestNamespace: true)
         self.onboarding = OnboardingController(
             probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
         )

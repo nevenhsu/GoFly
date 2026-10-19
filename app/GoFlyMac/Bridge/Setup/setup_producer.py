@@ -28,7 +28,7 @@ try:
     )
     from .setup_config import SetupConfiguration
     from .setup_delivery import deliver_v1_once
-    from .setup_journal import JournalStore, _regular
+    from .setup_journal import JournalStore
     from .setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 except ImportError:  # script execution from the packaged Setup directory
     from setup_adapters import (
@@ -45,7 +45,7 @@ except ImportError:  # script execution from the packaged Setup directory
     )
     from setup_config import SetupConfiguration
     from setup_delivery import deliver_v1_once
-    from setup_journal import JournalStore, _regular
+    from setup_journal import JournalStore
     from setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 
 
@@ -63,29 +63,6 @@ def support_method(os_version: str) -> str:
     if parts[0] == 26 and (len(parts) == 1 or parts[1] <= 3):
         return "personalized"
     return "cryptex"
-
-
-def _reject_unresolved_reinstall(state_root: Path) -> None:
-    """Keep protocol-2 mutations behind the shared M2 operation lease.
-
-    The M2 producer checkpoints ``reinstall-journal.json`` under the same
-    ``operation.lock``.  M1 must inspect that record while it already owns the
-    lock, and may only proceed after M2 has reached a durable terminal state.
-    This small crossguard intentionally performs no reconciliation or writes.
-    """
-    try:
-        from ..Management.management_journal import reject_unresolved_management
-        from ..Reinstall.reinstall_journal import ReinstallJournalStore, is_terminal_journal
-    except ImportError:
-        from Management.management_journal import reject_unresolved_management
-        from Reinstall.reinstall_journal import ReinstallJournalStore, is_terminal_journal
-    reject_unresolved_management(state_root)
-    # Validate even a dangling link before the other store's optional read.
-    # Its complete/abandon markers are meaningful only after its full codec.
-    _regular(state_root / "reinstall-journal.json", allow_missing=True)
-    value = ReinstallJournalStore(state_root).read()
-    if value is not None and not is_terminal_journal(value):
-        raise SetupBridgeError("transaction-conflict")
 
 
 @dataclass(frozen=True)
@@ -193,7 +170,6 @@ class SetupProducer:
         # seams may use a temporary SetupConfiguration for controlled tests.
         self.config.ensure_state_root()
         with self.store.lock():
-            _reject_unresolved_reinstall(self.config.state_root)
             # Apply is explicit, but still rechecks the selected USB device
             # and refuses an already-installed GoFly before creating a new
             # transaction record.
@@ -351,7 +327,6 @@ class SetupProducer:
 
     def resume(self, request: SetupRequest) -> ProducerPayload:
         with self.store.lock():
-            _reject_unresolved_reinstall(self.config.state_root)
             journal = self.store.read()
             if journal is None:
                 raise SetupBridgeError("transaction-unknown")

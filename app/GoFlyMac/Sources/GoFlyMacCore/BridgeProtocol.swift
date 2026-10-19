@@ -51,7 +51,7 @@ public struct ConnectedDevice: Codable, Identifiable, Equatable, Sendable {
     public var displayName: String { name.isEmpty ? "iPhone · …\(id.suffix(6))" : name }
     public var connectionID: String { id.lowercased() + ":" + transport.rawValue }
 
-    /// Management keeps both explicit connection choices for the same phone.
+    /// Keeps both explicit connection choices for the same phone.
     /// First install continues to use the USB-only list.
     public static func connectionChoices(_ devices: [Self], usbOnly: Bool) -> [Self] {
         var choices: [String: Self] = [:]
@@ -82,16 +82,11 @@ public struct DeviceInspection: Codable, Equatable, Sendable {
     public let appVersion: String?
     public let teamID: String?
     public let expiresAt: String?
-    public let canInstall: Bool
-    public let canRenew: Bool
-    public let canRepair: Bool
-    public let canReinstall: Bool
     public init(device: ConnectedDevice, developerMode: Bool?, installed: Bool?, vpnInstalled: Bool?,
                 appVersion: String? = nil, teamID: String? = nil, expiresAt: String? = nil) {
         self.device = device; self.developerMode = developerMode; self.installed = installed
         self.vpnInstalled = vpnInstalled; self.appVersion = appVersion; self.teamID = teamID
         self.expiresAt = expiresAt
-        self.canInstall = false; self.canRenew = false; self.canRepair = false; self.canReinstall = false
     }
 }
 

@@ -13,48 +13,19 @@ public final class ImportedRoutesStore: ObservableObject {
     @Published public private(set) var canUndo = false
     private let persistence: any ImportedRoutesPersistence
     private var selectionRevision: UInt64 = 0
-    private let transferOwnerID = UUID()
-    private var transferHold: TransferHold?
     /// IDs represent calls that have actually entered persistence/parsing.
     /// They are removed only after the physical async body has returned.
     private var physicalOperations: Set<UUID> = []
 
     public init(persistence: any ImportedRoutesPersistence) { self.persistence = persistence }
-    public var canMutate: Bool { loadState == .ready && !isBusy && transferHold == nil }
-    private var transferAdmissionAllowed: Bool { transferHold == nil }
+    public var canMutate: Bool { loadState == .ready && !isBusy }
+    private var transferAdmissionAllowed: Bool { true }
     private func beginPhysicalOperation() -> UUID {
         let id = UUID(); physicalOperations.insert(id); return id
     }
     private func finishPhysicalOperation(_ id: UUID) { physicalOperations.remove(id) }
 
-    public func acquireTransferHold() -> TransferHold? {
-        guard transferHold == nil, loadState == .ready, error == nil, !isBusy,
-              !isValidatingSelection, physicalOperations.isEmpty else { return nil }
-        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
-        transferHold = hold
-        return hold
-    }
     @discardableResult
-    public func releaseTransferHold(_ token: TransferHold) -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              physicalOperations.isEmpty else { return false }
-        transferHold = nil
-        return true
-    }
-    public func transferArchive(using token: TransferHold) async throws -> TransferArchiveSnapshot {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              loadState == .ready, error == nil, !isBusy, !isValidatingSelection,
-              physicalOperations.isEmpty else { throw ImportedRoutesFailure.busy }
-        let operation = beginPhysicalOperation()
-        defer { finishPhysicalOperation(operation) }
-        let snapshot = try await persistence.transferSnapshot()
-        let transferred = try await Task.detached {
-            try TransferArchiveCodec.importedRoutes(snapshot)
-        }.value
-        guard transferHold == token else { throw ImportedRoutesFailure.busy }
-        guard transferred == records else { throw ImportedRoutesFailure.metadataMismatch }
-        return snapshot
-    }
 
     public func clearError() { guard transferAdmissionAllowed else { return }; error = nil }
 
@@ -66,8 +37,7 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.read()
-            guard transferHold == nil else { return }
-            publish(receipt)
+                        publish(receipt)
             loadState = .ready
             error = nil
         } catch {
@@ -89,16 +59,14 @@ public final class ImportedRoutesStore: ObservableObject {
                 return try ImportedRouteArtifact(data: data, filename: filename)
             }.value
             try Task.checkCancellation()
-            guard transferHold == nil else { return false }
-            let receipt = try await persistence.importArtifact(artifact)
-            guard transferHold == nil else { return false }
-            publish(receipt)
+                        let receipt = try await persistence.importArtifact(artifact)
+                        publish(receipt)
             if selectionRevision == selectionAtStart { error = nil }
             if selectionRevision == selectionAtStart, let record = receipt.records.last {
                 let snapshot = try await Task.detached {
                     try ImportedRouteSnapshot(record: record, document: artifact.document)
                 }.value
-                guard transferHold == nil, selectionRevision == selectionAtStart else { return true }
+                guard selectionRevision == selectionAtStart else { return true }
                 selectionRevision &+= 1
                 selectedID = record.id
                 selectedSnapshot = snapshot
@@ -127,8 +95,7 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         do {
             let snapshot = try await persistence.validate(id)
-            guard transferHold == nil else { return }
-            guard selectionRevision == revision, selectedID == id, records.contains(where: { $0.id == id }) else { return }
+                        guard selectionRevision == revision, selectedID == id, records.contains(where: { $0.id == id }) else { return }
             guard !Task.isCancelled else { isValidatingSelection = false; return }
             selectedSnapshot = snapshot
             isValidatingSelection = false
@@ -148,8 +115,7 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.delete(id)
-            guard transferHold == nil else { return false }
-            publish(receipt)
+                        publish(receipt)
             if selectedID == id { await select(nil) }
             error = nil
             return true
@@ -164,8 +130,7 @@ public final class ImportedRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.undoDelete()
-            guard transferHold == nil else { return false }
-            publish(receipt)
+                        publish(receipt)
             error = nil
             return true
         } catch { recordFailure(error); return false }
@@ -179,10 +144,9 @@ public final class ImportedRoutesStore: ObservableObject {
         let revision = selectionRevision
         do {
             let snapshot = try await persistence.validate(id)
-            guard transferHold == nil else { throw ImportedRoutesFailure.busy }
-            guard selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
+                        guard selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
             let data = try await Task.detached { try GPXCodec.encode(snapshot.document, name: snapshot.record.filename) }.value
-            guard transferHold == nil, selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
+            guard selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
             return data
         } catch {
             if selectionRevision == revision { recordFailure(error) }

@@ -17,20 +17,6 @@ func goFlySessionRecoveryStore() -> SessionRecoveryStore {
     }
 }
 
-/// Creates a recovery store from the already verified runtime projection.
-/// The directory is supplied by Core; test namespaces only redirect that root.
-@MainActor
-func goFlySessionRecoveryStore(directory: URL, allowUITestNamespace: Bool = false) -> SessionRecoveryStore {
-    let resolved = allowUITestNamespace
-        ? GoFlyUITestOverrides.namespace(
-            "-gofly-ui-session-store",
-            under: directory.deletingLastPathComponent(),
-            folder: "SessionRecovery"
-        ) ?? directory
-        : directory
-    return SessionRecoveryStore(persistence: FileSessionRecoveryPersistence(directory: resolved))
-}
-
 private struct UnavailableSessionRecoveryPersistence: SessionRecoveryPersistence {
     func read() throws -> Data? { throw SessionRecoveryFailure.unavailable }
     func replaceAtomically(with data: Data) throws { throw SessionRecoveryFailure.unavailable }

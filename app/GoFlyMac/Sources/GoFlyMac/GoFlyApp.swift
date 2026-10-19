@@ -18,16 +18,7 @@ struct GoFlyApp: App {
         let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("GoFlySetup")
         let setup = MacSetupModel(runner: setupRunner, journal: MacSetupJournalReader(stateRoot: stateRoot))
-        let reinstallRunner: any MacReinstallRunning = (try? ReinstallProcessBridge(
-            configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
-            scriptURL: resources.appendingPathComponent("Bridge/Reinstall/reinstall_bridge.py"))) ?? UnavailableReinstallRunner()
-        let reinstall = MacReinstallModel(runner: reinstallRunner, journal: MacReinstallJournalReader(stateRoot: stateRoot))
-        let managementRunner: any MacManagementRunning = (try? ManagementProcessBridge(
-            configurationURL: resources.appendingPathComponent("ReinstallConfiguration.json"),
-            scriptURL: resources.appendingPathComponent("Bridge/Management/management_bridge.py"))) ?? UnavailableManagementRunner()
-        let management = MacManagementModel(runner: managementRunner, journal: MacManagementJournalReader(stateRoot: stateRoot))
-        let appModel = MacAppModel(live: checker, setup: setup, reinstall: reinstall,
-                                   management: management)
+        let appModel = MacAppModel(live: checker, setup: setup)
         if CommandLine.arguments.contains("--preview") { appModel.switchMode(preview: true) }
         _model = State(initialValue: appModel)
     }

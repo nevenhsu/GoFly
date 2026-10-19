@@ -61,11 +61,9 @@ struct MacRootView: View {
                 .accessibilityIdentifier("first-install")
             Text("USB 連接 iPhone，完成首次安裝與裝置準備")
                 .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted).padding(.top, 8)
-            if !model.isPreview, model.setup?.hasRecordedTransaction == true || model.management?.hasRecordedTransaction == true || model.setupLocksDevice {
-                Button(model.management?.hasRecordedTransaction == true ? "查看原管理操作" :
-                        model.reinstall?.hasRecordedTransaction == true ? "查看重新安裝狀態" : "查看安裝狀態") {
-                    model.openRecordedOperation()
-                }.padding(.top, 12).disabled(model.busy)
+            if !model.isPreview, model.setup?.hasRecordedTransaction == true || model.setupLocksDevice {
+                Button("查看安裝狀態") { model.openRecordedOperation() }
+                    .padding(.top, 12).disabled(model.busy)
             }
             PillButton(title: "裝置管理", width: 360, height: 48, enabled: model.ready) { model.openDevices(firstInstall: false) }
                 .padding(.top, 20).accessibilityIdentifier("manage-devices")
@@ -141,12 +139,8 @@ struct MacRootView: View {
         case .home: GoFlyMacSymbols.home
         case .environment: GoFlyMacSymbols.environment
         case .devices, .device: GoFlyMacSymbols.device
-        case .signing: GoFlyMacSymbols.signing
-        case .repair: GoFlyMacSymbols.repair
-        case .channel: GoFlyMacSymbols.connection
         case .install: GoFlyMacSymbols.install
         case .handoff: GoFlyMacSymbols.completed
-        case .reinstall: GoFlyMacSymbols.reinstall
         }
     }
 
@@ -156,15 +150,9 @@ struct MacRootView: View {
             if !model.isPreview { return [("連接 iPhone", .devices), ("安裝 GoFly", .install)] }
             return [("連接 iPhone", .devices), ("安裝 GoFly", .install), ("Mac 安裝完成", .handoff)]
         }
-        return [(model.selected?.displayName ?? "我的 iPhone", .device), ("簽名與重新簽名", .signing), ("連接與修復", .repair)]
+        return [(model.selected?.displayName ?? "我的 iPhone", .device)]
     }
-    private var selectedSidebar: MacPage {
-        switch model.page {
-        case .reinstall: .signing
-        case .channel: .repair
-        default: model.page
-        }
-    }
+    private var selectedSidebar: MacPage { model.page }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -194,8 +182,7 @@ struct MacRootView: View {
         VStack(spacing: 20) {
             Rule()
             HStack(spacing: 24) {
-                if !model.isPreview && !model.isChecking && ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) ||
-                    ((model.page == .signing || model.page == .repair) && model.management != nil)) {
+                if !model.isPreview && !model.isChecking && model.page == .install && model.setup != nil {
                     pageActions
                 } else if model.busy {
                     ProgressView().controlSize(.small)
@@ -222,12 +209,8 @@ struct MacRootView: View {
         case .environment: model.environment?.ready == true ? "Mac 環境已就緒" : "Mac 環境設定"
         case .devices: "選擇要連接的裝置"
         case .device: model.selected?.displayName ?? "我的 iPhone"
-        case .signing: "簽名與重新簽名"
-        case .repair: "連接與修復"
-        case .channel: "在 iPhone 修復本機通道"
         case .install: "確認 GoFly 簽名與安裝"
         case .handoff: "Mac 安裝完成"
-        case .reinstall: "選擇重新安裝後保留的資料"
         }
     }
     private var pageSubtitle: String {
@@ -236,18 +219,12 @@ struct MacRootView: View {
         case .environment: "背景檢測通過後，開放首次安裝介面與裝置管理檢查。"
         case .devices: model.firstInstall ? "只列出 USB 連接的裝置，請選擇要檢查的 iPhone。" : "相同 iPhone 只列一次並預設 USB；有兩種通道時，可明確選擇本次使用的連線。"
         case .device: "查看這部 iPhone 的裝置、安裝與連接狀態。"
-        case .signing: "簽名狀態須有可核對的實際證據；未取得時保留為待確認。"
-        case .repair: "查看這部 iPhone 的連接狀態與需要手動完成的設定。"
-        case .channel: "裝置連接與配對正常時，依手機提示確認 LocalDevVPN 與服務。"
         case .install: model.isPreview ? "使用 Xcode 中已設定的開發團隊（介面預覽）。" : "先檢查原裝置與簽名來源，再明確開始本次安裝。"
         case .handoff: "App、配對匯入及必要裝置支援均已確認；可拔除 USB。"
-        case .reinstall: model.isPreview ? "備份完成 → 重新安裝 → 自動匯入；目前為介面預覽。" : "明確選取保留資料，完整驗證備份後，同機重新安裝並核對匯入回報。"
         }
     }
 
     private var pageCheckFailure: CheckFailure? {
-        !model.isPreview && ((model.page == .install && model.setup != nil) ||
-            (model.page == .reinstall && model.reinstall != nil) ||
-            ((model.page == .signing || model.page == .repair) && model.management != nil)) ? nil : model.failure
+        !model.isPreview && model.page == .install && model.setup != nil ? nil : model.failure
     }
 }

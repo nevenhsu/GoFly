@@ -1,16 +1,12 @@
 # GoFly for Mac
 
-**2026-10-18 手機測試交付：** 依使用者本次要求，正式安裝 producer 已在 iPhone 15 Pro／iOS 27.0.1 完成 GoFly build 22 安裝、本次配對匯入、裝置支援精確核對及 activation receipt；已開啟並確認正常 Welcome 畫面，使用者接手拔除 USB 測試。這是本機開發包的實機交付，不代表完整 Mac GUI、iOS 26、定位效果或 M2 還原已驗收。本機開發 bundle 不是發行用 DMG；私密證據保留於 `work/gofly-ios/device-test`。
+**2026-10-18 手機測試交付：** 正式安裝 producer 已在 iPhone 15 Pro／iOS 27.0.1 完成 GoFly build 22 安裝、本次配對匯入、裝置支援精確核對及 activation receipt；已開啟並確認正常 Welcome 畫面，使用者接手拔除 USB 測試。這是本機開發包的實機交付，不代表完整 Mac GUI、iOS 26 或定位效果已驗收。本機開發 bundle 不是發行用 DMG；私密證據保留於 `work/gofly-ios/device-test`。
 
 使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
 
-原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。已接入正式 `com.neven.gofly` 首次安裝、USB 同機重裝與本機備份管理。自動／手動續簽與配對修復已接入獨立管理執行器及正式頁面，離線檢查通過，手機結果待驗。可攜 DMG 仍在開發；完整 Mac 目標尚未完成。
+原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。目前只保留正式 `com.neven.gofly` 的 USB 首次安裝、唯讀裝置檢查與環境檢查；可攜 DMG 仍在開發。
 
-M2 已接入 Mac 介面、持久交易、共用驗證器、實際裝置 adapter 與 iOS 匯出／還原。受控跨端資料及模擬器啟動檢查已通過，真實手機移除、安裝與還原仍待集中驗收。開發以 MVP 主要流程為優先，沿用既有檢查，只補阻斷流程與資料遺失風險的必要驗證。
-
-本機備份頁依實際原交易列出完成／未完成及裝置身分。完成匯入的備份從首次維護確認起至少保留七天，未完成不自動刪除；提前刪除須逐筆確認。清理中斷可接續，刪除只影響本機副本。待匯入的「繼續原交易」回到原 M2 頁面，核對原手機後才可明確續行。
-
-## 正式首次安裝（M1）
+## 正式首次安裝
 
 選取同一支 USB iPhone、10 碼 Team ID，以及本機固定 GoFly 專案或已簽署的 `GoFly.app`，先做唯讀檢查，再明確開始安裝。專案來源的「允許 Xcode 連線 Apple 更新開發簽署資料」預設關閉；勾選只授權本次操作。預檢不建立配對、不安裝 App、不下載支援資料。
 
@@ -21,14 +17,6 @@ M2 已接入 Mac 介面、持久交易、共用驗證器、實際裝置 adapter 
 重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [protocol 2](Bridge/Setup/README.md)。
 
 本次實機修正已進入共用安裝來源：USB 連線保留裝置實際序號大小寫；配對檔保留依賴回傳的文字或二進位 remote unlock 欄位；iOS 26／27 程序控制走已核對身分的 RSD。Apple BuildManifest 的 4 MiB 上限、支援檔案總量的 4 GiB 上限與 256 KiB 交易 JSON 上限分開。Cryptex 優先使用本機 Xcode 支援資料，缺少才下載；實際版本取自受雜湊保護的 `Image.dmg.cryptex_info`，不拿 BuildManifest 的佔位版本比較。已執行中的 GoFly 回報 `app-running`，介面提示關閉手機 App 後繼續原交易，不強制停止或重裝。
-
-## 保留資料的續簽與配對修復（M3）
-
-裝置管理明確選取 USB／Wi-Fi 並實際核對連線後，自動續簽一次；手動入口使用同一筆管理操作。刷新、輪詢與返回頁面不另開交易。續簽只走同身分的覆蓋更新，配對修復不安裝 App；都保留既有資料與設定。需要簽署資料更新時，仍由使用者在本次選項明確允許。
-
-中斷後先查詢原操作，再明確接續。未知更新、配對交付與正式準備寫入不盲目重送；介面依目前證據提示保持 GoFly 開啟或關閉後再接續，不強制接管其他程序。準備請求的有限重試只適用相同的持久化核對資料，不代表手機操作成功。完成須有完整 App 身分、配對、裝置支援及 Core 資料接續回報；不宣告 VPN、GPS 或移動已就緒。
-
-本輪使用既有 Mac72 項與 Python155 項離線檢查，並重建實際開發 bundle、核對36個資源與10份管理來源及隔離私密記錄查詢。沒有連接手機、簽署或 Apple 操作；真實更新、配對、到期／冷啟動及手機流程由使用者在全部開發完成後集中驗收。本輪 Figma Console Desktop Bridge 未連線，未宣稱最新視覺對照通過。
 
 ## 開啟
 
@@ -45,7 +33,7 @@ open work/gofly-mac/GoFly.app
 
 真實環境檢查沿用 protocol 1 的唯讀裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用分離的 protocol 2，仍只限 USB；protocol 1 仍拒絕安裝請求。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
-介面預覽持續顯示預覽標示，使用示意裝置與日期，可討論安裝、管理、續簽、修復、保留資料等畫面；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
+介面預覽持續顯示預覽標示，使用示意裝置與日期；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
 
 純介面檢查可用 `open work/gofly-mac/GoFly.app --args --preview` 啟動。此模式不讀取真實操作紀錄，也不執行實際裝置檢查；完整流程仍須在實際操作模式驗收。
 
@@ -61,14 +49,11 @@ env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   --config-path work/gofly-mac/config --security-path work/gofly-mac/security
 
 PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
-  -s app/GoFlyMac/Bridge/Tests
-
-PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
-  -s app/GoFlyMac/Bridge/Device/Tests
+  -s app/GoFlyMac/Bridge
 ```
 
-本次安裝修正已通過 Mac Swift 70 項、M1 Python 73 項、M2 Python 51 項及唯讀 bridge 14 項、裝置邊界 8 項；手機產物對應快照的 transfer 回歸另有 43 項通過。重建後 26 個 bundle 資源雜湊及 Setup／Reinstall 來源副本均一致，打包的唯讀 status 入口可讀回原交易 `complete/confirmed`，stderr 為空且不呼叫裝置。另有先前本機備份 4 項、暫存私密檔案的確認刪除／七天清理／中斷接續／未完成保留、共用驗證工具有效封包與拒絕流程，以及 iOS 未簽署／模擬器檢查紀錄；這些離線結果不替代完整 GUI 或手機矩陣驗收。本次正常手機啟動證據與限制見本文開頭。
+Mac Swift 與 Python 的實際數量以最後一次 `check.sh` 綠燈為準；不再逐輪記錄測試數。重建後 bundle 資源雜湊與 Setup 來源副本須一致，打包的唯讀 status 入口不呼叫裝置。這些離線結果不替代完整 GUI 或手機矩陣驗收。
 
-設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
+設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版狀態。
 
 介面使用 macOS 內建系統字體（中文交由系統選擇字形），支援系統深淺色。功能圖示採 SF Symbols，品牌圖形保留使用者提供的 GoFly 素材，沒有暫時素材 URL 留在執行程式中。詳見 [Mac UI 設計規格](../../docs/MAC-UI-DESIGN.md)。既有 LocalGo 裝置邊界沿用 AGPL-3.0，見 `../LocalGo/LICENSE`。

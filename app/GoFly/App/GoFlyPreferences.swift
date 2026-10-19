@@ -40,7 +40,6 @@ final class GoFlyPreferences {
     private(set) var language: GoFlyLanguage
     private(set) var appearance: GoFlyAppearance
     private var systemLanguages: [String]
-    private var transferHold: UUID?
     @ObservationIgnored private let defaults: UserDefaults
     private static let storageKey = "gofly.preferences.v1"
 
@@ -70,31 +69,15 @@ final class GoFlyPreferences {
     }
 
     func setLanguage(_ value: GoFlyLanguage) {
-        guard transferHold == nil, language != value else { return }
+        guard language != value else { return }
         language = value
         save()
     }
 
     func setAppearance(_ value: GoFlyAppearance) {
-        guard transferHold == nil, appearance != value else { return }
+        guard appearance != value else { return }
         appearance = value
         save()
-    }
-
-    /// The transfer coordinator owns this private synchronous admission. It
-    /// prevents a preference write from racing the accepted export cutline.
-    func acquireTransferHold() -> UUID? {
-        guard transferHold == nil else { return nil }
-        let hold = UUID()
-        transferHold = hold
-        return hold
-    }
-
-    @discardableResult
-    func releaseTransferHold(_ hold: UUID) -> Bool {
-        guard transferHold == hold else { return false }
-        transferHold = nil
-        return true
     }
 
     /// Re-reads the one persisted preferences dictionary after Core activates
@@ -106,10 +89,6 @@ final class GoFlyPreferences {
            let decoded = GoFlyLanguage(rawValue: value) { language = decoded }
         if let value = saved?["appearance"] as? String,
            let decoded = GoFlyAppearance(rawValue: value) { appearance = decoded }
-    }
-
-    func transferStore() -> TransferPreferencesStore {
-        TransferPreferencesStore(defaults: defaults, storageKey: Self.storageKey)
     }
 
     func refreshSystemPreferences() {

@@ -12,8 +12,7 @@ private struct EchoChecker: MacChecking {
                                               ["id": "device-a", "name": "iPhone", "transport": "wifi"]]]
         case .inspect:
             payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": request.transport?.rawValue ?? "usb"],
-                       "developerMode": true, "installed": NSNull(), "vpnInstalled": NSNull(),
-                       "canInstall": false, "canRenew": false, "canRepair": false, "canReinstall": false]
+                       "developerMode": true, "installed": NSNull(), "vpnInstalled": NSNull()]
         }
         return try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": request.requestID,
                                                            "status": "ok", "payload": payload])
@@ -169,12 +168,9 @@ private actor HeldChecker: MacChecking {
     model.select("device-a"); model.inspectSelected(); try await settled(model)
     #expect(model.inspection != nil)
     #expect(model.inspection?.installed == nil)
-    let initialSelection = model.managementSelection?.selectionID
     model.inspectSelected(); try await settled(model)
-    #expect(model.managementSelection?.selectionID == initialSelection)
     model.select("device-a", transport: .wifi)
     #expect(model.inspection == nil)
-    #expect(model.managementSelection?.selectionID != initialSelection)
     model.inspectSelected(); try await settled(model)
     #expect(model.inspection?.device.transport == .wifi)
     model.refreshDevices(); try await settled(model)

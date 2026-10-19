@@ -13,47 +13,18 @@ public final class FavoriteRoutesStore: ObservableObject {
     @Published public private(set) var canUndo = false
     private let persistence: any FavoriteRoutesPersistence
     private var selectionRevision: UInt64 = 0
-    private let transferOwnerID = UUID()
-    private var transferHold: TransferHold?
     /// Retained until each entered persistence or detached parse call returns.
     private var physicalOperations: Set<UUID> = []
 
     public init(persistence: any FavoriteRoutesPersistence) { self.persistence = persistence }
-    public var canMutate: Bool { loadState == .ready && !isBusy && transferHold == nil }
-    private var transferAdmissionAllowed: Bool { transferHold == nil }
+    public var canMutate: Bool { loadState == .ready && !isBusy }
+    private var transferAdmissionAllowed: Bool { true }
     private func beginPhysicalOperation() -> UUID {
         let id = UUID(); physicalOperations.insert(id); return id
     }
     private func finishPhysicalOperation(_ id: UUID) { physicalOperations.remove(id) }
 
-    public func acquireTransferHold() -> TransferHold? {
-        guard transferHold == nil, loadState == .ready, error == nil, !isBusy,
-              !isValidatingSelection, physicalOperations.isEmpty else { return nil }
-        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
-        transferHold = hold
-        return hold
-    }
     @discardableResult
-    public func releaseTransferHold(_ token: TransferHold) -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              physicalOperations.isEmpty else { return false }
-        transferHold = nil
-        return true
-    }
-    public func transferArchive(using token: TransferHold) async throws -> TransferArchiveSnapshot {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              loadState == .ready, error == nil, !isBusy, !isValidatingSelection,
-              physicalOperations.isEmpty else { throw FavoriteRoutesFailure.busy }
-        let operation = beginPhysicalOperation()
-        defer { finishPhysicalOperation(operation) }
-        let snapshot = try await persistence.transferSnapshot()
-        let transferred = try await Task.detached {
-            try TransferArchiveCodec.favoriteRoutes(snapshot)
-        }.value
-        guard transferHold == token else { throw FavoriteRoutesFailure.busy }
-        guard transferred == records else { throw FavoriteRoutesFailure.metadataMismatch }
-        return snapshot
-    }
 
     public func clearError() { guard transferAdmissionAllowed else { return }; error = nil }
     public func load() async {
@@ -64,8 +35,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.read()
-            guard transferHold == nil else { return }
-            publish(receipt)
+                        publish(receipt)
             loadState = .ready; error = nil
         } catch {
             let failure = FavoriteRoutesFailure.mapped(error)
@@ -84,8 +54,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.save(candidate, label: label)
-            guard transferHold == nil else { return nil }
-            publish(receipt.archive)
+                        publish(receipt.archive)
             if selectionRevision == revision { error = nil }
             return receipt.result
         } catch is CancellationError { return nil }
@@ -105,8 +74,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         do {
             let snapshot = try await persistence.validate(id)
-            guard transferHold == nil else { return }
-            guard selectionRevision == revision, selectedID == id, records.contains(where: { $0.id == id }) else { return }
+                        guard selectionRevision == revision, selectedID == id, records.contains(where: { $0.id == id }) else { return }
             isValidatingSelection = false
             guard !Task.isCancelled, loadState == .ready else { return }
             selectedSnapshot = snapshot; error = nil
@@ -125,8 +93,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.updateLabel(id, label: label)
-            guard transferHold == nil else { return false }
-            publish(receipt)
+                        publish(receipt)
             error = nil
             if selectedID == id { await select(id) }
             return true
@@ -141,8 +108,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.delete(id)
-            guard transferHold == nil else { return false }
-            publish(receipt)
+                        publish(receipt)
             if selectedID == id { await select(nil) }
             error = nil
             return true
@@ -157,8 +123,7 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { isBusy = false }
         do {
             let receipt = try await persistence.undoDelete()
-            guard transferHold == nil else { return false }
-            publish(receipt); error = nil; return true
+                        publish(receipt); error = nil; return true
         }
         catch is CancellationError { return false }
         catch { recordFailure(error); return false }

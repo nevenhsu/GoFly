@@ -1,1 +1,0 @@
-{"action":"apply","deviceID":"00008110-001234567890abcd","operation":"reinstall","options":{"allowProvisioningUpdates":false,"artifactPath":null,"categories":["favorites","routes","settings"],"source":"project","teamID":"ABCDE12345"},"protocol":3,"requestID":"aaaabbbb-cccc-4ddd-8eee-111122223333","transferID":"11112222-3333-4444-8555-666677778888"}

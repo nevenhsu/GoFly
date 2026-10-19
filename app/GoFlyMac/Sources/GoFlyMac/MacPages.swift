@@ -58,52 +58,6 @@ extension MacRootView {
                 }
             }
             }
-        case .signing:
-            if !model.isPreview, let management = model.management {
-                MacManagementPage(management: management, kind: .renew, device: model.selected,
-                    selection: model.managementSelection, defaultTeam: model.environment?.teamID,
-                    finish: { await model.finishManagement() }, cancel: { model.cancelManagement() })
-                    .disabled(model.isChecking)
-            } else {
-            StatusCard {
-                StatusRow(title: "目前簽名", detail: signatureDetail)
-                Rule()
-                StatusRow(title: "重新簽名", detail: "沿用相容的簽名身分，更新 App 的簽署有效性。現有資料與設定應保留。")
-                Rule()
-                StatusRow(title: "簽名身分不符？", detail: "重新安裝前先選擇保留資料；只有安裝與選取資料匯入都完成，才顯示整體完成。")
-                if !model.isPreview {
-                    Rule()
-                    StatusRow(title: "重新安裝與資料保留", detail: "簽名相容性尚未確認時，可明確選擇資料保留流程。備份完整驗證後才會移除原 App。")
-                }
-            }
-            }
-        case .repair:
-            if !model.isPreview, let management = model.management {
-                MacManagementPage(management: management, kind: .repair, device: model.selected,
-                    selection: model.managementSelection, defaultTeam: model.environment?.teamID,
-                    finish: { await model.finishManagement() }, cancel: { model.cancelManagement() })
-                    .disabled(model.isChecking)
-            } else {
-            StatusCard {
-                StatusRow(title: model.selected?.displayName ?? "尚未選擇 iPhone", detail: connectionDetail)
-                Rule()
-                StatusRow(title: "開發者模式", detail: developerDetail)
-                Rule()
-                Button { model.navigate(.channel) } label: {
-                    StatusRow(title: "手機 App 仍無法啟動或連線？  ›", detail: "查看 LocalDevVPN 與手機端服務檢查步驟。")
-                }.buttonStyle(.plain).goFlyRowFocus()
-                Rule()
-                StatusRow(title: "裝置配對", detail: model.isPreview ? "裝置身分已核對（預覽）" : "這次只用既有信任進行唯讀核對，不建立、重建或交付配對資料。")
-            }
-            }
-        case .channel:
-            StatusCard {
-                StatusRow(title: "1  在 iPhone 開啟 LocalDevVPN", detail: "按 Connect，確認 App 顯示連線狀態。Mac 無法據此確認手機本機通道可用。")
-                Rule()
-                StatusRow(title: "2  返回手機 App", detail: "在手機重新檢查本機通道與裝置服務；成功後再手動繼續。")
-                Rule()
-                StatusRow(title: "3  仍然失敗？", detail: "確認信任、開發者模式與裝置配對。手機內的設定流程尚在討論，本次不修改。")
-            }
         case .handoff:
             StatusCard {
                 StatusRow(title: model.isPreview ? "Mac 已完成（預覽）" : "Mac 交接條件待確認",
@@ -112,27 +66,6 @@ extension MacRootView {
                 StatusRow(title: "可以拔除 USB", detail: "首次安裝流程到此結束。VPN 與定位操作依 iPhone 內的正常提示完成。")
                 Rule()
                 StatusRow(title: "簽名到期日", detail: signatureDetail)
-            }
-        case .reinstall:
-            if !model.isPreview, let reinstall = model.reinstall {
-                MacReinstallPage(reinstall: reinstall, device: model.selected) { await model.finishReinstall() }
-                    .disabled(model.isChecking)
-            } else {
-            StatusCard {
-                StatusRow(title: "選擇重新安裝後要保留的資料", detail: "只備份勾選項目；重新安裝後自動匯入。這裡僅預覽資料選擇，不讀取或移除手機資料。")
-                Toggle(isOn: $model.preserveFavorites) {
-                    StatusRow(title: "最愛地點與標籤", detail: "儲存的地點、自訂名稱與標籤")
-                }.toggleStyle(.checkbox)
-                Toggle(isOn: $model.preserveRoutes) {
-                    StatusRow(title: "路線", detail: "儲存的路線、途經點與路線選項")
-                }.toggleStyle(.checkbox)
-                Toggle(isOn: $model.preserveSettings) {
-                    StatusRow(title: "設定", detail: "速度與操作偏好；移動任務不會自動恢復")
-                }.toggleStyle(.checkbox)
-                Rule()
-                Text("未勾選資料將不保留。所有項目取消時，代表全新安裝的預覽情境。")
-                    .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-            }
             }
         case .home: EmptyView()
         }
@@ -200,9 +133,7 @@ extension MacRootView {
     }
 
     @ViewBuilder var pageActions: some View {
-        if model.failure != nil && !(!model.isPreview &&
-            ((model.page == .install && model.setup != nil) || (model.page == .reinstall && model.reinstall != nil) ||
-             ((model.page == .signing || model.page == .repair) && model.management != nil))) {
+        if model.failure != nil && !(!model.isPreview && model.page == .install && model.setup != nil) {
             PillButton(title: "返回裝置清單", enabled: model.environment?.ready == true) { model.openDevices(firstInstall: model.firstInstall) }
             Spacer(minLength: 0)
             PillButton(title: "重新檢查", primary: true) { retry() }
@@ -233,26 +164,6 @@ extension MacRootView {
             case .handoff:
                 Spacer()
                 PillButton(title: "前往裝置管理", primary: true) { model.openDevices(firstInstall: false) }
-            case .signing:
-                PillButton(title: "保留資料與重裝", enabled: !model.setupLocksDevice) { model.navigate(.reinstall) }
-                Spacer(minLength: 0)
-                if model.isPreview {
-                    PillButton(title: "預覽重新簽名", primary: true) { model.previewAdvance() }
-                }
-            case .repair:
-                if model.isPreview { PillButton(title: "預覽修復裝置配對") { model.previewAdvance() } }
-                else { PillButton(title: "手機連線指引", enabled: !model.setupLocksDevice) { model.navigate(.channel) } }
-                Spacer(minLength: 0)
-                PillButton(title: "重新檢查連接", primary: true, enabled: model.selected != nil && !model.setupLocksDevice) { model.inspectSelected() }
-            case .channel:
-                Spacer()
-                PillButton(title: "返回連接與修復", primary: true) { model.navigate(.repair) }
-            case .reinstall:
-                PillButton(title: "返回簽名管理") { model.navigate(.signing) }
-                Spacer(minLength: 0)
-                if model.isPreview {
-                    PillButton(title: "預覽備份與重新安裝", primary: true) { model.previewAdvance() }
-                }
             case .home: EmptyView()
             }
         }

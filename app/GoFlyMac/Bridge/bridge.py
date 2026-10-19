@@ -626,10 +626,6 @@ class Bridge:
             "appVersion": version,
             "teamID": None,
             "expiresAt": None,
-            "canInstall": False,
-            "canRenew": False,
-            "canRepair": False,
-            "canReinstall": False,
         }
 
     def handle(self, request: Any) -> dict[str, Any]:

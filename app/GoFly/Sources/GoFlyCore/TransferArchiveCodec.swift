@@ -1,3 +1,32 @@
+import Foundation
+
+public enum TransferFailure: Error, Equatable, Sendable {
+    case invalidInput
+    case unsupportedVersion
+    case unsafeFile
+    case limitExceeded
+    case identityMismatch
+    case artifactMismatch
+    case unavailable
+    case storageUnavailable
+    case commitUnknown
+    case receiptCapacity
+    case busy
+    case sourceBusy
+    case exportConflict
+    case updateRequired
+}
+
+public struct TransferArchiveSnapshot: Sendable, Equatable {
+    public let manifest: Data
+    public let payloads: [String: Data]
+
+    public init(manifest: Data, payloads: [String: Data]) {
+        self.manifest = manifest
+        self.payloads = payloads
+    }
+}
+
 import CryptoKit
 import Foundation
 

@@ -35,8 +35,6 @@ public final class RouteExecutionController: ObservableObject {
     public private(set) var favoriteLoadAdmissionRevision: UInt64 = 0
     private var issuedFavoriteLoadAdmission: UInt64?
     private var issuedImportedLoadAdmission: UInt64?
-    private let transferOwnerID = UUID()
-    private var transferHold: TransferHold?
     /// IDs represent route planner/native transitions that have actually
     /// entered their async body. Completed Task handles do not block a cutline.
     private var physicalOperations: Set<UUID> = []
@@ -73,7 +71,7 @@ public final class RouteExecutionController: ObservableObject {
         }
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
-    public var canEdit: Bool { phase == .editing && transferHold == nil }
+    public var canEdit: Bool { phase == .editing }
     public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canClearImportedRoute: Bool { canEdit && draft.gpxSource != nil }
@@ -82,23 +80,6 @@ public final class RouteExecutionController: ObservableObject {
     }
     private func finishPhysicalOperation(_ id: UUID) { physicalOperations.remove(id) }
 
-    public func acquireTransferHold() -> TransferHold? {
-        guard transferHold == nil, phase == .editing, picker == nil,
-              intent == nil, continuationIdentity == nil, !recoveryProbePending,
-              physicalOperations.isEmpty else { return nil }
-        invalidateFavoriteLoadAdmission()
-        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
-        transferHold = hold
-        return hold
-    }
-    @discardableResult
-    public func releaseTransferHold(_ token: TransferHold) -> Bool {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              physicalOperations.isEmpty, phase == .editing, picker == nil,
-              intent == nil, continuationIdentity == nil else { return false }
-        transferHold = nil
-        return true
-    }
     /// Capture before asynchronous archive validation; only this outstanding request may replace the draft.
     public func beginFavoriteLoad() -> UInt64? {
         guard canEdit, picker == nil else { return nil }
@@ -158,10 +139,10 @@ public final class RouteExecutionController: ObservableObject {
         applyDraft(RouteDraft(speed: draft.speed))
         return true
     }
-    public var canPause: Bool { transferHold == nil && phase == .running }
-    public var canSetRoundTrip: Bool { transferHold == nil && [.editing, .running, .paused].contains(phase) }
+    public var canPause: Bool { phase == .running }
+    public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
     public var canToggleHeading: Bool {
-        guard transferHold == nil, roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
+        guard roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
         return heading == .forward ? progress.committedDistanceMeters > 0 : progress.committedDistanceMeters < intent.route.totalDistanceMeters
     }
     public var currentTargetCoordinate: GeoCoordinate? {
@@ -185,7 +166,7 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     public var canResume: Bool {
-        transferHold == nil && sceneActive && connectionAvailable && !recoveryProbePending && phase == .paused && commands.canBeginRoute
+        sceneActive && connectionAvailable && !recoveryProbePending && phase == .paused && commands.canBeginRoute
     }
 
     /// Recovery blocks a paused resume until its fresh probe settles without
@@ -193,7 +174,7 @@ public final class RouteExecutionController: ObservableObject {
     func recoveryProbeDidStart() { recoveryProbePending = true; objectWillChange.send() }
     func recoveryProbeDidFinish() { recoveryProbePending = false; objectWillChange.send() }
     public var canCancel: Bool {
-        transferHold == nil && [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
+        [.planning, .preparing, .running, .pausing, .paused, .interrupted].contains(phase)
     }
     @discardableResult public func openPicker(for nodeID: RouteNodeID) -> Bool {
         guard canEdit, let node = draft.nodes.first(where: { $0.id == nodeID }) else { return false }
@@ -457,16 +438,11 @@ public final class RouteExecutionController: ObservableObject {
         return true
     }
     public func dismissCompletion(executionID: UUID) {
-        guard transferHold == nil else { return }
-        if completion?.executionID == executionID { completion = nil }
+                if completion?.executionID == executionID { completion = nil }
     }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         sceneActive = false
-        guard transferHold == nil else {
-            objectWillChange.send()
-            return
-        }
         if let intent, phase == .running, continuingLease == intent.lease {
             objectWillChange.send()
             return
@@ -476,19 +452,11 @@ public final class RouteExecutionController: ObservableObject {
 
     public func sceneDidBecomeActive() {
         sceneActive = true
-        guard transferHold == nil else {
-            objectWillChange.send()
-            return
-        }
         objectWillChange.send()
     }
 
     public func connectionDidBecomeUnavailable() {
         connectionAvailable = false
-        guard transferHold == nil else {
-            objectWillChange.send()
-            return
-        }
         releaseForUnavailable(reason: .connectionUnavailable)
     }
 
@@ -498,8 +466,7 @@ public final class RouteExecutionController: ObservableObject {
     }
 
     public func continuationDidBecomeUnavailable() {
-        guard transferHold == nil else { return }
-        releaseForUnavailable(reason: .backgroundUnavailable)
+                releaseForUnavailable(reason: .backgroundUnavailable)
     }
 
     private func releaseForUnavailable(reason: RouteSuspensionReason) {

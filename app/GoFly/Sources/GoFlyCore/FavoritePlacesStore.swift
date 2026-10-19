@@ -7,8 +7,6 @@ public final class FavoritePlacesStore: ObservableObject {
     @Published public private(set) var loadState: FavoritePlacesLoadState = .ready
     @Published public private(set) var error: FavoritePlacesFailure?
     private let persistence: any FavoritePlacesPersistence
-    private let transferOwnerID = UUID()
-    private var transferHold: TransferHold?
     // A label editor may remove and re-add its immutable place snapshot. Only
     // successfully persisted labels enter this cache; drafts never reach it.
     private var rememberedLabels: [FavoritePlaceKey: String] = [:]
@@ -24,35 +22,14 @@ public final class FavoritePlacesStore: ObservableObject {
             self.error = failure
         }
     }
-    public var canMutate: Bool { loadState == .ready && transferHold == nil }
-    public func acquireTransferHold() -> TransferHold? {
-        guard transferHold == nil, loadState == .ready, error == nil else { return nil }
-        let hold = TransferHold(ownerID: transferOwnerID, tokenID: UUID())
-        transferHold = hold
-        return hold
-    }
+    public var canMutate: Bool { loadState == .ready }
     @discardableResult
-    public func releaseTransferHold(_ token: TransferHold) -> Bool {
-        guard transferHold == token,
-              token.ownerID == transferOwnerID else { return false }
-        transferHold = nil
-        return true
-    }
-    public func transferArchive(using token: TransferHold) throws -> Data {
-        guard transferHold == token, token.ownerID == transferOwnerID,
-              loadState == .ready, error == nil else { throw FavoritePlacesFailure.unavailable }
-        let raw = try persistence.transferSnapshot()
-        let data = try raw ?? TransferArchiveCodec.emptyFavoritePlaces()
-        let decoded = try TransferArchiveCodec.favoritePlaces(data)
-        guard decoded == favorites else { throw FavoritePlacesFailure.corruptArchive }
-        return data
-    }
     public func favorite(for place: MapPlace) -> FavoritePlace? {
         guard let key = FavoritePlaceKey(place: place) else { return nil }
         return favorites.first { $0.key == key }
     }
     public func isFavorite(_ place: MapPlace) -> Bool { favorite(for: place) != nil }
-    public func clearError() { guard transferHold == nil else { return }; error = nil }
+    public func clearError() { error = nil }
 
     @discardableResult public func toggle(_ place: MapPlace) -> Bool {
         guard canMutate else { return false }

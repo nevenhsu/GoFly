@@ -270,23 +270,6 @@ struct GoFlyDeviceSettingsPage: View {
                 .foregroundStyle(GoFlyStyle.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(goFlyString("settings.device.signingGuideTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.device.signingGuide"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .settingsCard()
-            .accessibilityIdentifier("settings.device.signingGuide")
-
-            if service.error == .pairingRequired || service.error == .identityMismatch || service.error == .devicePreparationRequired {
-                Text(goFlyString("settings.device.repairGuide"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .settingsCard()
-            }
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in

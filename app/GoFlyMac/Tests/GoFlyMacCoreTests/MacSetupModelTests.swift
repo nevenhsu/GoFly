@@ -154,7 +154,7 @@ import GoFlyMacCore
         app.openDevices(firstInstall: false)
         app.select("00008110-ffffffffffffffff")
         app.refreshDevices()
-        app.navigate(.reinstall)
+        app.navigate(.devices)
         app.switchMode(preview: true)
         #expect(!app.isPreview)
         #expect(app.page == .install && app.selectedID == original.deviceID)
