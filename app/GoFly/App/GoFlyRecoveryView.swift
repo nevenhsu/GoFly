@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A data-only recovery projection. Actions use the existing controller gates.
 struct GoFlyRecoveryView: View {
-    @ObservedObject var recovery: MovementRecoveryController
+    @ObservedObject var recovery: ConnectionRecoveryController
     @ObservedObject var store: SessionRecoveryStore
     @ObservedObject var service: ServiceController
     var maximumHeight: CGFloat

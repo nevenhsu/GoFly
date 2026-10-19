@@ -43,7 +43,7 @@ public final class MovementContinuationController: ObservableObject {
     private let service: ServiceController
     private let route: RouteExecutionController
     private let joystick: JoystickMovementController
-    private let recovery: MovementRecoveryController
+    private let recovery: ConnectionRecoveryController
     private let presentation: @MainActor @Sendable (ContinuedProcessingKind, ContinuedProcessingProgress) -> (title: String, subtitle: String)
     private var runtime: ContinuedProcessingController!
     private var subscriptions: [AnyCancellable] = []
@@ -58,7 +58,7 @@ public final class MovementContinuationController: ObservableObject {
     private var handlingRuntimeLoss = false
 
     public init(service: ServiceController, route: RouteExecutionController,
-                joystick: JoystickMovementController, recovery: MovementRecoveryController,
+                joystick: JoystickMovementController, recovery: ConnectionRecoveryController,
                 driver: any ContinuedProcessingDriving,
                 presentation: @escaping @MainActor @Sendable (ContinuedProcessingKind, ContinuedProcessingProgress) -> (title: String, subtitle: String)) {
         self.service = service; self.route = route; self.joystick = joystick

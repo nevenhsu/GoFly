@@ -20,7 +20,7 @@ struct MovementContinuationSubmissionTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: clock)
         let driver = SubmissionHoldingDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -77,7 +77,7 @@ struct MovementContinuationSubmissionTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: clock)
         let driver = SubmissionHoldingDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -134,7 +134,7 @@ struct MovementContinuationSubmissionTests {
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock,
             wanderBearingSamples: { [90] })
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: clock)
         let driver = SubmissionHoldingDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,

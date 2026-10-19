@@ -11,7 +11,7 @@ final class GoFlyMovementModel: ObservableObject {
     @Published private(set) var presentationMode: SessionMapMode
     let route: RouteExecutionController
     let joystick: JoystickMovementController
-    let recovery: MovementRecoveryController
+    let recovery: ConnectionRecoveryController
     let continuation: MovementContinuationController
     private var mapAdmission: (@MainActor () -> Bool)?
 
@@ -24,7 +24,7 @@ final class GoFlyMovementModel: ObservableObject {
         )
         _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
         joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
-        recovery = MovementRecoveryController(
+        recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
             probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
         )
@@ -80,7 +80,7 @@ struct GoFlyMapView: View {
     let setupMetadata: GoFlySetupMetadata?
     @ObservedObject private var route: RouteExecutionController
     @ObservedObject private var joystick: JoystickMovementController
-    @ObservedObject private var recovery: MovementRecoveryController
+    @ObservedObject private var recovery: ConnectionRecoveryController
     @ObservedObject private var continuation: MovementContinuationController
     private var mode: GoFlyMapMode {
         get { movement.presentationMode }

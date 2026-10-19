@@ -169,7 +169,7 @@ struct GoFlyBackgroundSettingsPage: View {
 }
 
 struct GoFlyVPNSettingsPage: View {
-    @ObservedObject var recovery: MovementRecoveryController
+    @ObservedObject var recovery: ConnectionRecoveryController
     @StateObject private var status = GoFlySystemStatus()
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 

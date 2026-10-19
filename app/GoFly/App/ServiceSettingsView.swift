@@ -6,7 +6,7 @@ import UIKit
 struct ServiceSettingsView: View {
     @ObservedObject var service: ServiceController
     @ObservedObject var continuation: MovementContinuationController
-    @ObservedObject var recovery: MovementRecoveryController
+    @ObservedObject var recovery: ConnectionRecoveryController
     let setupMetadata: GoFlySetupMetadata?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var systemStatus = GoFlySystemStatus()

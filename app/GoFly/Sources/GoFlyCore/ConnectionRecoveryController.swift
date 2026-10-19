@@ -4,7 +4,7 @@ import Foundation
 /// Coordinates foreground reachability checks and the data-only recovery
 /// projection. It never creates a movement owner or resumes a controller.
 @MainActor
-public final class MovementRecoveryController: ObservableObject {
+public final class ConnectionRecoveryController: ObservableObject {
     @Published public private(set) var connectionState: VPNCheckState = .unknown
     @Published public private(set) var isChecking = false
     @Published public private(set) var isResettingTunnel = false
@@ -542,4 +542,11 @@ public final class MovementRecoveryController: ObservableObject {
 
         return nil
     }
+}
+
+public enum TunnelResetState: Equatable, Sendable {
+    case idle
+    case running(id: UUID)
+    case succeeded(id: UUID)
+    case failed(id: UUID, failure: DeviceServiceFailure)
 }

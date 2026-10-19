@@ -20,7 +20,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationRecordingDriver()
         let presentation = ContinuationPresentationTitle()
@@ -70,7 +70,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(
             draft: draft, planner: ContinuationPlanner(), commands: service, search: ContinuationSearch())
         let joystick = JoystickMovementController(commands: service)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe())
         let driver = ContinuationRecordingDriver()
 
@@ -104,7 +104,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(
             draft: draft, planner: ContinuationPlanner(), commands: service, search: ContinuationSearch())
         let joystick = JoystickMovementController(commands: service)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe())
         let driver = ContinuationHoldingDriver()
         let controller = MovementContinuationController(
@@ -157,7 +157,7 @@ struct MovementContinuationControllerTests {
             draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationRejectingDriver()
         let controller = MovementContinuationController(
@@ -205,7 +205,7 @@ struct MovementContinuationControllerTests {
             draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationRecordingDriver()
         let controller = MovementContinuationController(
@@ -261,7 +261,7 @@ struct MovementContinuationControllerTests {
             draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(
@@ -315,7 +315,7 @@ struct MovementContinuationControllerTests {
             draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(
@@ -357,7 +357,7 @@ struct MovementContinuationControllerTests {
             draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(
+        let recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick, probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(
@@ -425,7 +425,7 @@ struct MovementContinuationControllerTests {
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock,
             wanderBearingSamples: { [90] })
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: clock)
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -470,7 +470,7 @@ struct MovementContinuationControllerTests {
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock,
             wanderBearingSamples: { [90] })
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -531,7 +531,7 @@ struct MovementContinuationControllerTests {
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: joystickClock,
             wanderBearingSamples: { [90] })
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -602,7 +602,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -695,7 +695,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         let driver = ContinuationGrantDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -754,7 +754,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         let driver = ContinuationAcceptedWithoutLaunchDriver()
         let controller = MovementContinuationController(service: service, route: route, joystick: joystick,
@@ -804,7 +804,7 @@ struct MovementContinuationControllerTests {
         let route = RouteExecutionController(draft: draft, planner: ContinuationPlanner(), commands: service,
             search: ContinuationSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let recovery = MovementRecoveryController(service: service, route: route, joystick: joystick,
+        let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
             probe: ContinuationProbe(), clock: ContinuousRouteClock())
         var requested: [MovementContinuationIdentity] = []
         var withdrawn: [MovementContinuationIdentity] = []
