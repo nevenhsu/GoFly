@@ -39,6 +39,25 @@ struct ConnectionRecoveryControllerTests {
         #expect(service.canTeleport)
     }
 
+    @Test func coldClearFailureStaysSilentAndDoesNotBlockStart() async throws {
+        let device = RecoveryControllerDevice(failClear: true)
+        let service = ServiceController(service: device)
+        let retained = SessionRecoverySnapshot(activeMovement: .manual,
+            uncertainty: SessionMovementUncertainty(source: .unverifiedPreviousMovement))
+        let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
+                                               search: RecoveryControllerSearch())
+        let recovery = ConnectionRecoveryController(service: service, route: route,
+            joystick: JoystickMovementController(commands: service), probe: RecoveryControllerProbe(),
+            retainedColdSnapshot: retained)
+        await wait { await device.clearAttempts == 1 && !service.nativeBusy }
+        #expect(service.error == nil)
+        #expect(service.phase == .stopped)
+        #expect(service.coldClearPending)
+        #expect(recovery.requiresColdConfirmation)
+        #expect(service.start())
+        await wait { service.phase == .ready && !service.nativeBusy }
+    }
+
     @Test func failedProbeClosesAdmissionWithoutRewritingNativeFailure() async throws {
         let device = RecoveryControllerDevice()
         let service = ServiceController(service: device)
@@ -420,6 +439,8 @@ private actor RecoverySequenceProbe: TunnelProbing {
 private actor RecoveryControllerDevice: DeviceService {
     let holdPrepare: Bool
     let holdClear: Bool
+    let failClear: Bool
+    private(set) var clearAttempts = 0
     let holdMoveBeforeClaim: Bool
     let holdFirstMoveAfterClaim: Bool
     let holdMoveAfterClaim: Bool
@@ -433,10 +454,10 @@ private actor RecoveryControllerDevice: DeviceService {
     private(set) var moveCount = 0
     private var moveWaiter: CheckedContinuation<Void, Never>?
 
-    init(holdPrepare: Bool = false, holdClear: Bool = false, holdMoveBeforeClaim: Bool = false,
+    init(holdPrepare: Bool = false, holdClear: Bool = false, failClear: Bool = false, holdMoveBeforeClaim: Bool = false,
          holdFirstMoveAfterClaim: Bool = false,
          holdMoveAfterClaim: Bool = false, holdMoveAfterFirstClaim: Bool = false) {
-        self.holdPrepare = holdPrepare; self.holdClear = holdClear
+        self.holdPrepare = holdPrepare; self.holdClear = holdClear; self.failClear = failClear
         self.holdMoveBeforeClaim = holdMoveBeforeClaim
         self.holdFirstMoveAfterClaim = holdFirstMoveAfterClaim
         self.holdMoveAfterClaim = holdMoveAfterClaim
@@ -448,7 +469,9 @@ private actor RecoveryControllerDevice: DeviceService {
     }
     func releasePrepare() { prepareWaiter?.resume(); prepareWaiter = nil }
     func clearLocation() async throws {
+        clearAttempts += 1
         clearStarted = true
+        if failClear { throw DeviceServiceFailure.serviceUnavailable }
         if holdClear { await withCheckedContinuation { clearWaiter = $0 } }
     }
     func releaseClear() { clearWaiter?.resume(); clearWaiter = nil }

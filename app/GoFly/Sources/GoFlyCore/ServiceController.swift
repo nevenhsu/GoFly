@@ -16,6 +16,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// service health or changes the current task lease.
     @Published public private(set) var movementConnectionAvailable = true
     @Published public private(set) var coldClearPending = false
+    private var coldClearAttempt = false
     @Published public private(set) var tunnelResetState: TunnelResetState = .idle
 
     private struct DisplayedPosition {
@@ -343,6 +344,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     public func beginColdClear() -> Bool {
         guard coldClearPending, phase == .stopped, !nativeBusy, outstandingWork == 0,
               clearState != .confirmed, !clearScheduled else { return false }
+        coldClearAttempt = true
         beginClear()
         phase = .stopping
         nativeBusy = true
@@ -799,16 +801,25 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                     resolveJoystickBeginning(owner, outcome: .prepared)
                 }
                 if operation == .stopping || operation == .restoring {
+                    coldClearAttempt = false
                     clearState = .confirmed
                     clearConfirmedAt = now()
                 }
             case .failure(let failure):
-                if let preparation { failPreparation(preparation, failure: failure) }
-                phase = preparation?.wasReady == true ? .ready : .stopped
-                error = failure
-                if operation == .stopping || operation == .restoring {
+                if operation == .stopping, coldClearAttempt {
+                    coldClearAttempt = false
+                    phase = .stopped
+                    error = nil
                     clearState = .unknown
                     clearConfirmedAt = nil
+                } else {
+                    if let preparation { failPreparation(preparation, failure: failure) }
+                    phase = preparation?.wasReady == true ? .ready : .stopped
+                    error = failure
+                    if operation == .stopping || operation == .restoring {
+                        clearState = .unknown
+                        clearConfirmedAt = nil
+                    }
                 }
             case .point(let outcome):
                 if let point { completePoint(point, outcome: outcome) }
