@@ -9,7 +9,6 @@ import Foundation
 public enum MacBundleResourceEntry: String, CaseIterable, Sendable {
     case checkScript = "Contents/Resources/Bridge/bridge.py"
     case localConfiguration = "Contents/Resources/LocalConfiguration.json"
-    case setupScript = "Contents/Resources/Bridge/Setup/setup_bridge.py"
     case setupInit = "Contents/Resources/Bridge/Setup/__init__.py"
     case setupAdapters = "Contents/Resources/Bridge/Setup/setup_adapters.py"
     case setupConfig = "Contents/Resources/Bridge/Setup/setup_config.py"

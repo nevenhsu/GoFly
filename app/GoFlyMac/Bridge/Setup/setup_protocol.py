@@ -1,4 +1,4 @@
-"""Strict protocol-2 codec for the formal GoFly first-install producer."""
+"""Strict setup bridge codec for the formal GoFly first-install producer."""
 
 from __future__ import annotations
 
@@ -8,79 +8,26 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-PROTOCOL = 2
-MAX_REQUEST_BYTES = 32 * 1024
-MAX_RESPONSE_BYTES = 256 * 1024
-TARGET_BUNDLE_ID = "com.neven.gofly"
-TARGET_NAME = "GoFly"
-UUID_RE = re.compile(
-    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z"
-)
-UDID_RE = re.compile(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{16}|[0-9a-fA-F]{40})\Z")
-TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
-SAFE_ERROR_CODES = frozenset(
-    {
-        "invalid-request",
-        "protocol-mismatch",
-        "configuration-invalid",
-        "dependency-mismatch",
-        "runtime-api-mismatch",
-        "environment-not-ready",
-        "device-disconnected",
-        "trust-required",
-        "developer-mode-required",
-        "unsupported-os",
-        "identity-mismatch",
-        "app-already-installed", "app-not-installed", "app-running",
-        "signing-required",
-        "signature-invalid",
-        "artifact-mismatch",
-        "support-unavailable",
-        "pairing-unknown",
-        "pairing-rejected",
-        "handoff-unknown",
-        "commit-unknown",
-        "transaction-unknown",
-        "transaction-conflict",
-        "busy",
-        "cancelled",
-        "timeout",
-        "storage-unavailable",
-        "operation-failed",
-    }
-)
-_ACTIONS = frozenset({"preflight", "apply", "status", "resume"})
-_MODES = frozenset({"install", "renew"})
-_SOURCES = frozenset({"signedApp", "project"})
-_STAGES = frozenset({"preflight", "artifact", "pairing", "install", "support", "handoff", "complete"})
-_OUTCOMES = frozenset({"ready", "inProgress", "confirmed", "unknown", "failed"})
+try:
+    from ..wire import WireError, UUID_RE, TEAM_RE, parse_object, response as wire_response, encode as wire_encode
+except ImportError:  # direct/top-level import from the Setup directory
+    import sys as _sys
+    from pathlib import Path as _Path
+    _root = str(_Path(__file__).resolve().parents[1])
+    if _root not in _sys.path:
+        _sys.path.append(_root)
+    from wire import WireError, UUID_RE, TEAM_RE, parse_object, response as wire_response, encode as wire_encode
+
+SetupBridgeError = WireError
 
 
-class SetupBridgeError(Exception):
-    """A fixed safe error code suitable for the protocol boundary."""
-
-    def __init__(self, code: str):
-        self.code = code if code in SAFE_ERROR_CODES else "operation-failed"
-        super().__init__(self.code)
-
-
-def _object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise SetupBridgeError("invalid-request")
-        result[key] = value
-    return result
-
-
-def _parse_object(data: bytes, *, limit: int) -> dict[str, Any]:
+def _parse_object(data: bytes, *, limit: int = 32 * 1024) -> dict[str, Any]:
     if not isinstance(data, bytes) or len(data) > limit:
         raise SetupBridgeError("invalid-request")
     try:
         value = json.loads(
             data.decode("utf-8"),
-            object_pairs_hook=_object_pairs,
+            object_pairs_hook=_pairs,
             parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, SetupBridgeError):
@@ -90,17 +37,37 @@ def _parse_object(data: bytes, *, limit: int) -> dict[str, Any]:
     return value
 
 
+def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise SetupBridgeError("invalid-request")
+        result[key] = value
+    return result
+
+
 def _uuid(value: Any) -> str:
     if not isinstance(value, str) or UUID_RE.fullmatch(value) is None:
         raise SetupBridgeError("invalid-request")
     return value.lower()
 
 
+MAX_REQUEST_BYTES = 32 * 1024
+MAX_RESPONSE_BYTES = 256 * 1024
+TARGET_BUNDLE_ID = "com.neven.gofly"
+TARGET_NAME = "GoFly"
+_ACTIONS = frozenset({"preflight", "apply", "status", "resume"})
+_MODES = frozenset({"install", "renew"})
+_SOURCES = frozenset({"signedApp", "project"})
+_STAGES = frozenset({"preflight", "artifact", "pairing", "install", "support", "handoff", "complete"})
+_OUTCOMES = frozenset({"ready", "inProgress", "confirmed", "unknown", "failed"})
+
+
 def normalized_device(value: Any) -> str:
     if not isinstance(value, str):
         raise SetupBridgeError("invalid-request")
     candidate = value.strip().lower()
-    if UDID_RE.fullmatch(candidate) is None:
+    if re.fullmatch(r"(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})", candidate) is None:
         raise SetupBridgeError("invalid-request")
     return candidate
 
@@ -132,9 +99,7 @@ class SetupRequest:
 
     def as_dict(self) -> dict[str, Any]:
         value: dict[str, Any] = {
-            "protocol": PROTOCOL,
             "requestID": self.request_id,
-            "operation": "setup",
             "action": self.action,
             "setupID": self.setup_id,
             "deviceID": self.device_id,
@@ -170,16 +135,12 @@ def _decode_options(value: Any) -> SetupOptions:
     return SetupOptions(source, artifact, team, allow)
 
 
-def decode_request(data: bytes) -> SetupRequest:
-    value = _parse_object(data, limit=MAX_REQUEST_BYTES)
-    if "protocol" not in value:
+def decode_request(data: Any) -> SetupRequest:
+    value = parse_object(data) if isinstance(data, bytes) else data
+    if not isinstance(value, Mapping):
         raise SetupBridgeError("invalid-request")
-    if value.get("protocol") != PROTOCOL or type(value.get("protocol")) is not int:
-        raise SetupBridgeError("protocol-mismatch")
-    required = {"protocol", "requestID", "operation", "action", "setupID", "deviceID", "mode"}
+    required = {"requestID", "action", "setupID", "deviceID", "mode"}
     if set(value) - required - {"options"}:
-        raise SetupBridgeError("invalid-request")
-    if value.get("operation") != "setup" or not isinstance(value.get("operation"), str):
         raise SetupBridgeError("invalid-request")
     request_id = _uuid(value.get("requestID"))
     setup_id = _uuid(value.get("setupID"))
@@ -264,39 +225,9 @@ def encode_response(
     payload: Mapping[str, Any] | None = None,
     code: str | None = None,
 ) -> bytes:
-    if isinstance(request, SetupRequest):
-        request_value = request.as_dict()
-    elif isinstance(request, Mapping):
-        request_value = dict(request)
-    else:
-        raise SetupBridgeError("operation-failed")
-    request_id = request_value.get("requestID")
-    setup_id = request_value.get("setupID")
-    device_id = request_value.get("deviceID")
-    if not isinstance(request_id, str) or not isinstance(setup_id, str) or not isinstance(device_id, str):
-        raise SetupBridgeError("operation-failed")
-    if status not in {"ok", "error"}:
-        raise SetupBridgeError("operation-failed")
-    response: dict[str, Any] = {
-        "protocol": PROTOCOL,
-        "requestID": request_id,
-        "operation": "setup",
-        "action": request_value.get("action"),
-        "setupID": setup_id,
-        "deviceID": device_id,
-        "status": status,
-    }
-    if status == "error":
-        if code not in SAFE_ERROR_CODES:
-            code = "operation-failed"
-        response["code"] = code
-        response["payload"] = _response_payload(dict(payload) if payload is not None else _default_error_payload())
-    else:
-        response["payload"] = _response_payload(dict(payload or {}))
-    encoded = json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    if len(encoded) > MAX_RESPONSE_BYTES:
-        raise SetupBridgeError("operation-failed")
-    return encoded
+    request_value = request.as_dict() if isinstance(request, SetupRequest) else dict(request)
+    body = _response_payload(dict(payload) if payload is not None else _default_error_payload()) if status == "error" else _response_payload(dict(payload or {}))
+    return wire_encode(wire_response(request_value, status=status, payload=body, code=code))
 
 
 def error_response(
@@ -304,21 +235,8 @@ def error_response(
     code: str,
     payload: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build a response dict for callers that need to emit structured JSON."""
-
-    value = request if isinstance(request, Mapping) else {}
-    result: dict[str, Any] = {
-        "protocol": PROTOCOL,
-        "requestID": value.get("requestID") if isinstance(value.get("requestID"), str) else None,
-        "operation": "setup",
-        "action": value.get("action") if isinstance(value.get("action"), str) else None,
-        "setupID": value.get("setupID") if isinstance(value.get("setupID"), str) else None,
-        "deviceID": value.get("deviceID") if isinstance(value.get("deviceID"), str) else None,
-        "status": "error",
-        "code": code if code in SAFE_ERROR_CODES else "operation-failed",
-    }
-    result["payload"] = _response_payload(dict(payload) if payload is not None else _default_error_payload())
-    return result
+    body = _response_payload(dict(payload) if payload is not None else _default_error_payload())
+    return wire_response(request, status="error", payload=body, code=code)
 
 
 def _default_error_payload() -> dict[str, Any]:

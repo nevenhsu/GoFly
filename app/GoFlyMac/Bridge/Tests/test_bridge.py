@@ -66,15 +66,14 @@ class BridgeTests(unittest.TestCase):
     def device(self, rows, client=None):
         return FakeDeviceModule(rows, client)
 
-    def test_protocol_uuid_and_bounds(self):
-        self.assertEqual(bridge._validate_request({"protocol": 1, "requestID": RID, "action": "devices"}), "devices")
-        with self.assertRaisesRegex(bridge.BridgeError, "protocol-mismatch"):
-            bridge._validate_request({"protocol": 2, "requestID": RID, "action": "devices"})
+    def test_request_uuid_and_bounds(self):
+        self.assertEqual(bridge._validate_request({"requestID": RID, "action": "devices"}), "devices")
         with self.assertRaisesRegex(bridge.BridgeError, "invalid-request"):
-            bridge._validate_request({"protocol": 1, "requestID": "bad", "action": "devices"})
-        self.assertEqual(len(bridge._request_bytes(io.BytesIO(b"a" * bridge.MAX_REQUEST_BYTES))), bridge.MAX_REQUEST_BYTES)
+            bridge._validate_request({"requestID": "bad", "action": "devices"})
+        self.assertEqual(len(bridge.read_request(io.BytesIO(b"a" * bridge.MAX_REQUEST_BYTES))),
+                         bridge.MAX_REQUEST_BYTES)
         with self.assertRaises(bridge.BridgeError):
-            bridge._request_bytes(io.BytesIO(b"a" * (bridge.MAX_REQUEST_BYTES + 1)))
+            bridge.read_request(io.BytesIO(b"a" * (bridge.MAX_REQUEST_BYTES + 1)))
 
     def test_internal_error_codes_are_normalized(self):
         self.assertEqual(bridge._map_error("SECRET-PAIRING-DATA"), "operation-failed")
@@ -94,10 +93,10 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(instance._find_device(rows, UDID, "wifi")[2], "Network")
         with self.assertRaisesRegex(bridge.BridgeError, "device-disconnected"):
             instance._find_device(rows[1:], UDID, "wifi")
-        self.assertEqual(bridge._validate_request({"protocol": 1, "requestID": RID, "action": "inspect",
+        self.assertEqual(bridge._validate_request({"requestID": RID, "action": "inspect",
                                                  "deviceID": UDID, "transport": "wifi"}), "inspect")
         with self.assertRaisesRegex(bridge.BridgeError, "invalid-request"):
-            bridge._validate_request({"protocol": 1, "requestID": RID, "action": "inspect",
+            bridge._validate_request({"requestID": RID, "action": "inspect",
                                       "deviceID": UDID, "transport": ["wifi"]})
 
     def test_inspect_uses_exact_usb_autopair_false_and_developer_mode(self):
@@ -115,7 +114,7 @@ class BridgeTests(unittest.TestCase):
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
         response = bridge.Bridge(self.config(), device).handle(
-            {"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID}
+            {"requestID": RID, "action": "inspect", "deviceID": UDID}
         )
         self.assertEqual(response["status"], "ok")
         self.assertEqual(len(client.loop_ids), 1)
@@ -184,7 +183,7 @@ class BridgeTests(unittest.TestCase):
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
                 instance = bridge.Bridge(self.config(), device)
                 with mock.patch.object(instance, "_installed_info", side_effect=AssertionError("must not query apps")):
-                    response = instance.handle({"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID})
+                    response = instance.handle({"requestID": RID, "action": "inspect", "deviceID": UDID})
                 self.assertEqual(response["status"], "error")
                 self.assertEqual(response["code"], "unsupported-os")
                 self.assertTrue(client.closed)
@@ -198,7 +197,7 @@ class BridgeTests(unittest.TestCase):
             "developerDirectory": str(config.developer_directory),
             "projectPath": str(config.project_path),
         }))
-        request = json.dumps({"protocol": 1, "requestID": RID, "action": "unknown"}).encode()
+        request = json.dumps({"requestID": RID, "action": "unknown"}).encode()
         response = bridge.run_stdio(config_file, stdin=io.BytesIO(request))
         self.assertEqual(response["code"], "invalid-request")
 

@@ -1,49 +1,51 @@
-# GoFlyMac bridge protocol
+# GoFlyMac bridge
 
-The bridge is a one-shot executable. It reads one UTF-8 JSON object from
-stdin (maximum 32 KiB), performs one read-only operation, and writes one
-compact UTF-8 JSON object to stdout (maximum 256 KiB). Libraries and child
-processes have their output captured; stdout is reserved for the response.
+One executable, one request, one response. `Bridge/bridge.py` reads one UTF-8
+JSON object from stdin (maximum 32 KiB) and writes one compact object to stdout
+(maximum 256 KiB). `action` selects the operation; there are no protocol
+numbers. Libraries and child processes have their output captured.
 
-Every request has `protocol: 1`, a UUID `requestID`, and an `action` of
-`environment`, `devices`, or `inspect`. No signing, pairing, installation,
-repair, or renewal is performed by this version.
+Requests carry a UUID `requestID` and an `action`:
+
+- `environment`, `devices`, `inspect`: read-only device checks.
+- `preflight`, `apply`, `status`, `resume`: formal setup or renewal.
+
+Setup requests add UUID `setupID`, a `deviceID`, `mode` (`install` or `renew`),
+and, for `preflight`/`apply`, an exact `options` object (`source`,
+`artifactPath`, `teamID`, `allowProvisioningUpdates`). `inspect` accepts an
+optional `transport` of `usb` or `wifi`; no transport is guessed.
 
 Successful responses have `status: "ok"` and a `payload`; failures have
-`status: "error"` and a stable `code`. The request ID is echoed when it was
-syntactically available.
+`status: "error"` and a stable `code`. The `requestID` and `action` are echoed.
 
-The error code set accepted by the Swift client is: `invalid-request`,
-`protocol-mismatch`, `environment-not-ready`,
-`device-disconnected`, `trust-required`, `developer-mode-required`,
-`unsupported-os`, `identity-mismatch`, `signing-required`,
-`operation-failed`, `busy`, `usb-lockdown-failed`, `usb-device-not-found`,
-`device-identity-mismatch`, `unsupported-os-version`, `runtime-unavailable`,
-`dependency-mismatch`, `device-values-unavailable`, `runtime-api-mismatch`,
-`timeout`, and `configuration-invalid`.
+## Read-only actions
 
-`environment` reports `ready`, safe check rows (`id`, `title`, `detail`, and
-`passed`), and the independently detected Xcode Personal Team (`teamID`, or
-`null`). A missing Personal Team does not make read-only management
-unavailable.
+`environment` reports `ready`, safe check rows, and the Xcode Personal Team.
+`devices` lists exact usbmux USB and Network observations; duplicate IDs and
+transports collapse while both transports remain selectable. `inspect` requires
+`deviceID`, pins the selected transport, opens lockdown with `autopair=false`,
+and returns identity, OS, developer mode, installed app, LocalDevVPN presence,
+and signing evidence that is actually known (otherwise `null`).
 
-`devices` lists exact usbmux USB and Network observations. Device IDs are
-normalized to lowercase; duplicate observations of the same ID and transport
-collapse, while USB and Network choices remain available independently. The
-GUI shows one row per phone, defaults to USB and offers an explicit connection
-picker when both are observed. Unknown names are an
-empty string and unknown OS versions are `null`; no online devices are
-invented.
+## Setup actions
 
-`inspect` requires `deviceID` and accepts an optional `transport` of `usb` or
-`wifi`. The GUI always pins its selected transport; an unavailable requested
-transport fails instead of falling back. Older requests without `transport`
-retain USB preference. It selects the exact observed transport and
-opens lockdown with `autopair=false` and a private temporary cache. Identity,
-OS version, and developer mode are checked. Installed LocalGo metadata is
-looked up through InstallationProxy when available. Signing evidence,
-LocalDevVPN's bundle ID, and expiry are not guessed, so the corresponding
-fields remain `null` when unavailable; an unsupported developer-mode key also
-remains `null`.
-The GUI creates a fresh selection identity only from an explicit user selection;
-discovery, refresh and repeated inspection do not create another selection.
+`SetupConfiguration` fixes the workspace, interpreter, project, target and
+private state root. `JournalStore` owns `stateRoot/journal.json` and
+`operation.lock`; writes use a private temporary file, fsync, and atomic
+replacement. Reads never create or repair state.
+
+All setup mutations require the one lease. A proven completed install journal
+may be replaced for a later explicit setup on another device; a completed renew
+journal may be replaced by the next explicit renew. Unresolved same-device
+state remains a conflict.
+
+`mode: "install"` runs `artifact → pairing → install → support → handoff →
+complete`; it refuses an already installed app. `mode: "renew"` requires an
+installed app (`app-not-installed` otherwise), overwrites the same bundle, and
+runs only `artifact → install → complete`. Renew never pairs, installs support,
+or hands off; its confirmed payload carries the signed profile's `expiresAt`
+(or `null`). An unknown install is never adopted or resubmitted.
+
+`preflight` validates options and device state without writing. `apply` creates
+the journal and performs the stages. `status` and `resume` bind the original
+setup, device, and mode; an explicit resume may only continue that transaction.

@@ -10,9 +10,7 @@ import GoFlyMacCore
         let id = UUID()
         let request = try MacSetupRequest(action: .preflight, setupID: id, deviceID: device, options: options)
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
-        #expect(Set(object.keys) == ["protocol", "operation", "requestID", "setupID", "deviceID", "mode", "action", "options"])
-        #expect(object["protocol"] as? Int == 2)
-        #expect(object["operation"] as? String == "setup")
+        #expect(Set(object.keys) == ["requestID", "setupID", "deviceID", "mode", "action", "options"])
         #expect(object["mode"] as? String == "install")
         #expect(object["setupID"] as? String == id.uuidString)
         let encodedOptions = try #require(object["options"] as? [String: Any])
@@ -87,11 +85,8 @@ import GoFlyMacCore
         let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
         let valid = String(decoding: try response(for: request), as: UTF8.self)
         let invalid = [
-            "{\"protocol\":1," + valid.dropFirst(),
-            "{\"\\u0070rotocol\":2," + valid.dropFirst(),
             valid.replacingOccurrences(of: "\"proof\":{", with: "\"proof\":{\"supportObserved\":false,"),
-            valid.replacingOccurrences(of: "\"supportObserved\":true", with: "\"supportObserved\":true,\"supportObserved\":false"),
-            valid.replacingOccurrences(of: "\"protocol\":2", with: "\"protocol\":2.0")
+            valid.replacingOccurrences(of: "\"supportObserved\":true", with: "\"supportObserved\":true,\"supportObserved\":false")
         ]
         for wire in invalid {
             #expect(throws: MacSetupFailure.invalidResponse) {
@@ -217,7 +212,7 @@ import GoFlyMacCore
 
     private func response(for request: MacSetupRequest, payload: [String: Any]? = nil) throws -> Data {
         try JSONSerialization.data(withJSONObject: [
-            "protocol": 2, "operation": "setup", "action": request.action.rawValue,
+            "action": request.action.rawValue,
             "requestID": request.requestID.uuidString, "setupID": request.setupID.uuidString,
             "deviceID": request.deviceID, "status": "ok", "payload": payload ?? self.payload()
         ])

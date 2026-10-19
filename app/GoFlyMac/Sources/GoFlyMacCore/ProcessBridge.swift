@@ -8,9 +8,7 @@ public struct BridgeConfiguration: Codable, Sendable {
     public let projectPath: String
     public let targetBundleID: String
     public let targetName: String
-}
 
-extension BridgeConfiguration {
     init(verifiedData data: Data) throws {
         guard !data.isEmpty, data.count <= 32_768 else { throw CheckFailure.unavailable }
         let object = try SetupWireJSON.object(data)
@@ -23,65 +21,136 @@ extension BridgeConfiguration {
             projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
         guard workspaceRoot.hasPrefix("/"), root.path == workspaceRoot,
               !workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
-              pythonPath == root.appendingPathComponent("work/mac-setup-env/bin/python").path,
-              formal,
-              developerDirectory == "/Applications/Xcode.app/Contents/Developer" else {
-            throw CheckFailure.unavailable
-        }
+              pythonPath == root.appendingPathComponent("work/mac-setup-env/bin/python").path, formal,
+              developerDirectory == "/Applications/Xcode.app/Contents/Developer" else { throw CheckFailure.unavailable }
     }
 }
 
-public struct ProcessBridge: MacChecking {
+public struct MacSetupConfiguration: Decodable, Sendable {
+    public let workspaceRoot: String
+    public let pythonPath: String
+    public let developerDirectory: String
+    public let projectPath: String
+    public let targetBundleID: String
+    public let targetName: String
+    public let stateRoot: String
+
+    init(verifiedData data: Data) throws {
+        guard !data.isEmpty, data.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
+        let object = try SetupWireJSON.object(data)
+        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath",
+                                   "targetBundleID", "targetName", "stateRoot"] else {
+            throw MacSetupFailure.invalidRequest
+        }
+        self = try JSONDecoder().decode(Self.self, from: data)
+        try Self.validate(self, failure: MacSetupFailure.invalidRequest)
+    }
+
+    public init(configurationURL: URL) throws {
+        do {
+            guard configurationURL.isFileURL else { throw MacSetupFailure.invalidRequest }
+            let file = open(configurationURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+            guard file >= 0 else { throw MacSetupFailure.invalidRequest }
+            defer { close(file) }
+            var info = stat()
+            guard fstat(file, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+                  info.st_size > 0, info.st_size <= 32_768 else { throw MacSetupFailure.invalidRequest }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4_096)
+            while true {
+                let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
+                if count < 0, errno == EINTR { continue }
+                guard count >= 0, data.count + count <= 32_768 else { throw MacSetupFailure.invalidRequest }
+                if count == 0 { break }
+                data.append(contentsOf: buffer.prefix(count))
+            }
+            guard data.count == info.st_size else { throw MacSetupFailure.invalidRequest }
+            let object = try SetupWireJSON.object(data)
+            guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath",
+                                       "targetBundleID", "targetName", "stateRoot"] else {
+                throw MacSetupFailure.invalidRequest
+            }
+            self = try JSONDecoder().decode(Self.self, from: data)
+            try Self.validate(self, failure: MacSetupFailure.invalidRequest)
+        } catch { throw MacSetupFailure.invalidRequest }
+    }
+
+    static func validate(_ value: MacSetupConfiguration, failure: MacSetupFailure) throws {
+        let workspace = URL(fileURLWithPath: value.workspaceRoot).standardizedFileURL
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("GoFlySetup").path
+        guard value.workspaceRoot.hasPrefix("/"), workspace.path == value.workspaceRoot,
+              !value.workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              value.pythonPath == workspace.appendingPathComponent("work/mac-setup-env/bin/python").path,
+              value.projectPath == workspace.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path,
+              value.developerDirectory == "/Applications/Xcode.app/Contents/Developer",
+              value.targetBundleID == "com.neven.gofly", value.targetName == "GoFly",
+              value.stateRoot == support else { throw failure }
+    }
+}
+
+/// One bounded Python process boundary for both read-only checks and setup.
+public struct ProcessBridge: MacChecking, MacSetupRunning {
+    private enum Role { case readOnly, setup }
+    private let role: Role
     private let configurationURL: URL
     private let scriptURL: URL
-    private let configuration: BridgeConfiguration
+    private let pythonPath: String
+    private let developerDirectory: String
     private let bundleResources: MacBundleResources
     private let initialResourceStamp: MacBundleResourceStamp
 
     public init(configurationURL: URL, scriptURL: URL) throws {
         guard let resources = Bundle.main.resourceURL,
               configurationURL.isFileURL, scriptURL.isFileURL,
-              configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL,
               scriptURL.standardizedFileURL == resources.appendingPathComponent("Bridge/bridge.py").standardizedFileURL,
               (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
                   $0.isRegularFile == true && $0.isSymbolicLink != true
-              }) == true else { throw CheckFailure.unavailable }
-        let bundleURL = Bundle.main.bundleURL
-        let bundleResources: MacBundleResources
+              }) == true else { throw MacSetupFailure.unavailable }
+        let setup = configurationURL.standardizedFileURL == resources.appendingPathComponent("SetupConfiguration.json").standardizedFileURL
+        let readOnly = configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL
+        guard setup || readOnly else { throw MacSetupFailure.unavailable }
         do {
-            bundleResources = try MacBundleResources(bundleURL: bundleURL)
-        } catch {
-            throw CheckFailure.unavailable
-        }
-        let initialResourceStamp: MacBundleResourceStamp
-        do {
-            initialResourceStamp = try bundleResources.stamp()
-            let verifiedConfiguration = try bundleResources.read(.localConfiguration)
-            self = try ProcessBridge(verifiedConfigurationData: verifiedConfiguration,
-                                      configurationURL: configurationURL,
-                                      scriptURL: scriptURL,
-                                      bundleResources: bundleResources,
-                                      initialResourceStamp: initialResourceStamp)
-        } catch let error as CheckFailure {
-            throw error
-        } catch {
-            throw CheckFailure.unavailable
-        }
+            let resourcesBundle = try MacBundleResources(bundleURL: Bundle.main.bundleURL)
+            let stamp = try resourcesBundle.stamp()
+            if setup {
+                let config = try MacSetupConfiguration(verifiedData: resourcesBundle.read(.setupConfiguration))
+                try MacSetupConfiguration.validate(config, failure: MacSetupFailure.unavailable)
+                guard FileManager.default.isExecutableFile(atPath: config.pythonPath),
+                      FileManager.default.fileExists(atPath: config.projectPath) else {
+                    throw MacSetupFailure.unavailable
+                }
+                self.init(role: .setup, configurationURL: configurationURL, scriptURL: scriptURL,
+                          pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
+                          bundleResources: resourcesBundle, initialResourceStamp: stamp)
+            } else {
+                let config = try BridgeConfiguration(verifiedData: resourcesBundle.read(.localConfiguration))
+                guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
+                    throw MacSetupFailure.unavailable
+                }
+                self.init(role: .readOnly, configurationURL: configurationURL, scriptURL: scriptURL,
+                          pythonPath: config.pythonPath, developerDirectory: config.developerDirectory,
+                          bundleResources: resourcesBundle, initialResourceStamp: stamp)
+            }
+        } catch let error as CheckFailure { throw error }
+        catch let error as MacSetupFailure { throw error }
+        catch { throw MacSetupFailure.unavailable }
     }
 
-    private init(verifiedConfigurationData data: Data, configurationURL: URL, scriptURL: URL,
-                 bundleResources: MacBundleResources, initialResourceStamp: MacBundleResourceStamp) throws {
-        self.configuration = try BridgeConfiguration(verifiedData: data)
-        guard FileManager.default.isExecutableFile(atPath: configuration.pythonPath) else {
-            throw CheckFailure.unavailable
-        }
+    private init(role: Role, configurationURL: URL, scriptURL: URL, pythonPath: String,
+                 developerDirectory: String, bundleResources: MacBundleResources,
+                 initialResourceStamp: MacBundleResourceStamp) {
+        self.role = role
         self.configurationURL = configurationURL
         self.scriptURL = scriptURL
+        self.pythonPath = pythonPath
+        self.developerDirectory = developerDirectory
         self.bundleResources = bundleResources
         self.initialResourceStamp = initialResourceStamp
     }
 
     public func check(_ request: CheckRequest) async throws -> Data {
+        guard role == .readOnly else { throw CheckFailure.unavailable }
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw CheckFailure.invalidResponse }
         do { try bundleResources.revalidate() } catch { throw CheckFailure.unavailable }
@@ -89,13 +158,45 @@ public struct ProcessBridge: MacChecking {
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await Task.detached {
-                try runner.run(executable: self.configuration.pythonPath,
+                try runner.run(executable: self.pythonPath,
                                arguments: ["-I", self.scriptURL.path, "--config", self.configurationURL.path],
-                               developerDirectory: self.configuration.developerDirectory,
-                               input: input, timeout: request.action == .inspect ? 100 : 45)
+                               developerDirectory: self.developerDirectory, input: input,
+                               timeout: request.action == .inspect ? 100 : 45)
             }.value
         } onCancel: { runner.cancel(reason: .cancelled) }
     }
+
+    public func run(_ request: MacSetupRequest) async throws -> Data {
+        guard role == .setup else { throw MacSetupFailure.unavailable }
+        let input = try JSONEncoder().encode(request)
+        guard input.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
+        do { try bundleResources.revalidate() } catch { throw MacSetupFailure.unavailable }
+        let process = BoundedProcess()
+        do {
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await Task.detached {
+                    try process.run(executable: self.pythonPath,
+                                    arguments: ["-I", self.scriptURL.path, "--config", self.configurationURL.path],
+                                    developerDirectory: self.developerDirectory, input: input,
+                                    timeout: request.action == .status ? 30 : request.action == .preflight ? 120 : 1_800)
+                }.value
+            } onCancel: { process.cancel(reason: .cancelled) }
+        } catch let error as CheckFailure {
+            switch error {
+            case .cancelled: throw MacSetupFailure.cancelled
+            case .timeout: throw MacSetupFailure.timeout
+            case .unavailable: throw MacSetupFailure.unavailable
+            default: throw MacSetupFailure.invalidResponse
+            }
+        } catch is CancellationError { throw MacSetupFailure.cancelled }
+    }
+}
+
+public struct UnavailableChecker: MacChecking, MacSetupRunning {
+    public init() {}
+    public func check(_ request: CheckRequest) async throws -> Data { throw CheckFailure.unavailable }
+    public func run(_ request: MacSetupRequest) async throws -> Data { throw MacSetupFailure.unavailable }
 }
 
 /// Owns one child. No shell, no logs, bounded output, and group termination on cancellation.
@@ -121,22 +222,18 @@ public final class BoundedProcess: @unchecked Sendable {
             self.lock.lock()
             let active = !self.finished
             self.lock.unlock()
-            if active {
-                kill(-pid, SIGKILL)
-                if child.isRunning { kill(pid, SIGKILL) }
-            }
+            if active { kill(-pid, SIGKILL); if child.isRunning { kill(pid, SIGKILL) } }
         }
     }
 
     public func run(executable: String, arguments: [String], developerDirectory: String, input: Data,
-             timeout: TimeInterval) throws -> Data {
+                    timeout: TimeInterval) throws -> Data {
         let child = Process()
         let output = Pipe()
         let stdin = Pipe()
         let diagnostics = Pipe()
         child.executableURL = URL(fileURLWithPath: executable)
         child.arguments = arguments
-        // Keep system services available, but do not forward the user's Python or library search paths.
         child.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": NSHomeDirectory(),
                              "DEVELOPER_DIR": developerDirectory, "PYTHONDONTWRITEBYTECODE": "1"]
         child.standardInput = stdin
@@ -146,7 +243,6 @@ public final class BoundedProcess: @unchecked Sendable {
         if let failure { lock.unlock(); throw failure }
         guard !finished, process == nil else { lock.unlock(); throw CheckFailure.unavailable }
         process = child
-        // Starting under the same lock closes cancellation's launch race.
         do { try child.run() } catch { finished = true; lock.unlock(); throw CheckFailure.unavailable }
         lock.unlock()
         let deadline = DispatchWorkItem { self.cancel(reason: .timeout) }
@@ -159,8 +255,6 @@ public final class BoundedProcess: @unchecked Sendable {
             try? diagnostics.fileHandleForReading.close()
         }
         let streams = DispatchGroup()
-        // Drain stderr while stdout is read below. Diagnostic bytes never
-        // become response content, and excessive diagnostics fail closed.
         streams.enter()
         DispatchQueue.global().async {
             defer { streams.leave() }
@@ -168,15 +262,10 @@ public final class BoundedProcess: @unchecked Sendable {
             while true {
                 let chunk = diagnostics.fileHandleForReading.availableData
                 if chunk.isEmpty { break }
-                guard size <= 65_536 - chunk.count else {
-                    self.cancel(reason: .invalidResponse)
-                    break
-                }
+                guard size <= 65_536 - chunk.count else { self.cancel(reason: .invalidResponse); break }
                 size += chunk.count
             }
         }
-        // A child may write before reading stdin. Concurrent input prevents
-        // either pipe's capacity from deadlocking the operation.
         streams.enter()
         DispatchQueue.global().async {
             defer { streams.leave() }
@@ -196,7 +285,6 @@ public final class BoundedProcess: @unchecked Sendable {
         streams.wait()
         lock.lock(); let finalFailure = failure; lock.unlock()
         if let finalFailure { throw finalFailure }
-        // Structured error envelopes may deliberately use a nonzero exit status.
         guard !data.isEmpty else { throw CheckFailure.invalidResponse }
         return data
     }

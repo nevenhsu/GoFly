@@ -4,7 +4,7 @@
 The protocol-1 checker keeps one narrow seam to the device dependency: this
 module.  It pins pymobiledevice3 11.31.0 and exposes only what a read-only
 inspection needs: enumerate attached devices and open one lockdown session.
-Pairing records, installation and device support stay in the protocol-2 setup
+Pairing records, installation and device support stay in the setup bridge setup
 bridge, which owns its own candidate records.
 """
 

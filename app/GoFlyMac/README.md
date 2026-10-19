@@ -14,7 +14,7 @@
 
 最後的產品交接另以原 USB iPhone 的實際 App 查詢核對 LocalDevVPN 已安裝，再開放前往裝置管理；缺少或無法確認時保留核對入口，不重做已完成的安裝。正式 bundle ID `com.jkcoxson.LocalDevVPN` 已由 [Apple 公開 metadata](https://itunes.apple.com/lookup?id=6755608044&country=us) 核對，並非以名稱猜測。這個唯讀查詢不控制 VPN，也不代表 VPN 已連線。
 
-重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [protocol 2](Bridge/Setup/README.md)。
+重開 Mac App 會讀取原交易；「查詢原交易」不寫入裝置，「繼續原交易」保留同一裝置與選項。取消仍等待實際程序返回。交易建立前的預檢失敗可保留選項重試；一次性配對交付結果不明時僅顯示查詢，不能重送。若安裝結果遺失，即使後來看到同名 App，也維持待確認，不接管、不重送、不自動移除資料。首次安裝遇到既有 GoFly 會拒絕覆蓋。詳見 [M1 票](../../.scratch/gofly-ios/issues/M1-first-install.md)及 [bridge 契約](Bridge/PROTOCOL.md)。
 
 本次實機修正已進入共用安裝來源：USB 連線保留裝置實際序號大小寫；配對檔保留依賴回傳的文字或二進位 remote unlock 欄位；iOS 26／27 程序控制走已核對身分的 RSD。Apple BuildManifest 的 4 MiB 上限、支援檔案總量的 4 GiB 上限與 256 KiB 交易 JSON 上限分開。Cryptex 優先使用本機 Xcode 支援資料，缺少才下載；實際版本取自受雜湊保護的 `Image.dmg.cryptex_info`，不拿 BuildManifest 的佔位版本比較。已執行中的 GoFly 回報 `app-running`，介面提示關閉手機 App 後繼續原交易，不強制停止或重裝。
 
@@ -31,7 +31,7 @@ open work/gofly-mac/GoFly.app
 
 ## 真實流程與預覽
 
-真實環境檢查沿用 protocol 1 的唯讀裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用分離的 protocol 2，仍只限 USB；protocol 1 仍拒絕安裝請求。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
+真實環境檢查沿用唯讀 bridge 裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用同一個 bridge 的 setup action，仍只限 USB；唯讀 action 不接受安裝。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
 介面預覽持續顯示預覽標示，使用示意裝置與日期；預覽資料不會成為真實交易成功證據。正式尚未實作的操作維持停用。
 

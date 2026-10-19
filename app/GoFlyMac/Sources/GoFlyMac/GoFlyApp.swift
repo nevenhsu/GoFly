@@ -12,9 +12,9 @@ struct GoFlyApp: App {
         let checker: any MacChecking = (try? ProcessBridge(
             configurationURL: resources.appendingPathComponent("LocalConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/bridge.py"))) ?? UnavailableChecker()
-        let setupRunner: any MacSetupRunning = (try? SetupProcessBridge(
+        let setupRunner: any MacSetupRunning = (try? ProcessBridge(
             configurationURL: resources.appendingPathComponent("SetupConfiguration.json"),
-            scriptURL: resources.appendingPathComponent("Bridge/Setup/setup_bridge.py"))) ?? UnavailableSetupRunner()
+            scriptURL: resources.appendingPathComponent("Bridge/bridge.py"))) ?? UnavailableChecker()
         let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("GoFlySetup")
         let setup = MacSetupModel(runner: setupRunner, journal: MacSetupJournalReader(stateRoot: stateRoot))

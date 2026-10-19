@@ -34,57 +34,31 @@ from typing import Any, Iterable, Mapping
 sys.dont_write_bytecode = True
 
 
-PROTOCOL = 1
-MAX_REQUEST_BYTES = 32 * 1024
-MAX_RESPONSE_BYTES = 256 * 1024
-PMD3_VERSION = "11.31.0"
-SUPPORTED_OS_MAJOR = 26
-USB = "USB"
-NETWORK = "Network"
+try:
+    from .wire import (
+        MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, SAFE_ERROR_CODES, UUID_RE, TEAM_RE,
+        WireError, action as wire_action, encode as wire_encode, emit as wire_emit,
+        parse_object, read_request, request_id as wire_request_id, response as wire_response,
+    )
+except ImportError:  # direct script execution from the Bridge directory
+    from wire import (
+        MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, SAFE_ERROR_CODES, UUID_RE, TEAM_RE,
+        WireError, action as wire_action, encode as wire_encode, emit as wire_emit,
+        parse_object, read_request, request_id as wire_request_id, response as wire_response,
+    )
+
+BridgeError = WireError
 DEFAULT_BUNDLE_ID = "com.neven.gofly"
 DEFAULT_TARGET_NAME = "GoFly"
-# Apple lookup for App Store ID 6755608044, verified 2026-10-18.
+PMD3_VERSION = "11.31.0"
 LOCALDEVVPN_BUNDLE_ID = "com.jkcoxson.LocalDevVPN"
+USB = "USB"
+NETWORK = "Network"
+SUPPORTED_OS_MAJOR = 26
 UDID_RE = re.compile(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{16}|[0-9a-fA-F]{40})\Z")
-TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
-UUID_RE = re.compile(
-    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
-    r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\Z"
-)
 _ACTIVE_RUNNER: contextvars.ContextVar[asyncio.Runner | None] = contextvars.ContextVar(
     "gofly_active_runner", default=None
 )
-SAFE_ERROR_CODES = {
-    "invalid-request",
-    "protocol-mismatch",
-    "environment-not-ready",
-    "device-disconnected",
-    "trust-required",
-    "developer-mode-required",
-    "unsupported-os",
-    "identity-mismatch",
-    "signing-required",
-    "operation-failed",
-    "busy",
-    "usb-lockdown-failed",
-    "usb-device-not-found",
-    "device-identity-mismatch",
-    "unsupported-os-version",
-    "runtime-unavailable",
-    "dependency-mismatch",
-    "device-values-unavailable",
-    "runtime-api-mismatch",
-    "timeout",
-    "configuration-invalid",
-}
-
-
-class BridgeError(Exception):
-    """An error code safe to expose over the bridge boundary."""
-
-    def __init__(self, code: str):
-        self.code = code if code in SAFE_ERROR_CODES else "operation-failed"
-        super().__init__(self.code)
 
 
 @dataclass(frozen=True)
@@ -653,25 +627,21 @@ class Bridge:
                 payload = self.devices()
             else:
                 payload = self.inspect(request["deviceID"], request.get("transport"))
-            return {"protocol": PROTOCOL, "requestID": request_id, "status": "ok", "payload": payload}
+            return wire_response(request, status="ok", payload=payload)
         except BridgeError as error:
-            return {"protocol": PROTOCOL, "requestID": request_id, "status": "error", "code": error.code}
+            return wire_response(request, status="error", code=error.code)
         except Exception:
-            return {"protocol": PROTOCOL, "requestID": request_id, "status": "error", "code": "operation-failed"}
+            return wire_response(request, status="error", code="operation-failed")
 
 
 def _validate_request(request: Any) -> str:
     if not isinstance(request, dict):
         raise BridgeError("invalid-request")
-    if type(request.get("protocol")) is not int or request.get("protocol") != PROTOCOL:
-        raise BridgeError("protocol-mismatch")
-    request_id = request.get("requestID")
-    if not isinstance(request_id, str) or not UUID_RE.fullmatch(request_id):
-        raise BridgeError("invalid-request")
-    action = request.get("action")
+    wire_request_id(request)
+    action = wire_action(request)
     if action not in {"environment", "devices", "inspect"}:
         raise BridgeError("invalid-request")
-    allowed = {"protocol", "requestID", "action"}
+    allowed = {"requestID", "action"}
     if action in {"inspect"}:
         allowed.add("deviceID")
         target = request.get("deviceID")
@@ -703,58 +673,161 @@ def _map_error(code: Any) -> str:
     return mapped if mapped in SAFE_ERROR_CODES else "operation-failed"
 
 
-def _request_bytes(stream: Any) -> bytes:
-    reader = getattr(stream, "buffer", stream)
-    data = reader.read(MAX_REQUEST_BYTES + 1)
-    if isinstance(data, str):
-        data = data.encode("utf-8")
-    if not isinstance(data, bytes) or len(data) > MAX_REQUEST_BYTES:
-        raise BridgeError("invalid-request")
-    return data
+def establish_process_group() -> None:
+    try:
+        if os.getpgrp() != os.getpid():
+            os.setsid()
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.setpgrp()
+    if os.getpgrp() != os.getpid():
+        raise BridgeError("environment-not-ready")
 
 
-def run_stdio(config_path: str | Path, *, stdin: Any = None) -> dict[str, Any]:
+def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
+    if config is not None:
+        try:
+            from Setup.setup_journal import JournalStore
+        except ImportError:
+            from setup_journal import JournalStore
+        try:
+            journal = JournalStore(config.state_root).read()
+            if isinstance(journal, dict) and (
+                getattr(request, "setup_id", None) is None or journal.get("setupID") == request.setup_id
+            ) and (
+                getattr(request, "device_id", None) is None or journal.get("deviceID") == request.device_id
+            ):
+                stages = journal.get("stages", {})
+                mode = journal.get("mode", "install")
+                order = ("artifact", "install", "complete") if mode == "renew" else (
+                    "artifact", "pairing", "install", "support", "handoff", "complete"
+                )
+                current, outcome = "complete", "confirmed"
+                for stage in order:
+                    state = stages.get(stage, {}).get("state")
+                    if state in {"unknown", "inflight"}:
+                        current, outcome = stage, "unknown"
+                        break
+                    if state != "confirmed":
+                        current, outcome = stage, "inProgress"
+                        break
+                proof = journal.get("proof", {})
+                if current == "complete" and outcome == "confirmed" and not (
+                    proof.get("installationConfirmed") is True
+                    and (mode == "renew" or (
+                        proof.get("pairingImported") is True and proof.get("supportObserved") is True
+                    ))
+                    and isinstance(journal.get("receiptSHA256"), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", journal["receiptSHA256"]) is not None
+                ):
+                    outcome = "unknown"
+                delivery_state = journal.get("delivery", {}).get("state")
+                payload: dict[str, Any] = {
+                    "stage": current, "outcome": outcome,
+                    "canResume": outcome != "confirmed" and delivery_state not in {"inflight", "unknown"},
+                    "proof": {
+                        "installationConfirmed": proof.get("installationConfirmed") is True,
+                        "pairingImported": proof.get("pairingImported") is True,
+                        "supportObserved": proof.get("supportObserved") is True,
+                    },
+                }
+                artifact = journal.get("intent", {}).get("artifact")
+                if isinstance(artifact, dict):
+                    payload["app"] = {
+                        "bundleID": artifact.get("bundleID"), "build": artifact.get("build"),
+                        "profileSHA256": artifact.get("profileSHA256"),
+                        "executableSHA256": artifact.get("executableSHA256"),
+                    }
+                    payload["teamID"] = journal.get("intent", {}).get("teamID")
+                    payload["expiresAt"] = artifact.get("expiresAt")
+                receipt = journal.get("receiptSHA256")
+                if isinstance(receipt, str) and re.fullmatch(r"[0-9a-f]{64}", receipt) is not None:
+                    payload["receiptSHA256"] = receipt
+                return payload
+        except Exception:
+            pass
+    action = getattr(request, "action", None)
+    stage = action if action in {"preflight", "artifact", "pairing", "install", "support", "handoff"} else "preflight"
+    return {"stage": stage, "outcome": "unknown", "canResume": stage != "preflight" and action not in {"status", "resume"},
+            "proof": {"installationConfirmed": False, "pairingImported": False, "supportObserved": False}}
+
+
+def _setup_response(value: Mapping[str, Any], config_path: Path, *, producer_factory: Any = None) -> dict[str, Any]:
+    try:
+        from Setup.setup_adapters import PinnedPymobiledeviceAdapter, PinnedXcodeProcessAdapter, close_async_runtime
+        from Setup.setup_config import SetupConfiguration
+        from Setup.setup_producer import SetupProducer
+        from Setup.setup_protocol import decode_request
+        from Setup.setup_support import PinnedSupportAdapter
+    except ImportError:
+        from setup_adapters import PinnedPymobiledeviceAdapter, PinnedXcodeProcessAdapter, close_async_runtime
+        from setup_config import SetupConfiguration
+        from setup_producer import SetupProducer
+        from setup_protocol import decode_request
+        from setup_support import PinnedSupportAdapter
+    config = None
+    request = None
+    try:
+        config = SetupConfiguration.load(config_path)
+        config.validate_read_only_paths()
+        request = decode_request(value)
+        if producer_factory is not None:
+            producer = producer_factory(config)
+        else:
+            device = PinnedPymobiledeviceAdapter(state_root=config.state_root)
+            producer = SetupProducer(config, device=device, process=PinnedXcodeProcessAdapter(config),
+                                     support=PinnedSupportAdapter(device))
+        payload = producer.handle(request).as_dict()
+        from Setup.setup_protocol import _response_payload
+        return wire_response(value, status="ok", payload=_response_payload(payload))
+    except WireError as error:
+        return wire_response(value, status="error", code=error.code, payload=_setup_error_payload(request, config))
+    except Exception:
+        return wire_response(value, status="error", code="operation-failed", payload=_setup_error_payload(request, config))
+    finally:
+        try:
+            close_async_runtime()
+        except Exception:
+            pass
+
+
+def run_stdio(config_path: str | Path, *, stdin: Any = None, setup_producer_factory: Any = None,
+              producer_factory: Any = None) -> dict[str, Any]:
     stream = stdin if stdin is not None else sys.stdin
+    setup_producer_factory = setup_producer_factory or producer_factory
     try:
-        data = _request_bytes(stream)
-        request = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, BridgeError):
-        return {"protocol": PROTOCOL, "requestID": None, "status": "error", "code": "invalid-request"}
-    request_id = request.get("requestID") if isinstance(request, dict) else None
-    try:
-        config = Config.load(config_path)
-    except BridgeError as error:
-        return {"protocol": PROTOCOL, "requestID": request_id, "status": "error", "code": error.code}
-    with quiet_dependencies():
-        return Bridge(config).handle(request)
+        value = parse_object(read_request(stream))
+        action = wire_action(value)
+    except WireError as error:
+        return wire_response(None, status="error", code=error.code)
+    if action in {"environment", "devices", "inspect"}:
+        try:
+            _validate_request(value)
+            return Bridge(Config.load(config_path)).handle(value)
+        except WireError as error:
+            return wire_response(value, status="error", code=error.code)
+        except Exception:
+            return wire_response(value, status="error", code="operation-failed")
+    if action in {"preflight", "apply", "status", "resume"}:
+        return _setup_response(value, Path(config_path), producer_factory=setup_producer_factory)
+    return wire_response(value, status="error", code="invalid-request")
 
 
 def _emit(response: dict[str, Any], stream: Any = None) -> None:
-    encoded = json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    if len(encoded) > MAX_RESPONSE_BYTES:
-        response = {
-            "protocol": PROTOCOL,
-            "requestID": response.get("requestID"),
-            "status": "error",
-            "code": "operation-failed",
-        }
-        encoded = json.dumps(response, separators=(",", ":")).encode("utf-8")
-    output = stream if stream is not None else sys.stdout
-    writer = getattr(output, "buffer", output)
-    if hasattr(writer, "write"):
-        try:
-            writer.write(encoded + b"\n")
-            if hasattr(writer, "flush"):
-                writer.flush()
-        except TypeError:
-            output.write(encoded.decode("utf-8") + "\n")
+    try:
+        wire_emit(response, stream)
+    except WireError:
+        wire_emit(wire_response(None, status="error", code="operation-failed"), stream)
 
 
 def main(argv: list[str] | None = None) -> int:
     # The Swift caller terminates the process group on cancellation.  Failure
     # to create a new group is harmless in an embedded test process.
-    with contextlib.suppress(OSError):
-        os.setpgrp()
+    try:
+        establish_process_group()
+    except BridgeError as error:
+        _emit(wire_response(None, status="error", code=error.code))
+        return 1
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config", required=True)
     try:

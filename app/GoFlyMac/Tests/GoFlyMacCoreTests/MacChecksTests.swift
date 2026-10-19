@@ -14,7 +14,7 @@ private struct EchoChecker: MacChecking {
             payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": request.transport?.rawValue ?? "usb"],
                        "developerMode": true, "installed": NSNull(), "vpnInstalled": NSNull()]
         }
-        return try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": request.requestID,
+        return try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
                                                            "status": "ok", "payload": payload])
     }
 }
@@ -76,7 +76,7 @@ private actor HeldChecker: MacChecking {
     #expect(encoded["transport"] as? String == "wifi")
     let request = CheckRequest(action: .environment)
     let oldRequest = CheckRequest(action: .environment)
-    let stale = try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": oldRequest.requestID,
+    let stale = try JSONSerialization.data(withJSONObject: ["requestID": oldRequest.requestID,
         "status": "ok", "payload": ["ready": true, "checks": []]])
     #expect(throws: CheckFailure.invalidResponse) {
         try ResponseDecoder.decode(stale, for: request, as: MacEnvironment.self)
@@ -94,7 +94,7 @@ private actor HeldChecker: MacChecking {
 
 @Test func unknownErrorCannotLeakArbitraryDiagnostics() throws {
     let request = CheckRequest(action: .devices)
-    let data = try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": request.requestID,
+    let data = try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
         "status": "error", "code": "sensitive raw device output"])
     #expect(throws: CheckFailure.invalidResponse) {
         try ResponseDecoder.decode(data, for: request, as: DeviceList.self)

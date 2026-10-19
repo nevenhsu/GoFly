@@ -69,7 +69,7 @@ assert sorted(p.name for p in (bundle / "Contents/Resources/Bridge/Device").iter
 # staged copy and compare it to its exact source before replacing a previous
 # generated app.
 setup_names = [
-    "__init__.py", "setup_adapters.py", "setup_bridge.py", "setup_config.py",
+    "__init__.py", "setup_adapters.py", "setup_config.py",
     "setup_delivery.py", "setup_journal.py", "setup_producer.py",
     "setup_protocol.py", "setup_support.py",
 ]

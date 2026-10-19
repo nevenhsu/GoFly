@@ -1,4 +1,4 @@
-"""Closed protocol-2 setup orchestration over explicit production seams."""
+"""Closed setup bridge setup orchestration over explicit production seams."""
 
 from __future__ import annotations
 

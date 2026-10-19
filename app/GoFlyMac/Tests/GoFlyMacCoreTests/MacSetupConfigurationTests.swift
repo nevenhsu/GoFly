@@ -25,17 +25,17 @@ import GoFlyMacCore
         try Data("# controlled fixture; never executed\n".utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         try FileManager.default.createDirectory(atPath: expected["projectPath"]!, withIntermediateDirectories: true)
-        let outsideScript = directory.appendingPathComponent("Bridge/Setup/setup_bridge.py")
+        let outsideScript = directory.appendingPathComponent("Bridge/not-the-entry.py")
         try FileManager.default.createDirectory(at: outsideScript.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("# controlled fixture; never executed\n".utf8).write(to: outsideScript)
         #expect(throws: MacSetupFailure.unavailable) {
-            try SetupProcessBridge(configurationURL: url, scriptURL: outsideScript)
+            try ProcessBridge(configurationURL: url, scriptURL: outsideScript)
         }
         var formalCheck = expected
         formalCheck.removeValue(forKey: "stateRoot")
         let checkURL = directory.appendingPathComponent("LocalConfiguration.json")
         try JSONSerialization.data(withJSONObject: formalCheck).write(to: checkURL)
-        #expect(throws: CheckFailure.unavailable) {
+        #expect(throws: MacSetupFailure.unavailable) {
             try ProcessBridge(configurationURL: checkURL, scriptURL: outsideScript)
         }
         for (key, invalid) in [

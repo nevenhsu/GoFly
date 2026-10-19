@@ -299,8 +299,3 @@ public final class MacAppModel {
         }
     }
 }
-
-public struct UnavailableChecker: MacChecking {
-    public init() {}
-    public func check(_ request: CheckRequest) async throws -> Data { throw CheckFailure.unavailable }
-}

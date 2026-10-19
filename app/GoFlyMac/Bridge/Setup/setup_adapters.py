@@ -1,4 +1,4 @@
-"""Production-boundary adapters and value types for protocol 2.
+"""Production-boundary adapters and value types for setup bridge.
 
 The producer never constructs a device dependency at import time.  Tests pass
 controlled implementations at these seams; production adapters validate the

@@ -386,7 +386,7 @@ import GoFlyMacCore
 
     private func response(_ request: MacSetupRequest, stage: String, outcome: String, code: String? = nil) throws -> Data {
         var value: [String: Any] = [
-            "protocol": 2, "operation": "setup", "action": request.action.rawValue,
+            "action": request.action.rawValue,
             "requestID": request.requestID.uuidString, "setupID": request.setupID.uuidString,
             "deviceID": request.deviceID, "status": code == nil ? "ok" : "error",
             "payload": ["stage": stage, "outcome": outcome, "canResume": outcome == "unknown",
@@ -410,7 +410,7 @@ private struct RenewChecker: MacChecking {
                        "developerMode": true, "installed": true, "vpnInstalled": true]
         }
         return try JSONSerialization.data(withJSONObject: [
-            "protocol": 1, "requestID": request.requestID, "status": "ok", "payload": payload
+            "requestID": request.requestID, "status": "ok", "payload": payload
         ])
     }
 }
@@ -418,7 +418,7 @@ private struct RenewChecker: MacChecking {
 private struct SetupReadOnlyChecker: MacChecking {
     func check(_ request: CheckRequest) async throws -> Data {
         guard request.action == .environment else { throw CheckFailure.unavailable }
-        return try JSONSerialization.data(withJSONObject: ["protocol": 1, "requestID": request.requestID,
+        return try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
             "status": "ok", "payload": ["ready": true, "checks": [], "teamID": NSNull()]])
     }
 }

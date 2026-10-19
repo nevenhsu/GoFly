@@ -22,13 +22,8 @@ import sys
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PACKAGE_ROOT))
 
-from setup_bridge import (  # noqa: E402
-    SetupBridgeError,
-    decode_request,
-    encode_response,
-    _error_payload,
-    run_stdio,
-)
+from bridge import run_stdio as bridge_run_stdio, _setup_error_payload as _error_payload  # noqa: E402
+from setup_protocol import SetupBridgeError, decode_request, encode_response  # noqa: E402
 from setup_journal import JournalStore  # noqa: E402
 from setup_adapters import (  # noqa: E402
     ArtifactIdentity,
@@ -58,9 +53,7 @@ REQUEST_ID = str(uuid.uuid4())
 
 def request(action: str = "status", **extra: object) -> dict[str, object]:
     value: dict[str, object] = {
-        "protocol": 2,
         "requestID": REQUEST_ID,
-        "operation": "setup",
         "action": action,
         "setupID": SETUP_ID,
         "deviceID": DEVICE,
@@ -1856,10 +1849,10 @@ class RenewB1Tests(unittest.TestCase):
 
 class StdioB1Tests(unittest.TestCase):
     def test_process_group_owns_controlled_child_tree_for_cancel(self) -> None:
-        bridge = Path(__file__).resolve().parents[1] / "setup_bridge.py"
+        bridge = Path(__file__).resolve().parents[2] / "bridge.py"
         script = (
-            "import os, subprocess, sys, time, runpy; "
-            f"m=runpy.run_path({str(bridge)!r}); m['establish_process_group'](); "
+            "import os, subprocess, sys, time; "
+            f"sys.path.insert(0, {str(bridge.parent)!r}); import bridge; bridge.establish_process_group(); "
             "child=subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
             "print(f'{os.getpid()} {child.pid}', flush=True); time.sleep(30)"
         )
@@ -1895,8 +1888,7 @@ class StdioB1Tests(unittest.TestCase):
     def test_invalid_request_has_bounded_protocol2_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "SetupConfiguration.json"
-            response = run_stdio(missing, stdin=io.BytesIO(b"{}"))
-            self.assertEqual(response["protocol"], 2)
+            response = bridge_run_stdio(missing, stdin=io.BytesIO(b"{}"))
             self.assertEqual(response["status"], "error")
             self.assertEqual(response["code"], "invalid-request")
 
@@ -1917,7 +1909,7 @@ class StdioB1Tests(unittest.TestCase):
                 "targetName": "GoFly",
                 "stateRoot": str(state),
             }))
-            response = run_stdio(config, stdin=io.BytesIO(json.dumps(request("status")).encode()))
+            response = bridge_run_stdio(config, stdin=io.BytesIO(json.dumps(request("status")).encode()))
             self.assertEqual(response["code"], "configuration-invalid")
             self.assertFalse(state.exists())
 
@@ -1938,7 +1930,7 @@ class StdioB1Tests(unittest.TestCase):
                 "stateRoot": str(root / "state"),
             }))
             value = request("status")
-            response = run_stdio(config, stdin=io.BytesIO(json.dumps(value).encode()))
+            response = bridge_run_stdio(config, stdin=io.BytesIO(json.dumps(value).encode()))
             self.assertEqual(response["status"], "error")
             self.assertEqual(response["payload"]["outcome"], "unknown")
             self.assertEqual(response["payload"]["stage"], "preflight")
@@ -1972,7 +1964,7 @@ class StdioB1Tests(unittest.TestCase):
                 store.update(journal)
                 raise SetupBridgeError("operation-failed")
 
-            response = run_stdio(config, stdin=io.BytesIO(json.dumps(request("status")).encode()), producer_factory=failing_factory)
+            response = bridge_run_stdio(config, stdin=io.BytesIO(json.dumps(request("status")).encode()), producer_factory=failing_factory)
             self.assertEqual(response["code"], "configuration-invalid")
 
 
