@@ -48,11 +48,13 @@ extension MacRootView {
         case .devices: devicePicker
         case .device:
             StatusCard {
-                StatusRow(title: model.installStatus, detail: versionDetail)
+                StatusRow(title: "手機上的 GoFly", detail: versionDetail)
+                Rule()
+                StatusRow(title: "Mac 專案", detail: projectVersionDetail)
                 Rule()
                 StatusRow(title: "裝置連接", detail: connectionDetail)
                 Rule()
-                StatusRow(title: "簽名狀態", detail: signatureDetail)
+                StatusRow(title: "簽名到期日", detail: signatureDetail)
                 Rule()
                 StatusRow(title: "LocalDevVPN", detail: vpnDetail)
             }
@@ -161,7 +163,7 @@ extension MacRootView {
                     .accessibilityIdentifier("inspect-device")
             case .device:
                 if model.inspection?.installed == true {
-                    PillButton(title: "重新簽名") { model.startRenew() }
+                    PillButton(title: model.renewButtonTitle) { model.startRenew() }
                         .accessibilityIdentifier("renew-signing")
                 }
                 Spacer(minLength: 0)
@@ -185,16 +187,21 @@ extension MacRootView {
         return "\(device.displayName) · \(device.connectionName)\(version)\n\(model.inspection == nil ? "裝置狀態待確認" : "本次身分核對完成")"
     }
     private var versionDetail: String {
-        model.inspection?.appVersion.map { "目前版本 \($0)" } ?? "沒有取得可核對的 App 版本資訊。"
+        guard let inspection = model.inspection, inspection.installed == true else {
+            return model.installStatus
+        }
+        let version = inspection.appVersion ?? "待確認"
+        let build = inspection.appBuild ?? "待確認"
+        return "版本 \(version) · build \(build)"
+    }
+    private var projectVersionDetail: String {
+        let version = model.environment?.projectVersion ?? "待確認"
+        let build = model.environment?.projectBuild ?? "待確認"
+        return "版本 \(version) · build \(build)"
     }
     private var signatureDetail: String {
-        guard let inspection = model.inspection, let expiry = inspection.expiresAt else {
-            return "待確認。尚未取得已安裝 App 的簽名身分與實際到期日。"
-        }
-        let date = ISO8601DateFormatter().date(from: expiry)
-        let style = Date.FormatStyle(date: .numeric, time: .shortened).locale(Locale(identifier: "zh_TW"))
-        let display = date?.formatted(style) ?? expiry
-        return "到期：\(display)\(date.map { $0 < Date() ? " · 已過期" : "" } ?? "")\n\(inspection.teamID ?? "簽名身分待確認")"
+        let team = model.inspection?.teamID ?? "簽名身分待確認"
+        return "\(model.signingExpiryText)\n\(team)"
     }
     private var developerDetail: String {
         switch model.inspection?.developerMode {

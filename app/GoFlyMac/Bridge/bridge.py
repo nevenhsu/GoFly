@@ -407,6 +407,29 @@ class Bridge:
         path = self.config.project_path
         return path.is_absolute() and not path.is_symlink() and path.is_dir() and path.suffix == ".xcodeproj"
 
+    def _project_identity(self) -> tuple[str | None, str | None]:
+        path = self.config.workspace_root / "app/GoFly/GoFly.xcconfig"
+        if path.is_symlink() or not path.is_file():
+            return None, None
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None, None
+        values: dict[str, str] = {}
+        for line in text.splitlines():
+            line = line.split("//", 1)[0].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+        version = values.get("MARKETING_VERSION")
+        build = values.get("CURRENT_PROJECT_VERSION")
+        if not isinstance(version, str) or re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,3}", version) is None:
+            version = None
+        if not isinstance(build, str) or re.fullmatch(r"[0-9]{1,16}", build) is None:
+            build = None
+        return version, build
+
     def _check_developer_tools(self) -> bool:
         developer = self.config.developer_directory
         if developer.is_symlink() or not developer.is_dir():
@@ -505,7 +528,9 @@ class Bridge:
         base_ids = {"project", "developer-tools", "xcode-first-launch", "python-runtime",
                     "device-discovery", "apple-account"}
         ready = all(item["passed"] for item in checks if item["id"] in base_ids)
-        return {"ready": ready, "checks": checks, "teams": teams, "xcodeVersion": xcode}
+        project_version, project_build = self._project_identity()
+        return {"ready": ready, "checks": checks, "teams": teams, "xcodeVersion": xcode,
+                "projectVersion": project_version, "projectBuild": project_build}
 
     def _find_device(self, raw: list[Any], target: str, selected_transport: str | None = None) -> tuple[Any, str, str]:
         matches: list[tuple[int, Any, str, str]] = []
@@ -615,10 +640,11 @@ class Bridge:
         if not values["name"] and isinstance(raw_name, str):
             values["name"] = raw_name
         version = info.get("CFBundleShortVersionString") if isinstance(info, Mapping) else None
-        if not isinstance(version, str) and isinstance(info, Mapping):
-            version = info.get("CFBundleVersion")
+        build = info.get("CFBundleVersion") if isinstance(info, Mapping) else None
         if not isinstance(version, str):
             version = None
+        if not isinstance(build, str):
+            build = None
         return {
             "device": {
                 "id": values["id"],
@@ -630,6 +656,7 @@ class Bridge:
             "installed": installed,
             "vpnInstalled": vpn_installed,
             "appVersion": version,
+            "appBuild": build,
             "teamID": None,
             "expiresAt": None,
         }

@@ -291,7 +291,7 @@ import GoFlyMacCore
     }
 
 
-    @Test func automaticRenewStartsOnceAndManualDoesNotOverlap() async throws {
+    @Test func inspectionDoesNotStartRenewAndManualStartsOne() async throws {
         let runner = HeldSetupRunner()
         let journal = ModelJournal(nil)
         let setup = MacSetupModel(runner: runner, journal: journal)
@@ -304,29 +304,30 @@ import GoFlyMacCore
         app.select(device)
         app.inspectSelected()
         #expect(await waitForAppCheck(app))
+        #expect(await runner.requests.isEmpty, "Selecting a device must not write to the phone.")
+
+        app.startRenew()
         guard await waitForRequests(1, runner) else {
-            Issue.record("Automatic renew preflight did not reach the runner")
+            Issue.record("Manual renew preflight did not reach the runner")
             return
         }
         let preflight = try #require(await runner.requests.last)
         #expect(preflight.mode == .renew && preflight.action == .preflight)
         await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
         guard await waitForRequests(2, runner) else {
-            Issue.record("Automatic renew apply did not reach the runner")
+            Issue.record("Manual renew apply did not reach the runner")
             return
         }
         let apply = try #require(await runner.requests.last)
         #expect(apply.mode == .renew && apply.action == .apply)
 
-        // A second inspection/refresh cannot create another transaction.
-        app.inspectSelected()
-        app.refreshDevices()
+        app.startRenew()
         #expect(await runner.requests.count == 2)
         await runner.fail(.cancelled)
         #expect(await waitUntilIdle(setup))
     }
 
-    @Test func manualRenewJoinsTheAutomaticOperationWithoutParallelApply() async throws {
+    @Test func manualRenewStartsOneOperationAndDoesNotOverlap() async throws {
         let runner = HeldSetupRunner()
         let setup = MacSetupModel(runner: runner, journal: ModelJournal(nil))
         let app = MacAppModel(live: RenewChecker(), setup: setup)
@@ -338,8 +339,10 @@ import GoFlyMacCore
         app.select(device)
         app.inspectSelected()
         #expect(await waitForAppCheck(app))
+        #expect(await runner.requests.isEmpty)
+        app.startRenew()
         guard await waitForRequests(1, runner) else {
-            Issue.record("Automatic renew preflight did not reach the runner")
+            Issue.record("Manual renew preflight did not reach the runner")
             return
         }
         app.startRenew()
@@ -347,7 +350,7 @@ import GoFlyMacCore
         let preflight = try #require(await runner.requests.last)
         await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
         guard await waitForRequests(2, runner) else {
-            Issue.record("Automatic renew apply did not reach the runner")
+            Issue.record("Manual renew apply did not reach the runner")
             return
         }
         app.startRenew()
@@ -384,6 +387,7 @@ import GoFlyMacCore
         await model.restore()
         #expect(model.continuation == nil)
         #expect(!model.locksDevice)
+        #expect(model.lastCompleted?.expiresAt == "2027-10-17T09:06:10Z")
     }
 
     private func waitForAppCheck(_ app: MacAppModel, attempts: Int = 400) async -> Bool {

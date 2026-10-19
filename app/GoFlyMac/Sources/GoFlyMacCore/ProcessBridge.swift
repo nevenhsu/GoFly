@@ -205,6 +205,10 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
     public init(runner: any MacSetupRunning) { self.runner = runner }
 
     public func readContinuation() async throws -> MacSetupContinuation? {
+        try await readState().continuation
+    }
+
+    public func readState() async throws -> MacSetupJournalState {
         let request = try MacSetupRequest(action: .status)
         do {
             let data = try await runner.run(request)
@@ -216,7 +220,7 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
                       root["code"] as? String == "transaction-unknown" else {
                     throw MacSetupFailure.invalidResponse
                 }
-                return nil
+                return MacSetupJournalState(continuation: nil, completed: nil)
             }
             guard root["status"] as? String == "ok",
                   let rawID = root["setupID"] as? String, let id = UUID(uuidString: rawID),
@@ -237,12 +241,17 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
                payload["stage"] as? String == "complete",
                payload["outcome"] as? String == "confirmed" {
                 // A completed journal has nothing to resume and must never lock
-                // the app.  Its result remains available through the producer.
-                return nil
+                // the app.  Keep its snapshot for device-page facts only.
+                let statusRequest = try MacSetupRequest(action: .status, requestID: request.requestID,
+                                                        setupID: id, deviceID: device, mode: mode)
+                let completed = try? MacSetupResponseDecoder.decode(data, for: statusRequest)
+                return MacSetupJournalState(continuation: nil, completed: completed)
             }
-            return try MacSetupContinuation(setupID: id, deviceID: device, mode: mode)
+            return MacSetupJournalState(
+                continuation: try MacSetupContinuation(setupID: id, deviceID: device, mode: mode),
+                completed: nil)
         } catch MacSetupFailure.service("transaction-unknown") {
-            return nil
+            return MacSetupJournalState(continuation: nil, completed: nil)
         } catch let error as MacSetupFailure {
             throw error
         } catch {

@@ -101,7 +101,8 @@ struct MacSetupPage: View {
     }
 
     @ViewBuilder private var completion: some View {
-        StatusRow(title: "Mac 安裝完成", detail: "手機上的資料和設定已保留。")
+        StatusRow(title: setup.mode == .renew ? "GoFly 已重新簽名" : "Mac 安裝完成",
+                  detail: "手機上的資料和設定已保留。")
         Rule()
         StatusRow(title: "簽名到期日", detail: expiryText)
         Rule()

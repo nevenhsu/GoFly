@@ -141,11 +141,15 @@ public struct MacEnvironment: Codable, Equatable, Sendable {
     public let checks: [EnvironmentCheck]
     public let teams: [MacTeam]
     public let xcodeVersion: String?
-    public init(ready: Bool, checks: [EnvironmentCheck], teams: [MacTeam] = [], xcodeVersion: String? = nil) {
-        self.ready = ready; self.checks = checks; self.teams = teams; self.xcodeVersion = xcodeVersion
+    public let projectVersion: String?
+    public let projectBuild: String?
+    public init(ready: Bool, checks: [EnvironmentCheck], teams: [MacTeam] = [],
+                xcodeVersion: String? = nil, projectVersion: String? = nil, projectBuild: String? = nil) {
+        self.ready = ready; self.checks = checks; self.teams = teams
+        self.xcodeVersion = xcodeVersion; self.projectVersion = projectVersion; self.projectBuild = projectBuild
     }
 
-    private enum CodingKeys: String, CodingKey { case ready, checks, teams, xcodeVersion }
+    private enum CodingKeys: String, CodingKey { case ready, checks, teams, xcodeVersion, projectVersion, projectBuild }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -153,6 +157,8 @@ public struct MacEnvironment: Codable, Equatable, Sendable {
         checks = try values.decode([EnvironmentCheck].self, forKey: .checks)
         teams = try values.decodeIfPresent([MacTeam].self, forKey: .teams) ?? []
         xcodeVersion = try values.decodeIfPresent(String.self, forKey: .xcodeVersion)
+        projectVersion = try values.decodeIfPresent(String.self, forKey: .projectVersion)
+        projectBuild = try values.decodeIfPresent(String.self, forKey: .projectBuild)
     }
 }
 
@@ -198,13 +204,14 @@ public struct DeviceInspection: Codable, Equatable, Sendable {
     public let installed: Bool?
     public let vpnInstalled: Bool?
     public let appVersion: String?
+    public let appBuild: String?
     public let teamID: String?
     public let expiresAt: String?
     public init(device: ConnectedDevice, developerMode: Bool?, installed: Bool?, vpnInstalled: Bool?,
-                appVersion: String? = nil, teamID: String? = nil, expiresAt: String? = nil) {
+                appVersion: String? = nil, appBuild: String? = nil, teamID: String? = nil, expiresAt: String? = nil) {
         self.device = device; self.developerMode = developerMode; self.installed = installed
-        self.vpnInstalled = vpnInstalled; self.appVersion = appVersion; self.teamID = teamID
-        self.expiresAt = expiresAt
+        self.vpnInstalled = vpnInstalled; self.appVersion = appVersion; self.appBuild = appBuild
+        self.teamID = teamID; self.expiresAt = expiresAt
     }
 }
 
@@ -337,7 +344,7 @@ public struct MacSetupRequest: Encodable, Sendable {
     public let action: MacSetupAction
     public let options: MacSetupOptions?
 
-    public init(action: MacSetupAction, setupID: UUID? = nil, deviceID: String? = nil,
+    public init(action: MacSetupAction, requestID: UUID = UUID(), setupID: UUID? = nil, deviceID: String? = nil,
                 mode: MacSetupMode? = nil, options: MacSetupOptions? = nil) throws {
         let normalized = deviceID?.lowercased()
         if let normalized {
@@ -356,7 +363,7 @@ public struct MacSetupRequest: Encodable, Sendable {
         guard ((action == .preflight || action == .apply) == (options != nil)) else {
             throw MacSetupFailure.invalidRequest
         }
-        requestID = UUID()
+        self.requestID = requestID
         self.setupID = setupID
         self.deviceID = normalized
         self.mode = resolvedMode

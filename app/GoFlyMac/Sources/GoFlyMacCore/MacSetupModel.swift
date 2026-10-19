@@ -17,15 +17,30 @@ public struct MacSetupContinuation: Equatable, Sendable {
     }
 }
 
-public protocol MacSetupJournalReading: Sendable {
-    func readContinuation() async throws -> MacSetupContinuation?
+public struct MacSetupJournalState: Sendable, Equatable {
+    public let continuation: MacSetupContinuation?
+    public let completed: MacSetupSnapshot?
+    public init(continuation: MacSetupContinuation?, completed: MacSetupSnapshot?) {
+        self.continuation = continuation; self.completed = completed
+    }
 }
 
+public protocol MacSetupJournalReading: Sendable {
+    func readContinuation() async throws -> MacSetupContinuation?
+    func readState() async throws -> MacSetupJournalState
+}
+
+public extension MacSetupJournalReading {
+    func readState() async throws -> MacSetupJournalState {
+        MacSetupJournalState(continuation: try await readContinuation(), completed: nil)
+    }
+}
 
 @MainActor @Observable
 public final class MacSetupModel {
     public private(set) var continuation: MacSetupContinuation?
     public private(set) var snapshot: MacSetupSnapshot?
+    public private(set) var lastCompleted: MacSetupSnapshot?
     public private(set) var progressStage: MacSetupStage?
     public private(set) var failure: MacSetupFailure?
     public private(set) var isBusy = false
@@ -204,6 +219,7 @@ public final class MacSetupModel {
                 if !journalBlocked { operationFailure = .cancelled }
             }
             snapshot = observed
+            if observed?.isComplete == true { lastCompleted = observed }
             progressStage = nil
             failure = operationFailure
             isBusy = false
@@ -236,9 +252,11 @@ public final class MacSetupModel {
 
     private func readJournal() async {
         do {
-            journalIdentity = try await journal.readContinuation()
-            continuation = journalIdentity
-            mode = journalIdentity?.mode ?? .install
+            let state = try await journal.readState()
+            lastCompleted = state.completed
+            journalIdentity = state.continuation
+            continuation = state.continuation
+            mode = state.continuation?.mode ?? state.completed?.mode ?? .install
             options = nil
             snapshot = nil
             journalBlocked = false

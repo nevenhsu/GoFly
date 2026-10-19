@@ -5,15 +5,24 @@ import GoFlyMacCore
 private struct EchoChecker: MacChecking {
     let wrongDevice: Bool
     var installed: Bool? = nil
+    var installedVersion: String? = nil
+    var installedBuild: String? = nil
+    var expiresAt: String? = nil
     func check(_ request: CheckRequest) async throws -> Data {
         let payload: [String: Any]
         switch request.action {
-        case .environment: payload = ["ready": true, "checks": [], "teams": [["teamID": "ABCDE12345", "teamName": "Test Team", "isFreeProvisioningTeam": true]], "xcodeVersion": "27.1"]
+        case .environment: payload = ["ready": true, "checks": [],
+                                     "teams": [["teamID": "ABCDE12345", "teamName": "Test Team", "isFreeProvisioningTeam": true]],
+                                     "xcodeVersion": "27.1", "projectVersion": "0.2.0", "projectBuild": "21"]
         case .devices: payload = ["devices": [["id": "device-a", "name": "iPhone", "transport": "usb"],
                                               ["id": "device-a", "name": "iPhone", "transport": "wifi"]]]
         case .inspect:
             payload = ["device": ["id": wrongDevice ? "device-b" : "device-a", "name": "iPhone", "transport": request.transport?.rawValue ?? "usb"],
-                       "developerMode": true, "installed": installed.map { $0 as Any } ?? NSNull(), "vpnInstalled": NSNull()]
+                       "developerMode": true, "installed": installed.map { $0 as Any } ?? NSNull(),
+                       "vpnInstalled": NSNull(),
+                       "appVersion": installedVersion.map { $0 as Any } ?? NSNull(),
+                       "appBuild": installedBuild.map { $0 as Any } ?? NSNull(),
+                       "expiresAt": expiresAt.map { $0 as Any } ?? NSNull()]
         }
         return try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
                                                            "status": "ok", "payload": payload])
@@ -128,6 +137,25 @@ private actor HeldChecker: MacChecking {
     #expect(model.page == .device)
     #expect(model.selectedID == "device-a")
     #expect(model.selectedTransport == .usb)
+}
+
+@Test @MainActor func deviceManagementChoosesUpdateOrRenew() async throws {
+    let update = MacAppModel(live: EchoChecker(wrongDevice: false, installed: true,
+                                               installedVersion: "0.1.0", installedBuild: "20"))
+    update.checkEnvironment(); try await settled(update)
+    update.openDevices(firstInstall: false); try await settled(update)
+    update.select("device-a", transport: .usb)
+    update.inspectSelected(); try await settled(update)
+    #expect(update.page == .device)
+    #expect(update.renewButtonTitle == "更新 GoFly")
+
+    let renew = MacAppModel(live: EchoChecker(wrongDevice: false, installed: true,
+                                              installedVersion: "0.2.0", installedBuild: "21"))
+    renew.checkEnvironment(); try await settled(renew)
+    renew.openDevices(firstInstall: false); try await settled(renew)
+    renew.select("device-a", transport: .usb)
+    renew.inspectSelected(); try await settled(renew)
+    #expect(renew.renewButtonTitle == "延長簽名期限")
 }
 
 @Test @MainActor func cancellationDiscardsLateResult() async throws {

@@ -26,7 +26,6 @@ public final class MacAppModel {
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var activeCheckID: UUID?
-    @ObservationIgnored private var renewTriggeredSelection: String?
     private static let selectedTeamKey = "gofly.mac.selectedTeamID"
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil) {
@@ -108,7 +107,6 @@ public final class MacAppModel {
         }
         selectedID = id; selectedTransport = choice.transport
         inspection = nil; failure = nil
-        renewTriggeredSelection = nil
     }
 
     public func openDevices(firstInstall: Bool) {
@@ -139,7 +137,6 @@ public final class MacAppModel {
         selectedTransport = device.transport
         page = .device
         failure = nil
-        renewTriggeredSelection = nil
     }
 
     public func checkEnvironment() {
@@ -188,22 +185,40 @@ public final class MacAppModel {
                   result.device.transport == device.transport else { throw CheckFailure.invalidResponse }
             self.inspection = result
             self.page = self.firstInstall ? .install : .device
-            self.triggerAutomaticRenewIfNeeded(device)
         }
     }
 
-    private func triggerAutomaticRenewIfNeeded(_ device: ConnectedDevice) {
-        guard !firstInstall, inspection?.installed == true,
-              renewTriggeredSelection != device.connectionID,
-              let setup, setup.isRestored, !setup.isBusy, !setup.hasRecordedTransaction,
-              let team = selectedTeam?.teamID,
-              let options = try? MacSetupOptions(teamID: team) else { return }
-        renewTriggeredSelection = device.connectionID
-        do {
-            try setup.beginRenew(deviceID: device.id, options: options)
-        } catch {
-            renewTriggeredSelection = nil
+    public var projectIsNewer: Bool {
+        let projectVersion = environment?.projectVersion
+        let projectBuild = environment?.projectBuild
+        let installedVersion = inspection?.appVersion
+        let installedBuild = inspection?.appBuild
+        if let projectBuild, let projectBuildNumber = Int(projectBuild),
+           let installedBuild, let installedBuildNumber = Int(installedBuild),
+           projectBuildNumber != installedBuildNumber {
+            return projectBuildNumber > installedBuildNumber
         }
+        return projectVersion != nil && installedVersion != nil && projectVersion != installedVersion
+    }
+
+    public var renewButtonTitle: String {
+        projectIsNewer ? "更新 GoFly" : "延長簽名期限"
+    }
+
+    public var signingExpiryISO: String? {
+        inspection?.expiresAt ?? setup?.snapshot?.expiresAt ?? setup?.lastCompleted?.expiresAt
+    }
+
+    public var signingExpiryDate: Date? {
+        signingExpiryISO.flatMap { ISO8601DateFormatter().date(from: $0) }
+    }
+
+    public var signingExpiryText: String {
+        guard let date = signingExpiryDate else { return "待確認" }
+        let text = date.formatted(Date.FormatStyle(date: .numeric, time: .shortened)
+            .locale(Locale(identifier: "zh_TW")))
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+        return days < 0 ? "\(text)（已過期）" : "\(text)（剩餘 \(days) 天）"
     }
 
     public func startRenew() {

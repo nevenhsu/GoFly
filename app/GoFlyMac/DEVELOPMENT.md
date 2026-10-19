@@ -32,22 +32,18 @@
 - iOS 在交接資料驗證並原子提交前不建立正常服務、任務或資料商店。提交不代表 VPN 已連線、GPS 已取得、clear 已完成或移動已授權。完成後可拔 USB；手機不另行下載支援資料，也不出現 U19 或 H12。
 
 
-## 連線成功後自動重新簽名
+## 裝置管理重新簽名與更新
 
-在裝置管理明確選取裝置並成功完成 inspect、且確認已安裝 GoFly 時，自動開始一次 setup 的 `renew`。`renew` 以相同 Bundle ID 覆蓋安裝，保留 App 資料，不先移除 App。preflight 要求裝置上已有 GoFly，缺少時回 `app-not-installed`；GoFly 執行中沿用 `app-running` 提示。
-
-- 同一次選取最多自動觸發一次；刷新裝置清單、重新 inspect、返回裝置頁都不再觸發。
-- 一次只能有一筆 setup／renew；自動與手動入口共用同一個 `operation.lock` 與進度。
-- 結果不明時保留 `install=unknown`，不重送、不推定成功；resume 由使用者明確接續。
-- 完成後顯示可驗證的 `expiresAt`；讀不到 provisioning profile 的到期日時為 null，不自估。
-
-## 保留手動重新簽名流程
-
-裝置頁在已安裝 GoFly 時顯示「重新簽名」。按下後沿用 Setup 頁的表單、進度與結果元件，不新增頁面或 model；已有 renew 在執行時顯示同一筆進度，不另開交易。手動流程與自動觸發走同一個 `mode: "renew"` 路徑，只更新簽章與安裝結果，不重做配對、支援或 handoff，也不清除 App 資料。
+- 選取裝置只執行 inspect；不得因為選取或 inspect 就自動開始 renew。只有使用者在裝置頁按下按鈕才建立寫入交易。
+- 裝置頁顯示手機上 GoFly 的版本與 build、Mac 專案從 `GoFly.xcconfig` 讀到的 `MARKETING_VERSION`／`CURRENT_PROJECT_VERSION`、簽名到期日與剩餘天數。
+- 手機與專案的版本、build 都相同時，按鈕為「延長簽名期限」；Mac 專案較新時為「更新 GoFly」。兩者都走既有 `renew`（建置、簽名、覆蓋安裝、保留資料），不新增另一條只重新簽名的流程。
+- `renew` 沿用 install 的同一個交易與 `operation.lock`；一次只能有一筆，結果不明時保留 `install=unknown`，不重送，resume 由使用者明確接續。
+- 到期日必須讀取已簽署 App 的 `embedded.mobileprovision` `ExpirationDate`，不是 Developer Certificate 的 `NotAfter`。實際天數以 profile 為準，不假設免費 Team 一定 7 天；讀不到時為 null。
+- 完成後顯示新的 `expiresAt`，並明確顯示「手機上的資料和設定已保留」。
 
 ## 環境錯誤與導覽
 
-- 首頁與環境頁顯示實際失敗原因，至少區分「Bundle 驗證失敗（請重新執行 `build-app.sh`）」與「Python 環境無法使用」；不得只顯示「尚未就緒」。
+- 首頁與環境頁顯示實際失敗原因，至少區分「App 資源設定失敗（請重新執行 `build-app.sh`）」與「Python 環境無法使用」；不得只顯示「尚未就緒」。
 - 環境未就緒或 setup journal 阻塞時，「首頁」「查看 Mac 環境」「返回裝置清單」等純導覽入口仍可使用；只有會執行檢查、安裝或 renew 的操作才受 readiness 與操作鎖限制。
 - 首次安裝遇到已安裝 GoFly 時，前往裝置頁只是導覽，不會自動 inspect、apply 或 resume。
 
@@ -73,5 +69,9 @@
 | App 回到前景 | 自動重新檢查 Mac 環境 |
 | 沒有 setup journal | `transaction-unknown` 視為無待接續交易，首頁不被導向安裝頁 |
 | 已完成 setup journal | `complete`＋`confirmed` 不鎖任何頁面；header 無 `mode` 視為 `install` |
+| 選取裝置 | 只執行 inspect，不自動 renew、不寫入手機 |
+| 裝置版本相同 | 顯示「延長簽名期限」，走既有 renew |
+| Mac 專案較新 | 顯示「更新 GoFly」，走既有 renew 並保留資料 |
+| 簽名到期日 | 取自 `embedded.mobileprovision` `ExpirationDate`；顯示剩餘天數，不以憑證到期日代替 |
 | 已就緒的裝置支援 | 重用，不重複下載或掛載；下載成功但裝置驗證失敗仍不算完成 |
 | 離線／測試 | 只驗程式與介面；不產生裝置寫入或完成證據 |
