@@ -73,10 +73,6 @@ _TARGET_PAIRING_NAMESPACE = "gofly-management-repair-pairing-v1"
 _READBACK_POLL_SECONDS = 30.0
 _ACTIVATION_POLL_SECONDS = 1800.0
 _POLL_INTERVAL_SECONDS = 0.05
-_READBACK_RECOVERY_STATES = frozenset({
-    "owned", "absent", "ownershipUnproven", "retryPending", "retryExhausted",
-    "externallyActive",
-})
 
 
 def _error(code: str = "operation-failed") -> ManagementBridgeError:
@@ -1030,16 +1026,6 @@ class ManagementTargetDriver:
             self._readback_publication(header, identity, request)
         return raw
 
-    # Kept as a compatibility spelling for callers being migrated by the
-    # producer.  It intentionally has the same safe, source-stopped behavior
-    # as the public publication boundary; it is no longer local-only.
-    def prepare_readback_metadata(
-        self,
-        request: ManagementRequest,
-        identity: PreparationAppIdentity,
-    ) -> bytes:
-        return self.publish_readback_metadata(request, identity)
-
     def _publication_recovery_state(self) -> str | None:
         """Classify the optional bounded publication-attempt ledger.
 
@@ -1072,39 +1058,6 @@ class ManagementTargetDriver:
         }:
             return "retryPending"
         return None
-
-    def _readback_recovery_state(
-        self,
-        header: Mapping[str, Any],
-        identity: PreparationAppIdentity,
-        *,
-        live_pid: int | None = None,
-    ) -> str:
-        """Classify readback ownership from saved facts and optional live PID.
-
-        ``live_pid`` is supplied only by the explicit read-only recovery path;
-        callers that only have journal data must omit it.  A fresh PID is
-        never persisted or treated as an owned process.
-        """
-        publication_state = self._publication_recovery_state()
-        process_raw = self.store.read_evidence("readbackProcess")
-        if process_raw is not None:
-            self._process_pid(process_raw, header)
-            return "owned"
-        absence = self._validated_absence_observation(header, identity)
-        target_raw = self.store.read_evidence("targetReadback")
-        if absence is not None and target_raw is not None:
-            if publication_state is not None:
-                # A completed absence is stronger than a historical metadata
-                # retry status; it still does not prove a native stop.
-                return "absent"
-            return "absent"
-        if live_pid is not None and target_raw is not None:
-            if type(live_pid) is int and live_pid > 0:
-                return "externallyActive"
-        if publication_state is not None:
-            return publication_state
-        return "ownershipUnproven"
 
     def _recover_readback_absence(
         self,

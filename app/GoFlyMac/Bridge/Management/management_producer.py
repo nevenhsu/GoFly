@@ -66,7 +66,6 @@ except ImportError:  # direct execution from packaged Bridge root
 
 
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
-_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 # Public phases deliberately use protocol 5's closed vocabulary. Internal
 # readback/launch checkpoints are grouped under pairing or adoption.
 _STAGE_MAP = (

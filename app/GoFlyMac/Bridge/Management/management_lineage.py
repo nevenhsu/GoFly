@@ -111,20 +111,6 @@ class ManagementGeneration:
     source_activation: bytes
     source_restore_root: bytes | None = None
 
-    # These aliases make the raw nature explicit at call sites while keeping
-    # the constructor small and matching the Swift filenames.
-    @property
-    def raw_request(self) -> bytes:
-        return self.request
-
-    @property
-    def raw_activation(self) -> bytes:
-        return self.source_activation
-
-    @property
-    def raw_restore_root(self) -> bytes | None:
-        return self.source_restore_root
-
 
 @dataclass(frozen=True)
 class SourceLineageSummary:
@@ -134,15 +120,6 @@ class SourceLineageSummary:
     origin_setup_id: str
     origin_app: PreparationAppIdentity
     adopted_management_ids: tuple[str, ...] = ()
-
-    @property
-    def root_sha256(self) -> str | None:
-        return self.current_root_sha256
-
-
-# Descriptive aliases are intentionally value aliases, not separate APIs.
-ManagementLineageSummary = SourceLineageSummary
-ManagementGenerationEvidence = ManagementGeneration
 
 
 @dataclass(frozen=True)
@@ -700,6 +677,6 @@ def generation_ids(raw: bytes | None) -> tuple[str, ...]:
 __all__ = [
     "MAX_MANAGEMENT_ROOT_BYTES", "MAX_GENERATION_REQUEST_BYTES",
     "MAX_GENERATION_ACTIVATION_BYTES", "MAX_GENERATION_RESTORE_ROOT_BYTES",
-    "LineageApp", "ManagementGeneration", "ManagementGenerationEvidence",
-    "SourceLineageSummary", "ManagementLineageSummary", "validate_source_lineage", "generation_ids",
+    "LineageApp", "ManagementGeneration",
+    "SourceLineageSummary", "validate_source_lineage", "generation_ids",
 ]

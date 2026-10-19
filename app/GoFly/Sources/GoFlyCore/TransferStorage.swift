@@ -397,38 +397,6 @@ public enum TransferControlCodec {
         catch { throw TransferFailure.invalidInput }
     }
 
-    public static func encodeReadback(_ readback: TransferReadback) throws -> Data {
-        try TransferStorageJSON.readbackObject(readback)
-    }
-
-    public static func decodeReadback(_ data: Data) throws -> TransferReadback {
-        let value = try TransferStorageJSON.parse(data, maximum: TransferLimits.requestBytes)
-        do {
-            try value.requireObjectKeys(["version", "commandID", "action", "transferID", "nonce", "requestSHA256", "manifestSHA256", "sourceApp", "pid", "phase", "receiptSHA256", "errorCode"])
-            let manifestValue = try value.object("manifestSHA256"); let receiptValue = try value.object("receiptSHA256"); let errorValue = try value.object("errorCode")
-            guard let action = TransferAction(rawValue: try TransferStorageJSON.string(value.object("action"))),
-                  let phase = TransferReadbackPhase(rawValue: try TransferStorageJSON.string(value.object("phase"))) else { throw TransferFailure.invalidInput }
-            let source = try SetupAppIdentity.decode(value.object("sourceApp"))
-            let pidInt = try TransferStorageJSON.int(value.object("pid")); guard pidInt > 0 && pidInt <= Int(Int32.max) else { throw TransferFailure.invalidInput }
-            let requestSHA = try TransferStorageJSON.string(value.object("requestSHA256"))
-            guard SetupValidation.isLowerHex(requestSHA, count: 64) else { throw TransferFailure.invalidInput }
-            let manifest = manifestValue.isNull ? nil : try TransferStorageJSON.string(manifestValue)
-            guard manifest.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true else { throw TransferFailure.invalidInput }
-            let receipt = receiptValue.isNull ? nil : try TransferStorageJSON.string(receiptValue)
-            guard receipt.map({ SetupValidation.isLowerHex($0, count: 64) }) ?? true else { throw TransferFailure.invalidInput }
-            let errorCode = errorValue.isNull ? nil : try TransferStorageJSON.string(errorValue)
-            guard errorCode.map(TransferStorageErrorCode.isValid) ?? true else { throw TransferFailure.invalidInput }
-            if phase == .waiting || phase == .failed {
-                guard receipt == nil, manifest == nil else { throw TransferFailure.invalidInput }
-            }
-            return TransferReadback(version: try TransferStorageJSON.int(value.object("version")), commandID: try TransferStorageJSON.uuid(value.object("commandID")), action: action,
-                transferID: try TransferStorageJSON.uuid(value.object("transferID")), nonce: try TransferStorageJSON.uuid(value.object("nonce")),
-                requestSHA256: requestSHA, manifestSHA256: manifest,
-                sourceApp: source, pid: Int32(pidInt), phase: phase, receiptSHA256: receipt,
-                errorCode: errorCode)
-        } catch let failure as TransferFailure { throw failure }
-        catch { throw TransferFailure.invalidInput }
-    }
 }
 
 // MARK: - Preferences
@@ -478,12 +446,6 @@ public final class TransferExportStore: @unchecked Sendable {
         self.checkpoint = checkpoint
     }
 
-    public func readRequest() throws -> TransferExportInput? {
-        try withLock { guard let data = try TransferStorageDisk.read(transferRoot.appendingPathComponent("export-request.json"), maximum: TransferLimits.requestBytes) else { return nil }; return try TransferExportInput(data: data) }
-    }
-    public func readControl() throws -> TransferControlRequest? {
-        try withLock { guard let data = try TransferStorageDisk.read(transferRoot.appendingPathComponent("control-request.json"), maximum: TransferLimits.requestBytes) else { return nil }; return try TransferControlCodec.decodeControlRequest(data) }
-    }
     public func readControlInput() throws -> TransferControlInput? {
         try withLock { try readControlInputUnlocked() }
     }
@@ -790,32 +752,6 @@ public final class TransferExportStore: @unchecked Sendable {
         if let captured { try requireCurrentControlInputUnlocked(captured) }
         try TransferStorageDisk.atomicWrite(object, to: transferRoot.appendingPathComponent("control-response.json"), checkpoint: checkpoint)
         return readback
-    }
-
-    public func writePendingReadback(control: TransferControlRequest, input: TransferExportInput,
-                                     currentApp: SetupAppIdentity, pid: Int32,
-                                     phase: TransferReadbackPhase, errorCode: String?) throws -> TransferReadback {
-        guard phase == .waiting || phase == .failed else { throw TransferFailure.invalidInput }
-        guard control.transferID == input.request.transferID, control.nonce == input.request.nonce,
-              control.requestSHA256 == input.rawSHA256 else { throw TransferFailure.identityMismatch }
-        let safeError: String? = errorCode.flatMap { value in
-            guard !value.isEmpty, value.utf8.count <= 64,
-                  value.unicodeScalars.allSatisfy({ scalar in
-                      scalar == "-" || scalar == "_" ||
-                      (scalar.value >= 48 && scalar.value <= 57) ||
-                      (scalar.value >= 65 && scalar.value <= 90) ||
-                      (scalar.value >= 97 && scalar.value <= 122)
-                  }) else { return nil }
-            return value
-        }
-        return try withLock {
-            let readback = TransferReadback(version: 1, commandID: control.commandID, action: control.action,
-                transferID: input.request.transferID, nonce: input.request.nonce, requestSHA256: input.rawSHA256,
-                manifestSHA256: nil, sourceApp: currentApp, pid: pid, phase: phase,
-                receiptSHA256: nil, errorCode: safeError)
-            try TransferStorageDisk.atomicWrite(TransferStorageJSON.readbackObject(readback), to: transferRoot.appendingPathComponent("control-response.json"), checkpoint: checkpoint)
-            return readback
-        }
     }
 
     private func loadCutline(input: TransferExportInput, sourceApp: SetupAppIdentity) throws -> TransferPreparation {
@@ -1827,7 +1763,6 @@ private enum TransferStorageDisk {
             throw TransferFailure.commitUnknown
         }
     }
-    static func writePackageFile(_ data: Data, path: String, under root: URL) throws { let target = root.appendingPathComponent(path); try ensureDirectory(target.deletingLastPathComponent()); try atomicWrite(data, to: target, checkpoint: nil) }
     static func writeStable(_ data: Data, to target: URL) throws {
         if let existing = try read(target, maximum: max(data.count, 1)) {
             guard existing == data else { throw TransferFailure.artifactMismatch }

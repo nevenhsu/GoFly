@@ -12,7 +12,6 @@ enum GoFlyStyle {
     static let errorSurface = Color(uiColor: .secondarySystemBackground)
     static let border = Color(uiColor: .separator)
     static let subtleBorder = Color(uiColor: .opaqueSeparator).opacity(0.45)
-    static let insetSurface = Color(uiColor: .tertiarySystemFill)
     static let inputSurface = Color(uiColor: .systemGray5)
     static let inputBorder = Color(uiColor: .systemGray)
     static let cornerRadius: CGFloat = 20

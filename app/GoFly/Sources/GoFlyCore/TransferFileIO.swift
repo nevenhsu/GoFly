@@ -218,29 +218,9 @@ enum TransferFileIO {
         return try openRoot(root, allowMissing: allowMissing, requirePrivate: requirePrivate)
     }
 
-    static func packageRoot(_ root: URL) throws {
-        _ = try openPackageRoot(root)
-    }
-
-    static func readPackageFile(_ root: URL, relativePath: String, maximum: Int) throws -> Data {
-        let handle = try openPackageRoot(root)
-        guard let data = try handle.read(relativePath, maximum: maximum) else { throw TransferFailure.artifactMismatch }
-        return data
-    }
-
     static func inventory(_ root: URL, maxDepth: Int = 4, maxEntries: Int = 512) throws -> [(String, Bool)] {
         let handle = try openPackageRoot(root)
         return try handle.inventory(maxDepth: maxDepth, maxEntries: maxEntries)
-    }
-
-    static func isRegularPrivateFile(_ url: URL) throws -> Bool {
-        var info = stat()
-        guard Darwin.lstat(url.absoluteURL.path, &info) == 0 else {
-            if errno == ENOENT { return false }
-            throw errno == ELOOP || errno == ENOTDIR ? TransferFailure.unsafeFile : TransferFailure.unavailable
-        }
-        try validateFile(info)
-        return true
     }
 
     fileprivate static func validateDirectory(_ value: stat) throws {

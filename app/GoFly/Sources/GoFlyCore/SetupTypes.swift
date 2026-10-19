@@ -83,7 +83,6 @@ public struct SetupPairingEvidence: Equatable, Sendable {
         self.receipt = receipt
     }
 
-    public var storedPairing: SetupPairingObservation { stored }
     public var inputObservation: SetupV1InputObservation { input }
     public var receiptObservation: SetupV1ReceiptObservation { receipt }
 }
@@ -240,7 +239,6 @@ public struct SetupInput: Equatable, Sendable {
 
     public func encoded() throws -> Data { rawData }
     public var data: Data { rawData }
-    public var manifestDigest: String { rawManifestSHA256 }
 }
 
 public struct SetupReadbackRequest: Codable, Equatable, Sendable {
@@ -285,8 +283,6 @@ public struct SetupReadbackReceipt: Codable, Equatable, Sendable {
         self.expectedDeviceUDID = expectedDeviceUDID.lowercased(); self.app = app; self.pairing = pairing
     }
 
-    public var actualApp: SetupAppIdentity { app }
-    public var pairingObservation: SetupPairingObservation { pairing }
     public func encoded() throws -> Data { try SetupCodec.encodeReceipt(self) }
 }
 
@@ -307,8 +303,6 @@ public struct SetupReceipt: Codable, Equatable, Sendable {
     public let generationID: UUID
     public let artifacts: [SetupArtifact]
     public let status: String
-
-    public var rawManifestDigest: String { rawManifestSHA256 }
 
     init(manifest: SetupManifest, rawManifestSHA256: String) throws {
         guard SetupValidation.isLowerHex(rawManifestSHA256, count: 64) else { throw SetupFailure.invalidInput }
@@ -392,12 +386,6 @@ enum _SetupJSON {
         let matches = pairs.filter { $0.0 == name }
         guard matches.count == 1 else { throw SetupFailure.invalidInput }
         return matches[0].1
-    }
-    func optionalObject(_ name: String) throws -> _SetupJSON? {
-        guard case .object(let pairs) = self else { throw SetupFailure.invalidInput }
-        let matches = pairs.filter { $0.0 == name }
-        guard matches.count <= 1 else { throw SetupFailure.invalidInput }
-        return matches.first?.1
     }
     func requireObjectKeys(_ names: Set<String>) throws {
         guard case .object(let pairs) = self else { throw SetupFailure.invalidInput }

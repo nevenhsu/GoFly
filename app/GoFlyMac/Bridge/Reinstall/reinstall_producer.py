@@ -42,7 +42,6 @@ from .reinstall_protocol import CATEGORY_ORDER, ReinstallBridgeError, ReinstallO
 
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
-_SOURCE_STAGES = ("sourceRequest", "sourceReady")
 _PROOF_KEYS = (
     "backupValidated", "sourceSealed", "removalConfirmed", "installationConfirmed",
     "pairingImported", "supportObserved", "restoreCommitted",
@@ -143,9 +142,6 @@ class _EmbeddedSetupPort:
         # This is the existing M1 artifact/support location.  No M1 journal
         # is created there; the parent remains the only current authority.
         return JournalStore(self.parent_store.root).transaction_root(setup_id)
-
-    def bind_parent(self, parent: dict[str, Any]) -> None:
-        self.parent = parent
 
 
 @dataclass(frozen=True)

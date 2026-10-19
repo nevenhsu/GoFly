@@ -1373,16 +1373,6 @@ class SetupProducer:
         return self._payload_from_journal(journal, can_resume=False, receipt=receipt)
 
     @staticmethod
-    def _matches_artifact(installed: InstalledAppObservation, artifact: ArtifactIdentity) -> bool:
-        return (
-            installed.present
-            and installed.bundle_id == artifact.bundle_id
-            and installed.artifact_sha256 == artifact.artifact_sha256
-            and installed.executable_sha256 == artifact.executable_sha256
-            and installed.profile_sha256 == artifact.profile_sha256
-        )
-
-    @staticmethod
     def _install_result_confirms(installed: InstalledAppObservation, artifact: ArtifactIdentity) -> bool:
         """Check only the install API result; exact app identity is read back later."""
         return (

@@ -20,7 +20,6 @@ UUID_RE = re.compile(
 UDID_RE = re.compile(r"(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})\Z")
 TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 HEX64_RE = re.compile(r"[0-9a-f]{64}\Z")
-INTEGER_RE = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 EXPIRY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z\Z")
 MAX_ARTIFACT_PATH_BYTES = 4_096
 

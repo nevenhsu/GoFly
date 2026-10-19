@@ -43,8 +43,6 @@ except ImportError:  # script execution from the packaged Setup directory
 
 PMD3_VERSION = "11.31.0"
 USB = "USB"
-DEVELOPER_MODE_DOMAIN = "com.apple.security.mac.amfi"
-DEVELOPER_MODE_KEY = "DeveloperModeStatus"
 WIFI_DEBUGGING_DOMAIN = "com.apple.mobile.wireless_lockdown"
 WIFI_DEBUGGING_KEY = "EnableWifiDebugging"
 MAX_ARTIFACT_BYTES = 4 * 1024 * 1024 * 1024
@@ -714,10 +712,6 @@ class DeviceAdapter(Protocol):
 
 class ProcessAdapter(Protocol):
     def build(self, setup_id: str, team_id: str, allow_provisioning_updates: bool = False) -> Path: ...
-
-
-class PairingAdapter(Protocol):
-    def prepare(self, device_id: str, candidate: Path) -> None: ...
 
 
 class SupportAdapter(Protocol):

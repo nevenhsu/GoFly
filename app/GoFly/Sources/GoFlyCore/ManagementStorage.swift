@@ -1057,13 +1057,6 @@ public final class ManagementStore: @unchecked Sendable {
         }
     }
 
-    public func isBlocking() throws -> Bool {
-        try locked {
-            guard let phase = try readState().current?.phase else { return false }
-            return [.preparing, .ready, .mutationSealed].contains(phase)
-        }
-    }
-
     private func locked<T>(_ operation: () throws -> T) throws -> T {
         lock.lock(); defer { lock.unlock() }
         do { return try operation() }

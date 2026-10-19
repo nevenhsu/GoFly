@@ -108,9 +108,6 @@ _PUBLICATION_ATTEMPT_KEYS = {
     "number", "revision", "requestSHA256", "state", "recordedAt", "priorOutcome", "terminalReason",
 }
 _PUBLICATION_STATES = frozenset({"inflight", "unknown", "absentAfterReconcile", "confirmed"})
-_PUBLICATION_TERMINAL_REASONS = frozenset({
-    "absent-on-explicit-resume", "exact-request-observed", "publication-interrupted", "attempt-limit",
-})
 _PUBLICATION_TIMESTAMP_RE = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$"
 )
@@ -1212,10 +1209,6 @@ class ManagementJournal:
         self._put_evidence(value, evidence_name, raw)
         return self._write(value)
 
-    # Camel-case aliases match the control names in the cross-language packet;
-    # the snake-case methods remain the Python public API.
-    freezeCommand = freeze_command
-
     def begin_publication(
         self, action: str, raw: bytes | None = None, *, revision: int | None = None,
     ) -> dict[str, Any]:
@@ -1259,8 +1252,6 @@ class ManagementJournal:
         value["errorCode"] = None
         return self._write(value)
 
-    beginPublication = begin_publication
-
     def reconcile_command_absence(
         self, action: str, *, revision: int | None = None, fresh_absent: bool = False,
     ) -> dict[str, Any]:
@@ -1277,14 +1268,10 @@ class ManagementJournal:
         value["outcome"] = "unknown"
         return self._write(value)
 
-    reconcileCommandAbsence = reconcile_command_absence
-
     def mark_absent_after_reconcile(
         self, action: str, *, revision: int | None = None, fresh_absent: bool = False,
     ) -> dict[str, Any]:
         return self.reconcile_command_absence(action, revision=revision, fresh_absent=fresh_absent)
-
-    markAbsentAfterReconcile = mark_absent_after_reconcile
 
     def confirm_command(self, action: str, response: bytes, *, actual_pid: int | None = None) -> dict[str, Any]:
         """Confirm a command only from its exact typed durable App response."""
@@ -1336,8 +1323,6 @@ class ManagementJournal:
         value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
         value["errorCode"] = None
         return self._write(value)
-
-    confirmCommand = confirm_command
 
     def _legacy_removal_gate(self, value: Mapping[str, Any], stage: str) -> dict[str, Any]:
         evidence_name = _LEGACY_REMOVAL_EVIDENCE.get(stage)
@@ -1451,8 +1436,6 @@ class ManagementJournal:
         self._append_readback_publication(value, revision=revision)
         return self._write(value)
 
-    beginReadbackPublication = begin_readback_publication
-
     def reconcile_readback_absence(
         self, *, fresh_absent: bool = False, revision: int | None = None,
     ) -> dict[str, Any]:
@@ -1473,8 +1456,6 @@ class ManagementJournal:
         value["outcome"] = "unknown"
         return self._write(value)
 
-    reconcileReadbackAbsence = reconcile_readback_absence
-
     def exhaust_readback_publication(self, *, revision: int | None = None) -> dict[str, Any]:
         """Durably retain the bounded retry limit without creating another attempt."""
         value = self._required()
@@ -1492,8 +1473,6 @@ class ManagementJournal:
         value["outcome"] = "unknown"
         return self._write(value)
 
-    exhaustReadbackPublication = exhaust_readback_publication
-
     def mark_readback_publication_unknown(self, code: str = "publication-interrupted") -> dict[str, Any]:
         value = self._required()
         record = self._publication_record(value)
@@ -1510,8 +1489,6 @@ class ManagementJournal:
         value["outcome"] = "unknown"
         value["errorCode"] = code if code in SAFE_ERROR_CODES else "operation-failed"
         return self._write(value)
-
-    markReadbackPublicationUnknown = mark_readback_publication_unknown
 
     def confirm_readback_publication(self, evidence: str = "readbackPlan") -> dict[str, Any]:
         """Close the latest attempt from the caller's exact readonly match."""
@@ -1541,8 +1518,6 @@ class ManagementJournal:
         value["outcome"] = "unknown" if self._outstanding(value) else "inProgress"
         value["errorCode"] = None
         return self._write(value)
-
-    confirmReadbackPublication = confirm_readback_publication
 
     def record_intent(self, stage: str) -> dict[str, Any]:
         value = self._required()
