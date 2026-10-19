@@ -183,6 +183,7 @@ Swift 端對應：
 - **D-E 保留最小版**：背景持續執行改成 ≤150 行的 driver（細節見下表）。
 - **D-F 保留三語**：en／zh-Hant／zh-Hans 全部保留。
 - **D-G 保留但精簡**：照下表。
+- **D-H 配對修復暫不實作**：真的需要時才做；最小做法見下表。
 
 各項範圍與理由：
 
@@ -195,6 +196,8 @@ Swift 端對應：
 | D-E | 背景持續執行（BGContinuedProcessingTask） | Core `ContinuedProcessing*`、`MovementContinuation*`(~1.1k)；App driver 422＋view；測試 ~2.7k | **保留最小版（已定案）** | 保留一個 ≤150 行 driver：進背景時若有運行中的路線／漫步任務就 submit 一個 task、expiry 時暫停任務；啟動時註冊一次。刪除 grant／scene 原子 authority、`ContinuedProcessingRegistrationBook`（256 次註冊）、`MovementContinuation*` 協調層、`GoFlyContinuationView`。測試只留 1 檔 ≤100 行（submit／expiry 暫停／前景不自動恢復）。 |
 | D-F | 簡體中文 | `zh-Hans.lproj`、`README.zh-Hans.md` | **保留（已定案）** | 三語全部保留；新增字串仍需三份同步。 |
 | D-G | Mac 首次安裝的「Mac 端準備 DDI／Cryptex 支援檔」 | `Setup/setup_support.py`(977) | **保留但精簡（已定案）** | 刪除私有 closed inventory 複製與 generation 管理；改為直接用 pymobiledevice3 的 mounter 自動處理。 |
+
+| D-H | 配對修復（重新匯入 pairing＋handoff） | `Setup/`、`GoFlySetupBootstrap`、`LocalGoSetupHandoff` | **暫不實作（已定案）** | 真的需要時，setup 加 `mode="repair"`，走完整 install 流程（artifact → pairing → install → support → handoff → complete），只跳過 `app-already-installed` 阻擋、install 用覆蓋安裝。iOS 已經接受不同 setupID 的完整交接：`app/GoFly/Sources/GoFlyCore/SetupBootstrap.swift:28–47`（找不到同 setupID 就往下走）、`:49–50`（驗 support）、`:79`（commit）；`SetupStorage.swift:98–120`（新 setupID append receipt 並更新 active）；iOS 需 0 行修改。明確不做 reduced handoff，也不做只更新 pairing 的 commit 路徑。 |
 
 依上述決定執行，預估再減 ~25k 行（含測試）。
 
