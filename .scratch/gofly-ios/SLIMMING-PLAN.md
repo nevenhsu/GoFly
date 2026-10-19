@@ -134,7 +134,7 @@ Swift 端對應：
 
 ### C1-d. 裝置 adapter／support 精簡（手機驗收後）
 
-狀態：C1-a／C1-b／C1-c1／C1-c2／C3／C4-1／C4-1b／C4-2／C4-3／C5-3／C5-7／B2 完成；C5-1／C5-5 延後；C1-d／C2 手機驗收後。
+狀態：C1-a／C1-b／C1-c1／C1-c2／C3／C4-1／C4-2／C4-3／C5-2／C5-3／C5-7／B2 完成；C5-1／C5-4／C5-5 不做；C1-d／C2／C4-1b 手機驗收後。
 
 暫不實作，等使用者集中手機驗收後再處理：
 - `setup_adapters.py` 的 Protocol seam 只有 3 個小類別，拿掉省不到行數，保留不動。
@@ -167,8 +167,9 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 ### C4. iOS：恢復／背景層合併
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
-- **C5-1 延後至 B2 後**：一次嘗試＋手動重試會改動多個 attempt 2/3 時序測試；B2 後再單獨做。
-- **C5-5 延後**：移除 picker `objectWillChange` 轉發會改動 RouteExecutionController 的既有通知契約與 UI 刷新；依規則先跳過，併入 B2 後再處理。
+- **C5-1 不做**：ServiceController 的自動重試只重試 `.failure` 與 `.point(.notSent)`，都是尚未送出的安全重試，對原生連線抖動有實際幫助；改成手動只省約 80 行，卻要重寫多組時序測試。保留 B2 的「自動重試最終成功」測試。
+- **C5-4 不做**：`routeAdmissionRevision` 同時用於路線與搖桿准入（`movementAdmissionRevision`），並與連線／scene 門檻綁在一起，屬送點授權範圍，依規則不改。
+- **C5-5 不做**：移除 picker `objectWillChange` 轉發只省約 20 行，卻有 UI 不刷新的風險。
 - **B2 ✅**：Core 測試 11,568 → **5,999** 行；保留一個「自動重試最終成功」case。
 - **C5-7 ✅**：mode 按鈕最小 44×44；`GoFlyModeUITestSupport` 加回 44pt 斷言。
 - **C5-3 ✅**：漫步改為單一隨機方向＋固定十分鐘距離，刪 32 樣本與最近 100 點排除。
@@ -177,7 +178,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 - **C4-3 ✅**：冷啟動 hold 改成 `coldClearPending`；**啟動時自動送一次 clear**，失敗時保持 stopped、不設定錯誤、不彈窗，只保留提示與 pending；Start 不受影響。ACK 後清空 session active／uncertainty 並 flush 成功才解除；舊 cold 欄位由 codec 忽略。
 - **C4-2 ✅**：`ConnectionRecoveryController` 合併 `TunnelResetState`，測試併為 `ConnectionRecoveryTests`；冷啟動行為未改。
 - **C4-1b 背景授權模型簡化（手機驗收後）**：目前呼叫鏈是 `PointDispatchGate.claim` → `MovementTaskAuthority.install`／`permitsDispatch`；`ServiceController.bindMovementContinuation`／`hasMovementContinuation`／`retireMovementContinuation` 以 grant 的 `requestID`／`movementID`／`lease`／`isValid` 當 native dispatch 授權。可能的簡化方向（未定案）：只在前景、或有背景任務執行中時才准送點；背景任務到期就暫停任務並作廢 lease，交給既有 lease 檢查擋住後續送點，不再另外綁 grant。前提是先手機驗證現有背景行為。
-- `SessionRecovery*`（Models＋Codec 435＋Store＋Persistence＋App `GoFlySessionRecovery`）只保留「保存草稿與設定，下次開啟還原草稿」。刪除冷啟動 hold（「必須實際 clear ACK 後才可建立新任務」）——改成：冷啟動若上次有 active 任務，Start 前自動排一次 clear，失敗就顯示錯誤，不做持久化的不確定狀態機。
+- `SessionRecovery*` 只保留草稿與設定；冷啟動自動送一次 clear，失敗保持 stopped、不設錯誤、不彈窗，只留提示；Start 不受影響；ACK 後清空 active／uncertainty 並 flush 成功才解除。
 - `MovementRecoveryController`（584）與 `TunnelResetState` 合併為一個前景連線檢查＋Reset 的小 controller。
 - 背景（`ContinuedProcessing*`、`MovementContinuation*`、`GoFlyContinuedProcessingDriver` 422、`GoFlyContinuationView`）：照 D-E 縮成最小 driver。
 
@@ -201,7 +202,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 
 - **D-A 刪除**：M2 重裝＋iOS 匯出／還原整塊移除，包含 `GoFlyTransferValidator`。 ✅ done (6693306)
 - **D-B 刪除**：M3 本機備份管理整塊移除。 ✅ done (9ba61ad)
-- **D-C 改寫**：刪除 protocol 5 管理（Mac `Management/`、Swift Management 系列、iOS `Management*` 信箱），續簽改成 setup 的 `renew` 模式。 🟡 renew done (68b1e4c)；配對修復待決定。
+- **D-C 改寫**：刪除 protocol 5 管理（Mac `Management/`、Swift Management 系列、iOS `Management*` 信箱），續簽改成 setup 的 `renew` 模式。 ✅ renew done (68b1e4c)；配對修復見 D-H（暫不實作）。
 - **D-D 不做**：Wi-Fi 續傳（包括 lean MVP）不實作，刪除相關決策文件與規格段落。 ✅ done (bc7a765)
 - **D-E 保留最小版**：背景持續執行改成 ≤150 行的 driver（細節見下表）。
 - **D-F 保留三語**：en／zh-Hant／zh-Hans 全部保留。
@@ -278,9 +279,9 @@ UI 煙霧測試（Phase B1 後）：`xcodebuild test -scheme GoFly -destination 
 
 | 區域 | 現況 | 目標（D 已定案） |
 | --- | ---: | ---: |
-| iOS Core＋App | ~24.9k | ~13k |
+| iOS Core＋App（C2、C4-1b 延後；C5-1／C5-4／C5-5 不做） | ~24.9k | ~13k |
 | iOS 測試（Core＋UI） | ~20k | ~6k |
-| Mac Python | ~21.9k＋5.8k 測試 | ~4k＋1.5k 測試 |
+| Mac Python（C1-d 延後，setup_adapters／setup_support 尚未精簡） | ~21.9k＋5.8k 測試 | ~4k＋1.5k 測試 |
 | Mac Swift | ~6.9k＋1.9k 測試 | ~3k＋0.6k 測試 |
 | 文件 | ~3.5k | ~0.8k |
 | **合計** | **~85k** | **~29k** |
