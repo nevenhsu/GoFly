@@ -165,6 +165,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 ### C4. iOS：恢復／背景層合併
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
+- **C5-3 ✅**：漫步改為單一隨機方向＋固定十分鐘距離，刪 32 樣本與最近 100 點排除。
 - **C5-2 ✅**：`ContinuedProcessingRegistrationBook` 已隨 C4-1 刪除，啟動只註冊一次。
 - **C4-1 背景 driver 精簡 ✅**：保留 Grant／`MovementContinuationController` 授權模型；driver 縮到 143 行、刪 `ContinuedProcessingRegistrationBook` 與 `GoFlyContinuationView`，啟動只註冊一次；沿用既有 `setTaskCompleted` 與 progress 回報。
 - **C4-3 ✅**：冷啟動 hold 改成 `coldClearPending`；**啟動時自動送一次 clear**，失敗時保持 stopped、不設定錯誤、不彈窗，只保留提示與 pending；Start 不受影響。ACK 後清空 session active／uncertainty 並 flush 成功才解除；舊 cold 欄位由 codec 忽略。

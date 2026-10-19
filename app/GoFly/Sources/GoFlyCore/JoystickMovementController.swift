@@ -227,8 +227,8 @@ public final class JoystickMovementController: ObservableObject {
     }
 
     private func selectTarget(origin: GeoCoordinate) -> WanderTarget? {
-        WanderTargetSelector.select(origin: origin, speed: speed, currentTarget: wanderTarget,
-            history: wanderHistory, bearingSamples: wanderBearingSamples())
+        WanderTargetSelector.select(origin: origin, speed: speed,
+            bearingSamples: wanderBearingSamples())
     }
     private func commitTarget(_ target: WanderTarget) {
         if let intent { _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease) }
