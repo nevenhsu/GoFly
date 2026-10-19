@@ -11,6 +11,8 @@ public final class MacSetupModel {
     public private(set) var cancellationRequested = false
     public private(set) var isRestored = false
     public private(set) var options: MacSetupOptions?
+    public private(set) var mode: MacSetupMode = .install
+    @ObservationIgnored private var applyAfterPreflight = false
     @ObservationIgnored private let runner: any MacSetupRunning
     @ObservationIgnored private let journal: any MacSetupJournalReading
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -46,6 +48,8 @@ public final class MacSetupModel {
         snapshot = nil
         progressStage = nil
         failure = nil
+        mode = .install
+        applyAfterPreflight = false
     }
     public func restore() async {
         guard !isRestored, !isBusy else { return }
@@ -54,18 +58,25 @@ public final class MacSetupModel {
         isRestored = true
         isBusy = false
     }
-    public func configure(deviceID: String, options: MacSetupOptions) throws {
+    public func configure(deviceID: String, options: MacSetupOptions, mode: MacSetupMode = .install) throws {
         guard isRestored, !isBusy, !journalBlocked else { throw MacSetupFailure.invalidResponse }
         guard journalIdentity == nil else { throw MacSetupFailure.service("transaction-conflict") }
-        continuation = try MacSetupContinuation(setupID: UUID(), deviceID: deviceID)
+        continuation = try MacSetupContinuation(setupID: UUID(), deviceID: deviceID, mode: mode)
         self.options = options
+        self.mode = mode
         snapshot = nil
         progressStage = nil
         failure = nil
     }
     public func preflight() {
         guard journalIdentity == nil, options != nil else { return }
+        applyAfterPreflight = mode == .renew
         start(.preflight)
+    }
+    public func beginRenew(deviceID: String, options: MacSetupOptions) throws {
+        if snapshot?.isComplete == true { resetSelection() }
+        try configure(deviceID: deviceID, options: options, mode: .renew)
+        preflight()
     }
     public func apply() {
         guard canApply else { return }
@@ -92,6 +103,7 @@ public final class MacSetupModel {
         let request: MacSetupRequest
         do {
             request = try MacSetupRequest(action: action, setupID: identity.setupID, deviceID: identity.deviceID,
+                                          mode: mode,
                                           options: action == .preflight || action == .apply ? options : nil)
         } catch {
             failure = error as? MacSetupFailure ?? .invalidRequest
@@ -120,6 +132,16 @@ public final class MacSetupModel {
             observing?.cancel()
             await observing?.value
             progressTask = nil
+            if action == .preflight, let observed, observed.stage == .preflight,
+               observed.outcome == .ready, observed.errorCode == nil, applyAfterPreflight, !Task.isCancelled {
+                applyAfterPreflight = false
+                snapshot = observed
+                isBusy = false
+                task = nil
+                apply()
+                return
+            }
+            applyAfterPreflight = false
             if action != .preflight || Task.isCancelled {
                 do {
                     let actual = try await journal.readContinuation()
@@ -176,7 +198,8 @@ public final class MacSetupModel {
             do {
                 guard !Task.isCancelled else { return }
                 guard try await journal.readContinuation() == identity else { continue }
-                let request = try MacSetupRequest(action: .status, setupID: identity.setupID, deviceID: identity.deviceID)
+                let request = try MacSetupRequest(action: .status, setupID: identity.setupID,
+                                                  deviceID: identity.deviceID, mode: mode)
                 let data = try await runner.run(request)
                 let observed = try MacSetupResponseDecoder.decode(data, for: request)
                 guard !Task.isCancelled, isBusy, continuation == identity else { return }
@@ -194,6 +217,7 @@ public final class MacSetupModel {
         do {
             journalIdentity = try await journal.readContinuation()
             continuation = journalIdentity
+            mode = journalIdentity?.mode ?? .install
             options = nil
             snapshot = nil
             journalBlocked = false

@@ -13,6 +13,20 @@
 - 技術界線：Apple BuildManifest 讀取上限 4 MiB、支援檔總量 4 GiB、交易 JSON 256 KiB，分開計算。Cryptex 已安裝版本取自受雜湊保護的 `Image.dmg.cryptex_info` 的 `CFBundleVersion`，不以 BuildManifest 的 `Cryptex1,Version` 佔位值代替。
 - iOS 在交接資料驗證並原子提交前不建立正常服務、任務或資料商店。提交不代表 VPN 已連線、GPS 已取得、clear 已完成或移動已授權。完成後可拔 USB；手機不另行下載支援資料，也不出現 U19 或 H12。
 
+
+## 連線成功後自動重新簽名
+
+在裝置管理明確選取裝置並成功完成 inspect、且確認已安裝 GoFly 時，自動開始一次 setup 的 `renew`。`renew` 以相同 Bundle ID 覆蓋安裝，保留 App 資料，不先移除 App。preflight 要求裝置上已有 GoFly，缺少時回 `app-not-installed`；GoFly 執行中沿用 `app-running` 提示。
+
+- 同一次選取最多自動觸發一次；刷新裝置清單、重新 inspect、返回裝置頁都不再觸發。
+- 一次只能有一筆 setup／renew；自動與手動入口共用同一個 `operation.lock` 與進度。
+- 結果不明時保留 `install=unknown`，不重送、不推定成功；resume 由使用者明確接續。
+- 完成後顯示可驗證的 `expiresAt`；讀不到 provisioning profile 的到期日時為 null，不自估。
+
+## 保留手動重新簽名流程
+
+裝置頁在已安裝 GoFly 時顯示「重新簽名」。按下後沿用 Setup 頁的表單、進度與結果元件，不新增頁面或 model；已有 renew 在執行時顯示同一筆進度，不另開交易。手動流程與自動觸發走同一個 `mode: "renew"` 路徑，只更新簽章與安裝結果，不重做配對、支援或 handoff，也不清除 App 資料。
+
 ## DMG 發行
 
 正式交付入口是下載 Mac DMG → 開啟 GoFly → USB 連接 iPhone → 由 Mac 安裝 iPhone App。DMG 內 App 不得依賴開發者工作目錄絕對路徑；所需 runtime／工具須隨包提供或由 App 明確引導設定。

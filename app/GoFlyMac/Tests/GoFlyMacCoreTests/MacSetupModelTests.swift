@@ -294,6 +294,80 @@ import GoFlyMacCore
         #expect(setup.progressStage == nil, "A late cancelled observer cannot publish new progress.")
     }
 
+
+    @Test func automaticRenewStartsOnceAndManualDoesNotOverlap() async throws {
+        let runner = HeldSetupRunner()
+        let journal = ModelJournal(nil)
+        let setup = MacSetupModel(runner: runner, journal: journal)
+        let app = MacAppModel(live: RenewChecker(), setup: setup)
+        await app.restoreSetup()
+        app.checkEnvironment()
+        #expect(await waitForAppCheck(app))
+        app.openDevices(firstInstall: false)
+        #expect(await waitForAppCheck(app))
+        app.select(device)
+        app.inspectSelected()
+        #expect(await waitForAppCheck(app))
+        guard await waitForRequests(1, runner) else {
+            Issue.record("Automatic renew preflight did not reach the runner")
+            return
+        }
+        let preflight = try #require(await runner.requests.last)
+        #expect(preflight.mode == .renew && preflight.action == .preflight)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
+        guard await waitForRequests(2, runner) else {
+            Issue.record("Automatic renew apply did not reach the runner")
+            return
+        }
+        let apply = try #require(await runner.requests.last)
+        #expect(apply.mode == .renew && apply.action == .apply)
+
+        // A second inspection/refresh cannot create another transaction.
+        app.inspectSelected()
+        app.refreshDevices()
+        #expect(await runner.requests.count == 2)
+        await runner.fail(.cancelled)
+        #expect(await waitUntilIdle(setup))
+    }
+
+    @Test func manualRenewJoinsTheAutomaticOperationWithoutParallelApply() async throws {
+        let runner = HeldSetupRunner()
+        let setup = MacSetupModel(runner: runner, journal: ModelJournal(nil))
+        let app = MacAppModel(live: RenewChecker(), setup: setup)
+        await app.restoreSetup()
+        app.checkEnvironment()
+        #expect(await waitForAppCheck(app))
+        app.openDevices(firstInstall: false)
+        #expect(await waitForAppCheck(app))
+        app.select(device)
+        app.inspectSelected()
+        #expect(await waitForAppCheck(app))
+        guard await waitForRequests(1, runner) else {
+            Issue.record("Automatic renew preflight did not reach the runner")
+            return
+        }
+        app.startRenew()
+        #expect(await runner.requests.count == 1)
+        let preflight = try #require(await runner.requests.last)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
+        guard await waitForRequests(2, runner) else {
+            Issue.record("Automatic renew apply did not reach the runner")
+            return
+        }
+        app.startRenew()
+        #expect(await runner.requests.count == 2)
+        await runner.fail(.cancelled)
+        #expect(await waitUntilIdle(setup))
+    }
+
+    private func waitForAppCheck(_ app: MacAppModel, attempts: Int = 400) async -> Bool {
+        for _ in 0..<attempts {
+            if !app.isChecking { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return false
+    }
+
     private func waitForRequests(_ count: Int, _ runner: HeldSetupRunner, attempts: Int = 200) async -> Bool {
         for _ in 0..<attempts {
             if await runner.requests.count >= count { return true }
@@ -320,6 +394,24 @@ import GoFlyMacCore
         ]
         if let code { value["code"] = code }
         return try JSONSerialization.data(withJSONObject: value)
+    }
+}
+
+private struct RenewChecker: MacChecking {
+    func check(_ request: CheckRequest) async throws -> Data {
+        let payload: [String: Any]
+        switch request.action {
+        case .environment:
+            payload = ["ready": true, "checks": [], "teamID": "ABCDE12345"]
+        case .devices:
+            payload = ["devices": [["id": "00008110-001234567890abcd", "name": "iPhone", "transport": "usb"]]]
+        case .inspect:
+            payload = ["device": ["id": "00008110-001234567890abcd", "name": "iPhone", "transport": "usb"],
+                       "developerMode": true, "installed": true, "vpnInstalled": true]
+        }
+        return try JSONSerialization.data(withJSONObject: [
+            "protocol": 1, "requestID": request.requestID, "status": "ok", "payload": payload
+        ])
     }
 }
 

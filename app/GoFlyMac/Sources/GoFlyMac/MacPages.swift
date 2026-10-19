@@ -149,6 +149,10 @@ extension MacRootView {
                 PillButton(title: "檢查裝置", primary: true, enabled: model.mayInspect) { model.inspectSelected() }
                     .accessibilityIdentifier("inspect-device")
             case .device:
+                if model.inspection?.installed == true {
+                    PillButton(title: "重新簽名") { model.startRenew() }
+                        .accessibilityIdentifier("renew-signing")
+                }
                 Spacer(minLength: 0)
                 PillButton(title: "重新檢查狀態", primary: true, enabled: model.selected != nil) { model.inspectSelected() }
             case .install:

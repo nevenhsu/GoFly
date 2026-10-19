@@ -64,6 +64,7 @@ def request(action: str = "status", **extra: object) -> dict[str, object]:
         "action": action,
         "setupID": SETUP_ID,
         "deviceID": DEVICE,
+        "mode": "install",
     }
     value.update(extra)
     return value
@@ -1728,6 +1729,129 @@ class ChangingBoundaryDevice:
     def observe(self, device_id: str) -> DeviceObservation:
         self.boundary_calls += 1
         return DeviceObservation(device_id, "26.4.0", "USB", True, True)
+
+
+
+class RenewDevice:
+    def __init__(self, present: bool = True, fail_install: bool = False) -> None:
+        self.present = present
+        self.fail_install = fail_install
+        self.install_calls = 0
+
+    def observe(self, device_id: str) -> DeviceObservation:
+        return DeviceObservation(device_id, "27.0", "USB", True, True)
+
+    def installed(self, device_id: str) -> InstalledAppObservation:
+        return InstalledAppObservation(self.present, "com.neven.gofly")
+
+    def install(self, device_id: str, artifact: ArtifactIdentity) -> InstalledAppObservation:
+        self.install_calls += 1
+        if self.fail_install:
+            raise RuntimeError("controlled process death")
+        return InstalledAppObservation(True, "com.neven.gofly", build=artifact.build)
+
+    def pair(self, *_args: object) -> PairingObservation:
+        raise AssertionError("renew must not pair")
+
+    def verify_pairing(self, *_args: object) -> PairingObservation:
+        raise AssertionError("renew must not verify pairing")
+
+    def deliver_pairing(self, *_args: object) -> None:
+        raise AssertionError("renew must not deliver pairing")
+
+    def launch(self, *_args: object) -> None:
+        raise AssertionError("renew must not launch")
+
+    def stop(self, *_args: object) -> None:
+        raise AssertionError("renew must not stop")
+
+    def readback(self, *_args: object) -> None:
+        raise AssertionError("renew must not read back")
+
+    def query_support(self, *_args: object) -> SupportObservation:
+        raise AssertionError("renew must not query support")
+
+    def install_support(self, *_args: object) -> SupportObservation:
+        raise AssertionError("renew must not install support")
+
+
+class RenewB1Tests(unittest.TestCase):
+    def producer(self, directory: str, device: RenewDevice) -> SetupProducer:
+        root = Path(directory)
+        (root / "GoFly.app").mkdir(exist_ok=True)
+        (root / "GoFly.xcodeproj").mkdir(exist_ok=True)
+        (root / "Developer").mkdir(exist_ok=True)
+        (root / "python").touch()
+        config = SetupConfiguration(
+            root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
+            "com.neven.gofly", "GoFly", root / "state",
+        )
+        return SetupProducer(config, device=device, artifact_validator=FakeArtifactValidator())
+
+    def options(self, root: Path) -> dict[str, object]:
+        return {
+            "source": "signedApp",
+            "artifactPath": str(root / "GoFly.app"),
+            "teamID": "ABCDEFGHIJ",
+            "allowProvisioningUpdates": False,
+        }
+
+    def test_renew_preflight_rejects_a_missing_app(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            producer = self.producer(directory, RenewDevice(present=False))
+            with mock.patch.object(SetupConfiguration, "validate_read_only_paths", return_value=None):
+                with self.assertRaisesRegex(SetupBridgeError, "app-not-installed"):
+                    producer.handle(decode_request(json.dumps(request(
+                        "preflight", mode="renew", options=self.options(root)
+                    )).encode()))
+
+    def test_renew_apply_installs_without_pairing_or_support(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = RenewDevice()
+            producer = self.producer(directory, device)
+            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
+                result = producer.handle(decode_request(json.dumps(request(
+                    "apply", mode="renew", options=self.options(root)
+                )).encode()))
+            self.assertEqual(result.stage, "complete")
+            self.assertEqual(result.outcome, "confirmed")
+            self.assertTrue(result.installation_confirmed)
+            self.assertFalse(result.pairing_imported)
+            self.assertFalse(result.support_observed)
+            self.assertEqual(result.expires_at, "2030-01-01T00:00:00Z")
+            journal = JournalStore(root / "state").read()
+            self.assertEqual(set(journal["stages"]), {"artifact", "install", "complete"})
+            for absent in ("pairing", "support", "handoff"):
+                self.assertNotIn(absent, journal["stages"])
+            self.assertEqual(device.install_calls, 1)
+
+    def test_renew_unknown_install_resume_does_not_resubmit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = RenewDevice(fail_install=True)
+            producer = self.producer(directory, device)
+            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
+                with self.assertRaises(SetupBridgeError):
+                    producer.handle(decode_request(json.dumps(request(
+                        "apply", mode="renew", options=self.options(root)
+                    )).encode()))
+                self.assertEqual(device.install_calls, 1)
+                result = producer.handle(decode_request(json.dumps(request("resume", mode="renew")).encode()))
+            self.assertEqual(result.outcome, "unknown")
+            self.assertEqual(result.stage, "install")
+            self.assertEqual(device.install_calls, 1)
+
+    def test_install_mode_still_rejects_an_existing_app(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            producer = self.producer(directory, RenewDevice(present=True))
+            with mock.patch.object(SetupConfiguration, "validate_read_only_paths", return_value=None):
+                with self.assertRaisesRegex(SetupBridgeError, "app-already-installed"):
+                    producer.handle(decode_request(json.dumps(request(
+                        "preflight", mode="install", options=self.options(root)
+                    )).encode()))
 
 
 class StdioB1Tests(unittest.TestCase):

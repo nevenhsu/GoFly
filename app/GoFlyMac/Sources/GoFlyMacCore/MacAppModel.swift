@@ -47,6 +47,7 @@ public final class MacAppModel {
     @ObservationIgnored private var activeCheckID: UUID?
     private enum PendingCheckAction { case mode(Bool), scenario }
     @ObservationIgnored private var pendingCheckAction: PendingCheckAction?
+    @ObservationIgnored private var renewTriggeredSelection: String?
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil) {
         self.live = live
@@ -158,6 +159,7 @@ public final class MacAppModel {
         }
         selectedID = id; selectedTransport = choice.transport
         inspection = nil; failure = nil
+        renewTriggeredSelection = nil
     }
 
     public func openDevices(firstInstall: Bool) {
@@ -194,6 +196,38 @@ public final class MacAppModel {
                   result.device.transport == device.transport else { throw CheckFailure.invalidResponse }
             self.inspection = result
             self.page = self.firstInstall ? .install : .device
+            self.triggerAutomaticRenewIfNeeded(device)
+        }
+    }
+
+    private func triggerAutomaticRenewIfNeeded(_ device: ConnectedDevice) {
+        guard !isPreview, !firstInstall, inspection?.installed == true,
+              renewTriggeredSelection != device.connectionID,
+              let setup, setup.isRestored, !setup.isBusy, !setup.hasRecordedTransaction,
+              let team = environment?.teamID,
+              let options = try? MacSetupOptions(source: .project, teamID: team) else { return }
+        renewTriggeredSelection = device.connectionID
+        do {
+            try setup.beginRenew(deviceID: device.id, options: options)
+        } catch {
+            renewTriggeredSelection = nil
+        }
+    }
+
+    public func startRenew() {
+        guard !busy, let device = selected, inspection?.installed == true,
+              let setup, setup.isRestored, !setup.isBusy,
+              let team = environment?.teamID,
+              let options = try? MacSetupOptions(source: .project, teamID: team) else { return }
+        if setup.hasRecordedTransaction && setup.snapshot?.isComplete != true {
+            page = .install
+            return
+        }
+        do {
+            try setup.beginRenew(deviceID: device.id, options: options)
+            page = .install
+        } catch {
+            page = .install
         }
     }
 

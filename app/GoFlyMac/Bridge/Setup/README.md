@@ -25,15 +25,15 @@ BuildManifest may be a placeholder and is not an installed-version proof.
 
 `setup_bridge.py` accepts one strict JSON request from stdin and emits one
 bounded response. The frozen request fields are `protocol`, `requestID`,
-`operation`, `action`, `setupID`, `deviceID`, and, for `preflight`/`apply`, an
-exact `options` object. `SetupConfiguration` accepts only the seven frozen
+`operation`, `action`, `setupID`, `deviceID`, `mode` (`install` or `renew`),
+and, for `preflight`/`apply`, an exact `options` object. `SetupConfiguration` accepts only the seven frozen
 configuration keys and enforces `com.neven.gofly` / `GoFly`.
 
 `JournalStore` owns the single `stateRoot/journal.json` state record and
 `operation.lock`. The root header is always:
 
 ```json
-{"version":1,"operation":"setup","setupID":"...","deviceID":"..."}
+{"version":1,"operation":"setup","setupID":"...","deviceID":"...","mode":"install"}
 ```
 
 Writes use a private temporary file, file fsync, atomic replacement, and
@@ -47,9 +47,21 @@ launches, stops, hands off, or resubmits it.
 Status and header reads are read-only: they reject an unsafe or missing root
 without creating directories or changing permissions. Apply is the only path
 that prepares the fixed current-user private state root; transaction mutations
-then require its one operation lease. A proven completed journal can be archived only under
-that same lease before a later explicit setup on a different selected device;
-unresolved or same-device state remains a conflict.
+then require its one operation lease. A proven completed install journal can be
+archived only under that same lease before a later explicit setup on a different
+selected device; a proven completed renew journal may be replaced for the next
+explicit renew. Unresolved state remains a conflict.
+
+## Renew mode
+
+`mode: "renew"` re-signs and overwrites the installed `com.neven.gofly` bundle
+without unlinking it, so iOS keeps the existing App data. Preflight requires an
+installed App and returns `app-not-installed` otherwise; an already running App
+keeps the existing `app-running` handling. Renew journals contain only
+`artifact`, `install`, and `complete` stages and never run pairing, support, or
+handoff. A confirmed `complete` payload carries the signed artifact profile's
+`ExpirationDate` as `expiresAt`, or `null` when it is unavailable. An unknown
+install remains unknown on status/resume and is never resubmitted.
 
 The production seams are `DeviceAdapter`, `ProcessAdapter`, `SupportAdapter`,
 `FormalArtifactValidator`, `PinnedPymobiledeviceAdapter`, and

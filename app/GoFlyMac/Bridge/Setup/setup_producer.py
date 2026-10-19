@@ -140,7 +140,10 @@ class SetupProducer:
         self.config.validate_read_only_paths()
         observed = self._observe_device(request.device_id)
         existing = self.device.installed(request.device_id)
-        if existing.present:
+        if request.mode == "renew":
+            if not existing.present:
+                raise SetupBridgeError("app-not-installed")
+        elif existing.present:
             raise SetupBridgeError("app-already-installed")
         artifact = None
         if options.source == "signedApp":
@@ -165,6 +168,8 @@ class SetupProducer:
         options = request.options
         if options is None:
             raise SetupBridgeError("invalid-request")
+        if request.mode == "renew":
+            return self._apply_renew(request)
         # State-root creation is a write-side operation.  The CLI validates
         # the frozen paths before constructing this producer; direct injected
         # seams may use a temporary SetupConfiguration for controlled tests.
@@ -318,6 +323,113 @@ class SetupProducer:
                         journal = self.store.checkpoint(journal, stage, "unknown", detail="operation-failed")
                 raise SetupBridgeError("operation-failed") from None
 
+    def _apply_renew(self, request: SetupRequest) -> ProducerPayload:
+        options = request.options
+        assert options is not None
+        self.config.ensure_state_root()
+        with self.store.lock():
+            observed = self._observe_device(request.device_id)
+            if not self.device.installed(request.device_id).present:
+                raise SetupBridgeError("app-not-installed")
+            existing = self.store.read()
+            if existing is not None:
+                if existing.get("setupID") == request.setup_id and existing.get("deviceID") == request.device_id:
+                    raise SetupBridgeError("transaction-conflict")
+                if not self._journal_is_completed(existing):
+                    raise SetupBridgeError("transaction-conflict")
+                self.store.archive_completed_locked(existing["setupID"], existing["deviceID"])
+            journal = self.store.create(
+                request.setup_id,
+                request.device_id,
+                {
+                    "source": options.source,
+                    "artifactPath": options.artifact_path,
+                    "teamID": options.team_id,
+                    "allowProvisioningUpdates": options.allow_provisioning_updates,
+                    "targetBundleID": self.config.target_bundle_id,
+                    "targetName": self.config.target_name,
+                    "artifact": None,
+                },
+                mode="renew",
+            )
+            try:
+                journal["intent"]["deviceObservation"] = {
+                    "deviceID": observed.device_id,
+                    "osVersion": observed.os_version,
+                    "transport": observed.transport,
+                    "developerMode": True,
+                    "trust": True,
+                }
+                journal = self.store.update(journal)
+                journal = self.store.checkpoint(journal, "artifact", "inflight")
+                artifact = self._build_or_validate(request, observed)
+                artifact = snapshot_artifact(
+                    artifact,
+                    self.store.transaction_root(request.setup_id) / "artifact" / "GoFly.app",
+                    self.artifact_validator,
+                    device_id=request.device_id,
+                    team_id=artifact.team_id,
+                )
+                journal["intent"]["artifact"] = self._artifact_dict(artifact)
+                journal = self.store.checkpoint(journal, "artifact", "confirmed")
+                journal = self.store.checkpoint(journal, "install", "inflight")
+                self._observe_device(request.device_id)
+                if not self.device.installed(request.device_id).present:
+                    journal = self.store.checkpoint(journal, "install", "unknown", detail="app-not-installed")
+                    raise SetupBridgeError("app-not-installed")
+                current_artifact = self.artifact_validator.inspect(
+                    artifact.path, device_id=request.device_id, team_id=artifact.team_id
+                )
+                if current_artifact != artifact:
+                    journal = self.store.checkpoint(journal, "install", "unknown", detail="artifact-changed")
+                    raise SetupBridgeError("artifact-mismatch")
+                installed = self.device.install(request.device_id, artifact)
+                if not self._install_result_confirms(installed, artifact):
+                    journal = self.store.checkpoint(journal, "install", "unknown", detail="postcondition-unconfirmed")
+                    return self._payload_from_journal(journal, artifact=artifact, can_resume=True)
+                journal["installOwnership"] = {
+                    "transactionID": request.setup_id,
+                    "bundleID": artifact.bundle_id,
+                    "build": artifact.build,
+                    "artifactSHA256": artifact.artifact_sha256,
+                    "executableSHA256": artifact.executable_sha256,
+                    "profileSHA256": artifact.profile_sha256,
+                }
+                journal = self.store.checkpoint(
+                    journal, "install", "confirmed", proof={"installationConfirmed": True}
+                )
+                journal = self.store.checkpoint(
+                    journal, "complete", "confirmed", proof={"installationConfirmed": True}
+                )
+                receipt = self._receipt_digest(journal)
+                journal["receiptSHA256"] = receipt
+                journal = self.store.update(journal)
+                return self._payload_from_journal(journal, artifact=artifact, can_resume=False, receipt=receipt)
+            except SetupBridgeError as error:
+                stage = self._inflight_stage(journal)
+                if stage is not None:
+                    with _suppress_journal_errors():
+                        journal = self.store.checkpoint(journal, stage, "unknown", detail=error.code)
+                raise
+            except TimeoutError:
+                stage = self._inflight_stage(journal)
+                with _suppress_journal_errors():
+                    if stage is not None:
+                        journal = self.store.checkpoint(journal, stage, "unknown", detail="timeout")
+                raise SetupBridgeError("timeout") from None
+            except KeyboardInterrupt:
+                stage = self._inflight_stage(journal)
+                with _suppress_journal_errors():
+                    if stage is not None:
+                        journal = self.store.checkpoint(journal, stage, "unknown", detail="cancelled")
+                raise SetupBridgeError("cancelled") from None
+            except Exception:
+                stage = self._inflight_stage(journal)
+                with _suppress_journal_errors():
+                    if stage is not None:
+                        journal = self.store.checkpoint(journal, stage, "unknown", detail="operation-failed")
+                raise SetupBridgeError("operation-failed") from None
+
     def status(self, request: SetupRequest) -> ProducerPayload:
         journal = self.store.read()
         if journal is None:
@@ -331,6 +443,8 @@ class SetupProducer:
             if journal is None:
                 raise SetupBridgeError("transaction-unknown")
             self._bind(journal, request)
+            if journal.get("mode", "install") == "renew":
+                return self._resume_renew(journal, request)
             stages = journal["stages"]
             if stages["artifact"]["state"] in {"pending", "unknown", "inflight"}:
                 journal = self._resume_artifact(journal, request)
@@ -1155,6 +1269,72 @@ class SetupProducer:
         journal = self.store.checkpoint(journal, "handoff", "confirmed", proof={"pairingImported": True})
         return journal
 
+    def _resume_renew(self, journal: dict[str, Any], request: SetupRequest) -> ProducerPayload:
+        stages = journal["stages"]
+        if stages["artifact"]["state"] in {"pending", "unknown", "inflight"}:
+            journal = self._resume_artifact(journal, request)
+            stages = journal["stages"]
+        if stages["install"]["state"] == "pending":
+            artifact = self._artifact_from_journal(journal)
+            if artifact is None:
+                raise SetupBridgeError("transaction-unknown")
+            self._observe_device(request.device_id)
+            if not self.device.installed(request.device_id).present:
+                journal = self.store.checkpoint(journal, "install", "unknown", detail="app-not-installed")
+                return self._payload_from_journal(journal, can_resume=True)
+            journal = self.store.checkpoint(journal, "install", "inflight")
+            current_artifact = self.artifact_validator.inspect(
+                artifact.path, device_id=request.device_id, team_id=artifact.team_id
+            )
+            if current_artifact != artifact:
+                journal = self.store.checkpoint(journal, "install", "unknown", detail="artifact-changed")
+                raise SetupBridgeError("artifact-mismatch")
+            try:
+                installed = self.device.install(request.device_id, artifact)
+            except SetupBridgeError as error:
+                journal = self.store.checkpoint(journal, "install", "unknown", detail=error.code)
+                return self._payload_from_journal(journal, can_resume=True)
+            except Exception:
+                journal = self.store.checkpoint(journal, "install", "unknown", detail="operation-failed")
+                return self._payload_from_journal(journal, can_resume=True)
+            if not self._install_result_confirms(installed, artifact):
+                journal = self.store.checkpoint(journal, "install", "unknown", detail="postcondition-unconfirmed")
+                return self._payload_from_journal(journal, can_resume=True)
+            journal["installOwnership"] = {
+                "transactionID": request.setup_id,
+                "bundleID": artifact.bundle_id,
+                "build": artifact.build,
+                "artifactSHA256": artifact.artifact_sha256,
+                "executableSHA256": artifact.executable_sha256,
+                "profileSHA256": artifact.profile_sha256,
+            }
+            journal = self.store.checkpoint(
+                journal, "install", "confirmed", proof={"installationConfirmed": True}
+            )
+            stages = journal["stages"]
+        if stages["install"]["state"] in {"inflight", "unknown"}:
+            self._observe_device(request.device_id)
+            with _suppress_journal_errors():
+                self.device.installed(request.device_id)
+            return self._payload_from_journal(journal, can_resume=True)
+        if stages["install"]["state"] != "confirmed":
+            return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
+        if stages["complete"]["state"] != "confirmed":
+            journal = self.store.checkpoint(
+                journal, "complete", "confirmed", proof={"installationConfirmed": True}
+            )
+            receipt = self._receipt_digest(journal)
+            journal["receiptSHA256"] = receipt
+            journal = self.store.update(journal)
+        elif not (
+            isinstance(journal.get("receiptSHA256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", journal["receiptSHA256"]) is not None
+        ):
+            receipt = self._receipt_digest(journal)
+            journal["receiptSHA256"] = receipt
+            journal = self.store.update(journal)
+        return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
+
     def _resume_handoff(self, journal: dict[str, Any], request: SetupRequest) -> ProducerPayload:
         artifact = self._artifact_from_journal(journal)
         handoff = journal.get("handoff")
@@ -1400,6 +1580,8 @@ class SetupProducer:
             raise SetupBridgeError("transaction-conflict")
         if journal.get("deviceID") != request.device_id:
             raise SetupBridgeError("identity-mismatch")
+        if journal.get("mode", "install") != request.mode:
+            raise SetupBridgeError("transaction-conflict")
 
     @staticmethod
     def _can_resume(journal: Mapping[str, Any]) -> bool:
@@ -1409,7 +1591,10 @@ class SetupProducer:
 
     @staticmethod
     def _inflight_stage(journal: Mapping[str, Any]) -> str | None:
-        for stage in ("artifact", "pairing", "install", "support", "handoff", "complete"):
+        order = ("artifact", "install", "complete") if journal.get("mode") == "renew" else (
+            "artifact", "pairing", "install", "support", "handoff", "complete"
+        )
+        for stage in order:
             if journal.get("stages", {}).get(stage, {}).get("state") == "inflight":
                 return stage
         return None
@@ -1422,7 +1607,7 @@ class SetupProducer:
         if source not in {"project", "signedApp"} or not isinstance(team_id, str):
             raise SetupBridgeError("transaction-unknown")
         options = SetupOptions(source, artifact_path, team_id, intent.get("allowProvisioningUpdates") is True)
-        rebound = SetupRequest(request.request_id, "apply", request.setup_id, request.device_id, options)
+        rebound = SetupRequest(request.request_id, "apply", request.setup_id, request.device_id, request.mode, options)
         try:
             observed = self._observe_device(request.device_id)
             journal = self.store.checkpoint(journal, "artifact", "inflight")
@@ -1471,7 +1656,11 @@ class SetupProducer:
     ) -> ProducerPayload:
         stages = journal["stages"]
         proof = journal.get("proof", {})
-        for stage in ("artifact", "pairing", "install", "support", "handoff", "complete"):
+        mode = journal.get("mode", "install")
+        order = ("artifact", "install", "complete") if mode == "renew" else (
+            "artifact", "pairing", "install", "support", "handoff", "complete"
+        )
+        for stage in order:
             state = stages[stage]["state"]
             if state in {"unknown", "inflight"}:
                 current = stage
@@ -1487,12 +1676,12 @@ class SetupProducer:
             # below the protocol's confirmed-complete boundary.
             receipt_value = journal.get("receiptSHA256")
             proof_complete = (
-                all(proof.get(key) is True for key in (
+                proof.get("installationConfirmed") is True
+                if mode == "renew"
+                else all(proof.get(key) is True for key in (
                     "installationConfirmed", "pairingImported", "supportObserved"
                 ))
-                if isinstance(proof, Mapping)
-                else False
-            )
+            ) if isinstance(proof, Mapping) else False
             if proof_complete and isinstance(receipt_value, str) and re.fullmatch(r"[0-9a-f]{64}", receipt_value):
                 current = "complete"
                 outcome = "confirmed"

@@ -32,7 +32,7 @@ SAFE_ERROR_CODES = frozenset(
         "developer-mode-required",
         "unsupported-os",
         "identity-mismatch",
-        "app-already-installed", "app-running",
+        "app-already-installed", "app-not-installed", "app-running",
         "signing-required",
         "signature-invalid",
         "artifact-mismatch",
@@ -51,6 +51,7 @@ SAFE_ERROR_CODES = frozenset(
     }
 )
 _ACTIONS = frozenset({"preflight", "apply", "status", "resume"})
+_MODES = frozenset({"install", "renew"})
 _SOURCES = frozenset({"signedApp", "project"})
 _STAGES = frozenset({"preflight", "artifact", "pairing", "install", "support", "handoff", "complete"})
 _OUTCOMES = frozenset({"ready", "inProgress", "confirmed", "unknown", "failed"})
@@ -126,6 +127,7 @@ class SetupRequest:
     action: str
     setup_id: str
     device_id: str
+    mode: str
     options: SetupOptions | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -136,6 +138,7 @@ class SetupRequest:
             "action": self.action,
             "setupID": self.setup_id,
             "deviceID": self.device_id,
+            "mode": self.mode,
         }
         if self.options is not None:
             value["options"] = self.options.as_dict()
@@ -173,7 +176,7 @@ def decode_request(data: bytes) -> SetupRequest:
         raise SetupBridgeError("invalid-request")
     if value.get("protocol") != PROTOCOL or type(value.get("protocol")) is not int:
         raise SetupBridgeError("protocol-mismatch")
-    required = {"protocol", "requestID", "operation", "action", "setupID", "deviceID"}
+    required = {"protocol", "requestID", "operation", "action", "setupID", "deviceID", "mode"}
     if set(value) - required - {"options"}:
         raise SetupBridgeError("invalid-request")
     if value.get("operation") != "setup" or not isinstance(value.get("operation"), str):
@@ -181,6 +184,9 @@ def decode_request(data: bytes) -> SetupRequest:
     request_id = _uuid(value.get("requestID"))
     setup_id = _uuid(value.get("setupID"))
     device_id = normalized_device(value.get("deviceID"))
+    mode = value.get("mode")
+    if mode not in _MODES:
+        raise SetupBridgeError("invalid-request")
     action = value.get("action")
     if action not in _ACTIONS:
         raise SetupBridgeError("invalid-request")
@@ -188,7 +194,7 @@ def decode_request(data: bytes) -> SetupRequest:
     if requires_options != ("options" in value):
         raise SetupBridgeError("invalid-request")
     options = _decode_options(value["options"]) if requires_options else None
-    return SetupRequest(request_id, action, setup_id, device_id, options)
+    return SetupRequest(request_id, action, setup_id, device_id, mode, options)
 
 
 def _response_payload(payload: Any) -> dict[str, Any]:
@@ -215,7 +221,7 @@ def _response_payload(payload: Any) -> dict[str, Any]:
     if payload.get("stage") == "preflight" and any(payload["proof"].values()):
         raise SetupBridgeError("operation-failed")
     if payload.get("stage") == "complete" and payload.get("outcome") == "confirmed":
-        if not all(payload["proof"].values()):
+        if not payload["proof"]["installationConfirmed"]:
             raise SetupBridgeError("operation-failed")
         if not isinstance(payload.get("app"), dict):
             raise SetupBridgeError("operation-failed")
@@ -225,7 +231,9 @@ def _response_payload(payload: Any) -> dict[str, Any]:
             raise SetupBridgeError("operation-failed")
         if not isinstance(payload.get("teamID"), str) or TEAM_RE.fullmatch(payload["teamID"]) is None:
             raise SetupBridgeError("operation-failed")
-        if not isinstance(payload.get("expiresAt"), str) or not payload["expiresAt"]:
+        if payload.get("expiresAt") is not None and (
+            not isinstance(payload["expiresAt"], str) or not payload["expiresAt"]
+        ):
             raise SetupBridgeError("operation-failed")
         if not isinstance(payload.get("receiptSHA256"), str) or re.fullmatch(r"[0-9a-f]{64}", payload["receiptSHA256"]) is None:
             raise SetupBridgeError("operation-failed")

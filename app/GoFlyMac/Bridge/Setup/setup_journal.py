@@ -30,7 +30,13 @@ _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z"
 )
-_STAGES = ("artifact", "pairing", "install", "support", "handoff", "complete")
+_INSTALL_STAGES = ("artifact", "pairing", "install", "support", "handoff", "complete")
+_RENEW_STAGES = ("artifact", "install", "complete")
+_MODES = frozenset({"install", "renew"})
+
+
+def _stages_for(mode: str) -> tuple[str, ...]:
+    return _RENEW_STAGES if mode == "renew" else _INSTALL_STAGES
 _STATES = frozenset({"pending", "inflight", "confirmed", "unknown", "failed"})
 _TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 _OS_RE = re.compile(r"(?:26|27)(?:\.\d+){1,2}\Z")
@@ -209,8 +215,13 @@ def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
     try:
         stages = journal["stages"]
         proof = journal["proof"]
-        if not all(stages[name]["state"] == "confirmed" for name in _STAGES):
+        mode = journal.get("mode", "install")
+        if mode not in _MODES:
             return False
+        if not all(stages[name]["state"] == "confirmed" for name in _stages_for(mode)):
+            return False
+        if mode == "renew":
+            return proof.get("installationConfirmed") is True
         if not all(proof[name] is True for name in ("installationConfirmed", "pairingImported", "supportObserved")):
             return False
         if journal.get("delivery", {}).get("state") != "delivered":
@@ -310,6 +321,7 @@ class JournalHeader:
     operation: str
     setup_id: str
     device_id: str
+    mode: str = "install"
 
 
 class JournalStore:
@@ -454,9 +466,13 @@ class JournalStore:
                 raise SetupBridgeError("storage-unavailable")
             if any(re.fullmatch(r"[0-9a-f]{64}", artifact.get(key, "")) is None for key in ("artifactSHA256", "executableSHA256", "profileSHA256")):
                 raise SetupBridgeError("storage-unavailable")
-        if set(stages) != set(_STAGES):
+        mode = value.get("mode", "install")
+        if mode not in _MODES:
             raise SetupBridgeError("storage-unavailable")
-        for stage in _STAGES:
+        expected_stages = _stages_for(mode)
+        if set(stages) != set(expected_stages):
+            raise SetupBridgeError("storage-unavailable")
+        for stage in expected_stages:
             state = stages[stage]
             if not isinstance(state, dict) or state.get("state") not in _STATES:
                 raise SetupBridgeError("storage-unavailable")
@@ -546,17 +562,17 @@ class JournalStore:
             if any(re.fullmatch(r"[0-9a-f]{64}", ownership[key]) is None for key in ("artifactSHA256", "executableSHA256", "profileSHA256")):
                 raise SetupBridgeError("storage-unavailable")
 
-    def create(self, setup_id: str, device_id: str, intent: Mapping[str, Any]) -> dict[str, Any]:
+    def create(self, setup_id: str, device_id: str, intent: Mapping[str, Any], *, mode: str = "install") -> dict[str, Any]:
         _private_root(self.root)
         self._ensure_lock_path()
         setup_id = _validate_setup_id(setup_id)
         device_id = normalized_device(device_id)
-        if not isinstance(intent, Mapping):
+        if not isinstance(intent, Mapping) or mode not in _MODES:
             raise SetupBridgeError("storage-unavailable")
         if self.read() is not None:
             raise SetupBridgeError("transaction-conflict")
         self.transaction_root(setup_id)
-        stage = {name: {"state": "pending"} for name in _STAGES}
+        stage = {name: {"state": "pending"} for name in _stages_for(mode)}
         intent_value = copy.deepcopy(dict(intent))
         # The pairing transaction is part of immutable intent.  It is created
         # before any pair boundary and survives a reopen, so resume never has
@@ -573,6 +589,7 @@ class JournalStore:
             "operation": "setup",
             "setupID": setup_id,
             "deviceID": device_id,
+            "mode": mode,
             "intent": intent_value,
             "stages": stage,
             "proof": {
@@ -603,7 +620,7 @@ class JournalStore:
         proof: Mapping[str, bool] | None = None,
         detail: str | None = None,
     ) -> dict[str, Any]:
-        if stage not in _STAGES or state not in _STATES:
+        if stage not in journal.get("stages", {}) or state not in _STATES:
             raise SetupBridgeError("storage-unavailable")
         value = copy.deepcopy(dict(journal))
         self._validate(value)
@@ -709,7 +726,10 @@ class JournalStore:
             device_id = normalized_device(value.get("deviceID"))
             if value.get("setupID") != setup_id or value.get("deviceID") != device_id:
                 raise ValueError()
-            return JournalHeader(1, "setup", setup_id, device_id)
+            mode = value.get("mode", "install")
+            if mode not in _MODES:
+                raise ValueError()
+            return JournalHeader(1, "setup", setup_id, device_id, mode)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, SetupBridgeError):
             raise SetupBridgeError("storage-unavailable") from None
 

@@ -7,6 +7,7 @@ func setupFullMatch(_ value: String, _ pattern: String) -> Bool {
 
 public enum MacSetupAction: String, Codable, Sendable { case preflight, apply, status, resume }
 public enum MacSetupSource: String, Codable, Sendable { case signedApp, project }
+public enum MacSetupMode: String, Codable, Sendable { case install, renew }
 
 public enum MacSetupFailure: Error, Equatable, Sendable {
     case invalidRequest, invalidResponse, unavailable, cancelled, timeout
@@ -65,11 +66,12 @@ public struct MacSetupRequest: Encodable, Sendable {
     public let requestID: UUID
     public let setupID: UUID
     public let deviceID: String
+    public let mode: MacSetupMode
     public let action: MacSetupAction
     public let options: MacSetupOptions?
 
     public init(action: MacSetupAction, setupID: UUID, deviceID: String,
-                options: MacSetupOptions? = nil) throws {
+                mode: MacSetupMode = .install, options: MacSetupOptions? = nil) throws {
         let normalized = deviceID.lowercased()
         guard setupFullMatch(normalized, "^(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$"),
               ((action == .preflight || action == .apply) == (options != nil)) else {
@@ -78,6 +80,7 @@ public struct MacSetupRequest: Encodable, Sendable {
         requestID = UUID()
         self.setupID = setupID
         self.deviceID = normalized
+        self.mode = mode
         self.action = action
         self.options = options
     }
@@ -91,6 +94,7 @@ public enum MacSetupOutcome: String, Decodable, Sendable {
 }
 
 public struct MacSetupSnapshot: Equatable, Sendable {
+    public let mode: MacSetupMode
     public let stage: MacSetupStage
     public let outcome: MacSetupOutcome
     public let canResume: Bool
@@ -106,8 +110,9 @@ public struct MacSetupSnapshot: Equatable, Sendable {
     public var failure: MacSetupFailure? { errorCode.map(MacSetupFailure.service) }
 
     public var isComplete: Bool {
-        stage == .complete && outcome == .confirmed && installationConfirmed &&
-            pairingImported && supportObserved && receiptSHA256 != nil && appBuild != nil && errorCode == nil
+        let imported = mode == .renew || (pairingImported && supportObserved)
+        return stage == .complete && outcome == .confirmed && installationConfirmed &&
+            imported && receiptSHA256 != nil && appBuild != nil && errorCode == nil
     }
 }
 
@@ -119,7 +124,7 @@ public enum MacSetupResponseDecoder {
     private static let safeCodes: Set<String> = [
         "invalid-request", "protocol-mismatch", "configuration-invalid", "dependency-mismatch",
         "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "trust-required",
-        "developer-mode-required", "unsupported-os", "identity-mismatch", "app-already-installed", "app-running",
+        "developer-mode-required", "unsupported-os", "identity-mismatch", "app-already-installed", "app-not-installed", "app-running",
         "signing-required", "signature-invalid", "artifact-mismatch", "support-unavailable",
         "pairing-unknown", "pairing-rejected", "handoff-unknown", "commit-unknown",
         "transaction-unknown", "transaction-conflict", "busy", "cancelled", "timeout",
@@ -183,13 +188,14 @@ public enum MacSetupResponseDecoder {
             if stage == .preflight, installed || paired || support { throw MacSetupFailure.invalidResponse }
             if request.action == .preflight, stage != .preflight { throw MacSetupFailure.invalidResponse }
             if stage == .complete, outcome == .confirmed {
-                guard !canResume, installed, paired, support,
-                      receipt != nil, build != nil, team != nil, expiry != nil else {
+                let imported = request.mode == .renew || (paired && support)
+                guard !canResume, installed, imported, receipt != nil, build != nil, team != nil else {
                     throw MacSetupFailure.invalidResponse
                 }
+                if request.mode == .install, expiry == nil { throw MacSetupFailure.invalidResponse }
             }
-            return MacSetupSnapshot(stage: stage, outcome: outcome, canResume: canResume, appBuild: build,
-                                    teamID: team, expiresAt: expiry, receiptSHA256: receipt,
+            return MacSetupSnapshot(mode: request.mode, stage: stage, outcome: outcome, canResume: canResume,
+                                    appBuild: build, teamID: team, expiresAt: expiry, receiptSHA256: receipt,
                                     installationConfirmed: installed, pairingImported: paired,
                                     supportObserved: support, errorCode: code)
         } catch { throw MacSetupFailure.invalidResponse }

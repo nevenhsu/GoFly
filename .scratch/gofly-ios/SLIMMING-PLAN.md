@@ -69,6 +69,8 @@
 
 實際保留 `-gofly-ui-preferences-store`（含 seed 旗標）：Settings 煙霧測試需要 UserDefaults namespace 隔離，否則測試會互相污染；seed 邏輯已併入 `GoFlyUITestOverrides`。其餘 9 個旗標已刪除。
 
+UI 煙霧測試在 D-A 後為 11 tests 全過，xcodebuild 總耗時 434.320s（7 分 14 秒），超過 <5 分鐘目標；D-C 完成後再處理。
+
 ### B2. Core 單元測試：16k 行 → 目標 ≤6k 行
 
 原則：每個模組一個測試檔；只測公開行為的 happy path＋1–2 個關鍵失敗（例如「未 ACK 不更新位置」「Stop 後遲到 ACK 不復活」「損壞檔不覆寫」）。刪除 race 排列、逐一 fault injection 矩陣、檔案權限／symlink 矩陣、精確 timing。
