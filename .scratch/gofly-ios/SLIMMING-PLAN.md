@@ -178,7 +178,7 @@ Swift 端對應：
 
 - **D-A 刪除**：M2 重裝＋iOS 匯出／還原整塊移除，包含 `GoFlyTransferValidator`。 ✅ done (6693306)
 - **D-B 刪除**：M3 本機備份管理整塊移除。 ✅ done (9ba61ad)
-- **D-C 改寫**：刪除 protocol 5 管理（Mac `Management/`、Swift Management 系列、iOS `Management*` 信箱），續簽改成 setup 的 `renew` 模式。
+- **D-C 改寫**：刪除 protocol 5 管理（Mac `Management/`、Swift Management 系列、iOS `Management*` 信箱），續簽改成 setup 的 `renew` 模式。 🟡 renew done (68b1e4c)；配對修復待決定。
 - **D-D 不做**：Wi-Fi 續傳（包括 lean MVP）不實作，刪除相關決策文件與規格段落。 ✅ done (bc7a765)
 - **D-E 保留最小版**：背景持續執行改成 ≤150 行的 driver（細節見下表）。
 - **D-F 保留三語**：en／zh-Hant／zh-Hans 全部保留。
