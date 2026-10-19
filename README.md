@@ -58,7 +58,7 @@ This creates a local development app, not a portable DMG. Its generated configur
 
 The development Mac GUI implements formal GoFly USB first installation, selected-data same-device reinstallation, and local backup management. These flows have local/controlled-boundary checks; final iPhone acceptance is deferred. Re-signing, pairing repair, Wi-Fi writes, and the portable DMG remain in development. Preview success uses sample data and does not prove a device operation happened.
 
-The superseded LocalGo prototype is fully retired: its app sources were removed on 2026-10-19, and its setup/install CLI and tests on 2026-10-20. GoFly is the only install path. The only remaining LocalGo files are the read-only device boundary (`LocalGo/MacSetup/localgo_device.py`) that the Mac app still uses to enumerate and inspect devices, the three reused setup sources, the AGPL-3.0 license, and the upstream provenance record.
+The superseded LocalGo prototype is fully retired: its app sources were removed on 2026-10-19, and its setup/install CLI and tests on 2026-10-20. GoFly is the only install path. The Mac app now owns its read-only device boundary (`app/GoFlyMac/Bridge/Device/gofly_device.py`); the only remaining LocalGo files are the three reused setup sources, the AGPL-3.0 license, and the upstream provenance record.
 
 ## Research workflow
 

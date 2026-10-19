@@ -11,7 +11,7 @@ The requested policy is free use without mandatory attribution. **0BSD** is sele
 | Existing material | Current license / source | Release implication |
 | --- | --- | --- |
 | LocalGo derived from StikDebug | [AGPL-3.0](../app/LocalGo/LICENSE); [provenance](../app/LocalGo/UPSTREAM.md) | Preserve upstream license/notices and meet applicable source-distribution obligations. |
-| Device boundary copied into the Mac app | The build script copies LocalGo's `localgo_device.py` and license | Bundling this boundary does not make it 0BSD. |
+| Mac app read-only device boundary | Authored for GoFly in `app/GoFlyMac/Bridge/Device/gofly_device.py`; uses pinned `pymobiledevice3` (GPL-3.0) | No LocalGo code or license is bundled for this boundary. |
 | New GoFly app's adapted/native components | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt); [source notices](../app/GoFly/Legal/SOURCES.txt) | Retain the existing notices; a new app identifier does not remove upstream obligations. |
 | Mac prototype's `pymobiledevice3` | GPL-3.0 per the [dependency record](../app/LocalGo/UPSTREAM.md) | Preserve its terms; assess the actual distribution/integration before release. |
 | Bundled Noto Sans TC font | [OFL-1.1 notice](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | Keep the font license and notices with the font. |
@@ -31,7 +31,7 @@ The repository is therefore **mixed-license**, with 0BSD applied to the listed n
 | 既有內容 | 目前授權／來源 | 發行影響 |
 | --- | --- | --- |
 | 衍生自 StikDebug 的 LocalGo | [AGPL-3.0](../app/LocalGo/LICENSE)；[來源紀錄](../app/LocalGo/UPSTREAM.md) | 保留上游授權／註記，履行適用的原始碼提供義務。 |
-| 複製進 Mac App 的裝置邊界 | 建置腳本複製 LocalGo 的 `localgo_device.py` 及授權 | 打包不會使其變成 0BSD。 |
+| Mac App 唯讀裝置邊界 | GoFly 自有的 `app/GoFlyMac/Bridge/Device/gofly_device.py`，使用固定版 `pymobiledevice3`（GPL-3.0） | 此邊界不再打包 LocalGo 程式碼或授權。 |
 | 新版 GoFly 的衍生／原生元件 | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt)；[來源註記](../app/GoFly/Legal/SOURCES.txt) | 保留既有註記，新 App 識別碼不會消除上游義務。 |
 | Mac prototype 的 `pymobiledevice3` | [依賴紀錄](../app/LocalGo/UPSTREAM.md)記載 GPL-3.0 | 保留條款，依實際散布／整合方式確認發行要求。 |
 | 隨附 Noto Sans TC 字體 | [OFL-1.1](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | 字體須附原授權與註記。 |
@@ -51,7 +51,7 @@ The repository is therefore **mixed-license**, with 0BSD applied to the listed n
 | 现有内容 | 当前许可／来源 | 发布影响 |
 | --- | --- | --- |
 | 基于 StikDebug 的 LocalGo | [AGPL-3.0](../app/LocalGo/LICENSE)；[来源记录](../app/LocalGo/UPSTREAM.md) | 保留上游许可／声明，履行适用的源代码提供义务。 |
-| 复制进 Mac App 的设备边界 | 构建脚本复制 LocalGo 的 `localgo_device.py` 及许可 | 打包不会使其变成 0BSD。 |
+| Mac App 只读设备边界 | GoFly 自有的 `app/GoFlyMac/Bridge/Device/gofly_device.py`，使用固定版 `pymobiledevice3`（GPL-3.0） | 此边界不再打包 LocalGo 代码或许可。 |
 | 新版 GoFly 的衍生／原生组件 | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt)；[来源声明](../app/GoFly/Legal/SOURCES.txt) | 保留现有声明，新 App 标识符不会消除上游义务。 |
 | Mac prototype 的 `pymobiledevice3` | [依赖记录](../app/LocalGo/UPSTREAM.md)记载 GPL-3.0 | 保留条款，根据实际分发／整合方式确认发布要求。 |
 | 附带 Noto Sans TC 字体 | [OFL-1.1](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | 字体须附原许可与声明。 |

@@ -64,10 +64,10 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
   -s app/GoFlyMac/Bridge/Tests
 
 PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
-  -s app/LocalGo/MacSetup/Tests
+  -s app/GoFlyMac/Bridge/Device/Tests
 ```
 
-本次安裝修正已通過 Mac Swift 70 項、M1 Python 73 項、M2 Python 51 項及唯讀 bridge 14 項；手機產物對應快照的 transfer 回歸另有 43 項通過。重建後 26 個 bundle 資源雜湊及 Setup／Reinstall 來源副本均一致，打包的唯讀 status 入口可讀回原交易 `complete/confirmed`，stderr 為空且不呼叫裝置。另有先前本機備份 4 項、暫存私密檔案的確認刪除／七天清理／中斷接續／未完成保留、共用驗證工具有效封包與拒絕流程，以及 iOS 未簽署／模擬器檢查紀錄；這些離線結果不替代完整 GUI 或手機矩陣驗收。本次正常手機啟動證據與限制見本文開頭。
+本次安裝修正已通過 Mac Swift 70 項、M1 Python 73 項、M2 Python 51 項及唯讀 bridge 14 項、裝置邊界 8 項；手機產物對應快照的 transfer 回歸另有 43 項通過。重建後 26 個 bundle 資源雜湊及 Setup／Reinstall 來源副本均一致，打包的唯讀 status 入口可讀回原交易 `complete/confirmed`，stderr 為空且不呼叫裝置。另有先前本機備份 4 項、暫存私密檔案的確認刪除／七天清理／中斷接續／未完成保留、共用驗證工具有效封包與拒絕流程，以及 iOS 未簽署／模擬器檢查紀錄；這些離線結果不替代完整 GUI 或手機矩陣驗收。本次正常手機啟動證據與限制見本文開頭。
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 

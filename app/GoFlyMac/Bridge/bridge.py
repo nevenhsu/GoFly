@@ -43,8 +43,8 @@ PMD3_VERSION = "11.31.0"
 SUPPORTED_OS_MAJOR = 26
 USB = "USB"
 NETWORK = "Network"
-DEFAULT_BUNDLE_ID = "com.neven.localgo"
-DEFAULT_TARGET_NAME = "LocalGo 開發版"
+DEFAULT_BUNDLE_ID = "com.neven.gofly"
+DEFAULT_TARGET_NAME = "GoFly"
 # Apple lookup for App Store ID 6755608044, verified 2026-10-18.
 LOCALDEVVPN_BUNDLE_ID = "com.jkcoxson.LocalDevVPN"
 UDID_RE = re.compile(r"(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{16}|[0-9a-fA-F]{40})\Z")
@@ -130,11 +130,6 @@ class Config:
         return cls(workspace, python, developer, project, bundle, name)
 
 
-@dataclass(frozen=True)
-class LegacyModules:
-    device: Any
-
-
 def _load_module(path: Path, name: str) -> Any:
     if path.is_symlink() or not path.is_file():
         raise BridgeError("runtime-unavailable")
@@ -153,19 +148,18 @@ def _load_module(path: Path, name: str) -> Any:
     return module
 
 
-def load_legacy_modules(config: Config) -> LegacyModules:
-    """Load the packaged device boundary, with a validated source-tree fallback."""
+def load_device_module(config: Config) -> Any:
+    """Load the packaged read-only device boundary, with a source-tree fallback."""
 
-    bundled = Path(__file__).resolve().parent / "Legacy"
-    source = config.workspace_root / "app" / "LocalGo" / "MacSetup"
-    if (bundled / "localgo_device.py").is_file():
-        root = bundled
-    elif (source / "localgo_device.py").is_file():
-        root = source
+    bundled = Path(__file__).resolve().parent / "Device" / "gofly_device.py"
+    source = config.workspace_root / "app" / "GoFlyMac" / "Bridge" / "Device" / "gofly_device.py"
+    if bundled.is_file():
+        path = bundled
+    elif source.is_file():
+        path = source
     else:
         raise BridgeError("runtime-unavailable")
-
-    return LegacyModules(_load_module(root / "localgo_device.py", "_gofly_legacy_localgo_device"))
+    return _load_module(path, "_gofly_device_boundary")
 
 
 @contextlib.contextmanager
@@ -295,20 +289,20 @@ def _safe_process(arguments: list[str], *, env: Mapping[str, str] | None = None,
 
 
 class Bridge:
-    def __init__(self, config: Config, modules: LegacyModules | None = None):
+    def __init__(self, config: Config, device: Any | None = None):
         self.config = config
-        self._modules = modules
+        self._device = device
 
     @property
-    def modules(self) -> LegacyModules:
-        if self._modules is None:
-            self._modules = load_legacy_modules(self.config)
-        return self._modules
+    def device(self) -> Any:
+        if self._device is None:
+            self._device = load_device_module(self.config)
+        return self._device
 
     def _raw_devices(self) -> list[Any]:
-        device = self.modules.device
+        device = self.device
         check = getattr(device, "check_compatibility", None)
-        list_devices = getattr(device, "_list_usb_devices", None)
+        list_devices = getattr(device, "list_usb_devices", None)
         if not callable(check) or not callable(list_devices):
             raise BridgeError("runtime-api-mismatch")
         try:
@@ -528,28 +522,12 @@ class Bridge:
         return item, serial, connection
 
     def _open_lockdown(self, serial: str, connection: str, cache: Path) -> Any:
-        device = self.modules.device
+        opener = getattr(self.device, "open_lockdown", None)
+        if not callable(opener):
+            raise BridgeError("runtime-api-mismatch")
         try:
             with quiet_dependencies():
-                if connection.upper() == USB:
-                    opener = getattr(device, "_open_usb_lockdown", None)
-                    if not callable(opener):
-                        raise BridgeError("runtime-api-mismatch")
-                    return _await(opener(serial, cache, autopair=False))
-                _, lockdown, _ = getattr(device, "_load_dependencies")()  # type: ignore[misc]
-                create = getattr(lockdown, "create_using_usbmux", None)
-                if not callable(create):
-                    raise BridgeError("runtime-api-mismatch")
-                return _await(
-                    create(
-                        serial=serial,
-                        connection_type=NETWORK,
-                        pairing_records_cache_folder=cache,
-                        autopair=False,
-                        pair_timeout=60,
-                        label="GoFlyMac Read Only",
-                    )
-                )
+                return _await(opener(serial, connection, cache, autopair=False))
         except BridgeError:
             raise
         except Exception as error:
@@ -703,8 +681,8 @@ def _validate_request(request: Any) -> str:
     if action not in {"environment", "devices", "inspect", "install"}:
         raise BridgeError("invalid-request")
     if action == "install":
-        # Explicitly reject this action before validating fields or loading a
-        # legacy setup module.  The UI currently exposes install as preview.
+        # Explicitly reject this action before validating fields or loading the
+        # device boundary.  The UI currently exposes install as preview.
         return action
     allowed = {"protocol", "requestID", "action"}
     if action in {"inspect"}:

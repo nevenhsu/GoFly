@@ -41,7 +41,7 @@ public enum MacBundleResourceEntry: String, CaseIterable, Sendable {
     case managementProtocol = "Contents/Resources/Bridge/Management/management_protocol.py"
     case managementSource = "Contents/Resources/Bridge/Management/management_source.py"
     case managementTarget = "Contents/Resources/Bridge/Management/management_target.py"
-    case legacyDeviceAdapter = "Contents/Resources/Bridge/Legacy/localgo_device.py"
+    case deviceBoundary = "Contents/Resources/Bridge/Device/gofly_device.py"
     case transferValidator = "Contents/MacOS/GoFlyTransferValidator"
 }
 

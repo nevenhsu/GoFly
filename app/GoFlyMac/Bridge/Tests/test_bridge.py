@@ -48,11 +48,11 @@ class FakeDeviceModule:
     def check_compatibility(self):
         return None
 
-    async def _list_usb_devices(self):
+    async def list_usb_devices(self):
         return self.rows
 
-    async def _open_usb_lockdown(self, serial, cache, *, autopair):
-        self.calls.append((serial, autopair))
+    async def open_lockdown(self, serial, connection, cache, *, autopair):
+        self.calls.append((serial, connection, autopair))
         return self.client
 
 
@@ -63,13 +63,13 @@ class BridgeTests(unittest.TestCase):
         project.mkdir()
         return bridge.Config(root, root / "python", root / "Developer", project)
 
-    def modules(self, rows, client=None):
-        return bridge.LegacyModules(FakeDeviceModule(rows, client))
+    def device(self, rows, client=None):
+        return FakeDeviceModule(rows, client)
 
     def test_install_rejected_before_loading_or_mutating(self):
         value = {"protocol": 1, "requestID": RID, "action": "install", "deviceID": UDID, "teamID": "ABCDEFGHIJ", "confirmed": True}
         instance = bridge.Bridge(self.config(), None)
-        with mock.patch.object(bridge, "load_legacy_modules", side_effect=AssertionError("must not load legacy modules")):
+        with mock.patch.object(bridge, "load_device_module", side_effect=AssertionError("must not load the device boundary")):
             response = instance.handle(value)
         self.assertEqual(response["status"], "error")
         self.assertEqual(response["code"], "read-only-mode")
@@ -94,7 +94,7 @@ class BridgeTests(unittest.TestCase):
             SimpleNamespace(serial=UDID.upper(), connection_type="USB", name="Phone"),
             SimpleNamespace(serial="not-an-udid", connection_type="USB"),
         ]
-        instance = bridge.Bridge(self.config(), self.modules(rows))
+        instance = bridge.Bridge(self.config(), self.device(rows))
         result = instance.devices()
         self.assertEqual({item["transport"] for item in result["devices"]}, {"usb", "wifi"})
         self.assertEqual(len(result["devices"]), 2)
@@ -112,8 +112,8 @@ class BridgeTests(unittest.TestCase):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID.upper(), connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
-        self.assertEqual(device.calls, [(UDID.upper(), False)])
+        result = bridge.Bridge(self.config(), device).inspect(UDID)
+        self.assertEqual(device.calls, [(UDID.upper(), "USB", False)])
         self.assertEqual(result["device"]["transport"], "usb")
         self.assertTrue(result["developerMode"])
         self.assertIsNone(result["vpnInstalled"])
@@ -124,7 +124,7 @@ class BridgeTests(unittest.TestCase):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-        response = bridge.Bridge(self.config(), bridge.LegacyModules(device)).handle(
+        response = bridge.Bridge(self.config(), device).handle(
             {"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID}
         )
         self.assertEqual(response["status"], "ok")
@@ -148,7 +148,7 @@ class BridgeTests(unittest.TestCase):
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
                 module = SimpleNamespace(InstallationProxyService=Service)
                 with mock.patch.dict(sys.modules, {"pymobiledevice3.services.installation_proxy": module}):
-                    result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
+                    result = bridge.Bridge(self.config(), device).inspect(UDID)
                 self.assertIs(result["vpnInstalled"], expected)
                 self.assertIn([bridge.LOCALDEVVPN_BUNDLE_ID], queried)
 
@@ -159,14 +159,14 @@ class BridgeTests(unittest.TestCase):
         config = bridge.Config(
             Path.cwd(), configured, self.config().developer_directory, self.config().project_path
         )
-        self.assertTrue(bridge.Bridge(config, self.modules([]))._check_python())
+        self.assertTrue(bridge.Bridge(config, self.device([]))._check_python())
 
     def test_developer_tools_only_require_xcodebuild_under_directory(self):
         config = self.config()
         xcodebuild = config.developer_directory / "usr/bin/xcodebuild"
         xcodebuild.parent.mkdir(parents=True)
         xcodebuild.touch()
-        self.assertTrue(bridge.Bridge(config, self.modules([]))._check_developer_tools())
+        self.assertTrue(bridge.Bridge(config, self.device([]))._check_developer_tools())
 
     def test_missing_developer_mode_observation_remains_unknown(self):
         class MissingDeveloper(FakeClient):
@@ -177,7 +177,7 @@ class BridgeTests(unittest.TestCase):
 
         client = MissingDeveloper({"UniqueDeviceID": UDID, "ProductVersion": "27.0"})
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
+        result = bridge.Bridge(self.config(), device).inspect(UDID)
         self.assertIsNone(result["developerMode"])
 
     def test_identity_mismatch_fails_closed(self):
@@ -185,14 +185,14 @@ class BridgeTests(unittest.TestCase):
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
         with self.assertRaisesRegex(bridge.BridgeError, "identity-mismatch"):
-            bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
+            bridge.Bridge(self.config(), device).inspect(UDID)
 
     def test_unsupported_or_unknown_ios_stops_before_app_lookup(self):
         for version in ["25.9", None, "invalid"]:
             with self.subTest(version=version):
                 client = FakeClient({"UniqueDeviceID": UDID, "ProductVersion": version})
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-                instance = bridge.Bridge(self.config(), bridge.LegacyModules(device))
+                instance = bridge.Bridge(self.config(), device)
                 with mock.patch.object(instance, "_installed_info", side_effect=AssertionError("must not query apps")):
                     response = instance.handle({"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID})
                 self.assertEqual(response["status"], "error")

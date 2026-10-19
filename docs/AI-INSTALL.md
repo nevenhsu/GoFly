@@ -67,7 +67,7 @@ Report version/route, redacted device label, preflight, actual writes, installat
 
 ## Shared CLI commands / 共用 CLI 命令 / 共用 CLI 命令
 
-The LocalGo prototype CLI (`LocalGo/MacSetup/localgo_setup.py`) and its tests were removed on 2026-10-20; GoFly is the only install path. The Python environment below is still required because the Mac app uses the remaining read-only device boundary.
+The LocalGo prototype CLI (`LocalGo/MacSetup/localgo_setup.py`) and its tests were removed on 2026-10-20; GoFly is the only install path. The Python environment below is still required because the Mac app's read-only device boundary runs in that pinned environment.
 
 LocalGo prototype CLI（`localgo_setup.py`）與其測試已於 2026-10-20 移除，GoFly 是唯一安裝路徑。下列 Python 環境仍需建立，因為 Mac App 使用剩下的唯讀裝置邊界。
 
@@ -77,5 +77,5 @@ LocalGo prototype CLI（`localgo_setup.py`）及其测试已于 2026-10-20 移�
 
 ```sh
 python3 -m venv work/mac-setup-env
-work/mac-setup-env/bin/python -m pip install -r app/LocalGo/MacSetup/requirements.txt
+work/mac-setup-env/bin/python -m pip install -r app/GoFlyMac/requirements.txt
 ```

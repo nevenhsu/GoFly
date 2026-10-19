@@ -25,7 +25,7 @@ PRODUCTS="$(/usr/bin/xcrun swift build --disable-sandbox --package-path "$APP_SO
 VALIDATOR_PRODUCTS="$(/usr/bin/xcrun swift build --disable-sandbox --package-path "$WORKSPACE_ROOT/app/GoFly" \
   --scratch-path "$BUILD_ROOT/validator-build" --cache-path "$BUILD_ROOT/cache" \
   --config-path "$BUILD_ROOT/config" --security-path "$BUILD_ROOT/security" --show-bin-path)"
-mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy" \
+mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Bridge/Device" \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup" "$STAGING_BUNDLE/Contents/Resources/Bridge/Reinstall" \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Backup" "$STAGING_BUNDLE/Contents/Resources/Bridge/Management"
 cp "$PRODUCTS/GoFlyMac" "$STAGING_BUNDLE/Contents/MacOS/GoFlyMac"
@@ -42,8 +42,7 @@ cp "$APP_SOURCE/Bridge/Backup/__init__.py" "$APP_SOURCE/Bridge/Backup/bridge.py"
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Backup/"
 cp "$APP_SOURCE/Bridge/Management/__init__.py" "$APP_SOURCE"/Bridge/Management/management_*.py \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Management/"
-cp "$WORKSPACE_ROOT/app/LocalGo/MacSetup/localgo_device.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/Legacy/"
-cp "$WORKSPACE_ROOT/app/LocalGo/LICENSE" "$STAGING_BUNDLE/Contents/Resources/LocalGo-LICENSE.txt"
+cp "$APP_SOURCE/Bridge/Device/gofly_device.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/Device/"
 
 /usr/bin/python3 - "$WORKSPACE_ROOT" "$STAGING_BUNDLE" "$APP_BUNDLE" "$VALIDATOR_PRODUCTS" <<'PY'
 import json
@@ -79,7 +78,7 @@ info = {
     "NSPrincipalClass": "NSApplication",
 }
 (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
-assert sorted(p.name for p in (bundle / "Contents/Resources/Bridge/Legacy").iterdir()) == ["localgo_device.py"]
+assert sorted(p.name for p in (bundle / "Contents/Resources/Bridge/Device").iterdir()) == ["gofly_device.py"]
 
 # The manifest is intentionally closed: every Python source copied into the
 # bundle, all three generated bridge configurations, and the validator are
@@ -101,6 +100,8 @@ management_names = [
     "management_journal.py", "management_lineage.py", "management_preparation.py",
     "management_producer.py", "management_protocol.py", "management_source.py", "management_target.py",
 ]
+if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Device").glob("*.py")) != ["gofly_device.py"]:
+    raise SystemExit("unexpected Device bridge Python inventory")
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Setup").glob("*.py")) != sorted(setup_names):
     raise SystemExit("unexpected Setup bridge Python inventory")
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Reinstall").glob("*.py")) != sorted(reinstall_names):
@@ -111,7 +112,7 @@ if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Management").glob("*.py")
     raise SystemExit("unexpected Management bridge Python inventory")
 source_files = {
     "Contents/Resources/Bridge/bridge.py": root / "app/GoFlyMac/Bridge/bridge.py",
-    "Contents/Resources/Bridge/Legacy/localgo_device.py": root / "app/LocalGo/MacSetup/localgo_device.py",
+    "Contents/Resources/Bridge/Device/gofly_device.py": root / "app/GoFlyMac/Bridge/Device/gofly_device.py",
     "Contents/MacOS/GoFlyTransferValidator": validator_products / "GoFlyTransferValidator",
 }
 for name in setup_names:

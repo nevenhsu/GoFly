@@ -32,6 +32,6 @@
 
 ## Mac 首次設定
 
-新增獨立 Python USB 設定工具 `MacSetup/`，固定 `pymobiledevice3==11.31.0`（GPL-3.0），啟動檢查所用 API；在 Mac 獨立執行，不打包進 iOS App。實際環境版本清單在研究專案 `work/mac-first-setup/dependency-lock.txt`。配對 schema 以 idevice 原始碼核對，未使用 AnyGo 的程式碼、嵌入身分、金鑰或服務。
+曾新增獨立 Python USB 設定工具 `MacSetup/`，固定 `pymobiledevice3==11.31.0`（GPL-3.0）；該 prototype 與其測試已於 2026-10-20 移除。Mac App 現使用自有唯讀裝置邊界 `app/GoFlyMac/Bridge/Device/gofly_device.py`，仍以隔離的 `work/mac-setup-env` 執行（需求清單在 `app/GoFlyMac/requirements.txt`）。實際環境版本清單在研究專案 `work/mac-first-setup/dependency-lock.txt`。配對 schema 以 idevice 原始碼核對，未使用 AnyGo 的程式碼、嵌入身分、金鑰或服務。
 
 新增手機端私密交付 codec、一次性匯入、交易回報與重播防護，保留 PairingFileStore 原子匯入與原生驗證。最新驗證及已遮蔽身分的實機狀態在 `work/mac-first-setup/`；簽署產物在 `work/localgo-signed`，個人配對／憑證不放入產品原始碼。

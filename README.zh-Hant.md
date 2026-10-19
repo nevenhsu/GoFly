@@ -58,7 +58,7 @@ open work/gofly-mac/GoFly.app
 
 開發版 Mac GUI 已實作正式 GoFly USB 首次安裝、所選資料同機重裝與本機備份管理，通過本機／受控邊界檢查，手機集中驗收仍待進行。重新簽名、配對修復、Wi-Fi 寫入與可攜 DMG 仍在開發。預覽成功使用示意資料，不代表裝置已執行操作。
 
-被取代的 LocalGo prototype 已完全退役：App 原始碼於 2026-10-19 移除，設定／安裝 CLI 及其測試於 2026-10-20 移除。GoFly 是唯一的安裝路徑。剩下的 LocalGo 檔案只有 Mac App 仍用來列舉與檢視裝置的唯讀裝置邊界 `LocalGo/MacSetup/localgo_device.py`、三個被重用的 setup 來源、AGPL-3.0 授權與上游來源紀錄。
+被取代的 LocalGo prototype 已完全退役：App 原始碼於 2026-10-19 移除，設定／安裝 CLI 及其測試於 2026-10-20 移除。GoFly 是唯一的安裝路徑。Mac App 現已使用自有唯讀裝置邊界 `app/GoFlyMac/Bridge/Device/gofly_device.py`；剩下的 LocalGo 檔案只有三個被重用的 setup 來源、AGPL-3.0 授權與上游來源紀錄。
 
 ## 研究操作
 
