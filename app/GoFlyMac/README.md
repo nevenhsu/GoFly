@@ -4,7 +4,7 @@
 
 使用者入口：[English](../../README.md) · [繁體中文](../../README.zh-Hant.md) · [简体中文](../../README.zh-Hans.md)。本文保留 Mac 開發現況與驗證說明；預定 DMG 發行／手機安裝流程及 [AI 操作說明](../../docs/AI-INSTALL.md) 均區分待實作與目前能力。授權範圍見 [LICENSING.md](../../docs/LICENSING.md)。
 
-原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。已接入正式 `com.neven.gofly` 首次安裝、USB 同機重裝與本機備份管理。自動／手動續簽與配對修復已接入獨立管理執行器及正式頁面，離線檢查通過，手機結果待驗。Wi-Fi 同機重裝／匯入與可攜 DMG 仍在開發；完整 Mac 目標尚未完成。
+原生 SwiftUI macOS App，依 GoFly 的 Mac 線框製作。已接入正式 `com.neven.gofly` 首次安裝、USB 同機重裝與本機備份管理。自動／手動續簽與配對修復已接入獨立管理執行器及正式頁面，離線檢查通過，手機結果待驗。可攜 DMG 仍在開發；完整 Mac 目標尚未完成。
 
 M2 已接入 Mac 介面、持久交易、共用驗證器、實際裝置 adapter 與 iOS 匯出／還原。受控跨端資料及模擬器啟動檢查已通過，真實手機移除、安裝與還原仍待集中驗收。開發以 MVP 主要流程為優先，沿用既有檢查，只補阻斷流程與資料遺失風險的必要驗證。
 

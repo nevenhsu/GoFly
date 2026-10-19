@@ -7,7 +7,7 @@
 ### Establish the task
 
 1. Read the selected root README, this guide, [Mac capabilities](../app/GoFlyMac/README.md), and applicable workspace rules. Identify whether the user wants a GoFly release or a Mac development-preview run. Continue within existing authorization without asking for the same permission repeatedly.
-2. **Current state, 2026-10-18:** no verified public DMG is recorded. The development GUI implements formal USB first installation, same-device reinstallation with selected data, and local backup management; iPhone acceptance is deferred. Re-signing, pairing repair, Wi-Fi writes, and portable packaging remain in development. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
+2. **Current state, 2026-10-18:** no verified public DMG is recorded. The development GUI implements formal USB first installation, same-device reinstallation with selected data, and local backup management; iPhone acceptance is deferred. Re-signing, pairing repair, and portable packaging remain in development. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
 3. Check Mac/Xcode, iPhone/iOS, USB, and signing team. Use only the intended phone. Resolve ambiguous device/team selection before writing.
 4. The user handles Apple sign-in, passwords, 2FA, terms, Keychain prompts, iPhone trust/Developer Mode, and VPN permission. Do not request credentials or pairing private keys in chat. Report pending physical phone actions.
 
@@ -28,7 +28,7 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 確認任務
 
 1. 先讀選用語言的根目錄 README、本文、[Mac 現況](../app/GoFlyMac/README.md)及適用的工作目錄規則。確認使用者要 GoFly 發行版還是 Mac 開發預覽。沿用已有授權，不重複詢問同一權限。
-2. **2026-10-18 現況：**尚無已驗證的公開 DMG。開發版 GUI 已實作正式 USB 首次安裝、所選資料同機重裝與本機備份管理，手機驗收延後；重新簽名、配對修復、Wi-Fi 寫入與可攜包仍在開發。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
+2. **2026-10-18 現況：**尚無已驗證的公開 DMG。開發版 GUI 已實作正式 USB 首次安裝、所選資料同機重裝與本機備份管理，手機驗收延後；重新簽名、配對修復與可攜包仍在開發。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
 3. 檢查 Mac／Xcode、iPhone／iOS、USB 及簽署 Team，只操作指定手機。多裝置／Team 且意圖不明時，寫入前先釐清。
 4. Apple 登入、密碼、雙重認證、條款、鑰匙圈提示、手機信任／開發者模式及 VPN 權限由使用者處理。不在聊天索取憑證或配對私鑰；需要實體手機操作時回報待辦。
 
@@ -49,7 +49,7 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 确认任务
 
 1. 先读所选语言的根目录 README、本文、[Mac 现状](../app/GoFlyMac/README.md)及适用的工作目录规则。确认用户要 GoFly 发布版还是 Mac 开发预览。沿用已有授权，不重复询问同一权限。
-2. **2026-10-18 现状：**尚无已验证的公开 DMG。开发版 GUI 已实现正式 USB 首次安装、所选数据同机重装与本机备份管理，手机验收延后；重新签名、配对修复、Wi-Fi 写入与可移植包仍在开发。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
+2. **2026-10-18 现状：**尚无已验证的公开 DMG。开发版 GUI 已实现正式 USB 首次安装、所选数据同机重装与本机备份管理，手机验收延后；重新签名、配对修复与可移植包仍在开发。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
 3. 检查 Mac／Xcode、iPhone／iOS、USB 及签名 Team，只操作指定手机。多设备／Team 且意图不明时，写入前先明确。
 4. Apple 登录、密码、双重认证、条款、钥匙串提示、手机信任／开发者模式及 VPN 权限由用户处理。不在聊天索取凭证或配对私钥；需要实体手机操作时报告待办。
 
