@@ -64,7 +64,7 @@ class BridgeTests(unittest.TestCase):
         return bridge.Config(root, root / "python", root / "Developer", project)
 
     def modules(self, rows, client=None):
-        return bridge.LegacyModules(FakeDeviceModule(rows, client), SimpleNamespace(personal_team=lambda _: "ABCDEFGHIJ"))
+        return bridge.LegacyModules(FakeDeviceModule(rows, client))
 
     def test_install_rejected_before_loading_or_mutating(self):
         value = {"protocol": 1, "requestID": RID, "action": "install", "deviceID": UDID, "teamID": "ABCDEFGHIJ", "confirmed": True}
@@ -112,7 +112,7 @@ class BridgeTests(unittest.TestCase):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID.upper(), connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).inspect(UDID)
+        result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
         self.assertEqual(device.calls, [(UDID.upper(), False)])
         self.assertEqual(result["device"]["transport"], "usb")
         self.assertTrue(result["developerMode"])
@@ -124,7 +124,7 @@ class BridgeTests(unittest.TestCase):
         values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-        response = bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).handle(
+        response = bridge.Bridge(self.config(), bridge.LegacyModules(device)).handle(
             {"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID}
         )
         self.assertEqual(response["status"], "ok")
@@ -148,7 +148,7 @@ class BridgeTests(unittest.TestCase):
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
                 module = SimpleNamespace(InstallationProxyService=Service)
                 with mock.patch.dict(sys.modules, {"pymobiledevice3.services.installation_proxy": module}):
-                    result = bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).inspect(UDID)
+                    result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
                 self.assertIs(result["vpnInstalled"], expected)
                 self.assertIn([bridge.LOCALDEVVPN_BUNDLE_ID], queried)
 
@@ -177,7 +177,7 @@ class BridgeTests(unittest.TestCase):
 
         client = MissingDeveloper({"UniqueDeviceID": UDID, "ProductVersion": "27.0"})
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).inspect(UDID)
+        result = bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
         self.assertIsNone(result["developerMode"])
 
     def test_identity_mismatch_fails_closed(self):
@@ -185,14 +185,14 @@ class BridgeTests(unittest.TestCase):
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
         with self.assertRaisesRegex(bridge.BridgeError, "identity-mismatch"):
-            bridge.Bridge(self.config(), bridge.LegacyModules(device, None)).inspect(UDID)
+            bridge.Bridge(self.config(), bridge.LegacyModules(device)).inspect(UDID)
 
     def test_unsupported_or_unknown_ios_stops_before_app_lookup(self):
         for version in ["25.9", None, "invalid"]:
             with self.subTest(version=version):
                 client = FakeClient({"UniqueDeviceID": UDID, "ProductVersion": version})
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-                instance = bridge.Bridge(self.config(), bridge.LegacyModules(device, None))
+                instance = bridge.Bridge(self.config(), bridge.LegacyModules(device))
                 with mock.patch.object(instance, "_installed_info", side_effect=AssertionError("must not query apps")):
                     response = instance.handle({"protocol": 1, "requestID": RID, "action": "inspect", "deviceID": UDID})
                 self.assertEqual(response["status"], "error")

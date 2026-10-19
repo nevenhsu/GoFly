@@ -58,7 +58,7 @@ open work/gofly-mac/GoFly.app
 
 开发版 Mac GUI 已实现正式 GoFly USB 首次安装、所选数据同机重装与本机备份管理，通过本机／受控边界检查，手机集中验收仍待进行。重新签名、配对修复、Wi-Fi 写入与可移植 DMG 仍在开发。预览成功使用示例数据，不代表设备已执行操作。
 
-若要另外进行 **LocalGo prototype** 实验，请阅读 [Mac 设置 CLI 说明](app/LocalGo/MacSetup/README.md)。该工具在明确执行时会真正通过 USB 签名／安装，目标为 `com.neven.localgo`，不是新版 GoFly 的 `com.neven.gofly`。Prototype 仍在手机准备／下载设备支持数据，尚未符合 GoFly 预定的安装完成条件。2026-10-19 已从版本控制移除被取代的 LocalGo prototype App 源代码，只保留此 CLI、三个被复用的 setup 来源、AGPL-3.0 许可与上游来源记录。
+被取代的 LocalGo prototype 已完全退役：App 源代码于 2026-10-19 移除，设置／安装 CLI 及其测试于 2026-10-20 移除。GoFly 是唯一的安装路径。剩下的 LocalGo 文件只有 Mac App 仍用来枚举与查看设备的只读设备边界 `LocalGo/MacSetup/localgo_device.py`、三个被复用的 setup 来源、AGPL-3.0 许可与上游来源记录。
 
 ## 研究操作
 
@@ -75,8 +75,7 @@ GoFly 设计涵盖地点选择、路线／GPX、摇杆移动、设备服务准�
 ```text
 请先阅读 README.zh-Hans.md 与 docs/AI-INSTALL.md，协助我在 Mac 和自己的
 iPhone 设置 GoFly。先确认实际发布版本、当前能力与目标设备，再根据我的授权
-执行可用的设置流程。如果只有预览版，请明确说明限制；只有在我明确选择
-LocalGo prototype 实验时才使用旧工具。Apple 登录、双重认证、信任、开发者
+执行可用的设置流程。如果只有预览版，请明确说明限制。Apple 登录、双重认证、信任、开发者
 模式与 VPN 确认由我操作。保留现有 App 数据，逐步核对实际结果，最后报告
 已完成项目、待我操作的步骤及阻碍。
 ```

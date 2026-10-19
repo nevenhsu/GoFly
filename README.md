@@ -58,7 +58,7 @@ This creates a local development app, not a portable DMG. Its generated configur
 
 The development Mac GUI implements formal GoFly USB first installation, selected-data same-device reinstallation, and local backup management. These flows have local/controlled-boundary checks; final iPhone acceptance is deferred. Re-signing, pairing repair, Wi-Fi writes, and the portable DMG remain in development. Preview success uses sample data and does not prove a device operation happened.
 
-For a separate **LocalGo prototype** experiment, follow the [Mac setup CLI guide](app/LocalGo/MacSetup/README.md). That tool can perform real USB signing/installation when explicitly executed. It targets `com.neven.localgo`, not the new GoFly app (`com.neven.gofly`). The prototype still prepares/downloads device support on the phone and therefore does not meet the planned GoFly installation-completion requirement. On 2026-10-19 the superseded LocalGo prototype app sources were removed from the tree; only this CLI, the three reused setup sources, the AGPL-3.0 license, and the upstream provenance record remain.
+The superseded LocalGo prototype is fully retired: its app sources were removed on 2026-10-19, and its setup/install CLI and tests on 2026-10-20. GoFly is the only install path. The only remaining LocalGo files are the read-only device boundary (`LocalGo/MacSetup/localgo_device.py`) that the Mac app still uses to enumerate and inspect devices, the three reused setup sources, the AGPL-3.0 license, and the upstream provenance record.
 
 ## Research workflow
 
@@ -76,8 +76,7 @@ Give an AI assistant the [installation runbook](docs/AI-INSTALL.md#english), the
 Read README.md and docs/AI-INSTALL.md first. Help me set up GoFly on my Mac
 and my iPhone. Check the actual release and current capabilities, identify
 the target device, and perform the available setup within my authorization.
-If only the preview is available, report that limit. Use the LocalGo prototype
-only if I explicitly choose that experiment. I will handle Apple sign-in,
+If only the preview is available, report that limit. I will handle Apple sign-in,
 2FA, trust, Developer Mode, and VPN confirmations. Preserve existing app data.
 Verify each result and report completed steps, pending manual steps, and blockers.
 ```

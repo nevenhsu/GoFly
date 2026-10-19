@@ -116,4 +116,4 @@ Mac 收到的匯出回報即使顯示 ready／preparing，只要帶有錯誤，�
 
 以上是待實作及實機驗收要求，不以預覽、文件或既有唯讀測試當作已完成。實作時需另完成 USB 與 Wi-Fi 的真實重新簽名及資料保留驗收。
 
-相關文件：[Mac App 現況](README.md)、[唯讀 bridge 契約](Bridge/PROTOCOL.md)、[首次 Mac 設定 CLI](../LocalGo/MacSetup/README.md)、[用語](../../work/gofly-planning/GLOSSARY.md)。
+相關文件：[Mac App 現況](README.md)、[唯讀 bridge 契約](Bridge/PROTOCOL.md)、[用語](../../work/gofly-planning/GLOSSARY.md)。

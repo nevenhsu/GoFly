@@ -214,8 +214,8 @@ existing public first-PID test, so the full discovery count remains 57 rather
 than adding a duplicate fixture.
 
 The formal signed-artifact validator has its own GoFly identity checks. It does
-not call or mutate `LocalGo/MacSetup/localgo_setup.validate_profile`, whose
-globals are intentionally legacy `com.neven.localgo` / `StikDebug`.
+not reuse any legacy LocalGo validation, whose globals were intentionally
+`com.neven.localgo` / `StikDebug`.
 
 ## Known runtime unknowns
 

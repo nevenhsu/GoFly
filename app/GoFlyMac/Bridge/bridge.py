@@ -133,7 +133,6 @@ class Config:
 @dataclass(frozen=True)
 class LegacyModules:
     device: Any
-    setup: Any | None
 
 
 def _load_module(path: Path, name: str) -> Any:
@@ -143,8 +142,8 @@ def _load_module(path: Path, name: str) -> Any:
     if spec is None or spec.loader is None:
         raise BridgeError("runtime-unavailable")
     module = importlib.util.module_from_spec(spec)
-    # localgo_setup imports localgo_device by its public module name.  The
-    # caller installs that alias before loading setup.
+    # Use a private module name so a different invocation cannot accidentally
+    # reuse a module loaded from an arbitrary working directory.
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
@@ -155,7 +154,7 @@ def _load_module(path: Path, name: str) -> Any:
 
 
 def load_legacy_modules(config: Config) -> LegacyModules:
-    """Load only packaged helpers, with a validated source-tree fallback."""
+    """Load the packaged device boundary, with a validated source-tree fallback."""
 
     bundled = Path(__file__).resolve().parent / "Legacy"
     source = config.workspace_root / "app" / "LocalGo" / "MacSetup"
@@ -166,21 +165,7 @@ def load_legacy_modules(config: Config) -> LegacyModules:
     else:
         raise BridgeError("runtime-unavailable")
 
-    # Use private module names so a different invocation cannot accidentally
-    # reuse a module loaded from an arbitrary working directory.  The setup
-    # module's absolute import is handled by a temporary public alias.
-    device = _load_module(root / "localgo_device.py", "_gofly_legacy_localgo_device")
-    old_alias = sys.modules.get("localgo_device")
-    sys.modules["localgo_device"] = device
-    try:
-        setup_path = root / "localgo_setup.py"
-        setup = _load_module(setup_path, "_gofly_legacy_localgo_setup") if setup_path.is_file() else None
-    finally:
-        if old_alias is None:
-            sys.modules.pop("localgo_device", None)
-        else:
-            sys.modules["localgo_device"] = old_alias
-    return LegacyModules(device, setup)
+    return LegacyModules(_load_module(root / "localgo_device.py", "_gofly_legacy_localgo_device"))
 
 
 @contextlib.contextmanager
@@ -380,30 +365,19 @@ class Bridge:
             return None
         if not isinstance(values, dict):
             return None
-        try:
-            setup = self.modules.setup
-        except BridgeError:
+        groups = values.get("IDEProvisioningTeamByIdentifier")
+        if not isinstance(groups, Mapping):
             return None
-        personal = getattr(setup, "personal_team", None) if setup is not None else None
-        if callable(personal):
-            try:
-                team = personal(values)
-            except Exception:
-                return None
-        else:
-            groups = values.get("IDEProvisioningTeamByIdentifier")
-            if not isinstance(groups, Mapping):
-                return None
-            found = {
-                item.get("teamID")
-                for group in groups.values()
-                if isinstance(group, list)
-                for item in group
-                if isinstance(item, Mapping) and item.get("isFreeProvisioningTeam") is True
-            }
-            if len(found) != 1:
-                return None
-            team = found.pop()
+        found = {
+            item.get("teamID")
+            for group in groups.values()
+            if isinstance(group, list)
+            for item in group
+            if isinstance(item, Mapping) and item.get("isFreeProvisioningTeam") is True
+        }
+        if len(found) != 1:
+            return None
+        team = found.pop()
         return team if isinstance(team, str) and TEAM_RE.fullmatch(team) else None
 
     def _check_python(self) -> bool:
