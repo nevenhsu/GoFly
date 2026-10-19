@@ -134,16 +134,19 @@ Swift 端對應：
 
 ### C1-d. 裝置 adapter／support 精簡（手機驗收後）
 
-狀態：C1-a／C1-b／C1-c1／C1-c2／C3／C4-1／C4-2／C4-3／C5-2／C5-3／C5-7／B2 完成；C5-1／C5-4／C5-5 不做；C1-d／C2／C4-1b 手機驗收後。
+狀態：C1-a／C1-b／C1-c1／C1-c2／C3／C4-1／C4-2／C4-3／C5-2／C5-3／C5-7／B2 完成；C5-1／C5-4／C5-5 不做；C1-d／C2（信箱）／C4-1b 手機驗收後；C2 的啟動身分比對已提前完成。
 
 暫不實作，等使用者集中手機驗收後再處理：
 - `setup_adapters.py` 的 Protocol seam 只有 3 個小類別，拿掉省不到行數，保留不動。
 - `setup_support.py` 改直接用 pymobiledevice3 mounter（原 D-G），以及 `setup_adapters.py` 實際 adapter 的精簡，一併延後。原因：M1 是目前唯一在實機驗證過的流程，開發期間無法驗證裝置行為，現在改會把未驗證的風險帶進主要安裝路徑。
 
-### C2. iOS：Mac→iOS 信箱（手機驗收後）
+### C2. iOS：Mac→iOS 信箱（手機驗收後；啟動身分已提前完成）
 
 Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收後再做：
-- 拿掉 `GoFlySetupBootstrap` 啟動時對 executable 與 profile 的 SHA256。
+- ✅ **啟動時不再對 executable 與 profile 做 SHA256**（提前完成，2026-10-19）。
+  activation 與 input 只比對 bundle ID；readback 握手仍比對完整身分。提前做的原因：
+  renew（覆蓋安裝、不重送交接資料）和 Xcode 直接覆蓋安裝都會改變 executable 雜湊，
+  原本的完整身分比對會讓這兩種情況一律鎖在 `identityMismatch`。
 - 拿掉舊 `Documents/DDI` fallback，只留正式 pointer。
 - 合併 LocalGo 的三個來源。
 
@@ -152,7 +155,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 目標：
 - 一個 `MacInbox`（GoFlyCore）：固定目錄、讀一個 `request.json`（`{kind, id, payload}`）、寫一個 `response.json`；共用 no-follow 讀取與權限收緊。
 - App 端一個 `GoFlyMacInboxCoordinator`，依 `kind` 分派到 setup／renew（renew 只需重送配對檔，不需另一套信箱）。
-- `GoFlySetupBootstrap` 啟動時對 executable 做最大 256MiB 的 SHA256 雜湊、profile 雜湊——刪除；Bundle 身分只比對 bundleID＋build 字串。
+- ✅ `GoFlySetupBootstrap` 啟動時對 executable 做最大 256MiB 的 SHA256 雜湊、profile 雜湊——已移除；一般啟動只讀 Bundle ID，activation／input 只比對 bundleID。只有 readback 流程才計算完整身分（bundleID＋build＋兩個雜湊）。
 - 刪除「正式 pointer 不存在時退回舊 `Documents/DDI`」的雙路徑（`Device/ProvisionedSupport.swift`、`NativeDeviceService.swift`）：只留正式 pointer 一條路。
 
 ### C3. iOS：本機 JSON 存檔共用一個實作

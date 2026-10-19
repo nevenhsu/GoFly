@@ -7,18 +7,119 @@ import GoFlyCore
 final class SetupCoreTests: XCTestCase {
     private let device = String(repeating: "a", count: 40)
 
-    func testOrdinaryStartupDoesNotInvokeLazyIdentityReader() throws {
+    func testOrdinaryStartupDoesNotInvokeIdentityReaders() throws {
         let directory = try temporaryDirectory()
         let store = SetupActivationStore(directory: directory)
         let pairing = TestPairing()
         let coordinator = SetupBootstrapCoordinator(store: store, pairing: pairing)
-        let called = SetupFlag()
-        let result = try coordinator.prepare {
-            called.value = true
-            throw SetupFailure.identityMismatch
-        }
+        let bundleIDRead = SetupFlag()
+        let fullIdentityRead = SetupFlag()
+        let result = try coordinator.prepare(
+            bundleID: {
+                bundleIDRead.value = true
+                throw SetupFailure.identityMismatch
+            },
+            identity: {
+                fullIdentityRead.value = true
+                throw SetupFailure.identityMismatch
+            })
         XCTAssertEqual(result, .ordinaryStartup)
-        XCTAssertFalse(called.value)
+        XCTAssertFalse(bundleIDRead.value)
+        XCTAssertFalse(fullIdentityRead.value)
+    }
+
+    func testActiveActivationIgnoresChangedBuildAndHashes() throws {
+        let directory = try temporaryDirectory()
+        let manifest = try makeManifest()
+        try materializeSupport(manifest, in: directory)
+        let store = SetupActivationStore(directory: directory)
+        _ = try store.commit(SetupInput(manifest: manifest))
+        let rebuilt = try SetupAppIdentity(
+            bundleID: SetupAppIdentity.formalBundleID,
+            build: "19",
+            profileSHA256: String(repeating: "6", count: 64),
+            executableSHA256: String(repeating: "7", count: 64))
+        let fullIdentityRead = SetupFlag()
+        let result = try SetupBootstrapCoordinator(store: store, pairing: TestPairing()).prepare(
+            bundleID: { rebuilt.bundleID },
+            identity: {
+                fullIdentityRead.value = true
+                return rebuilt
+            })
+        guard case .completed(let receipt) = result else { return XCTFail("expected completed") }
+        XCTAssertEqual(receipt.setupID, manifest.setupID)
+        XCTAssertFalse(fullIdentityRead.value)
+    }
+
+    func testRenewAfterOverwriteInstallCompletesWithoutNewInput() throws {
+        let directory = try temporaryDirectory()
+        let manifest = try makeManifest()
+        try materializeSupport(manifest, in: directory)
+        let store = SetupActivationStore(directory: directory)
+        _ = try store.commit(SetupInput(manifest: manifest))
+        XCTAssertNil(try store.readInput())
+        let newerBuild = try SetupAppIdentity(
+            bundleID: SetupAppIdentity.formalBundleID,
+            build: "20",
+            profileSHA256: String(repeating: "8", count: 64),
+            executableSHA256: String(repeating: "9", count: 64))
+        let result = try SetupBootstrapCoordinator(store: store, pairing: TestPairing()).prepare(
+            bundleID: { newerBuild.bundleID },
+            identity: { newerBuild })
+        guard case .completed(let receipt) = result else { return XCTFail("expected completed") }
+        XCTAssertEqual(receipt.setupID, manifest.setupID)
+    }
+
+    func testInputBindsOnlyBundleID() throws {
+        let directory = try temporaryDirectory()
+        let manifest = try makeManifest()
+        try materializeSupport(manifest, in: directory)
+        try writeInput(try SetupInput(manifest: manifest), to: directory)
+        let staleIdentity = try SetupAppIdentity(
+            bundleID: SetupAppIdentity.formalBundleID,
+            build: "19",
+            profileSHA256: String(repeating: "6", count: 64),
+            executableSHA256: String(repeating: "7", count: 64))
+        let pairing = TestPairing(evidence: SetupPairingEvidence(
+            stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
+            input: .absent, receipt: .absent))
+        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
+            .prepare(bundleID: { manifest.app.bundleID }, identity: { staleIdentity })
+        guard case .completed(let receipt) = result else { return XCTFail("expected completed") }
+        XCTAssertEqual(receipt.setupID, manifest.setupID)
+    }
+
+    func testActiveActivationRejectsForeignBundleID() throws {
+        let directory = try temporaryDirectory()
+        let manifest = try makeManifest()
+        try materializeSupport(manifest, in: directory)
+        let store = SetupActivationStore(directory: directory)
+        _ = try store.commit(SetupInput(manifest: manifest))
+        let result = try SetupBootstrapCoordinator(store: store, pairing: TestPairing()).prepare(
+            bundleID: { "com.example.other" },
+            identity: { manifest.app })
+        XCTAssertEqual(result, .blocked(.identityMismatch))
+    }
+
+    func testReadbackStillRequiresFullIdentity() throws {
+        let directory = try temporaryDirectory()
+        let manifest = try makeManifest()
+        let request = try SetupReadbackRequest(setupID: manifest.setupID, nonce: manifest.nonce,
+                                               expectedDeviceUDID: device, app: manifest.app)
+        let requestURL = directory.appendingPathComponent("readback-request.json")
+        try request.encoded().write(to: requestURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
+        let rebuilt = try SetupAppIdentity(
+            bundleID: SetupAppIdentity.formalBundleID,
+            build: "19",
+            profileSHA256: String(repeating: "6", count: 64),
+            executableSHA256: String(repeating: "7", count: 64))
+        let pairing = TestPairing(observation: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256))
+        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
+            .prepare(bundleID: { rebuilt.bundleID }, identity: { rebuilt })
+        XCTAssertEqual(result, .blocked(.identityMismatch))
+        XCTAssertEqual(pairing.events, [])
+        XCTAssertNil(try SetupActivationStore(directory: directory).readReadbackReceipt())
     }
 
     func testStrictManifestRejectsUnknownAndDuplicateKeys() throws {
@@ -123,7 +224,7 @@ final class SetupCoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
         let pairing = TestPairing(observation: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256))
         let coordinator = SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-        let result = try coordinator.prepare { manifest.app }
+        let result = try coordinator.prepare(app: manifest.app)
         guard case .waitingForMac(let actual) = result else { return XCTFail("expected waitingForMac") }
         XCTAssertEqual(actual, request)
         let response = try XCTUnwrap(try SetupActivationStore(directory: directory).readReadbackReceipt())
@@ -189,7 +290,7 @@ final class SetupCoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
         let pairing = TestPairing(observation: .absent)
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         XCTAssertEqual(result, .waitingForMac(request))
         XCTAssertEqual(pairing.events, ["prepare", "observeStoredPairing"])
         XCTAssertEqual(try XCTUnwrap(try SetupActivationStore(directory: directory).readReadbackReceipt()).pairing, .absent)
@@ -205,7 +306,7 @@ final class SetupCoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
         let pairing = TestPairing(observation: .invalid)
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         XCTAssertEqual(result, .waitingForMac(request))
         XCTAssertEqual(pairing.events, ["prepare", "observeStoredPairing"])
         XCTAssertEqual(try XCTUnwrap(try SetupActivationStore(directory: directory).readReadbackReceipt()).pairing, .invalid)
@@ -217,7 +318,7 @@ final class SetupCoreTests: XCTestCase {
         try materializeSupport(manifest, in: directory)
         try writeInput(try SetupInput(manifest: manifest), to: directory)
         let pairing = TestPairing(observation: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256), evidence: SetupPairingEvidence(stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256), input: .exact, receipt: .absent))
-        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare(app: manifest.app)
         guard case .completed = result else { return XCTFail("expected completed") }
         XCTAssertEqual(pairing.events, ["prepare", "observe", "consume", "observeStoredPairing"])
     }
@@ -231,7 +332,7 @@ final class SetupCoreTests: XCTestCase {
             observation: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
             evidence: SetupPairingEvidence(stored: .absent, input: .exact, receipt: .absent))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         guard case .completed = result else { return XCTFail("expected completed") }
         XCTAssertEqual(pairing.events, ["prepare", "observe", "consume", "observeStoredPairing"])
     }
@@ -242,7 +343,7 @@ final class SetupCoreTests: XCTestCase {
         try materializeSupport(manifest, in: directory)
         try writeInput(try SetupInput(manifest: manifest), to: directory)
         let pairing = TestPairing(evidence: SetupPairingEvidence(stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256), input: .absent, receipt: .rejectedOrMalformed))
-        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.pairingRejected))
         XCTAssertFalse(pairing.events.contains("consume"))
     }
@@ -256,7 +357,7 @@ final class SetupCoreTests: XCTestCase {
             stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
             input: .malformedOrMismatched, receipt: .absent))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.pairingRejected))
         XCTAssertEqual(pairing.events, ["prepare", "observe"])
     }
@@ -270,7 +371,7 @@ final class SetupCoreTests: XCTestCase {
             stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
             input: .exact, receipt: .success))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.pairingRejected))
         XCTAssertEqual(pairing.events, ["prepare", "observe"])
     }
@@ -284,7 +385,7 @@ final class SetupCoreTests: XCTestCase {
             stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
             input: .absent, receipt: .success))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         guard case .completed = result else { return XCTFail("expected completed") }
         XCTAssertEqual(pairing.events, ["prepare", "observe"])
     }
@@ -298,7 +399,7 @@ final class SetupCoreTests: XCTestCase {
             stored: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256),
             input: .absent, receipt: .absent))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         guard case .completed = result else { return XCTFail("expected completed") }
         XCTAssertEqual(pairing.events, ["prepare", "observe"])
     }
@@ -310,7 +411,7 @@ final class SetupCoreTests: XCTestCase {
         try writeInput(try SetupInput(manifest: manifest), to: directory)
         let pairing = TestPairing(evidence: SetupPairingEvidence(stored: .absent, input: .absent, receipt: .success))
         let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing)
-            .prepare { manifest.app }
+            .prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.pairingUnknown))
         XCTAssertEqual(pairing.events, ["prepare", "observe"])
     }
@@ -320,7 +421,7 @@ final class SetupCoreTests: XCTestCase {
         let manifest = try makeManifest()
         try writeInput(try SetupInput(manifest: manifest), to: directory)
         let pairing = TestPairing(evidence: SetupPairingEvidence(stored: .absent, input: .exact, receipt: .absent))
-        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: SetupActivationStore(directory: directory), pairing: pairing).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.artifactMismatch))
         XCTAssertEqual(pairing.events, [])
     }
@@ -337,22 +438,22 @@ final class SetupCoreTests: XCTestCase {
         _ = try store.commit(SetupInput(manifest: newer))
         try writeInput(oldInput, to: directory)
         let pairing = TestPairing(evidence: SetupPairingEvidence(stored: .verified(expectedDeviceUDID: device, sha256: old.pairingSHA256), input: .absent, receipt: .success))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { old.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: old.app)
         guard case .completed(let receipt) = result else { return XCTFail("expected old receipt replay") }
         XCTAssertEqual(receipt.setupID, old.setupID)
         XCTAssertEqual(try XCTUnwrap(try store.activation()).activeSetupID, newer.setupID)
         XCTAssertEqual(pairing.events, [])
     }
 
-    func testOldReplayRejectsForeignCurrentActiveAppIdentity() throws {
+    func testOldReplayIgnoresActiveReceiptBuildAndHashes() throws {
         let directory = try temporaryDirectory()
         let old = try makeManifest()
-        let foreignApp = try SetupAppIdentity(
+        let rebuiltApp = try SetupAppIdentity(
             bundleID: SetupAppIdentity.formalBundleID,
             build: "19",
             profileSHA256: String(repeating: "4", count: 64),
             executableSHA256: String(repeating: "5", count: 64))
-        let newer = try makeManifest(method: .cryptex, app: foreignApp)
+        let newer = try makeManifest(method: .cryptex, app: rebuiltApp)
         try materializeSupport(old, in: directory)
         try materializeSupport(newer, in: directory)
         let store = SetupActivationStore(directory: directory)
@@ -363,7 +464,30 @@ final class SetupCoreTests: XCTestCase {
         let pairing = TestPairing(evidence: SetupPairingEvidence(
             stored: .verified(expectedDeviceUDID: device, sha256: old.pairingSHA256),
             input: .absent, receipt: .success))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { old.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: old.app)
+        guard case .completed(let receipt) = result else { return XCTFail("expected old receipt replay") }
+        XCTAssertEqual(receipt.setupID, old.setupID)
+        XCTAssertEqual(pairing.events, [])
+        XCTAssertEqual(try XCTUnwrap(try store.activation()).activeSetupID, newer.setupID)
+    }
+
+    func testOldReplayRejectsForeignBundleID() throws {
+        let directory = try temporaryDirectory()
+        let old = try makeManifest()
+        let newer = try makeManifest(method: .cryptex)
+        try materializeSupport(old, in: directory)
+        try materializeSupport(newer, in: directory)
+        let store = SetupActivationStore(directory: directory)
+        let oldInput = try SetupInput(manifest: old)
+        _ = try store.commit(oldInput)
+        _ = try store.commit(SetupInput(manifest: newer))
+        try writeInput(oldInput, to: directory)
+        let pairing = TestPairing(evidence: SetupPairingEvidence(
+            stored: .verified(expectedDeviceUDID: device, sha256: old.pairingSHA256),
+            input: .absent, receipt: .success))
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(
+            bundleID: { "com.example.other" },
+            identity: { old.app })
         XCTAssertEqual(result, .blocked(.identityMismatch))
         XCTAssertEqual(pairing.events, [])
         XCTAssertEqual(try XCTUnwrap(try store.activation()).activeSetupID, newer.setupID)
@@ -376,7 +500,7 @@ final class SetupCoreTests: XCTestCase {
         let store = SetupActivationStore(directory: directory)
         _ = try store.commit(SetupInput(manifest: manifest))
         try FileManager.default.removeItem(at: directory.appendingPathComponent("generations/\(manifest.setupID.uuidString.lowercased())/DDI/Image.dmg"))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: TestPairing()).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: TestPairing()).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.artifactMismatch))
     }
 
@@ -441,7 +565,7 @@ final class SetupCoreTests: XCTestCase {
         let store = SetupActivationStore(directory: directory)
         try store.writeReadbackReceipt(prior)
         let pairing = TestPairing(observation: .verified(expectedDeviceUDID: device, sha256: manifest.pairingSHA256))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.identityMismatch))
         XCTAssertEqual(pairing.events, [])
     }
@@ -462,7 +586,7 @@ final class SetupCoreTests: XCTestCase {
         let store = SetupActivationStore(directory: directory)
         try store.writeReadbackReceipt(prior)
         let pairing = TestPairing(observation: .verified(expectedDeviceUDID: secondDevice, sha256: manifest.pairingSHA256))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.identityMismatch))
         XCTAssertEqual(pairing.events, [])
         XCTAssertEqual(try XCTUnwrap(try store.readReadbackReceipt()).expectedDeviceUDID, device)
@@ -479,7 +603,7 @@ final class SetupCoreTests: XCTestCase {
         try spaced.write(to: directory.appendingPathComponent("incoming.json"), options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: directory.appendingPathComponent("incoming.json").path)
         let pairing = TestPairing()
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { manifest.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: manifest.app)
         XCTAssertEqual(result, .blocked(.invalidInput))
         XCTAssertEqual(pairing.events, [])
     }
@@ -517,7 +641,7 @@ final class SetupCoreTests: XCTestCase {
         let pairing = TestPairing(evidence: SetupPairingEvidence(
             stored: .verified(expectedDeviceUDID: device, sha256: extra.pairingSHA256),
             input: .exact, receipt: .absent))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { extra.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: extra.app)
         XCTAssertEqual(result, .blocked(.receiptCapacity))
         XCTAssertEqual(pairing.events, [])
         XCTAssertEqual(try XCTUnwrap(try store.activation()).receipts.count, SetupActivationRecord.maximumReceipts)
@@ -673,7 +797,7 @@ final class SetupCoreTests: XCTestCase {
         let pairing = TestPairing(evidence: SetupPairingEvidence(
             stored: .verified(expectedDeviceUDID: device, sha256: old.pairingSHA256),
             input: .absent, receipt: .success))
-        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare { old.app }
+        let result = try SetupBootstrapCoordinator(store: store, pairing: pairing).prepare(app: old.app)
         guard case .completed(let receipt) = result else { return XCTFail("expected committed replay") }
         XCTAssertEqual(receipt.setupID, old.setupID)
         XCTAssertEqual(try XCTUnwrap(try store.activation()).activeSetupID, newer.setupID)
@@ -898,6 +1022,12 @@ final class SetupCoreTests: XCTestCase {
     private func permissions(of url: URL) throws -> Int {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes[.posixPermissions] as? NSNumber)?.intValue ?? -1
+    }
+}
+
+private extension SetupBootstrapCoordinator {
+    func prepare(app: SetupAppIdentity) throws -> SetupBootstrapResult {
+        try prepare(bundleID: { app.bundleID }, identity: { app })
     }
 }
 

@@ -27,6 +27,14 @@
    不設錯誤、不彈窗，只保留 `coldClearPending` 與地圖提示；Start 不受影響。ACK 後清空 session
    的 active／uncertainty 並 flush 成功才解除提示。
 
+## 首次啟動與 setup 身分
+
+1. 沒有 `incoming.json`、`readback-request.json` 或 activation 時直接一般啟動，不讀身分。
+2. activation 與 input 的啟動比對只綁 bundle ID；build、profile、executable 雜湊不參與啟動阻擋。
+   重建、覆蓋安裝與 `renew` 會改變雜湊，但不會把 App 鎖在 `identityMismatch`。
+3. Mac readback 握手仍綁完整身分（bundleID、build、兩個 SHA-256）。只有這條流程會計算
+   profile 與執行檔（上限 256 MiB）的雜湊；一般啟動不計算。
+
 ## 儲存
 
 資料位於 `Library/Application Support`：

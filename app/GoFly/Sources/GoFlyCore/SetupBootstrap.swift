@@ -12,29 +12,34 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
         self.pairing = pairing
     }
 
-    public func prepare(identity: @Sendable () throws -> SetupAppIdentity) throws -> SetupBootstrapResult {
+    /// Launch gates bind only the bundle ID. Rebuilds change the executable
+    /// hash, so binding launch to the full identity locks renew and direct
+    /// Xcode installs. The full identity is read only for the Mac readback
+    /// handshake, where the Mac verifies the exact installed product.
+    public func prepare(bundleID: @Sendable () throws -> String,
+                        identity: @Sendable () throws -> SetupAppIdentity) throws -> SetupBootstrapResult {
         do {
             let input = try store.readInput()
             let request = try store.readReadbackRequest()
             let activation = try store.activation()
-            // This is deliberately checked before invoking the lazy identity
-            // reader. Existing installations and unsigned simulator launches
-            // have no formal setup state and retain ordinary startup.
+            // This is deliberately checked before invoking either reader.
+            // Existing installations and unsigned simulator launches have no
+            // formal setup state and retain ordinary startup.
             guard input != nil || request != nil || activation != nil else { return .ordinaryStartup }
-            let current: SetupAppIdentity
-            do { current = try identity() }
-            catch { return .blocked(.identityMismatch) }
 
             if let input {
-                guard input.manifest.app == current else { return .blocked(.identityMismatch) }
+                let currentBundleID: String
+                do { currentBundleID = try bundleID() }
+                catch { return .blocked(.identityMismatch) }
+                guard input.manifest.app.bundleID == currentBundleID else { return .blocked(.identityMismatch) }
                 if let activation, let existing = activation.receipts.first(where: { $0.setupID == input.manifest.setupID }) {
-                    guard existing.app == current else { return .blocked(.identityMismatch) }
+                    guard existing.app.bundleID == currentBundleID else { return .blocked(.identityMismatch) }
                     guard existing.rawManifestSHA256 == input.rawManifestSHA256 else { return .blocked(.invalidInput) }
                     guard let activeID = activation.activeSetupID,
                           let activeReceipt = activation.receipts.first(where: { $0.setupID == activeID }) else {
                         return .blocked(.artifactMismatch)
                     }
-                    guard activeReceipt.app == current else { return .blocked(.identityMismatch) }
+                    guard activeReceipt.app.bundleID == currentBundleID else { return .blocked(.identityMismatch) }
                     do { _ = try store.activeSupportDirectory(method: activeReceipt.method) }
                     catch let failure as SetupFailure { return .blocked(failure) }
                     catch { return .blocked(.artifactMismatch) }
@@ -82,6 +87,9 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
             }
 
             if let request {
+                let current: SetupAppIdentity
+                do { current = try identity() }
+                catch { return .blocked(.identityMismatch) }
                 guard request.app == current else { return .blocked(.identityMismatch) }
                 if let prior = try store.readReadbackReceipt(),
                    (prior.setupID != request.setupID || prior.nonce != request.nonce ||
@@ -99,7 +107,10 @@ public final class SetupBootstrapCoordinator: @unchecked Sendable {
 
             if let activation, let active = activation.activeSetupID,
                let receipt = activation.receipts.first(where: { $0.setupID == active }) {
-                guard receipt.app == current else { return .blocked(.identityMismatch) }
+                let currentBundleID: String
+                do { currentBundleID = try bundleID() }
+                catch { return .blocked(.identityMismatch) }
+                guard receipt.app.bundleID == currentBundleID else { return .blocked(.identityMismatch) }
                 do { _ = try store.activeSupportDirectory(method: receipt.method) }
                 catch let failure as SetupFailure { return .blocked(failure) }
                 catch { return .blocked(.artifactMismatch) }

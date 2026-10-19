@@ -69,7 +69,10 @@ final class GoFlySetupBootstrap: ObservableObject {
                         store: store,
                         pairing: GoFlySetupPairingAdapter()
                     )
-                    let setup = try coordinator.prepare(identity: GoFlySetupIdentityReader.read)
+                    let setup = try coordinator.prepare(
+                        bundleID: GoFlySetupIdentityReader.readBundleID,
+                        identity: GoFlySetupIdentityReader.readFullIdentity
+                    )
                     if requiresMacSetup, case .ordinaryStartup = setup {
                         return GoFlyBootstrapOutcome.awaitingMacInstall
                     }
@@ -119,10 +122,20 @@ private enum GoFlyBootstrapOutcome: Sendable {
 }
 
 enum GoFlySetupIdentityReader {
-    static func read() throws -> SetupAppIdentity {
+    /// Ordinary launch reads only the bundle ID; it never hashes the
+    /// executable or profile.
+    static func readBundleID() throws -> String {
         guard let bundleID = Bundle.main.bundleIdentifier,
-              bundleID == SetupAppIdentity.formalBundleID,
-              let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+              bundleID == SetupAppIdentity.formalBundleID else {
+            throw SetupFailure.identityMismatch
+        }
+        return bundleID
+    }
+
+    /// The Mac readback handshake is the only caller that binds the full
+    /// installed product, so only this path computes the bounded hashes.
+    static func readFullIdentity() throws -> SetupAppIdentity {
+        guard let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
               !build.isEmpty,
               let profile = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
               let executable = Bundle.main.executableURL else {
@@ -130,7 +143,7 @@ enum GoFlySetupIdentityReader {
         }
 
         return try SetupAppIdentity(
-            bundleID: bundleID,
+            bundleID: try readBundleID(),
             build: build,
             profileSHA256: try SHA256FileHasher.hex(profile, maximumBytes: 4 * 1_024 * 1_024),
             executableSHA256: try SHA256FileHasher.hex(executable, maximumBytes: 256 * 1_024 * 1_024)
