@@ -8,7 +8,7 @@ private struct EchoChecker: MacChecking {
     func check(_ request: CheckRequest) async throws -> Data {
         let payload: [String: Any]
         switch request.action {
-        case .environment: payload = ["ready": true, "checks": [], "teamID": "ABCDE12345"]
+        case .environment: payload = ["ready": true, "checks": [], "teams": [["teamID": "ABCDE12345", "teamName": "Test Team", "isFreeProvisioningTeam": true]], "xcodeVersion": "27.1"]
         case .devices: payload = ["devices": [["id": "device-a", "name": "iPhone", "transport": "usb"],
                                               ["id": "device-a", "name": "iPhone", "transport": "wifi"]]]
         case .inspect:

@@ -2,11 +2,20 @@
 
 只留已確認的產品需求與驗收條件。實機驗收由使用者最後集中執行，不以離線測試或既有唯讀結果代替。App 不提供介面預覽。
 
+## Mac 環境引導
+
+- 啟動順序：顯示「正在檢查 Mac 環境」→ 全部通過才進首頁；未通過時停在第一個失敗步驟，一次只顯示一個步驟。
+- 步驟依序為：Xcode 安裝 → Xcode 元件／初次啟動 → Apple 開發者帳號 → Team 選擇 → Python、專案、裝置清單等開發檢查。
+- Xcode 未安裝時提供「在 App Store 取得 Xcode」；Xcode 初次啟動未完成時提供「開啟 Xcode 安裝元件」。GoFly 不使用 sudo、不代替使用者執行 `-runFirstLaunch`、也不自動接受授權條款。
+- 沒有 Apple 開發者帳號時顯示「請在 Xcode → Settings → Apple Accounts 按 + 登入」與「開啟 Xcode」。GoFly 不顯示 Apple ID 或密碼輸入框。
+- Team 從 `com.apple.dt.Xcode` 的 `IDEProvisioningTeamByIdentifier` 讀取 `teamID`、`teamName`、`isFreeProvisioningTeam`。只有 1 個 Team 時自動選取；多個時顯示選單，標示「個人（免費，簽名 7 天）」或「團隊」。使用者明確選擇會存在 Mac App 本機設定，之後安裝與 renew 都使用同一個 Team。
+- 每個步驟都有「重新檢查」；App 回到前景時自動重新檢查一次。
+- 首頁顯示「Mac 環境」標籤，內含 Xcode 版本、Apple 帳號狀態、目前 Team 名稱與類型；點開可查看完整檢查並更換 Team。
+
 ## 首次安裝（USB）
 
 - 安裝只從本機 GoFly 專案建置；不提供已簽署 App 匯入來源，也不顯示介面預覽。
-- 使用者明確選取同一支 USB iPhone 與 10 碼 Team ID，先做唯讀檢查；按下開始後才建立私密交易與寫入權限。描述檔更新預設不勾選。
-- Team ID 預設採用環境檢查的 `environment.teamID`，以唯讀文字顯示「Xcode 開發團隊：<Team ID>」；只有偵測不到時才顯示 10 碼輸入框，並提示「Xcode → Settings → Accounts 可以查看」。目前不做多 Team 選單。
+- 使用者明確選取同一支 USB iPhone，確認頁使用 Mac 環境已選的 Team；按下開始後才建立私密交易與寫入權限。描述檔更新預設不勾選。
 - 交易固定正式 `com.neven.gofly`／`GoFly`、裝置、選項與本次配對，保存在單一私密 journal 與 `operation.lock`。每次可能修改前先持久化意圖。重開只接續原交易，不自動新建交易繞過未決結果。
 - Mac 在同一交易中驗證產物、簽署、安裝、私密交付配對，並依實際 OS 準備必要裝置支援。已完成且仍有效的支援重用，不重複下載或掛載。
 - 完成條件：App 部署、本次配對匯入、新觀察到的同機支援三者都確認，且取得 iOS 的 activation receipt，才顯示「Mac 安裝完成」（U18）。只看到 App 圖示、下載完成或檔案存在都不算完成。
@@ -54,6 +63,10 @@
 | 首次安裝中斷 | 原交易保留；結果不明不重送、不接管；重開可查詢或接續 |
 | 既有 GoFly 已安裝 | 首次安裝顯示「請到裝置管理重新簽名」與前往該裝置頁的按鈕；不接管或移除既有 App |
 | 環境／bridge 無法使用 | 首頁與環境頁顯示 Bundle 或 Python 原因；首頁與返回裝置清單導覽仍可用 |
+| Xcode 未安裝／元件未完成 | 停在對應步驟，提供 App Store 或「開啟 Xcode 安裝元件」；不代跑 sudo、`-runFirstLaunch` 或接受授權 |
+| 沒有 Apple 帳號 | 顯示 Xcode → Settings → Apple Accounts 登入說明與開啟 Xcode；不顯示 Apple ID／密碼欄位 |
+| Team 選擇 | 1 個自動選取；多個顯示「個人（免費，簽名 7 天）」／「團隊」選單並保存本機設定 |
+| App 回到前景 | 自動重新檢查 Mac 環境 |
 | 沒有 setup journal | `transaction-unknown` 視為無待接續交易，首頁不被導向安裝頁 |
 | 已完成 setup journal | `complete`＋`confirmed` 不鎖任何頁面；header 無 `mode` 視為 `install` |
 | 已就緒的裝置支援 | 重用，不重複下載或掛載；下載成功但裝置驗證失敗仍不算完成 |

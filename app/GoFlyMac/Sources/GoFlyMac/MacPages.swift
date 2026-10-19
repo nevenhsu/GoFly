@@ -5,21 +5,44 @@ extension MacRootView {
     @ViewBuilder var pageContent: some View {
         switch model.page {
         case .environment:
-            StatusCard {
-                if let environment = model.environment {
-                    ForEach(environment.checks) { check in
-                        HStack(alignment: .top, spacing: 12) {
-                            if check.passed { DesignAsset("EnvironmentPassed", width: 24) }
-                            else {
-                                Image(systemName: "exclamationmark.circle").font(.system(size: 19))
-                                    .foregroundStyle(GoFlyStyle.muted).frame(width: 24, height: 24).accessibilityHidden(true)
-                            }
-                            StatusRow(title: check.title, detail: check.detail)
+            VStack(alignment: .leading, spacing: 20) {
+                if let environment = model.environment, !environment.teams.isEmpty {
+                    StatusCard {
+                        StatusRow(title: "Apple 開發者帳號",
+                                  detail: "已找到 \(environment.teams.count) 個 Team。安裝與 renew 使用目前選擇的 Team。")
+                        Rule()
+                        HStack {
+                            Text("目前 Team").font(GoFlyStyle.font(13, bold: true))
+                            Spacer()
+                            Picker("目前 Team", selection: Binding(
+                                get: { model.selectedTeamID ?? environment.teams[0].teamID },
+                                set: { model.selectTeam($0) })) {
+                                ForEach(environment.teams) { team in
+                                    Text(team.displayName).tag(team.teamID)
+                                }
+                            }.frame(maxWidth: 420)
                         }
-                        if check.id != environment.checks.last?.id { Rule() }
+                        Text("更換 Team 只影響之後的安裝與 renew；不會修改手機上既有 App。")
+                            .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } else {
-                    StatusRow(title: "正在檢查 Xcode 與必要元件", detail: "不會自動安裝元件或接受系統條款。")
+                }
+                StatusCard {
+                    if let environment = model.environment {
+                        ForEach(environment.checks) { check in
+                            HStack(alignment: .top, spacing: 12) {
+                                if check.passed { DesignAsset("EnvironmentPassed", width: 24) }
+                                else {
+                                    Image(systemName: "exclamationmark.circle").font(.system(size: 19))
+                                        .foregroundStyle(GoFlyStyle.muted).frame(width: 24, height: 24).accessibilityHidden(true)
+                                }
+                                StatusRow(title: check.title, detail: check.detail)
+                            }
+                            if check.id != environment.checks.last?.id { Rule() }
+                        }
+                    } else {
+                        StatusRow(title: "正在檢查 Xcode 與必要元件", detail: "不會自動安裝元件或接受系統條款。")
+                    }
                 }
             }
         case .devices: devicePicker
@@ -49,7 +72,7 @@ extension MacRootView {
                 }
             } else if let setup = model.setup {
                 MacSetupPage(setup: setup, deviceID: model.selectedID,
-                             detectedTeamID: model.environment?.teamID,
+                             detectedTeamID: model.selectedTeam?.teamID,
                              vpnInstalled: model.inspection?.vpnInstalled,
                              vpnConfirmed: model.setupVPNConfirmed,
                              checkingDevice: model.isChecking,

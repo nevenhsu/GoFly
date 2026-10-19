@@ -33,7 +33,7 @@ open work/gofly-mac/GoFly.app
 
 真實環境檢查沿用唯讀 bridge 裝置邊界，僅利用既有信任。同機只列一次並預設 USB；同時觀察到 USB／Wi-Fi 時可明確選通道，檢查不偷偷改線。正式 `com.neven.gofly` 的安裝使用同一個 bridge 的 setup action，仍只限 USB；唯讀 action 不接受安裝。未讀到的簽名有效期或 VPN 資訊維持「待確認」，不以固定日期或按鈕點擊當成證據。
 
-Mac App 不提供介面預覽，也不匯入已簽署的 GoFly.app；安裝只從本機 GoFly 專案建置。
+Mac App 不提供介面預覽，也不匯入已簽署的 GoFly.app；安裝只從本機 GoFly 專案建置。啟動時會逐步引導 Xcode、首次啟動、Apple 帳號與 Team 設定；Team 清單來自 Xcode，選擇後保存在本機。
 
 建置腳本產生固定 `LocalConfiguration.json` 與 `SetupConfiguration.json`，綁定此工作目錄、既有 Python 與正式 GoFly 專案；生成的絕對路徑設定不追蹤進版控。實際程序入口只接受隨 Mac App 附帶的固定 Bridge 腳本與設定。沒有手機不等於環境檢查失敗；本輪開發不偵測或操作實體手機。
 

@@ -20,7 +20,9 @@ Successful responses have `status: "ok"` and a `payload`; failures have
 
 ## Read-only actions
 
-`environment` reports `ready`, safe check rows, and the Xcode Personal Team.
+`environment` reports `ready`, safe check rows, `xcodeVersion`, and every team
+from Xcode's `IDEProvisioningTeamByIdentifier` as `teams` entries with
+`teamID`, `teamName`, and `isFreeProvisioningTeam`.
 `devices` lists exact usbmux USB and Network observations; duplicate IDs and
 transports collapse while both transports remain selectable. `inspect` requires
 `deviceID`, pins the selected transport, opens lockdown with `autopair=false`,

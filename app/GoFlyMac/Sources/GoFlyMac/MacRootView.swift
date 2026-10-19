@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import GoFlyMacCore
 
@@ -5,7 +6,8 @@ struct MacRootView: View {
     @Bindable var model: MacAppModel
     var body: some View {
         VStack(spacing: 0) {
-            if model.page == .home { home }
+            if model.shouldShowEnvironmentGate { MacEnvironmentGate(model: model) }
+            else if model.page == .home { home }
             else {
                 HStack(spacing: 0) {
                     sidebar
@@ -23,6 +25,9 @@ struct MacRootView: View {
         .background(GoFlyStyle.canvas).foregroundStyle(GoFlyStyle.ink)
         .tint(GoFlyStyle.ink)
         .font(GoFlyStyle.font(14))
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.checkEnvironment()
+        }
     }
 
     private var home: some View {
@@ -53,8 +58,7 @@ struct MacRootView: View {
                 .padding(.top, 20).accessibilityIdentifier("manage-devices")
             Text("查看裝置狀態、簽名、連線與保留資料")
                 .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted).padding(.top, 8)
-            Button("查看 Mac 環境") { model.navigate(.environment) }
-                .buttonStyle(.link).font(GoFlyStyle.font(12)).padding(.top, 22).disabled(model.busy)
+            environmentLabel
             if let failure = model.failure {
                 VStack(spacing: 4) {
                     Text(failure.title).font(GoFlyStyle.font(13, bold: true))
@@ -71,6 +75,31 @@ struct MacRootView: View {
                 Spacer()
             }.font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted).padding(24)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var environmentLabel: some View {
+        Button { model.navigate(.environment) } label: {
+            HStack(spacing: 10) {
+                Text("Mac 環境").font(GoFlyStyle.font(12, bold: true))
+                Text(xcodeText).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                Text(accountText).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                if let team = model.selectedTeam {
+                    Text(team.displayName).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(GoFlyStyle.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(GoFlyStyle.line, lineWidth: 0.75))
+        }
+        .buttonStyle(.plain).disabled(model.busy).padding(.top, 22)
+        .accessibilityIdentifier("mac-environment-label")
+    }
+
+    private var xcodeText: String {
+        model.environment?.xcodeVersion.map { "Xcode \($0)" } ?? "Xcode 版本待確認"
+    }
+    private var accountText: String {
+        model.environment?.teams.isEmpty == false ? "Apple 帳號已登入" : "尚未登入 Apple 帳號"
     }
 
     private var sidebar: some View {

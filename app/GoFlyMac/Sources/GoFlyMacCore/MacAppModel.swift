@@ -21,15 +21,19 @@ public final class MacAppModel {
     private var restoringOperations = false
     public private(set) var failure: CheckFailure?
     public private(set) var firstInstall = true
+    public private(set) var selectedTeamID: String?
+    public private(set) var hasCheckedEnvironment = false
     @ObservationIgnored private let live: any MacChecking
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var activeCheckID: UUID?
     @ObservationIgnored private var renewTriggeredSelection: String?
+    private static let selectedTeamKey = "gofly.mac.selectedTeamID"
 
     public init(live: any MacChecking, setup: MacSetupModel? = nil) {
         self.live = live
         self.setup = setup
+        self.selectedTeamID = UserDefaults.standard.string(forKey: Self.selectedTeamKey)
     }
 
     public var busy: Bool {
@@ -52,7 +56,14 @@ public final class MacAppModel {
         }
     }
 
-    public var ready: Bool { environment?.ready == true && !busy }
+    public var ready: Bool { environment?.ready == true && selectedTeam != nil && !busy }
+    public var shouldShowEnvironmentGate: Bool {
+        !hasCheckedEnvironment || environment?.ready != true || selectedTeam == nil
+    }
+    public var selectedTeam: MacTeam? {
+        guard let environment, let selectedTeamID else { return nil }
+        return environment.teams.first { $0.teamID == selectedTeamID }
+    }
     public var selected: ConnectedDevice? {
         if let inspection, inspection.device.id.lowercased() == selectedID?.lowercased(),
            selectedTransport == nil || inspection.device.transport == selectedTransport { return inspection.device }
@@ -154,10 +165,29 @@ public final class MacAppModel {
 
     public func checkEnvironment() {
         guard !busy else { return }
-        environment = nil
         perform(.environment) { data, request in
-            self.environment = try ResponseDecoder.decode(data, for: request, as: MacEnvironment.self)
+            let value = try ResponseDecoder.decode(data, for: request, as: MacEnvironment.self)
+            self.applyEnvironment(value)
         }
+    }
+
+    private func applyEnvironment(_ value: MacEnvironment) {
+        environment = value
+        hasCheckedEnvironment = true
+        if let selectedTeamID, value.teams.contains(where: { $0.teamID == selectedTeamID }) {
+            return
+        }
+        if value.teams.count == 1 {
+            selectedTeamID = value.teams[0].teamID
+        } else {
+            selectedTeamID = nil
+        }
+    }
+
+    public func selectTeam(_ teamID: String) {
+        guard let team = environment?.teams.first(where: { $0.teamID == teamID }) else { return }
+        selectedTeamID = team.teamID
+        UserDefaults.standard.set(team.teamID, forKey: Self.selectedTeamKey)
     }
 
     public func refreshDevices() {
@@ -187,7 +217,7 @@ public final class MacAppModel {
         guard !firstInstall, inspection?.installed == true,
               renewTriggeredSelection != device.connectionID,
               let setup, setup.isRestored, !setup.isBusy, !setup.hasRecordedTransaction,
-              let team = environment?.teamID,
+              let team = selectedTeam?.teamID,
               let options = try? MacSetupOptions(teamID: team) else { return }
         renewTriggeredSelection = device.connectionID
         do {
@@ -200,7 +230,7 @@ public final class MacAppModel {
     public func startRenew() {
         guard !busy, let device = selected, inspection?.installed == true,
               let setup, setup.isRestored, !setup.isBusy,
-              let team = environment?.teamID,
+              let team = selectedTeam?.teamID,
               let options = try? MacSetupOptions(teamID: team) else { return }
         if setup.hasRecordedTransaction && setup.snapshot?.isComplete != true {
             page = .install
@@ -248,5 +278,6 @@ public final class MacAppModel {
         checkingBusy = false
         isCancellingCheck = false
         task = nil
+        hasCheckedEnvironment = true
     }
 }

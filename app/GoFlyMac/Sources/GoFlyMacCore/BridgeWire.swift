@@ -124,12 +124,35 @@ public struct EnvironmentCheck: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+public struct MacTeam: Codable, Identifiable, Equatable, Sendable {
+    public let teamID: String
+    public let teamName: String
+    public let isFreeProvisioningTeam: Bool
+    public var id: String { teamID }
+    public var kind: String { isFreeProvisioningTeam ? "個人（免費，簽名 7 天）" : "團隊" }
+    public var displayName: String { "\(teamName) · \(kind)" }
+    public init(teamID: String, teamName: String, isFreeProvisioningTeam: Bool) {
+        self.teamID = teamID; self.teamName = teamName; self.isFreeProvisioningTeam = isFreeProvisioningTeam
+    }
+}
+
 public struct MacEnvironment: Codable, Equatable, Sendable {
     public let ready: Bool
     public let checks: [EnvironmentCheck]
-    public let teamID: String?
-    public init(ready: Bool, checks: [EnvironmentCheck], teamID: String? = nil) {
-        self.ready = ready; self.checks = checks; self.teamID = teamID
+    public let teams: [MacTeam]
+    public let xcodeVersion: String?
+    public init(ready: Bool, checks: [EnvironmentCheck], teams: [MacTeam] = [], xcodeVersion: String? = nil) {
+        self.ready = ready; self.checks = checks; self.teams = teams; self.xcodeVersion = xcodeVersion
+    }
+
+    private enum CodingKeys: String, CodingKey { case ready, checks, teams, xcodeVersion }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        ready = try values.decode(Bool.self, forKey: .ready)
+        checks = try values.decode([EnvironmentCheck].self, forKey: .checks)
+        teams = try values.decodeIfPresent([MacTeam].self, forKey: .teams) ?? []
+        xcodeVersion = try values.decodeIfPresent(String.self, forKey: .xcodeVersion)
     }
 }
 

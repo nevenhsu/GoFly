@@ -476,7 +476,7 @@ private struct RenewChecker: MacChecking {
         let payload: [String: Any]
         switch request.action {
         case .environment:
-            payload = ["ready": true, "checks": [], "teamID": "ABCDE12345"]
+            payload = ["ready": true, "checks": [], "teams": [["teamID": "ABCDE12345", "teamName": "Test Team", "isFreeProvisioningTeam": true]], "xcodeVersion": "27.1"]
         case .devices:
             payload = ["devices": [["id": "00008110-001234567890abcd", "name": "iPhone", "transport": "usb"]]]
         case .inspect:
@@ -493,7 +493,7 @@ private struct SetupReadOnlyChecker: MacChecking {
     func check(_ request: CheckRequest) async throws -> Data {
         guard request.action == .environment else { throw CheckFailure.unavailable }
         return try JSONSerialization.data(withJSONObject: ["requestID": request.requestID,
-            "status": "ok", "payload": ["ready": true, "checks": [], "teamID": NSNull()]])
+            "status": "ok", "payload": ["ready": true, "checks": [], "teams": [["teamID": "ABCDE12345", "teamName": "Test Team", "isFreeProvisioningTeam": true]], "xcodeVersion": "27.1"]])
     }
 }
 

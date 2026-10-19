@@ -333,37 +333,46 @@ class Bridge:
     def devices(self) -> dict[str, Any]:
         return {"devices": self._device_rows(self._raw_devices())}
 
-    def _personal_team(self) -> str | None:
+    def _teams(self) -> list[dict[str, Any]]:
         defaults = Path("/usr/bin/defaults")
         if not defaults.is_file():
-            return None
+            return []
         env = os.environ.copy()
         try:
             status, data = _safe_process([str(defaults), "export", "com.apple.dt.Xcode", "-"], env=env, timeout=20)
         except BridgeError:
-            return None
+            return []
         if status != 0:
-            return None
+            return []
         try:
             values = plistlib.loads(data)
         except Exception:
-            return None
+            return []
         if not isinstance(values, dict):
-            return None
+            return []
         groups = values.get("IDEProvisioningTeamByIdentifier")
         if not isinstance(groups, Mapping):
-            return None
-        found = {
-            item.get("teamID")
-            for group in groups.values()
-            if isinstance(group, list)
-            for item in group
-            if isinstance(item, Mapping) and item.get("isFreeProvisioningTeam") is True
-        }
-        if len(found) != 1:
-            return None
-        team = found.pop()
-        return team if isinstance(team, str) and TEAM_RE.fullmatch(team) else None
+            return []
+        found: dict[str, dict[str, Any]] = {}
+        for group in groups.values():
+            if not isinstance(group, list):
+                continue
+            for item in group:
+                if not isinstance(item, Mapping):
+                    continue
+                team_id = item.get("teamID")
+                if not isinstance(team_id, str) or TEAM_RE.fullmatch(team_id) is None:
+                    continue
+                name = item.get("teamName")
+                if not isinstance(name, str) or not name or len(name) > 200:
+                    name = f"Team {team_id}"
+                free = item.get("isFreeProvisioningTeam") is True
+                found.setdefault(team_id, {
+                    "teamID": team_id,
+                    "teamName": name,
+                    "isFreeProvisioningTeam": free,
+                })
+        return sorted(found.values(), key=lambda team: (team["teamName"], team["teamID"]))
 
     def _check_python(self) -> bool:
         path = self.config.python_path
@@ -486,14 +495,17 @@ class Bridge:
             detail = "無法讀取裝置清單。"
         check("device-discovery", "裝置清單", detail, device_ok)
 
-        team = self._personal_team()
-        check("personal-team", "Personal Team", "已找到一組 Personal Team。" if team else "尚未找到唯一的 Personal Team。", team is not None)
+        teams = self._teams()
+        check("apple-account", "Apple 開發者帳號",
+              f"已找到 {len(teams)} 個可用 Team。" if teams else "請在 Xcode → Settings → Apple Accounts 登入。",
+              bool(teams))
 
         # A missing team blocks installation in the future, but does not make
         # read-only environment/device management unavailable.
-        base_ids = {"project", "developer-tools", "xcode-first-launch", "python-runtime", "device-discovery"}
+        base_ids = {"project", "developer-tools", "xcode-first-launch", "python-runtime",
+                    "device-discovery", "apple-account"}
         ready = all(item["passed"] for item in checks if item["id"] in base_ids)
-        return {"ready": ready, "checks": checks, "teamID": team}
+        return {"ready": ready, "checks": checks, "teams": teams, "xcodeVersion": xcode}
 
     def _find_device(self, raw: list[Any], target: str, selected_transport: str | None = None) -> tuple[Any, str, str]:
         matches: list[tuple[int, Any, str, str]] = []
