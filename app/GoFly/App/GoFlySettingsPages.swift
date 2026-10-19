@@ -349,3 +349,87 @@ private extension View {
             .goFlyCard()
     }
 }
+
+struct GoFlyContinuationStatus: View {
+    @ObservedObject var continuation: MovementContinuationController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    title
+                    Spacer(minLength: 12)
+                    status
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    title
+                    status
+                }
+            }
+
+            Text(goFlyString("background.description"))
+                .font(.subheadline)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("background.description")
+
+            Text(goFlyString("background.systemDecidesRuntime"))
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("background.systemDecides")
+
+            if continuation.hasRuntime {
+                Label {
+                    Text(goFlyString("background.runtimeAvailable"))
+                } icon: {
+                    Image(systemName: GoFlySymbols.success)
+                }
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .accessibilityIdentifier("background.runtimeAvailable")
+            }
+
+            if let key = continuation.noticeKey {
+                Label {
+                    Text(goFlyString(key))
+                } icon: {
+                    Image(systemName: GoFlySymbols.warning)
+                }
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.errorForeground)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("background.notice")
+            }
+        }
+        .padding(16)
+        .goFlyCard(floating: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("background.card")
+    }
+
+    private var title: some View {
+        Text(goFlyString("background.title"))
+            .font(.headline)
+            .accessibilityIdentifier("background.title")
+    }
+
+    private var status: some View {
+        Text(goFlyString(stateKey))
+            .font(.subheadline)
+            .foregroundStyle(GoFlyStyle.secondary)
+            .accessibilityIdentifier("background.status")
+    }
+
+    private var stateKey: String {
+        switch continuation.state {
+        case .idle: return "background.state.idle"
+        case .submitting: return "background.state.submitting"
+        case .accepted: return "background.state.accepted"
+        case .running: return "background.state.running"
+        case .rejected: return "background.state.rejected"
+        case .expired: return "background.state.expired"
+        case .finished: return "background.state.finished"
+        }
+    }
+}

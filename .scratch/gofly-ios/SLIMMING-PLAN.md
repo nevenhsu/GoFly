@@ -165,6 +165,8 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 ### C4. iOS：恢復／背景層合併
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
+- **C4-1 背景 driver 精簡 ✅**：保留 Grant／`MovementContinuationController` 授權模型；driver 縮到 143 行、刪 `ContinuedProcessingRegistrationBook` 與 `GoFlyContinuationView`，啟動只註冊一次；沿用既有 `setTaskCompleted` 與 progress 回報。
+- **C4-1b 背景授權模型簡化（手機驗收後）**：目前呼叫鏈是 `PointDispatchGate.claim` → `MovementTaskAuthority.install`／`permitsDispatch`；`ServiceController.bindMovementContinuation`／`hasMovementContinuation`／`retireMovementContinuation` 以 grant 的 `requestID`／`movementID`／`lease`／`isValid` 當 native dispatch 授權。可能的簡化方向（未定案）：只在前景、或有背景任務執行中時才准送點；背景任務到期就暫停任務並作廢 lease，交給既有 lease 檢查擋住後續送點，不再另外綁 grant。前提是先手機驗證現有背景行為。
 - `SessionRecovery*`（Models＋Codec 435＋Store＋Persistence＋App `GoFlySessionRecovery`）只保留「保存草稿與設定，下次開啟還原草稿」。刪除冷啟動 hold（「必須實際 clear ACK 後才可建立新任務」）——改成：冷啟動若上次有 active 任務，Start 前自動排一次 clear，失敗就顯示錯誤，不做持久化的不確定狀態機。
 - `MovementRecoveryController`（584）與 `TunnelResetState` 合併為一個前景連線檢查＋Reset 的小 controller。
 - 背景（`ContinuedProcessing*`、`MovementContinuation*`、`GoFlyContinuedProcessingDriver` 422、`GoFlyContinuationView`）：照 D-E 縮成最小 driver。

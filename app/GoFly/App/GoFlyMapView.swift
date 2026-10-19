@@ -902,3 +902,42 @@ private typealias GoFlyMapMode = SessionMapMode
 private extension SessionMapMode {
     var localizationKey: String { "mode.\(rawValue)" }
 }
+
+/// A compact map notice for a concrete continuation reason. The map decides
+/// whether to show it after higher-priority recovery and cold-state notices.
+struct GoFlyContinuationNotice: View {
+    @ObservedObject var continuation: MovementContinuationController
+    var onSettings: () -> Void = { }
+
+    var hasContent: Bool {
+        continuation.noticeKey != nil
+    }
+
+    var body: some View {
+        if let key = continuation.noticeKey {
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    Text(goFlyString(key))
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: GoFlySymbols.warning)
+                }
+                .font(.subheadline)
+                .accessibilityIdentifier("background.notice")
+
+                Button(action: onSettings) {
+                    Text(goFlyString("operation.settings"))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("background.settings")
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .goFlyCard(floating: true)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("background.notice.panel")
+        }
+    }
+}

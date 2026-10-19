@@ -10,7 +10,7 @@
         <key>UISceneConfigurations</key><dict/>
     </dict>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
-    <array><string>com.neven.gofly.movement.*</string></array>
+    <array><string>com.neven.gofly.movement</string></array>
     <key>UTImportedTypeDeclarations</key>
     <array>
         <dict>

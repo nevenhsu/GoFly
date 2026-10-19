@@ -5,18 +5,6 @@ import GoFlyCore
 
 @Suite @MainActor
 struct MovementContinuationServiceTests {
-    @Test func registrationBookCountsUniqueAttemptsAndNeverReusesCapacity() {
-        let book = ContinuedProcessingRegistrationBook()
-        var ids: [UUID] = []
-        for _ in 0..<ContinuedProcessingRegistrationBook.maximumRegistrations {
-            let id = UUID()
-            ids.append(id)
-            #expect(book.reserve(id) == .reserved)
-        }
-        #expect(book.reserve(ids[0]) == .alreadyAttempted)
-        #expect(book.reserve(UUID()) == .capacityReached)
-    }
-
     @Test func serviceBindsOnlyAHealthyRunningOwnerAndClosedGrantCannotDetachItAsOwnerPaused() async {
         let service = ServiceController(service: ImmediateContinuationDevice())
         service.observeRealLocation(RealLocationObservation(latitude: 25, longitude: 121,
