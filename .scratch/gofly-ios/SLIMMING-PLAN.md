@@ -67,6 +67,8 @@
 `-gofly-ui-map-metrics`（31 處，地圖幾何量測）、`-gofly-ui-operation-metrics`、`-gofly-ui-preparation-delay`、`-gofly-ui-route-planning-delay`、`-gofly-ui-setup-delay`、`-gofly-ui-setup-fixture`、`-gofly-ui-unconfirmed-point`、`-gofly-ui-session-fixture`、`-gofly-ui-route-draft-count`、`-gofly-ui-preferences-store`。
 保留：`-gofly-ui-session-store`／`favorites-store` 這類「隔離檔案 namespace」旗標若煙霧測試仍需要。目標是 App 內 `#if DEBUG` 區塊從 ~40 處降到 ≤8 處，`GoFlyUITestFixtures.swift` 只留 namespace 隔離。
 
+實際保留 `-gofly-ui-preferences-store`（含 seed 旗標）：Settings 煙霧測試需要 UserDefaults namespace 隔離，否則測試會互相污染；seed 邏輯已併入 `GoFlyUITestOverrides`。其餘 9 個旗標已刪除。
+
 ### B2. Core 單元測試：16k 行 → 目標 ≤6k 行
 
 原則：每個模組一個測試檔；只測公開行為的 happy path＋1–2 個關鍵失敗（例如「未 ACK 不更新位置」「Stop 後遲到 ACK 不復活」「損壞檔不覆寫」）。刪除 race 排列、逐一 fault injection 矩陣、檔案權限／symlink 矩陣、精確 timing。
@@ -164,6 +166,7 @@ Swift 端對應：
 | 路線 50m 端點吸附＋10,000 點驗證、admission revision | 保留上限檢查，刪除 admission revision（新規劃直接取消舊 Task 即可） |
 | `RouteExecutionController` 轉發 picker candidates 的 objectWillChange 訂閱 | 改由 View 直接觀察 picker 的 `CandidateController` |
 | `GoFlyMapView`（988）＋`GoFlyMapCanvas`：實測面板高度防震盪、短 viewport 精簡模式 | 刪除「依保留實測高度判斷精簡」邏輯，固定 padding；隨 B1 刪除 map-metrics 量測 |
+| mode pill 點擊區域實測 42×18 | 改成至少 44×44，並把 `GoFlyModeUITestSupport` 的 44pt 斷言加回去 |
 
 ---
 
@@ -234,6 +237,8 @@ swift test --package-path app/GoFlyMac
 ```bash
 python3 -m unittest discover -s app/GoFlyMac/Bridge -p 'test_*.py'
 ```
+目前要先執行 `source work/mac-setup-env/bin/activate`；系統 `python3` 缺 `pymobiledevice3` 與 `cryptography`，直接跑會有 3 個 dependency error。B3 重寫後，純邏輯測試應能在系統 `python3` 跑完；需要裝置依賴的測試在缺依賴時明確 skip。
+
 UI 煙霧測試（Phase B1 後）：`xcodebuild test -scheme GoFly -destination 'platform=iOS Simulator,name=iPhone 17'`，目標 < 5 分鐘。
 
 完成定義：
