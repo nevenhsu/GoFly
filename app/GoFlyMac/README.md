@@ -71,4 +71,4 @@ PYTHONDONTWRITEBYTECODE=1 work/mac-setup-env/bin/python -m unittest discover \
 
 設計：[GoFly Mac](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/?node-id=21-46408)。首頁、裝置列表、安裝、裝置管理、修復、保留資料與手機交接均已讀取相應設計內容；本地素材在 `Sources/GoFlyMac/Resources`。視窗使用 macOS 原生標題列；唯讀限制與預覽標示是本版新增狀態。
 
-介面使用 macOS 內建系統字體（中文交由系統選擇字形），支援系統深淺色；保留既有未使用字體資源的 `NotoSansTC-OFL.txt`。功能圖示採 SF Symbols，品牌圖形保留使用者提供的 GoFly 素材，沒有暫時素材 URL 留在執行程式中。詳見 [Mac UI 設計規格](../../docs/MAC-UI-DESIGN.md)。既有 LocalGo 裝置邊界沿用 AGPL-3.0，見 `../LocalGo/LICENSE`。
+介面使用 macOS 內建系統字體（中文交由系統選擇字形），支援系統深淺色。功能圖示採 SF Symbols，品牌圖形保留使用者提供的 GoFly 素材，沒有暫時素材 URL 留在執行程式中。詳見 [Mac UI 設計規格](../../docs/MAC-UI-DESIGN.md)。既有 LocalGo 裝置邊界沿用 AGPL-3.0，見 `../LocalGo/LICENSE`。

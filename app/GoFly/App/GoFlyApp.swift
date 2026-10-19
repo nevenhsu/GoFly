@@ -11,35 +11,19 @@ struct GoFlyApp: App {
 
     init() {
         _ = GoFlyPreferences.shared
-        #if DEBUG && targetEnvironment(simulator)
-        if !GoFlyIconPreview.isRequested { GoFlySetupFixture.seedIfRequested() }
-        #else
         GoFlySetupFixture.seedIfRequested()
-        #endif
         _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
 
     var body: some Scene {
         WindowGroup {
             Group {
-                #if DEBUG && targetEnvironment(simulator)
-                if GoFlyIconPreview.isRequested {
-                    GoFlyIconPreview(bootstrapIsIdle: bootstrap.runtime == nil
-                        && bootstrap.startupTask == nil && bootstrap.transferTask == nil)
-                } else {
-                    startupContent
-                }
-                #else
                 startupContent
-                #endif
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
             .task(id: scenePhase) {
                 guard scenePhase == .active else { return }
-                #if DEBUG && targetEnvironment(simulator)
-                if GoFlyIconPreview.isRequested { return }
-                #endif
                 await bootstrap.observeMacCommands()
             }
             .onChange(of: scenePhase) { _, phase in
@@ -53,9 +37,6 @@ struct GoFlyApp: App {
                 preferences.refreshSystemPreferences()
             }
             .onOpenURL { url in
-                #if DEBUG && targetEnvironment(simulator)
-                if GoFlyIconPreview.isRequested { return }
-                #endif
                 bootstrap.handle(url: url)
             }
         }

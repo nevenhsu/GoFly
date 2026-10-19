@@ -76,9 +76,6 @@ final class GoFlySetupBootstrap: ObservableObject {
     var preferManagementCommand = true
 
     init() {
-        #if DEBUG && targetEnvironment(simulator)
-        if GoFlyIconPreview.isRequested { return }
-        #endif
         start()
     }
 

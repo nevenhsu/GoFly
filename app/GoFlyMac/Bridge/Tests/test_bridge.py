@@ -66,14 +66,6 @@ class BridgeTests(unittest.TestCase):
     def device(self, rows, client=None):
         return FakeDeviceModule(rows, client)
 
-    def test_install_rejected_before_loading_or_mutating(self):
-        value = {"protocol": 1, "requestID": RID, "action": "install", "deviceID": UDID, "teamID": "ABCDEFGHIJ", "confirmed": True}
-        instance = bridge.Bridge(self.config(), None)
-        with mock.patch.object(bridge, "load_device_module", side_effect=AssertionError("must not load the device boundary")):
-            response = instance.handle(value)
-        self.assertEqual(response["status"], "error")
-        self.assertEqual(response["code"], "read-only-mode")
-
     def test_protocol_uuid_and_bounds(self):
         self.assertEqual(bridge._validate_request({"protocol": 1, "requestID": RID, "action": "devices"}), "devices")
         with self.assertRaisesRegex(bridge.BridgeError, "protocol-mismatch"):
@@ -208,15 +200,9 @@ class BridgeTests(unittest.TestCase):
             "developerDirectory": str(config.developer_directory),
             "projectPath": str(config.project_path),
         }))
-        request = json.dumps({"protocol": 1, "requestID": RID, "action": "install"}).encode()
+        request = json.dumps({"protocol": 1, "requestID": RID, "action": "unknown"}).encode()
         response = bridge.run_stdio(config_file, stdin=io.BytesIO(request))
-        self.assertEqual(response["code"], "read-only-mode")
-
-    def test_stdio_install_gate_precedes_invalid_config(self):
-        request = json.dumps({"protocol": 1, "requestID": RID, "action": "install"}).encode()
-        with mock.patch.object(bridge.Config, "load", side_effect=AssertionError("config must not load")):
-            response = bridge.run_stdio("/missing/config.json", stdin=io.BytesIO(request))
-        self.assertEqual(response["code"], "read-only-mode")
+        self.assertEqual(response["code"], "invalid-request")
 
 
 if __name__ == "__main__":

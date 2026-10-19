@@ -3,9 +3,7 @@
 
 The process has one request and one response.  It deliberately keeps the
 device dependency behind a narrow adapter so the same protocol can be tested
-without an iPhone or Xcode.  The current product scope is read-only:
-``install`` is retained as a protocol action for compatibility, but is always
-rejected before importing or calling a mutating helper.
+without an iPhone or Xcode.  The product scope is read-only.
 """
 
 from __future__ import annotations
@@ -59,7 +57,6 @@ _ACTIVE_RUNNER: contextvars.ContextVar[asyncio.Runner | None] = contextvars.Cont
 SAFE_ERROR_CODES = {
     "invalid-request",
     "protocol-mismatch",
-    "read-only-mode",
     "environment-not-ready",
     "device-disconnected",
     "trust-required",
@@ -654,8 +651,6 @@ class Bridge:
         request_id = request.get("requestID") if isinstance(request, dict) else None
         try:
             action = _validate_request(request)
-            if action == "install":
-                raise BridgeError("read-only-mode")
             if action == "environment":
                 payload = self.environment()
             elif action == "devices":
@@ -678,12 +673,8 @@ def _validate_request(request: Any) -> str:
     if not isinstance(request_id, str) or not UUID_RE.fullmatch(request_id):
         raise BridgeError("invalid-request")
     action = request.get("action")
-    if action not in {"environment", "devices", "inspect", "install"}:
+    if action not in {"environment", "devices", "inspect"}:
         raise BridgeError("invalid-request")
-    if action == "install":
-        # Explicitly reject this action before validating fields or loading the
-        # device boundary.  The UI currently exposes install as preview.
-        return action
     allowed = {"protocol", "requestID", "action"}
     if action in {"inspect"}:
         allowed.add("deviceID")
@@ -734,18 +725,6 @@ def run_stdio(config_path: str | Path, *, stdin: Any = None) -> dict[str, Any]:
     except (UnicodeDecodeError, json.JSONDecodeError, BridgeError):
         return {"protocol": PROTOCOL, "requestID": None, "status": "error", "code": "invalid-request"}
     request_id = request.get("requestID") if isinstance(request, dict) else None
-    # Keep the read-only gate ahead of config and dependency loading.  This is
-    # intentionally based only on the protocol envelope, so even a stale or
-    # missing config cannot turn an install preview into another operation.
-    if (
-        isinstance(request, dict)
-        and type(request.get("protocol")) is int
-        and request.get("protocol") == PROTOCOL
-        and isinstance(request_id, str)
-        and UUID_RE.fullmatch(request_id)
-        and request.get("action") == "install"
-    ):
-        return {"protocol": PROTOCOL, "requestID": request_id, "status": "error", "code": "read-only-mode"}
     try:
         config = Config.load(config_path)
     except BridgeError as error:

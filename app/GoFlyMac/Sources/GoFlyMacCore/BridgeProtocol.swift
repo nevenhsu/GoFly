@@ -157,7 +157,7 @@ public enum ResponseDecoder {
             guard envelope.protocol == 1, envelope.requestID == request.requestID,
                   ["ok", "error"].contains(envelope.status) else { throw CheckFailure.invalidResponse }
             if envelope.status == "error" {
-                let safeCodes: Set<String> = ["invalid-request", "protocol-mismatch", "read-only-mode", "environment-not-ready",
+                let safeCodes: Set<String> = ["invalid-request", "protocol-mismatch", "environment-not-ready",
                     "device-disconnected", "trust-required", "developer-mode-required", "unsupported-os", "identity-mismatch",
                     "signing-required", "operation-failed", "busy", "usb-lockdown-failed", "usb-device-not-found",
                     "device-identity-mismatch", "unsupported-os-version", "runtime-unavailable", "dependency-mismatch",

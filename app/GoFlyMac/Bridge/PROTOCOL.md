@@ -6,17 +6,15 @@ compact UTF-8 JSON object to stdout (maximum 256 KiB). Libraries and child
 processes have their output captured; stdout is reserved for the response.
 
 Every request has `protocol: 1`, a UUID `requestID`, and an `action` of
-`environment`, `devices`, `inspect`, or `install`. The install action is kept
-for forward protocol compatibility and always returns `read-only-mode` before
-loading a mutating helper. No signing, pairing, installation, repair, or
-renewal is performed by this version.
+`environment`, `devices`, or `inspect`. No signing, pairing, installation,
+repair, or renewal is performed by this version.
 
 Successful responses have `status: "ok"` and a `payload`; failures have
 `status: "error"` and a stable `code`. The request ID is echoed when it was
 syntactically available.
 
 The error code set accepted by the Swift client is: `invalid-request`,
-`protocol-mismatch`, `read-only-mode`, `environment-not-ready`,
+`protocol-mismatch`, `environment-not-ready`,
 `device-disconnected`, `trust-required`, `developer-mode-required`,
 `unsupported-os`, `identity-mismatch`, `signing-required`,
 `operation-failed`, `busy`, `usb-lockdown-failed`, `usb-device-not-found`,

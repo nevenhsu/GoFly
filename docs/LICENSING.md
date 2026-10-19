@@ -14,7 +14,6 @@ The requested policy is free use without mandatory attribution. **0BSD** is sele
 | Mac app read-only device boundary | Authored for GoFly in `app/GoFlyMac/Bridge/Device/gofly_device.py`; uses pinned `pymobiledevice3` (GPL-3.0) | No LocalGo code or license is bundled for this boundary. |
 | New GoFly app's adapted/native components | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt); [source notices](../app/GoFly/Legal/SOURCES.txt) | Retain the existing notices; a new app identifier does not remove upstream obligations. |
 | Mac prototype's `pymobiledevice3` | GPL-3.0 per the [dependency record](../app/LocalGo/UPSTREAM.md) | Preserve its terms; assess the actual distribution/integration before release. |
-| Bundled Noto Sans TC font | [OFL-1.1 notice](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | Keep the font license and notices with the font. |
 | `idevice` FFI and other transitive dependencies | Partial exact provenance in [UPSTREAM.md](../app/LocalGo/UPSTREAM.md); full audit pending | Do not infer a binary's license from current upstream or call the entire app attribution-free. |
 | LocalDevVPN | Separately installed external app | This repository grants no license to redistribute or re-sign it. |
 
@@ -34,7 +33,6 @@ The repository is therefore **mixed-license**, with 0BSD applied to the listed n
 | Mac App 唯讀裝置邊界 | GoFly 自有的 `app/GoFlyMac/Bridge/Device/gofly_device.py`，使用固定版 `pymobiledevice3`（GPL-3.0） | 此邊界不再打包 LocalGo 程式碼或授權。 |
 | 新版 GoFly 的衍生／原生元件 | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt)；[來源註記](../app/GoFly/Legal/SOURCES.txt) | 保留既有註記，新 App 識別碼不會消除上游義務。 |
 | Mac prototype 的 `pymobiledevice3` | [依賴紀錄](../app/LocalGo/UPSTREAM.md)記載 GPL-3.0 | 保留條款，依實際散布／整合方式確認發行要求。 |
-| 隨附 Noto Sans TC 字體 | [OFL-1.1](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | 字體須附原授權與註記。 |
 | `idevice` FFI 及間接依賴 | [UPSTREAM.md](../app/LocalGo/UPSTREAM.md) 記錄部分精確來源，完整稽核未完成 | 不以上游現況推定既有二進位授權，不宣稱整個 App 免署名。 |
 | LocalDevVPN | 使用者另行安裝的外部 App | 此儲存庫不授予散布或重新簽名該 App 的權利。 |
 
@@ -54,7 +52,6 @@ The repository is therefore **mixed-license**, with 0BSD applied to the listed n
 | Mac App 只读设备边界 | GoFly 自有的 `app/GoFlyMac/Bridge/Device/gofly_device.py`，使用固定版 `pymobiledevice3`（GPL-3.0） | 此边界不再打包 LocalGo 代码或许可。 |
 | 新版 GoFly 的衍生／原生组件 | [AGPL-3.0](../app/GoFly/Legal/AGPL-3.0.txt)；[来源声明](../app/GoFly/Legal/SOURCES.txt) | 保留现有声明，新 App 标识符不会消除上游义务。 |
 | Mac prototype 的 `pymobiledevice3` | [依赖记录](../app/LocalGo/UPSTREAM.md)记载 GPL-3.0 | 保留条款，根据实际分发／整合方式确认发布要求。 |
-| 附带 Noto Sans TC 字体 | [OFL-1.1](../app/GoFlyMac/Sources/GoFlyMac/Resources/NotoSansTC-OFL.txt) | 字体须附原许可与声明。 |
 | `idevice` FFI 及间接依赖 | [UPSTREAM.md](../app/LocalGo/UPSTREAM.md) 记录部分精确来源，完整审查未完成 | 不根据上游现状推定现有二进制许可，不宣称整个 App 免署名。 |
 | LocalDevVPN | 用户另行安装的外部 App | 此仓库不授予分发或重新签名该 App 的权利。 |
 
