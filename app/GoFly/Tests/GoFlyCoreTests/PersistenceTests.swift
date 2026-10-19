@@ -31,6 +31,13 @@ import Testing
         #expect(try SessionRecoveryCodec.decodeRecord(data).revision == 9)
     }
 
+    @Test func oldSessionColdFieldsAreIgnoredInsteadOfCorrupting() throws {
+        let old = Data(#"{"activeMovement":null,"coldRecoveryHeld":true,"draft":{"gpxData":null,"gpxFilename":null,"nodes":[],"sourceKind":"manual","speed":20},"joystickSpeed":20,"mode":"teleport","position":null,"requiresColdConfirmation":true,"revision":4,"roundTripEnabled":false,"schemaVersion":1,"uncertainty":null}"#.utf8)
+        let record = try SessionRecoveryCodec.decodeRecord(old)
+        #expect(record.revision == 4)
+        #expect(record.snapshot.mode == .teleport)
+    }
+
     @Test func favoritePlacesRoundTripKeepsPrivatePermissions() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let disk = FileFavoritePlacesPersistence(directory: root)

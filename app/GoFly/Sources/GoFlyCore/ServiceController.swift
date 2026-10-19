@@ -15,7 +15,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// TCP reachability is an admission signal only. It never claims native
     /// service health or changes the current task lease.
     @Published public private(set) var movementConnectionAvailable = true
-    @Published public private(set) var coldRecoveryHeld = false
+    @Published public private(set) var coldClearPending = false
     @Published public private(set) var tunnelResetState: TunnelResetState = .idle
 
     private struct DisplayedPosition {
@@ -190,7 +190,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// head cannot claim between the two operations.
     public func setMovementConnectionAvailable(_ available: Bool) {
         guard movementConnectionAvailable != available else { return }
-        movementAuthority.setAdmissionFence(connectionBlocked: !available, coldRecoveryHeld: coldRecoveryHeld)
+        movementAuthority.setAdmissionFence(connectionBlocked: !available, coldRecoveryHeld: false)
         routeAdmissionRevision &+= 1
         if !available { invalidateAvailableMovementGates() }
         // Published observers see the already-closed authority fence. This
@@ -317,9 +317,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
 
     /// Applies a persisted snapshot as waiting display data only. It never
     /// creates a native owner, origin proof, lease, or automatic command.
-    @discardableResult public func restoreColdRecovery(
-        position: SessionDisplayPosition?, requiresConfirmation: Bool
-    ) -> Bool {
+    @discardableResult public func restoreColdRecovery(position: SessionDisplayPosition?) -> Bool {
         guard !didRestoreColdRecovery, phase == .stopped, !nativeBusy,
               outstandingWork == 0, currentPoint == nil, currentPreparation == nil,
               realLocation == nil, confirmedSimulatedLocation == nil,
@@ -332,21 +330,27 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         if let position {
             lastDisplayedPosition = DisplayedPosition(coordinate: position.coordinate, source: position.source)
         }
-        if requiresConfirmation { setColdRecoveryHeld(true) }
         return true
     }
 
-    private func setColdRecoveryHeld(_ held: Bool) {
-        guard coldRecoveryHeld != held else { return }
-        movementAuthority.setAdmissionFence(connectionBlocked: !movementConnectionAvailable, coldRecoveryHeld: held)
-        routeAdmissionRevision &+= 1
-        if held { invalidateAvailableMovementGates() }
-        // As with reachability, publish only after admission is fenced and
-        // every currently available gate has been withdrawn.
-        coldRecoveryHeld = held
-        routeSubject.send(.availabilityChanged)
-        joystickSubject.send(.availabilityChanged)
+    /// Marks the historical task that must be cleared before the next start.
+    /// This is display state only; it does not fence native dispatch.
+    public func markColdClearPending() {
+        coldClearPending = true
     }
+
+    @discardableResult
+    public func beginColdClear() -> Bool {
+        guard coldClearPending, phase == .stopped, !nativeBusy, outstandingWork == 0,
+              clearState != .confirmed, !clearScheduled else { return false }
+        beginClear()
+        phase = .stopping
+        nativeBusy = true
+        enqueue(.stopping) { try await $0.clearLocation() }
+        return true
+    }
+
+    public func finishColdClear() { coldClearPending = false }
 
     private func invalidateAvailableMovementGates() {
         currentPreparation?.dispatch.invalidate()
@@ -797,7 +801,6 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                 if operation == .stopping || operation == .restoring {
                     clearState = .confirmed
                     clearConfirmedAt = now()
-                    setColdRecoveryHeld(false)
                 }
             case .failure(let failure):
                 if let preparation { failPreparation(preparation, failure: failure) }

@@ -432,6 +432,12 @@ struct GoFlyMapView: View {
             }
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+        .onChange(of: service.clearState) { _, state in
+            guard state == .confirmed, service.coldClearPending else { return }
+            Task {
+                if await recoveryStore.clearMovementState() { service.finishColdClear() }
+            }
+        }
     }
 
     private func bottomPanelContent(in geometry: GeometryProxy) -> some View {

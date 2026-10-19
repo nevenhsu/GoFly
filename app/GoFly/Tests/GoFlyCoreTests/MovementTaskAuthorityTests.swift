@@ -104,18 +104,17 @@ struct MovementTaskAuthorityTests {
         let position = SessionDisplayPosition(
             coordinate: GeoCoordinate(latitude: 25, longitude: 121)!, source: .gps
         )
-        let withHold = service.restoreColdRecovery(position: position, requiresConfirmation: true)
-        #expect(withHold)
-        #expect(service.coldRecoveryHeld)
-        #expect(!authority.permitsDispatch(for: oldLease))
-        #expect(!authority.install(MovementTaskLease(), replacing: authority.snapshot))
-        #expect(!service.restoreColdRecovery(position: nil, requiresConfirmation: false))
+        let restored = service.restoreColdRecovery(position: position)
+        #expect(restored)
+        service.markColdClearPending()
+        #expect(service.coldClearPending)
+        #expect(!service.restoreColdRecovery(position: nil))
 
         let late = ServiceController(service: FenceDevice())
         late.observeRealLocation(RealLocationObservation(
             latitude: 25, longitude: 121, horizontalAccuracy: 5, observedAt: Date()
         ))
-        #expect(!late.restoreColdRecovery(position: position, requiresConfirmation: true))
+        #expect(!late.restoreColdRecovery(position: position))
     }
 }
 

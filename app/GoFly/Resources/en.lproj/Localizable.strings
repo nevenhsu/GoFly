@@ -447,3 +447,5 @@
 "setup.blocked.storage" = "GoFly could not safely read setup. Connect this iPhone to the GoFly Mac app to retry setup.";
 "setup.retry" = "Retry setup";
 
+
+"recovery.coldClearPending" = "Last simulated position may still be active. Tap Restore to clear it.";

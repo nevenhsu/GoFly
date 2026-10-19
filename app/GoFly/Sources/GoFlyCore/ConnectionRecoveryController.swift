@@ -68,9 +68,11 @@ public final class ConnectionRecoveryController: ObservableObject {
         ]
 
         if let retainedColdSnapshot {
-            let needsConfirmation = retainedColdSnapshot.activeMovement != nil || retainedColdSnapshot.uncertainty != nil
-            _ = service.restoreColdRecovery(position: retainedColdSnapshot.position,
-                                            requiresConfirmation: needsConfirmation)
+            _ = service.restoreColdRecovery(position: retainedColdSnapshot.position)
+            if retainedColdSnapshot.activeMovement != nil || retainedColdSnapshot.uncertainty != nil {
+                service.markColdClearPending()
+                _ = service.beginColdClear()
+            }
         }
     }
 
@@ -80,10 +82,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         resetTask?.cancel()
     }
 
-    public var requiresColdConfirmation: Bool {
-        service.coldRecoveryHeld || (retainedSummaryAvailable &&
-            (retainedSnapshot?.activeMovement != nil || retainedSnapshot?.uncertainty != nil))
-    }
+    public var requiresColdConfirmation: Bool { service.coldClearPending }
 
     public var unverifiedMovement: SessionActiveRecovery? {
         guard retainedSummaryAvailable else { return nil }
@@ -99,7 +98,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     }
 
     public var noticeKey: String? {
-        if requiresColdConfirmation { return "recovery.confirmationNeeded" }
+        if service.coldClearPending { return "recovery.coldClearPending" }
         if isChecking && checkNoticeVisible { return "recovery.connectionChecking" }
         if recoveredNotice { return "recovery.connectionRecovered" }
         switch connectionState {
@@ -197,7 +196,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     public func discardUnverifiedMovement() {
                 retainedSnapshot = nil
         coldSummaryDiscarded = true
-        if service.coldRecoveryHeld {
+        if service.coldClearPending {
             discardedColdUncertainty = SessionMovementUncertainty(source: .unverifiedPreviousMovement)
         }
         queueCheckpointRevision()

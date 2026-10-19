@@ -21,11 +21,11 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         let recovery = goFlySessionRecoveryStore()
         let service = ServiceController(service: Self.deviceService())
         let snapshot = recovery.initialSnapshot
-        _ = service.restoreColdRecovery(
-            position: snapshot.position,
-            requiresConfirmation: recovery.loadState != .ready ||
-                snapshot.activeMovement != nil || snapshot.uncertainty != nil
-        )
+        _ = service.restoreColdRecovery(position: snapshot.position)
+        if snapshot.activeMovement != nil || snapshot.uncertainty != nil {
+            service.markColdClearPending()
+            _ = service.beginColdClear()
+        }
 
         self.service = service
         self.sessionRecovery = recovery

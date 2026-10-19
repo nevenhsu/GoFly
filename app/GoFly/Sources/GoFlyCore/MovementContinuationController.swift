@@ -287,7 +287,7 @@ public final class MovementContinuationController: ObservableObject {
         let owner = service.movementAuthority.snapshot
         guard owner.lease == demand.lease, owner.health == .confirmedHealthy,
               owner.runState == .running, service.movementConnectionAvailable,
-              !service.coldRecoveryHeld else { return false }
+              !service.coldClearPending else { return false }
         switch demand.kind {
         case .finiteRoute, .roundTrip:
             return route.phase == .running && route.intent?.id == demand.movementID && route.intent?.lease == demand.lease

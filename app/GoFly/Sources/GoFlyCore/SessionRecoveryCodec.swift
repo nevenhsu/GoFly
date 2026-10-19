@@ -74,31 +74,6 @@ public enum SessionRecoveryCodec {
               snapshot.joystickSpeed.kilometersPerHour >= 2 else { throw SessionRecoveryFailure.invalidSnapshot }
         try validate(snapshot.draft)
         if let position = snapshot.position { try validate(position.coordinate) }
-        if let uncertainty = snapshot.uncertainty, let place = uncertainty.requestedPlace {
-            try validate(place)
-        }
-        switch snapshot.activeMovement {
-        case nil, .manual:
-            break
-        case .route(let route):
-            try validate(route.draft)
-            guard route.route.points.count >= 2,
-                  route.route.points.count <= SessionRecoveryLimits.activePathPoints,
-                  route.route.points.allSatisfy({ $0.latitude.isFinite && $0.longitude.isFinite }) else {
-                throw SessionRecoveryFailure.limitExceeded
-            }
-            try validate(route.progress, route: route.route)
-        case .wander(let wander):
-            guard wander.history.count <= SessionRecoveryLimits.historyPoints else { throw SessionRecoveryFailure.limitExceeded }
-            guard wander.history.allSatisfy({ $0.latitude.isFinite && $0.longitude.isFinite }) else {
-                throw SessionRecoveryFailure.invalidSnapshot
-            }
-            try validate(wander.target.place)
-            try validate(wander.lastAcknowledgedCoordinate)
-            if let bearing = wander.lastAcknowledgedBearingDegrees {
-                guard bearing.isFinite, (0..<360).contains(bearing) else { throw SessionRecoveryFailure.invalidSnapshot }
-            }
-        }
     }
 
     private static func validate(_ draft: RouteDraft) throws {
@@ -168,8 +143,6 @@ public enum SessionRecoveryCodec {
         let roundTripEnabled: Bool
         let joystickSpeed: Int
         let position: PositionDTO?
-        let activeMovement: ActiveDTO?
-        let uncertainty: UncertaintyDTO?
 
         init(snapshot: SessionRecoverySnapshot, revision: UInt64) throws {
             schemaVersion = SessionRecoveryLimits.schemaVersion
@@ -179,8 +152,6 @@ public enum SessionRecoveryCodec {
             roundTripEnabled = snapshot.roundTripEnabled
             joystickSpeed = snapshot.joystickSpeed.kilometersPerHour
             position = snapshot.position.map(PositionDTO.init)
-            activeMovement = try snapshot.activeMovement.map { try ActiveDTO($0, rootDraft: snapshot.draft) }
-            uncertainty = try snapshot.uncertainty.map(UncertaintyDTO.init)
         }
 
         func snapshot() throws -> (snapshot: SessionRecoverySnapshot, revision: UInt64) {
@@ -188,9 +159,7 @@ public enum SessionRecoveryCodec {
             let rootDraft = try draft.value()
             return (SessionRecoverySnapshot(mode: mode, draft: rootDraft,
                 roundTripEnabled: roundTripEnabled, joystickSpeed: speed,
-                position: try position?.value(),
-                activeMovement: try activeMovement?.value(fallbackDraft: rootDraft),
-                uncertainty: try uncertainty?.value()), revision)
+                position: try position?.value()), revision)
         }
     }
 

@@ -177,6 +177,18 @@ public final class SessionRecoveryStore: ObservableObject {
 
     public func clearError() { error = nil }
 
+    /// Drops the historical active/uncertainty fields and waits for the empty
+    /// snapshot to commit before the caller releases its cold-clear fence.
+    public func clearMovementState() async -> Bool {
+        guard loadState == .ready else { return false }
+        let current = latestSnapshot ?? initialSnapshot
+        let cleared = SessionRecoverySnapshot(mode: current.mode, draft: current.draft,
+            roundTripEnabled: current.roundTripEnabled, joystickSpeed: current.joystickSpeed,
+            position: current.position, activeMovement: nil, uncertainty: nil)
+        guard capture(cleared) else { return false }
+        return await flush()
+    }
+
 
     @discardableResult
 

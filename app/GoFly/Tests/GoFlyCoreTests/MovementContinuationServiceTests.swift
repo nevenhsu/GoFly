@@ -192,14 +192,9 @@ struct MovementContinuationServiceTests {
             replacing: connectionService.movementAuthority.snapshot))
 
         let coldService = ServiceController(service: ImmediateContinuationDevice())
-        #expect(coldService.restoreColdRecovery(position: nil, requiresConfirmation: true))
-        let coldLease = MovementTaskLease()
-        #expect(!coldService.movementAuthority.install(coldLease,
-            replacing: coldService.movementAuthority.snapshot))
+        #expect(coldService.restoreColdRecovery(position: nil))
         coldService.setMovementConnectionAvailable(false)
         coldService.setMovementConnectionAvailable(true)
-        #expect(!coldService.movementAuthority.install(coldLease,
-            replacing: coldService.movementAuthority.snapshot))
     }
 
     @Test func bindingRejectsWrongIdentitiesAndNeverOverwritesAValidBinding() async throws {

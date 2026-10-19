@@ -447,3 +447,5 @@
 "setup.blocked.storage" = "GoFly 無法安全讀取設定。請將這部 iPhone 連接 GoFly Mac App 重試設定。";
 "setup.retry" = "重試設定";
 
+
+"recovery.coldClearPending" = "上次的模擬位置可能還在，請按「恢復 GPS」清除。";

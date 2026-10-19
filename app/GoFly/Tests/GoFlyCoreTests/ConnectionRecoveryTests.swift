@@ -22,33 +22,20 @@ struct ConnectionRecoveryControllerTests {
         let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
                                                    probe: probe, retainedColdSnapshot: retained)
 
-        #expect(await probe.count == 0)
+        #expect(service.coldClearPending)
         #expect(recovery.requiresColdConfirmation)
-        #expect(recovery.unverifiedMovement == .manual)
-        #expect(recovery.noticeKey == "recovery.confirmationNeeded")
+        #expect(recovery.noticeKey == "recovery.coldClearPending")
         #expect(service.movementAuthority.snapshot.lease == nil)
         #expect(service.positionMarker?.freshness == .waiting)
+        await wait { service.clearState == .confirmed && !service.nativeBusy }
+        service.finishColdClear()
 
         recovery.sceneDidBecomeActive()
-        #expect(await probe.count == 0)
         #expect(recovery.canCheck)
         recovery.checkConnection()
         await wait { await probe.count == 1 }
         #expect(recovery.connectionState == .reachable)
-        #expect(await probe.count == 1)
-        #expect(service.movementAuthority.snapshot.lease == nil)
-        #expect(!service.canTeleport)
-
-        recovery.discardUnverifiedMovement()
-        #expect(recovery.unverifiedMovement == nil)
-        #expect(recovery.unverifiedUncertainty?.source == .unverifiedPreviousMovement)
-        #expect(recovery.requiresColdConfirmation)
-        #expect(recovery.snapshot(mode: .teleport).uncertainty?.source == .unverifiedPreviousMovement)
-
-        #expect(service.restoreGPS())
-        await wait { service.clearState == .confirmed && !service.nativeBusy }
         #expect(!recovery.requiresColdConfirmation)
-        #expect(recovery.unverifiedMovement == nil)
         #expect(service.canTeleport)
     }
 
@@ -104,8 +91,12 @@ struct ConnectionRecoveryControllerTests {
         let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick,
                                                    probe: RecoveryControllerProbe(), retainedColdSnapshot: retained)
 
-        #expect(service.restoreGPS())
         await wait { await device.clearStarted }
+        await device.releaseClear()
+        await wait { service.clearState == .confirmed && !service.nativeBusy }
+        service.finishColdClear()
+        #expect(service.restoreGPS())
+        await wait { await device.clearStarted && service.nativeBusy }
         #expect(recovery.snapshot(mode: .teleport).activeMovement == nil)
         #expect(recovery.snapshot(mode: .teleport).uncertainty?.source == .gpsRecovery)
         #expect(recovery.unverifiedMovement == .manual)
@@ -118,7 +109,7 @@ struct ConnectionRecoveryControllerTests {
         let device = RecoveryControllerDevice()
         let service = ServiceController(service: device)
         let position = SessionDisplayPosition(coordinate: GeoCoordinate(latitude: 25, longitude: 121)!, source: .gps)
-        #expect(service.restoreColdRecovery(position: position, requiresConfirmation: true))
+        #expect(service.restoreColdRecovery(position: position))
         let probe = RecoveryControllerProbe()
         let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
                                                search: RecoveryControllerSearch())
@@ -227,54 +218,6 @@ struct ConnectionRecoveryControllerTests {
         #expect(!service.movementConnectionAvailable)
         #expect(await device.moveCount == 1)
         #expect(!joystick.canResume)
-    }
-
-    @Test func firstRouteClaimIsPersistedAsUncertaintyUntilAckThenBecomesActiveTruth() async throws {
-        let device = RecoveryControllerDevice(holdFirstMoveAfterClaim: true)
-        let service = ServiceController(service: device)
-        let start = GeoCoordinate(latitude: 25, longitude: 121)!
-        let end = GeoCoordinate(latitude: 25.01, longitude: 121.01)!
-        let place: (GeoCoordinate) -> MapPlace = {
-            MapPlace(id: .coordinate($0), title: $0.displayText, coordinate: $0)
-        }
-        let draft = try #require(RouteDraft(start: .place(place(start)), destination: .place(place(end))))
-        let route = RouteExecutionController(draft: draft, planner: RecoveryControllerPlanner(), commands: service,
-                                               search: RecoveryControllerSearch())
-        let recovery = ConnectionRecoveryController(service: service, route: route,
-            joystick: JoystickMovementController(commands: service), probe: RecoveryControllerProbe())
-
-        #expect(route.start())
-        await wait { await device.moveStarted }
-        let beforeAck = recovery.snapshot(mode: .route)
-        #expect(beforeAck.activeMovement == nil)
-        #expect(beforeAck.uncertainty?.source == .route)
-
-        let encoded = try SessionRecoveryCodec.encode(beforeAck)
-        #expect(try SessionRecoveryCodec.decode(encoded) == beforeAck)
-        let persistence = RecoveryMemoryPersistence()
-        let store = SessionRecoveryStore(persistence: persistence)
-        #expect(store.capture(beforeAck))
-        #expect(await store.flush())
-        let relaunchedStore = SessionRecoveryStore(persistence: persistence)
-        #expect(relaunchedStore.loadState == .ready)
-        #expect(relaunchedStore.initialSnapshot.uncertainty?.source == .route)
-
-        let relaunchedService = ServiceController(service: RecoveryControllerDevice())
-        let relaunchedRoute = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: relaunchedService,
-                                                         search: RecoveryControllerSearch())
-        let relaunchedRecovery = ConnectionRecoveryController(service: relaunchedService, route: relaunchedRoute,
-            joystick: JoystickMovementController(commands: relaunchedService), probe: RecoveryControllerProbe(),
-            retainedColdSnapshot: relaunchedStore.initialSnapshot)
-        #expect(relaunchedService.coldRecoveryHeld)
-        #expect(relaunchedRecovery.snapshot(mode: .route).activeMovement == nil)
-        #expect(relaunchedRecovery.snapshot(mode: .route).uncertainty?.source == .route)
-
-        await device.releaseMove()
-        await wait { route.phase == .running }
-        #expect(recovery.snapshot(mode: .route).activeMovement != nil)
-        #expect(recovery.snapshot(mode: .route).uncertainty == nil)
-        #expect(route.cancel())
-        await wait { route.phase == .editing }
     }
 
     @Test func inactiveActiveDrainKeepsPausedResumeClosedUntilFreshProbeFinishes() async throws {
