@@ -12,6 +12,7 @@ from unittest import mock
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 import sys
+import importlib.util
 
 sys.path.append(str(PACKAGE_ROOT))
 
@@ -221,6 +222,8 @@ class SupportSourceTests(unittest.TestCase):
             self.assertEqual(set(generation.files), {"MountMethod", "manifest", "image", "trustcache", "cryptex_info", "root_hash"})
             self.assertEqual(generation.files["MountMethod"][0], len(b"cryptex"))
 
+    @unittest.skipUnless(importlib.util.find_spec("pymobiledevice3") is not None,
+                         "pymobiledevice3 未安裝，跳過裝置依賴測試")
     def test_pinned_local_loader_reads_exact_nested_derived_inventory(self) -> None:
         # Explicit path is required: the dependency must never fetch a DDI.
         from pymobiledevice3.services.cryptexd import load_cryptex1_assets

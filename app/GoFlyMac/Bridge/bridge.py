@@ -159,6 +159,20 @@ def _await(value: Any) -> Any:
     raise BridgeError("operation-failed")
 
 
+def _new_async_runner() -> Any:
+    factory = getattr(asyncio, "Runner", None)
+    if factory is not None:
+        return factory()
+    class LegacyRunner:
+        def __init__(self) -> None:
+            self.loop = asyncio.new_event_loop()
+        def run(self, value: Any) -> Any:
+            return self.loop.run_until_complete(value)
+        def close(self) -> None:
+            self.loop.close()
+    return LegacyRunner()
+
+
 def _normalized_udid(value: Any) -> str | None:
     if not isinstance(value, str) or not UDID_RE.fullmatch(value.strip()):
         return None
@@ -609,7 +623,7 @@ class Bridge:
         # Keep one event loop alive for every async dependency call in this
         # request.  In particular, a lockdown client must be opened, used,
         # and closed on the same loop.
-        runner = asyncio.Runner()
+        runner = _new_async_runner()
         token = _ACTIVE_RUNNER.set(runner)
         try:
             return self._handle(request)

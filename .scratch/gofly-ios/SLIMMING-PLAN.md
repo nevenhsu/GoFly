@@ -132,7 +132,18 @@ Swift 端對應：
 
 預期：Python ~21.9k → ~7k；Mac Swift ~6.9k → ~3.5k。
 
-### C2. iOS：3 套 Mac→iOS 信箱 → 1 套
+### C1-d. 裝置 adapter／support 精簡（手機驗收後）
+
+暫不實作，等使用者集中手機驗收後再處理：
+- `setup_adapters.py` 的 Protocol seam 只有 3 個小類別，拿掉省不到行數，保留不動。
+- `setup_support.py` 改直接用 pymobiledevice3 mounter（原 D-G），以及 `setup_adapters.py` 實際 adapter 的精簡，一併延後。原因：M1 是目前唯一在實機驗證過的流程，開發期間無法驗證裝置行為，現在改會把未驗證的風險帶進主要安裝路徑。
+
+### C2. iOS：Mac→iOS 信箱（手機驗收後）
+
+Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收後再做：
+- 拿掉 `GoFlySetupBootstrap` 啟動時對 executable 與 profile 的 SHA256。
+- 拿掉舊 `Documents/DDI` fallback，只留正式 pointer。
+- 合併 LocalGo 的三個來源。
 
 現況：`SetupTypes/SetupCodec/SetupStorage/SetupBootstrap`、`TransferTypes/TransferCodec/TransferStorage(1,801)/TransferArchiveCodec/TransferFileIO/TransferPackageValidator/TransferHold`、`ManagementTypes/ManagementCodec/ManagementStorage(1,455)`；App 端 `GoFlySetupBootstrap`(759)、`GoFlyTransferCoordinator`(553)、`GoFlyManagementCoordinator`(315)、`GoFlySetupPaths`。
 
@@ -242,7 +253,7 @@ swift test --package-path app/GoFlyMac
 ```bash
 python3 -m unittest discover -s app/GoFlyMac/Bridge -p 'test_*.py'
 ```
-目前要先執行 `source work/mac-setup-env/bin/activate`；系統 `python3` 缺 `pymobiledevice3` 與 `cryptography`，直接跑會有 3 個 dependency error。B3 重寫後，純邏輯測試應能在系統 `python3` 跑完；需要裝置依賴的測試在缺依賴時明確 skip。
+純邏輯測試用系統 `python3` 直接跑；需要 `pymobiledevice3`／`cryptography` 的 case 以 `unittest.skipUnless` 明確 skip 並附原因。venv 跑法仍用 `source work/mac-setup-env/bin/activate`，可覆蓋完整依賴。C1-c2 後 Bridge Python 測試合計 ≤1,500 行；系統 `python3` 應全部通過（僅 dependency case skip）。
 
 UI 煙霧測試（Phase B1 後）：`xcodebuild test -scheme GoFly -destination 'platform=iOS Simulator,name=iPhone 17'`，目標 < 5 分鐘。
 
