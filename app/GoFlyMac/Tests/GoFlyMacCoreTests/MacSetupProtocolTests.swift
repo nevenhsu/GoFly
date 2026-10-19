@@ -213,8 +213,8 @@ import GoFlyMacCore
     private func response(for request: MacSetupRequest, payload: [String: Any]? = nil) throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "action": request.action.rawValue,
-            "requestID": request.requestID.uuidString, "setupID": request.setupID.uuidString,
-            "deviceID": request.deviceID, "status": "ok", "payload": payload ?? self.payload()
+            "requestID": request.requestID.uuidString, "setupID": request.setupID!.uuidString,
+            "deviceID": request.deviceID!, "status": "ok", "payload": payload ?? self.payload()
         ])
     }
 }

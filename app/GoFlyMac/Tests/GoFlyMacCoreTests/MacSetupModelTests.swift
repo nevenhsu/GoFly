@@ -360,6 +360,21 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(setup))
     }
 
+
+    @Test func bridgeStatusReaderReturnsOnlyTheCurrentJournalHeader() async throws {
+        let id = UUID()
+        let reader = BridgeStatusJournalReader(runner: StatusRunner(setupID: id))
+        let continuation = try await reader.readContinuation()
+        #expect(continuation?.setupID == id)
+        #expect(continuation?.deviceID == device)
+        #expect(continuation?.mode == .install)
+    }
+
+    @Test func bridgeStatusReaderMapsMissingJournalToNoContinuation() async throws {
+        let reader = BridgeStatusJournalReader(runner: MissingStatusRunner())
+        #expect(try await reader.readContinuation() == nil)
+    }
+
     private func waitForAppCheck(_ app: MacAppModel, attempts: Int = 400) async -> Bool {
         for _ in 0..<attempts {
             if !app.isChecking { return true }
@@ -387,13 +402,32 @@ import GoFlyMacCore
     private func response(_ request: MacSetupRequest, stage: String, outcome: String, code: String? = nil) throws -> Data {
         var value: [String: Any] = [
             "action": request.action.rawValue,
-            "requestID": request.requestID.uuidString, "setupID": request.setupID.uuidString,
-            "deviceID": request.deviceID, "status": code == nil ? "ok" : "error",
+            "requestID": request.requestID.uuidString, "setupID": request.setupID!.uuidString,
+            "deviceID": request.deviceID!, "status": code == nil ? "ok" : "error",
             "payload": ["stage": stage, "outcome": outcome, "canResume": outcome == "unknown",
                         "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]]
         ]
         if let code { value["code"] = code }
         return try JSONSerialization.data(withJSONObject: value)
+    }
+}
+
+private struct StatusRunner: MacSetupRunning {
+    let setupID: UUID
+    func run(_ request: MacSetupRequest) async throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "requestID": request.requestID.uuidString, "action": "status",
+            "setupID": setupID.uuidString, "deviceID": "00008110-001234567890abcd", "mode": "install",
+            "status": "ok",
+            "payload": ["stage": "install", "outcome": "inProgress", "canResume": true,
+                        "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]]
+        ])
+    }
+}
+
+private struct MissingStatusRunner: MacSetupRunning {
+    func run(_ request: MacSetupRequest) async throws -> Data {
+        throw MacSetupFailure.service("transaction-unknown")
     }
 }
 

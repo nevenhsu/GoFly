@@ -92,9 +92,9 @@ class SetupOptions:
 class SetupRequest:
     request_id: str
     action: str
-    setup_id: str
-    device_id: str
-    mode: str
+    setup_id: str | None
+    device_id: str | None
+    mode: str | None
     options: SetupOptions | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -139,17 +139,21 @@ def decode_request(data: Any) -> SetupRequest:
     value = parse_object(data) if isinstance(data, bytes) else data
     if not isinstance(value, Mapping):
         raise SetupBridgeError("invalid-request")
-    required = {"requestID", "action", "setupID", "deviceID", "mode"}
-    if set(value) - required - {"options"}:
+    required = {"requestID", "action"}
+    if set(value) - required - {"setupID", "deviceID", "mode", "options"}:
         raise SetupBridgeError("invalid-request")
     request_id = _uuid(value.get("requestID"))
+    action = value.get("action")
+    if action not in _ACTIONS:
+        raise SetupBridgeError("invalid-request")
+    if action == "status" and "setupID" not in value and "deviceID" not in value and "mode" not in value:
+        return SetupRequest(request_id, action, None, None, None, None)
+    if not {"setupID", "deviceID", "mode"}.issubset(value):
+        raise SetupBridgeError("invalid-request")
     setup_id = _uuid(value.get("setupID"))
     device_id = normalized_device(value.get("deviceID"))
     mode = value.get("mode")
     if mode not in _MODES:
-        raise SetupBridgeError("invalid-request")
-    action = value.get("action")
-    if action not in _ACTIONS:
         raise SetupBridgeError("invalid-request")
     requires_options = action in {"preflight", "apply"}
     if requires_options != ("options" in value):

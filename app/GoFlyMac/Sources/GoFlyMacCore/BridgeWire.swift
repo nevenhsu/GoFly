@@ -324,23 +324,35 @@ public struct MacSetupOptions: Codable, Equatable, Sendable {
 
 public struct MacSetupRequest: Encodable, Sendable {
     public let requestID: UUID
-    public let setupID: UUID
-    public let deviceID: String
-    public let mode: MacSetupMode
+    public let setupID: UUID?
+    public let deviceID: String?
+    public let mode: MacSetupMode?
     public let action: MacSetupAction
     public let options: MacSetupOptions?
 
-    public init(action: MacSetupAction, setupID: UUID, deviceID: String,
-                mode: MacSetupMode = .install, options: MacSetupOptions? = nil) throws {
-        let normalized = deviceID.lowercased()
-        guard setupFullMatch(normalized, "^(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$"),
-              ((action == .preflight || action == .apply) == (options != nil)) else {
+    public init(action: MacSetupAction, setupID: UUID? = nil, deviceID: String? = nil,
+                mode: MacSetupMode? = nil, options: MacSetupOptions? = nil) throws {
+        let normalized = deviceID?.lowercased()
+        if let normalized {
+            guard setupFullMatch(normalized, "^(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$") else {
+                throw MacSetupFailure.invalidRequest
+            }
+        }
+        let resolvedMode: MacSetupMode?
+        if action == .status, setupID == nil, deviceID == nil, mode == nil {
+            resolvedMode = nil
+        } else if setupID == nil || normalized == nil {
+            throw MacSetupFailure.invalidRequest
+        } else {
+            resolvedMode = mode ?? .install
+        }
+        guard ((action == .preflight || action == .apply) == (options != nil)) else {
             throw MacSetupFailure.invalidRequest
         }
         requestID = UUID()
         self.setupID = setupID
         self.deviceID = normalized
-        self.mode = mode
+        self.mode = resolvedMode
         self.action = action
         self.options = options
     }
@@ -381,6 +393,22 @@ public protocol MacSetupRunning: Sendable {
 }
 
 public enum MacSetupResponseDecoder {
+    public static func probe(_ data: Data) throws -> (MacSetupContinuation, MacSetupSnapshot) {
+        do {
+            let root = try SetupWireJSON.object(data)
+            guard let rawID = root["setupID"] as? String, rawID.utf8.count == 36,
+                  let id = UUID(uuidString: rawID),
+                  let device = root["deviceID"] as? String, device == device.lowercased(),
+                  let rawMode = root["mode"] as? String, let mode = MacSetupMode(rawValue: rawMode) else {
+                throw MacSetupFailure.invalidResponse
+            }
+            let request = try MacSetupRequest(action: .status, setupID: id, deviceID: device, mode: mode)
+            let snapshot = try decode(data, for: request)
+            return (try MacSetupContinuation(setupID: id, deviceID: device, mode: mode), snapshot)
+        } catch let error as MacSetupFailure { throw error }
+        catch { throw MacSetupFailure.invalidResponse }
+    }
+
     private static let safeCodes: Set<String> = [
         "invalid-request", "protocol-mismatch", "configuration-invalid", "dependency-mismatch",
         "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "trust-required",
@@ -394,7 +422,7 @@ public enum MacSetupResponseDecoder {
     public static func decode(_ data: Data, for request: MacSetupRequest) throws -> MacSetupSnapshot {
         do {
             let root = try SetupWireJSON.object(data)
-            guard keys(root, required: ["action", "requestID", "setupID", "deviceID", "status"], optional: ["payload", "code"]),
+            guard keys(root, required: ["action", "requestID", "setupID", "deviceID", "status"], optional: ["payload", "code", "mode"]),
                   root["action"] as? String == request.action.rawValue,
                   uuid(root["requestID"]) == request.requestID,
                   uuid(root["setupID"]) == request.setupID,
@@ -445,13 +473,14 @@ public enum MacSetupResponseDecoder {
             if stage == .preflight, installed || paired || support { throw MacSetupFailure.invalidResponse }
             if request.action == .preflight, stage != .preflight { throw MacSetupFailure.invalidResponse }
             if stage == .complete, outcome == .confirmed {
-                let imported = request.mode == .renew || (paired && support)
+                let mode = request.mode ?? .install
+                let imported = mode == .renew || (paired && support)
                 guard !canResume, installed, imported, receipt != nil, build != nil, team != nil else {
                     throw MacSetupFailure.invalidResponse
                 }
-                if request.mode == .install, expiry == nil { throw MacSetupFailure.invalidResponse }
+                if (request.mode ?? .install) == .install, expiry == nil { throw MacSetupFailure.invalidResponse }
             }
-            return MacSetupSnapshot(mode: request.mode, stage: stage, outcome: outcome, canResume: canResume,
+            return MacSetupSnapshot(mode: request.mode ?? .install, stage: stage, outcome: outcome, canResume: canResume,
                                     appBuild: build, teamID: team, expiresAt: expiry, receiptSHA256: receipt,
                                     installationConfirmed: installed, pairingImported: paired,
                                     supportObserved: support, errorCode: code)

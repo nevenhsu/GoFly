@@ -193,6 +193,33 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
     }
 }
 
+public struct BridgeStatusJournalReader: MacSetupJournalReading {
+    private let runner: any MacSetupRunning
+
+    public init(runner: any MacSetupRunning) { self.runner = runner }
+
+    public func readContinuation() async throws -> MacSetupContinuation? {
+        let request = try MacSetupRequest(action: .status)
+        do {
+            let data = try await runner.run(request)
+            let root = try SetupWireJSON.object(data)
+            guard root["status"] as? String == "ok",
+                  let rawID = root["setupID"] as? String, let id = UUID(uuidString: rawID),
+                  let device = root["deviceID"] as? String,
+                  let rawMode = root["mode"] as? String, let mode = MacSetupMode(rawValue: rawMode) else {
+                throw MacSetupFailure.invalidResponse
+            }
+            return try MacSetupContinuation(setupID: id, deviceID: device, mode: mode)
+        } catch MacSetupFailure.service("transaction-unknown") {
+            return nil
+        } catch let error as MacSetupFailure {
+            throw error
+        } catch {
+            throw MacSetupFailure.invalidResponse
+        }
+    }
+}
+
 public struct UnavailableChecker: MacChecking, MacSetupRunning {
     public init() {}
     public func check(_ request: CheckRequest) async throws -> Data { throw CheckFailure.unavailable }

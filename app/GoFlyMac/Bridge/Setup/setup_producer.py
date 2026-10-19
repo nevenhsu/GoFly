@@ -434,7 +434,8 @@ class SetupProducer:
         journal = self.store.read()
         if journal is None:
             raise SetupBridgeError("transaction-unknown")
-        self._bind(journal, request)
+        if request.setup_id is not None:
+            self._bind(journal, request)
         return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
 
     def resume(self, request: SetupRequest) -> ProducerPayload:

@@ -779,6 +779,13 @@ def _setup_response(value: Mapping[str, Any], config_path: Path, *, producer_fac
                                      support=PinnedSupportAdapter(device))
         payload = producer.handle(request).as_dict()
         from Setup.setup_protocol import _response_payload
+        if request.action == "status" and request.setup_id is None:
+            journal = __import__("Setup.setup_journal", fromlist=["JournalStore"]).JournalStore(config.state_root).read()
+            if isinstance(journal, dict):
+                value = dict(value)
+                value["setupID"] = journal.get("setupID")
+                value["deviceID"] = journal.get("deviceID")
+                value["mode"] = journal.get("mode", "install")
         return wire_response(value, status="ok", payload=_response_payload(payload))
     except WireError as error:
         return wire_response(value, status="error", code=error.code, payload=_setup_error_payload(request, config))

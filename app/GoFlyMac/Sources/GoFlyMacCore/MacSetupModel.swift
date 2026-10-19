@@ -1,6 +1,27 @@
 import Foundation
 import Observation
 
+public struct MacSetupContinuation: Equatable, Sendable {
+    public let setupID: UUID
+    public let deviceID: String
+    public let mode: MacSetupMode
+
+    public init(setupID: UUID, deviceID: String, mode: MacSetupMode = .install) throws {
+        let normalized = deviceID.lowercased()
+        guard setupFullMatch(normalized, "^(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$") else {
+            throw MacSetupFailure.invalidResponse
+        }
+        self.setupID = setupID
+        self.deviceID = normalized
+        self.mode = mode
+    }
+}
+
+public protocol MacSetupJournalReading: Sendable {
+    func readContinuation() async throws -> MacSetupContinuation?
+}
+
+
 @MainActor @Observable
 public final class MacSetupModel {
     public private(set) var continuation: MacSetupContinuation?

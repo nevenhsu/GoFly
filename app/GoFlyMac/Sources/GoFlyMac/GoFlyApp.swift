@@ -15,9 +15,7 @@ struct GoFlyApp: App {
         let setupRunner: any MacSetupRunning = (try? ProcessBridge(
             configurationURL: resources.appendingPathComponent("SetupConfiguration.json"),
             scriptURL: resources.appendingPathComponent("Bridge/bridge.py"))) ?? UnavailableChecker()
-        let stateRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("GoFlySetup")
-        let setup = MacSetupModel(runner: setupRunner, journal: MacSetupJournalReader(stateRoot: stateRoot))
+        let setup = MacSetupModel(runner: setupRunner, journal: BridgeStatusJournalReader(runner: setupRunner))
         let appModel = MacAppModel(live: checker, setup: setup)
         if CommandLine.arguments.contains("--preview") { appModel.switchMode(preview: true) }
         _model = State(initialValue: appModel)
