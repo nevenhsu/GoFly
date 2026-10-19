@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 BRIDGE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(BRIDGE_ROOT))
+sys.path.append(str(BRIDGE_ROOT))
 
 from Management import management_adapters
 from Management.management_adapters import PinnedManagementDeviceAdapter

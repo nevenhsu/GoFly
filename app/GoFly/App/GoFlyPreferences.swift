@@ -45,28 +45,7 @@ final class GoFlyPreferences {
     private static let storageKey = "gofly.preferences.v1"
 
     private init() {
-        var store = UserDefaults.standard
-        #if DEBUG && targetEnvironment(simulator)
-        let arguments = ProcessInfo.processInfo.arguments
-        if let index = arguments.firstIndex(of: "-gofly-ui-preferences-store"),
-           arguments.indices.contains(index + 1),
-           let namespace = UUID(uuidString: arguments[index + 1]),
-           let isolated = UserDefaults(suiteName: "gofly.ui.preferences.\(namespace.uuidString)") {
-            store = isolated
-            if store.object(forKey: Self.storageKey) == nil {
-                func initialValue(_ flag: String) -> String {
-                    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
-                        return "system"
-                    }
-                    return arguments[index + 1]
-                }
-                store.set([
-                    "language": initialValue("-gofly-ui-preferences-language"),
-                    "appearance": initialValue("-gofly-ui-preferences-appearance")
-                ], forKey: Self.storageKey)
-            }
-        }
-        #endif
+        let store = GoFlyUITestOverrides.preferencesDefaults() ?? UserDefaults.standard
         defaults = store
         let saved = store.dictionary(forKey: Self.storageKey)
         language = (saved?["language"] as? String).flatMap(GoFlyLanguage.init(rawValue:)) ?? .system

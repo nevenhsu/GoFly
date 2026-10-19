@@ -1,4 +1,3 @@
-import CryptoKit
 import GoFlyCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -16,8 +15,6 @@ struct GoFlyImportedRoutesView: View {
     @State private var loadFailureKey: String?
     @State private var exportDocument: GoFlyGPXExportDocument?
     @State private var exportFilename = "route"
-    @State private var exportMetrics = ""
-    @State private var visibleScrollFrame: CGRect = .zero
 
     var body: some View {
         let eligibilityFailure = executionFailureKey
@@ -73,7 +70,6 @@ struct GoFlyImportedRoutesView: View {
             }
             .padding(16)
         }
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
         .accessibilityIdentifier("imports.content")
         .safeAreaInset(edge: .bottom) {
             Button(goFlyString("imports.load"), action: loadSelected)
@@ -108,21 +104,6 @@ struct GoFlyImportedRoutesView: View {
         .fileExporter(isPresented: $showingExporter, document: exportDocument,
                       contentType: .goFlyGPX, defaultFilename: exportFilename) { result in
             if case .failure(let error) = result { presentFileError(error) }
-        }
-        .overlay(alignment: .topLeading) {
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-                VStack {
-                    Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                                visibleScrollFrame.width, visibleScrollFrame.height))
-                        .accessibilityIdentifier("imports.viewport.metrics")
-                    if !exportMetrics.isEmpty {
-                        Text(exportMetrics).accessibilityIdentifier("imports.export.metrics")
-                    }
-                }
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-            }
-            #endif
         }
         .onDisappear {
             fileTask?.cancel()
@@ -274,13 +255,6 @@ struct GoFlyImportedRoutesView: View {
                 try Task.checkCancellation()
                 exportDocument = try GoFlyGPXExportDocument(data: data)
                 exportFilename = URL(fileURLWithPath: snapshot.record.filename).deletingPathExtension().lastPathComponent
-                #if DEBUG && targetEnvironment(simulator)
-                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-                    let document = try GPXCodec.decode(data)
-                    let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-                    exportMetrics = "\(document.pointCount),\(data.count),\(hash)"
-                }
-                #endif
                 showingExporter = true
             } catch { presentFileError(error) }
         }

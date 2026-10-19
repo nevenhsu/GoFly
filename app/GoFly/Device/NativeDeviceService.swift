@@ -160,21 +160,10 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
 final class NativeDeviceService: DeviceService, @unchecked Sendable {
     init() {}
     func prepare() async throws {
-        await delayPreparationForUITest()
         throw DeviceServiceFailure.deviceRequired
     }
     func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
-        await delayPreparationForUITest()
         return .notSent(.deviceRequired)
-    }
-    private func delayPreparationForUITest() async {
-        #if DEBUG
-        // Delay only the simulator's existing real failure; never claim the
-        // dispatch gate or invent an acknowledged device operation.
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-preparation-delay") {
-            try? await Task.sleep(for: .seconds(2))
-        }
-        #endif
     }
     func clearLocation() async throws { throw DeviceServiceFailure.deviceRequired }
     func resetClientConnection() async throws { throw DeviceServiceFailure.deviceRequired }

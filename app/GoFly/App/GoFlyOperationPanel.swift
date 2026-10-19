@@ -20,7 +20,6 @@ struct GoFlyOperationPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let operation {
                     preparedContent(operation)
-                    operationMetrics(operation)
                 } else if let failure = unconfirmedFailure {
                     Text(goFlyString("teleport.unconfirmed")).font(.headline)
                     reason(failure)
@@ -112,35 +111,6 @@ struct GoFlyOperationPanel: View {
             .foregroundStyle(GoFlyStyle.secondary)
             .accessibilityIdentifier("operation.source")
     }
-
-    @ViewBuilder private func operationMetrics(_ operation: PreparedOperationSnapshot) -> some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-operation-metrics") {
-            Text(metricsText(operation))
-                .font(.caption2)
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier("operation.sourceMetrics")
-        }
-        #endif
-    }
-
-    #if DEBUG && targetEnvironment(simulator)
-    private func metricsText(_ operation: PreparedOperationSnapshot) -> String {
-        let source: String
-        switch operation.source {
-        case .start: source = "start"
-        case .point(let intent):
-            source = "point|\(intent.id)|\(intent.candidate.id)|\(intent.candidate.place.coordinate.displayText)"
-        case .route(let intent):
-            source = "route|\(intent.id)|\(intent.lease.id)|\(intent.route.start.displayText)|\(intent.route.end.displayText)"
-        case .joystick(let intent):
-            source = "joystick|\(intent.id)|\(intent.lease.id)"
-        }
-        return "\(operation.id)|\(source)|\(operation.attempt.value)"
-    }
-    #endif
 
     private func reason(_ failure: DeviceServiceFailure) -> some View {
         HStack(alignment: .top, spacing: 8) {

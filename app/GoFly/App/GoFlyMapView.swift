@@ -67,22 +67,9 @@ final class GoFlyMovementModel: ObservableObject {
         return true
     }
 
-    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
-        #if DEBUG && targetEnvironment(simulator)
-        return initialRouteUITestDraft() ?? saved
-        #else
-        return saved
-        #endif
-    }
+    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft { saved }
 
-    private static func routePlanner() -> any RoutePlanning {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-route-planning-delay") {
-            return DelayedFailureRouteUITestPlanner()
-        }
-        #endif
-        return MapKitWalkingRoutePlanner()
-    }
+    private static func routePlanner() -> any RoutePlanning { MapKitWalkingRoutePlanner() }
 
 }
 
@@ -254,7 +241,6 @@ struct GoFlyMapView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, dynamicTypeSize.isAccessibilitySize ? 4 : 8)
                     .padding(.bottom, bottomPadding)
-                    mapMetrics(origin: geometry.frame(in: .global).origin)
                 }
                 .coordinateSpace(name: "mapRoot")
                 .accessibilityHidden(presentedSheet != nil)
@@ -849,76 +835,6 @@ struct GoFlyMapView: View {
             .padding(12)
             .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
     }
-
-    @ViewBuilder private func mapMetrics(origin: CGPoint) -> some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            // Inspect the real configured SDK request without starting network work.
-            Text(mapPlaces.makeRequest(at: GeoCoordinate(latitude: 25.0478, longitude: 121.5170)!)?
-                .preferredLocale?.identifier ?? "system")
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("map.address.requestLocale")
-            Text(sessionPersistenceStatus)
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("session.persistence.status")
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f", panelFrame.minX + origin.x,
-                        panelFrame.minY + origin.y, panelFrame.width, panelFrame.height))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("map.panel.viewportMetrics")
-        }
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"), let projection {
-            Text(projection.mapInstanceID)
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityValue(projection.mapInstanceID)
-                .accessibilityIdentifier("map.instanceID")
-            Text(String(projection.mapUserInterfaceStyle))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityValue(String(projection.mapUserInterfaceStyle))
-                .accessibilityIdentifier("map.trait.userInterfaceStyle")
-            Text(String(projection.cameraStateToken))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityValue(String(projection.cameraStateToken))
-                .accessibilityIdentifier("map.camera.state")
-            Text(String(projection.routePointCount))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("map.routePreview.points")
-            Text(projection.routeIsVisible ? "true" : "false")
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("map.routePreview.visible")
-        }
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics"),
-           let projection, let candidate = projection.candidatePoint {
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
-                        projection.viewport.midX + origin.x, projection.viewport.midY + origin.y,
-                        candidate.x + origin.x, candidate.y + origin.y, projection.viewport.width, projection.viewport.height))
-                .font(.caption2)
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier("map.viewportMetrics")
-            if let selection = activeCandidate?.id {
-                Text(selection.uuidString)
-                    .font(.caption2)
-                    .foregroundStyle(.clear)
-                    .frame(width: 1, height: 1)
-                    .allowsHitTesting(false)
-                    .accessibilityIdentifier("map.candidate.selectionID")
-            }
-        }
-        #endif
-    }
-
-    #if DEBUG && targetEnvironment(simulator)
-    private var sessionPersistenceStatus: String {
-        guard recoveryStore.loadState == .ready else { return "blocked" }
-        let current = lastCapturedSnapshot.mode == mode && lastCapturedSnapshot.draft == route.draft &&
-            lastCapturedSnapshot.roundTripEnabled == route.roundTripEnabled &&
-            lastCapturedSnapshot.joystickSpeed == joystick.speed
-        if !current || recoveryStore.isSaving { return "pending" }
-        if recoveryStore.hasUnsavedChanges || recoveryStore.error != nil { return "dirty" }
-        return "saved"
-    }
-    #endif
 
     private func locationNotice(_ key: String) -> some View {
         HStack(alignment: .top, spacing: 8) {

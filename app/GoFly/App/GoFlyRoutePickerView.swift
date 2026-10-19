@@ -15,7 +15,6 @@ struct GoFlyRoutePickerView: View {
     @State private var headerHeight: CGFloat = 70
     @State private var actionHeight: CGFloat = 52
     @State private var contentHeight: CGFloat = 240
-    @State private var visibleScrollFrame: CGRect = .zero
 
     init(session: RoutePickerSession, maximumHeight: CGFloat, focusRequest: UUID?,
          onFavorites: @escaping () -> Void, onConfirm: @escaping (UUID, Bool) -> Void,
@@ -93,11 +92,6 @@ struct GoFlyRoutePickerView: View {
             }
             .defaultScrollAnchor(.bottom)
             .frame(height: max(0, min(contentHeight, maximumHeight - actionHeight - 44)))
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
-                #if DEBUG && targetEnvironment(simulator)
-                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") { visibleScrollFrame = frame }
-                #endif
-            }
             .accessibilityIdentifier("route.picker.content")
             Button(goFlyString("route.picker.confirm")) { onConfirm(session.id, usesCurrent) }
                 .buttonStyle(GoFlyActionStyle(primary: true))
@@ -107,26 +101,12 @@ struct GoFlyRoutePickerView: View {
         }
         .padding(16)
         .goFlyCard(floating: true)
-        .overlay(alignment: .topLeading) { viewportMetrics }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.picker")
         .onAppear { onStagedCurrentChange(usesCurrent) }
         .onChange(of: usesCurrent) { _, selected in onStagedCurrentChange(selected) }
         .onChange(of: candidates.candidate?.id) { _, _ in usesCurrent = false }
         .onChange(of: candidates.query) { _, _ in usesCurrent = false }
-    }
-    @ViewBuilder private var viewportMetrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                        visibleScrollFrame.width, visibleScrollFrame.height))
-                .font(.caption2)
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier("route.picker.viewportMetrics")
-        }
-        #endif
     }
 
 }

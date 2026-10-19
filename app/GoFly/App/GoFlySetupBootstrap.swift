@@ -108,12 +108,6 @@ final class GoFlySetupBootstrap: ObservableObject {
 
         let preferencesStore = GoFlyPreferences.shared.transferStore()
         startupTask = Task { [weak self] in
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("-gofly-ui-setup-delay") {
-                do { try await Task.sleep(for: .seconds(10)) }
-                catch { return }
-            }
-            #endif
             let result = await Task.detached(priority: .utility) {
                 do {
                     guard let support = FileManager.default.urls(

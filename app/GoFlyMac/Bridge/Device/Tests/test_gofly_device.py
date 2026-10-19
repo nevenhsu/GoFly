@@ -9,7 +9,7 @@ from unittest import mock
 
 
 MODULE_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(MODULE_ROOT))
+sys.path.append(str(MODULE_ROOT))
 import gofly_device as device  # noqa: E402
 
 

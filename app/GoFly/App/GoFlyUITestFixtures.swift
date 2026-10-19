@@ -1,42 +1,53 @@
-#if DEBUG && targetEnvironment(simulator)
 import Foundation
-import GoFlyCore
+import GoFlyTransport
 
-/// UI fault injection only: it creates an uncertain command state without
-/// claiming a successful device write, GPS fix, or recipient-app observation.
-struct UnconfirmedPointUITestService: DeviceService {
-    private let unavailableDevice = NativeDeviceService()
+/// Simulator-only launch-argument overrides. Release and device builds compile
+/// the inert variant, so no production argument can select test state.
+#if DEBUG && targetEnvironment(simulator)
+enum GoFlyUITestOverrides {
+    static func value(_ flag: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        return arguments[index + 1]
+    }
 
-    func prepare() async throws { try await unavailableDevice.prepare() }
-    func clearLocation() async throws { try await unavailableDevice.clearLocation() }
-    func resetClientConnection() async throws { try await unavailableDevice.resetClientConnection() }
-    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
-        guard dispatch.claim() else { return .notSent(.operationCancelled) }
-        return .unconfirmed(.operationTimedOut)
+    static func contains(_ flag: String) -> Bool {
+        ProcessInfo.processInfo.arguments.contains(flag)
+    }
+
+    static func namespace(_ flag: String, under root: URL, folder: String) -> URL? {
+        guard let namespace = value(flag).flatMap(UUID.init(uuidString:)) else { return nil }
+        return root.appendingPathComponent("UITests", isDirectory: true)
+            .appendingPathComponent(folder, isDirectory: true)
+            .appendingPathComponent(namespace.uuidString, isDirectory: true)
+    }
+
+    static func preferencesDefaults() -> UserDefaults? {
+        guard let namespace = value("-gofly-ui-preferences-store").flatMap(UUID.init(uuidString:)),
+              let store = UserDefaults(suiteName: "gofly.ui.preferences.\(namespace.uuidString)") else {
+            return nil
+        }
+        if store.object(forKey: "gofly.preferences.v1") == nil {
+            store.set([
+                "language": value("-gofly-ui-preferences-language") ?? "system",
+                "appearance": value("-gofly-ui-preferences-appearance") ?? "system"
+            ], forKey: "gofly.preferences.v1")
+        }
+        return store
+    }
+
+    static func tunnelProbe() -> NetworkTunnelProbe? {
+        contains("-gofly-ui-unreachable") ? .unavailableUITestProbe : nil
     }
 }
-
-/// A deterministic planning failure; it neither supplies a path nor calls native code.
-struct DelayedFailureRouteUITestPlanner: RoutePlanning {
-    func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
-        try await Task.sleep(for: .seconds(5))
-        try Task.checkCancellation()
-        throw RouteExecutionFailure.planningFailed
-    }
-}
-/// Initial editable test data only; this does not create a task or device outcome.
-@MainActor
-func initialRouteUITestDraft() -> RouteDraft? {
-    let arguments = ProcessInfo.processInfo.arguments
-    guard let flag = arguments.firstIndex(of: "-gofly-ui-route-draft-count"),
-          arguments.indices.contains(flag + 1), let count = Int(arguments[flag + 1]),
-          (0...RouteDraft.maximumNodeCount).contains(count) else { return nil }
-    let values: [RouteNodeValue] = (0..<count).map { index in
-        if index == 0 { return .current }
-        let coordinate = GeoCoordinate(latitude: 25 + Double(index) * 0.002,
-                                       longitude: 121.5 + Double(index) * 0.002)!
-        return .place(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate))
-    }
-    return RouteDraft(values: values)
+#else
+enum GoFlyUITestOverrides {
+    static func value(_ flag: String) -> String? { nil }
+    static func contains(_ flag: String) -> Bool { false }
+    static func namespace(_ flag: String, under root: URL, folder: String) -> URL? { nil }
+    static func preferencesDefaults() -> UserDefaults? { nil }
+    static func tunnelProbe() -> NetworkTunnelProbe? { nil }
 }
 #endif

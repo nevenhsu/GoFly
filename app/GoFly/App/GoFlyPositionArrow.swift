@@ -90,19 +90,3 @@ final class GoFlyPositionArrowView: MKAnnotationView {
         return path
     }
 }
-
-#if DEBUG && targetEnvironment(simulator)
-struct GoFlyPositionArrowPreview: UIViewRepresentable {
-    let source: PositionSource
-    let freshness: PositionFreshness
-    var bearingDegrees: Double? = nil
-
-    func makeUIView(context: Context) -> GoFlyPositionArrowView {
-        GoFlyPositionArrowView(annotation: nil, reuseIdentifier: nil)
-    }
-    func updateUIView(_ view: GoFlyPositionArrowView, context: Context) {
-        view.applyAppearance(source: source, freshness: freshness,
-                             bearingDegrees: bearingDegrees, cameraHeadingDegrees: 0)
-    }
-}
-#endif

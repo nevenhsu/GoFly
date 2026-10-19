@@ -9,7 +9,6 @@ struct GoFlyFavoriteRoutesView: View {
     @State private var loadTask: Task<Void, Never>?
     @State private var loadRequest: UUID?
     @State private var loadFailureKey: String?
-    @State private var visibleScrollFrame: CGRect = .zero
 
     var body: some View {
         NavigationStack {
@@ -49,7 +48,6 @@ struct GoFlyFavoriteRoutesView: View {
                 }
                 .padding(16)
             }
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
             .accessibilityIdentifier("favoriteRoutes.content")
             .safeAreaInset(edge: .bottom) {
                 Button(goFlyString("favoriteRoutes.return")) {
@@ -64,7 +62,6 @@ struct GoFlyFavoriteRoutesView: View {
             .background(GoFlyStyle.canvas)
             .navigationTitle(goFlyString("favoriteRoutes.title"))
             .navigationBarTitleDisplayMode(.inline)
-            .overlay(alignment: .topLeading) { viewportMetrics }
         }
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
@@ -168,17 +165,6 @@ struct GoFlyFavoriteRoutesView: View {
         invalidateLoad()
         loadFailureKey = nil
         editing = record
-    }
-
-    @ViewBuilder private var viewportMetrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                        visibleScrollFrame.width, visibleScrollFrame.height))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("favoriteRoutes.viewport.metrics")
-        }
-        #endif
     }
 }
 

@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.append(str(PACKAGE_ROOT))
 
 from Reinstall.reinstall_protocol import (  # noqa: E402
     CATEGORY_ORDER,

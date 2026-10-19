@@ -13,7 +13,7 @@ from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 import sys
-sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.append(str(PACKAGE_ROOT))
 
 from Reinstall.reinstall_adapters import ExportReadback, InstallObservation, SourceAppIdentity  # noqa: E402
 from Reinstall.reinstall_journal import ReinstallJournalStore, is_completed_journal  # noqa: E402

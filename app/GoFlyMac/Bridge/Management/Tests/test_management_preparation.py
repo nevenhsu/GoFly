@@ -14,7 +14,7 @@ from unittest.mock import patch
 import sys
 
 BRIDGE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(BRIDGE_ROOT))
+sys.path.append(str(BRIDGE_ROOT))
 
 from Management.management_preparation import ManagementPreparationAdapter
 from Management.management_protocol import ManagementBridgeError

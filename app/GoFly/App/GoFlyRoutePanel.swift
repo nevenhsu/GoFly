@@ -38,7 +38,6 @@ struct GoFlyRoutePanel: View {
             .accessibilityIdentifier("route.panel.content")
         }
         .goFlyCard(floating: true)
-        .overlay(alignment: .topLeading) { nodeMetrics }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
         .sheet(isPresented: $showingDetails) {
@@ -65,21 +64,6 @@ struct GoFlyRoutePanel: View {
         } message: {
             Text(goFlyString("route.cancelConfirmation.message"))
         }
-    }
-
-    @ViewBuilder private var nodeMetrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            VStack {
-                Text(controller.draft.nodes.map { $0.id.rawValue.uuidString }.joined(separator: ","))
-                    .accessibilityIdentifier("route.nodes.order")
-                Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                            visibleScrollFrame.width, visibleScrollFrame.height))
-                    .accessibilityIdentifier("route.nodes.viewport")
-            }
-            .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-        }
-        #endif
     }
 
     private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
@@ -292,7 +276,6 @@ struct GoFlyRoutePanel: View {
 private struct GoFlyRouteDetailsView: View {
     @ObservedObject var controller: RouteExecutionController
     var onDismiss: () -> Void
-    @State private var visibleScrollFrame: CGRect = .zero
 
     var body: some View {
         NavigationStack {
@@ -336,20 +319,8 @@ private struct GoFlyRouteDetailsView: View {
                 }
                 .padding(24)
             }
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
             .accessibilityIdentifier("route.details.content")
             .background(GoFlyStyle.surface)
-            .overlay(alignment: .topLeading) {
-                #if DEBUG && targetEnvironment(simulator)
-                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-                    Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                                visibleScrollFrame.width, visibleScrollFrame.height))
-                        .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1)
-                        .allowsHitTesting(false)
-                        .accessibilityIdentifier("route.details.viewportMetrics")
-                }
-                #endif
-            }
             .navigationTitle(goFlyString("route.details"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

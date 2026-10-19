@@ -20,11 +20,9 @@
 bash app/GoFly/scripts/check.sh
 ```
 
-`check.sh` 把衍生輸出放到根目錄 `work/gofly-ios`，執行正式核心測試、固定來源的原生測試／重建、輸入雜湊核對與 unsigned simulator／device build，不簽署、不安裝到手機、不動 prototype。Xcode 預設使用 `/Applications/Xcode.app/Contents/Developer`，可由 `DEVELOPER_DIR` 指定。
+`check.sh` 把衍生輸出放到根目錄 `work/gofly-ios`，預設執行核心測試與 unsigned simulator build，不簽署、不安裝到手機。加上 `--device` 才會重建原生程式庫、核對 native patch 與 Swift shim 宣告數，並執行 unsigned device build。Xcode 預設使用 `/Applications/Xcode.app/Contents/Developer`，可由 `DEVELOPER_DIR` 指定。
 
-首次原生建置需要 Apple Silicon、可用的固定 idevice 來源 checkout，以及下載 Rust 工具鏈與鎖定依賴的網路。來源位置、工具鏈隔離與建置步驟見 [NativeBridge](NativeBridge/README.md)。不使用 prototype 的舊 archive；缺少新產物或雜湊不符時，device 驗證直接失敗。
-
-只檢查來源邊界可執行 `python3 app/GoFly/scripts/verify-native.py --source-only`；原生建置完成後，去掉此參數才會連同 archive 與建置 manifest 核對。來源檢查通過不能代替 device build 或真機驗收。
+首次原生建置需要 Apple Silicon、可用的固定 idevice 來源 checkout，以及下載 Rust 工具鏈與鎖定依賴的網路。來源位置、工具鏈隔離與建置步驟見 [NativeBridge](NativeBridge/README.md)。原生 patch 或 shim 不符時，device 驗證直接失敗。
 
 ## 裝置準備與驗收界線
 

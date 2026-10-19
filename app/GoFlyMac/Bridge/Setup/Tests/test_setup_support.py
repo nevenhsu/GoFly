@@ -13,7 +13,7 @@ from unittest import mock
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 import sys
 
-sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.append(str(PACKAGE_ROOT))
 
 import setup_support  # noqa: E402
 from setup_protocol import SetupBridgeError  # noqa: E402

@@ -12,7 +12,6 @@ struct GoFlySaveFavoriteRouteView: View {
     @State private var localErrorKey: String?
     @State private var savedOmittingCurrent: FavoriteRouteRecord?
     @State private var saveTask: Task<Void, Never>?
-    @State private var visibleScrollFrame: CGRect = .zero
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -54,7 +53,6 @@ struct GoFlySaveFavoriteRouteView: View {
                 .padding(24)
             }
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
             .accessibilityIdentifier("favoriteRoutes.save.content")
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 12) {
@@ -75,7 +73,6 @@ struct GoFlySaveFavoriteRouteView: View {
             .background(GoFlyStyle.surface)
             .navigationTitle(goFlyString(savedOmittingCurrent == nil ? "favoriteRoutes.add" : "favoriteRoutes.savedTitle"))
             .navigationBarTitleDisplayMode(.inline)
-            .overlay(alignment: .topLeading) { viewportMetrics }
         }
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
@@ -158,17 +155,6 @@ struct GoFlySaveFavoriteRouteView: View {
                           lineWidth: focused ? 1.5 : 0.75)
             .allowsHitTesting(false)
     }
-
-    @ViewBuilder private var viewportMetrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                        visibleScrollFrame.width, visibleScrollFrame.height))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("favoriteRoutes.save.viewport.metrics")
-        }
-        #endif
-    }
 }
 
 struct GoFlyFavoriteRouteLabelEditor: View {
@@ -178,7 +164,6 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     @State private var label: String
     @State private var saving = false
     @State private var saveTask: Task<Void, Never>?
-    @State private var visibleScrollFrame: CGRect = .zero
     @FocusState private var focused: Bool
 
     init(record: FavoriteRouteRecord, onDismiss: @escaping () -> Void) {
@@ -210,7 +195,6 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                 .padding(24)
             }
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
             .accessibilityIdentifier("favoriteRoutes.editor.content")
             .safeAreaInset(edge: .bottom) {
                 ViewThatFits(in: .horizontal) {
@@ -223,7 +207,6 @@ struct GoFlyFavoriteRouteLabelEditor: View {
             .background(GoFlyStyle.surface)
             .navigationTitle(goFlyString("favoriteRoutes.editLabel"))
             .navigationBarTitleDisplayMode(.inline)
-            .overlay(alignment: .topLeading) { viewportMetrics }
         }
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
@@ -262,16 +245,5 @@ struct GoFlyFavoriteRouteLabelEditor: View {
             .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
                           lineWidth: focused ? 1.5 : 0.75)
             .allowsHitTesting(false)
-    }
-
-    @ViewBuilder private var viewportMetrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            Text(String(format: "%.2f,%.2f,%.2f,%.2f", visibleScrollFrame.minX, visibleScrollFrame.minY,
-                        visibleScrollFrame.width, visibleScrollFrame.height))
-                .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                .accessibilityIdentifier("favoriteRoutes.editor.viewport.metrics")
-        }
-        #endif
     }
 }

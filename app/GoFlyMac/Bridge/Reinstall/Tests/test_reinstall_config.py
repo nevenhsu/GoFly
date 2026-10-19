@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.append(str(PACKAGE_ROOT))
 
 from Reinstall.reinstall_config import ReinstallConfiguration  # noqa: E402
 from Setup.setup_protocol import SetupBridgeError  # noqa: E402

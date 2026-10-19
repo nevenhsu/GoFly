@@ -19,48 +19,12 @@ struct GoFlyMapProjection: Equatable {
     let wanderTargetPoint: CGPoint?
     let viewport: CGRect
     let cameraHeadingDegrees: Double
-    #if DEBUG && targetEnvironment(simulator)
-    private(set) var routePointCount = 0
-    private(set) var routeIsVisible = false
-    private(set) var mapInstanceID = ""
-    private(set) var mapUserInterfaceStyle = UIUserInterfaceStyle.unspecified.rawValue
-    private(set) var cameraStateToken = 0
-    #endif
 
     @MainActor init(candidatePoint: CGPoint?, wanderTargetPoint: CGPoint? = nil, viewport: CGRect, map: MKMapView) {
         self.candidatePoint = candidatePoint
         self.wanderTargetPoint = wanderTargetPoint
         self.viewport = viewport
         self.cameraHeadingDegrees = map.camera.heading
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            mapInstanceID = String(describing: ObjectIdentifier(map))
-            mapUserInterfaceStyle = map.traitCollection.userInterfaceStyle.rawValue
-            var cameraHasher = Hasher()
-            cameraHasher.combine(map.camera.centerCoordinate.latitude)
-            cameraHasher.combine(map.camera.centerCoordinate.longitude)
-            cameraHasher.combine(map.camera.altitude)
-            cameraHasher.combine(map.camera.pitch)
-            cameraHasher.combine(map.camera.heading)
-            cameraStateToken = cameraHasher.finalize()
-            let lines = map.overlays.compactMap { $0 as? MKPolyline }
-            routePointCount = lines.reduce(0) { $0 + $1.pointCount }
-            if !lines.isEmpty {
-                let bounds = lines.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
-                let corners = [MKMapPoint(x: bounds.minX, y: bounds.minY),
-                               MKMapPoint(x: bounds.maxX, y: bounds.minY),
-                               MKMapPoint(x: bounds.minX, y: bounds.maxY),
-                               MKMapPoint(x: bounds.maxX, y: bounds.maxY)]
-                    .map { map.convert($0.coordinate, toPointTo: map) }
-                let minimumX = corners.map(\.x).min()!, maximumX = corners.map(\.x).max()!
-                let minimumY = corners.map(\.y).min()!, maximumY = corners.map(\.y).max()!
-                let screenBounds = CGRect(x: minimumX, y: minimumY,
-                                          width: maximumX - minimumX, height: maximumY - minimumY)
-                    .insetBy(dx: -0.5, dy: -0.5)
-                routeIsVisible = viewport.insetBy(dx: -2, dy: -2).contains(screenBounds)
-            }
-        }
-        #endif
     }
 }
 

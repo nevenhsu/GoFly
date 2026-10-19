@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from setup_adapters import PinnedPymobiledeviceAdapter, close_async_runtime
 from setup_protocol import SetupBridgeError

@@ -81,7 +81,6 @@ struct GoFlyRouteNodeList: View {
                     .accessibilityHidden(true)
             }
         }
-        .overlay(alignment: .topLeading) { metrics }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.nodes.list")
         .onChange(of: rowFrames) { _, _ in updateProjection() }
@@ -228,16 +227,5 @@ struct GoFlyRouteNodeList: View {
     }
     private func editIdentifier(_ role: RouteNodeRole) -> String {
         switch role { case .start: "route.node.start"; case .destination: "route.node.destination"; case .waypoint(let n): "route.node.waypoint.\(n)" }
-    }
-
-    @ViewBuilder private var metrics: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-            VStack {
-                Text(draggingID?.rawValue.uuidString ?? "none").accessibilityIdentifier("route.nodes.dragging")
-            }
-            .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-        }
-        #endif
     }
 }

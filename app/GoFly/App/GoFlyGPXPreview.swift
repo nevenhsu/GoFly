@@ -15,17 +15,6 @@ struct GoFlyGPXPreview: View {
             .accessibilityValue(goFlyLocalizedFormat(goFlyString("imports.preview.summary"),
                                                                 document.pointCount, document.segments.count))
             .accessibilityIdentifier("imports.preview")
-            .overlay(alignment: .topLeading) {
-                #if DEBUG && targetEnvironment(simulator)
-                if ProcessInfo.processInfo.arguments.contains("-gofly-ui-map-metrics") {
-                    VStack {
-                        Text(document.pointCount, format: .number).accessibilityIdentifier("imports.preview.points")
-                        Text(document.segments.count, format: .number).accessibilityIdentifier("imports.preview.segments")
-                    }
-                    .font(.caption2).foregroundStyle(.clear).frame(width: 1, height: 1).allowsHitTesting(false)
-                }
-                #endif
-            }
     }
 }
 

@@ -11,7 +11,6 @@ struct GoFlyApp: App {
 
     init() {
         _ = GoFlyPreferences.shared
-        GoFlySetupFixture.seedIfRequested()
         _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
 

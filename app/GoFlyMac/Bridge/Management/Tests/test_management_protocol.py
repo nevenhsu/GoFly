@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.append(str(PACKAGE_ROOT))
 
 from Management.management_protocol import (  # noqa: E402
     ManagementBridgeError,
