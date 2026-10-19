@@ -1,14 +1,12 @@
 import Foundation
 import Testing
 @testable import GoFlyCore
-
 @Suite @MainActor struct PersistenceTests {
     private func directory() throws -> URL {
         let url = URL(fileURLWithPath: "/private/tmp/gofly-c3-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
-
     @Test func favoritePlacesReadsTheExistingSchemaOneFileUnchanged() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let old = Data(#"{"schemaVersion":1,"favorites":[{"identity":{"kind":"coordinate","value":null},"coordinate":{"latitude":25,"longitude":121},"title":"25.000000, 121.000000","address":null,"label":"home"}]}"#.utf8)
@@ -21,7 +19,6 @@ import Testing
         #expect(favorites[0].label == "home")
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == ["favorites.json"])
     }
-
     @Test func sessionReadsTheExistingSchemaOneFileUnchanged() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let old = Data(#"{"activeMovement":null,"draft":{"gpxData":null,"gpxFilename":null,"nodes":[{"id":"00000000-0000-0000-0000-000000000001","kind":"current","place":null}],"sourceKind":"manual","speed":20},"joystickSpeed":20,"mode":"teleport","position":{"coordinate":{"latitude":25,"longitude":121},"source":"gps"},"revision":9,"roundTripEnabled":false,"schemaVersion":1,"uncertainty":null}"#.utf8)
@@ -30,14 +27,12 @@ import Testing
         #expect(data == old)
         #expect(try SessionRecoveryCodec.decodeRecord(data).revision == 9)
     }
-
     @Test func oldSessionColdFieldsAreIgnoredInsteadOfCorrupting() throws {
         let old = Data(#"{"activeMovement":null,"coldRecoveryHeld":true,"draft":{"gpxData":null,"gpxFilename":null,"nodes":[],"sourceKind":"manual","speed":20},"joystickSpeed":20,"mode":"teleport","position":null,"requiresColdConfirmation":true,"revision":4,"roundTripEnabled":false,"schemaVersion":1,"uncertainty":null}"#.utf8)
         let record = try SessionRecoveryCodec.decodeRecord(old)
         #expect(record.revision == 4)
         #expect(record.snapshot.mode == .teleport)
     }
-
     @Test func favoritePlacesRoundTripKeepsPrivatePermissions() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let disk = FileFavoritePlacesPersistence(directory: root)
@@ -50,7 +45,6 @@ import Testing
         #expect((try FileManager.default.attributesOfItem(atPath: disk.fileURL.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
         #expect((try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber)?.intValue == 0o700)
     }
-
     @Test func corruptFavoritePlacesBlocksMutationAndKeepsTheOriginalBytes() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("favorites.json")
@@ -62,7 +56,6 @@ import Testing
         #expect(!store.toggle(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)))
         #expect(try Data(contentsOf: file) == corrupt)
     }
-
     @Test func importedRouteDeleteAndUndoAreStoreMemoryOnly() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let disk = FileImportedRoutesPersistence(directory: root)
@@ -81,7 +74,6 @@ import Testing
         #expect(store.records.map(\.id) == [record.id])
         #expect(!store.canUndo)
     }
-
     @Test func corruptManifestBlocksReadAndMutationWithoutRewriting() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let manifest = root.appendingPathComponent("manifest.json")
@@ -93,7 +85,6 @@ import Testing
         #expect(!store.canMutate)
         #expect(try Data(contentsOf: manifest) == corrupt)
     }
-
     @Test func missingPayloadIsUnavailableAndNeverRemovedFromTheManifest() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let disk = FileImportedRoutesPersistence(directory: root)
@@ -112,7 +103,6 @@ import Testing
         #expect(await store.delete(record.id))
         #expect(try await disk.read().records.isEmpty)
     }
-
     private func importedArtifact() throws -> ImportedRouteArtifact {
         let a = GeoCoordinate(latitude: 25, longitude: 121)!
         let b = GeoCoordinate(latitude: 25.001, longitude: 121.001)!

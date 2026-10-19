@@ -166,6 +166,7 @@ Transfer／Management 已刪，iOS 只剩 setup 一個信箱。等手機驗收�
 
 - **C4-1 不做（2026-10-19 決定）**：`MovementTaskAuthority` 併入 `ServiceController` 淨省只有約 44 行，卻讓已 1,500 行的 `ServiceController` 更大，且動到送點並行核心，不值得。
 - **C5-5 延後**：移除 picker `objectWillChange` 轉發會改動 RouteExecutionController 的既有通知契約與 UI 刷新；依規則先跳過，併入 B2 後再處理。
+- **B2 ✅**：Core 測試 11,568 → **5,999** 行；保留一個「自動重試最終成功」case。
 - **C5-7 ✅**：mode 按鈕最小 44×44；`GoFlyModeUITestSupport` 加回 44pt 斷言。
 - **C5-3 ✅**：漫步改為單一隨機方向＋固定十分鐘距離，刪 32 樣本與最近 100 點排除。
 - **C5-2 ✅**：`ContinuedProcessingRegistrationBook` 已隨 C4-1 刪除，啟動只註冊一次。
