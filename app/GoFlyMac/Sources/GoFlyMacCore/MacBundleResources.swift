@@ -8,6 +8,7 @@ import Foundation
 /// into a resource entry and the manifest is checked against this same set.
 public enum MacBundleResourceEntry: String, CaseIterable, Sendable {
     case checkScript = "Contents/Resources/Bridge/bridge.py"
+    case wire = "Contents/Resources/Bridge/wire.py"
     case localConfiguration = "Contents/Resources/LocalConfiguration.json"
     case setupInit = "Contents/Resources/Bridge/Setup/__init__.py"
     case setupAdapters = "Contents/Resources/Bridge/Setup/setup_adapters.py"

@@ -272,6 +272,7 @@ UI 煙霧測試（Phase B1 後）：`xcodebuild test -scheme GoFly -destination 
 
 完成定義：
 - 上述全綠；第 0 節列出的保留功能在模擬器手動點過一次。
+- `build-app.sh` 必須包含打包後 bridge 的實際執行檢查（只跑 `environment`，不連接或寫入手機）。
 - 不新增任何檔案到 `.scratch`（除了更新本計劃的勾選狀態）。
 - 實機驗收仍由使用者最後集中進行，不在本計劃範圍。
 

@@ -41,6 +41,12 @@ try:
         parse_object, read_request, request_id as wire_request_id, response as wire_response,
     )
 except ImportError:  # direct script execution from the Bridge directory
+    # ProcessBridge launches this file with `python -I`, which does not add the
+    # script directory to sys.path.  Restore the sibling module lookup so the
+    # packaged `wire.py` is importable.
+    _bridge_root = str(Path(__file__).resolve().parent)
+    if _bridge_root not in sys.path:
+        sys.path.insert(0, _bridge_root)
     from wire import (
         MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, SAFE_ERROR_CODES, UUID_RE, TEAM_RE,
         WireError, action as wire_action, encode as wire_encode, emit as wire_emit,

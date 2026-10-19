@@ -24,7 +24,8 @@ mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$STAGING_BUNDLE/Contents/Resources/Br
 cp "$PRODUCTS/GoFlyMac" "$STAGING_BUNDLE/Contents/MacOS/GoFlyMac"
 # SwiftPM resolves the resource bundle alongside the executable in this local development app.
 cp -R "$PRODUCTS/GoFlyMac_GoFlyMac.bundle" "$STAGING_BUNDLE/Contents/Resources/"
-cp "$APP_SOURCE/Bridge/bridge.py" "$STAGING_BUNDLE/Contents/Resources/Bridge/"
+cp "$APP_SOURCE/Bridge/bridge.py" "$APP_SOURCE/Bridge/wire.py" \
+  "$STAGING_BUNDLE/Contents/Resources/Bridge/"
 cp "$APP_SOURCE/Bridge/Setup/__init__.py" "$APP_SOURCE"/Bridge/Setup/setup_*.py \
   "$STAGING_BUNDLE/Contents/Resources/Bridge/Setup/"
 cp "$APP_SOURCE/Bridge/Device/__init__.py" "$APP_SOURCE/Bridge/Device/gofly_device.py" \
@@ -73,12 +74,15 @@ setup_names = [
     "setup_delivery.py", "setup_journal.py", "setup_producer.py",
     "setup_protocol.py", "setup_support.py",
 ]
+if sorted(p.name for p in (root / "app/GoFlyMac/Bridge").glob("*.py")) != ["bridge.py", "wire.py"]:
+    raise SystemExit("unexpected Bridge root Python inventory")
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Device").glob("*.py")) != ["__init__.py", "gofly_device.py"]:
     raise SystemExit("unexpected Device bridge Python inventory")
 if sorted(p.name for p in (root / "app/GoFlyMac/Bridge/Setup").glob("*.py")) != sorted(setup_names):
     raise SystemExit("unexpected Setup bridge Python inventory")
 source_files = {
     "Contents/Resources/Bridge/bridge.py": root / "app/GoFlyMac/Bridge/bridge.py",
+    "Contents/Resources/Bridge/wire.py": root / "app/GoFlyMac/Bridge/wire.py",
     "Contents/Resources/Bridge/Device/__init__.py": root / "app/GoFlyMac/Bridge/Device/__init__.py",
     "Contents/Resources/Bridge/Device/gofly_device.py": root / "app/GoFlyMac/Bridge/Device/gofly_device.py",
 }
@@ -130,3 +134,83 @@ if ! mv "$STAGING_BUNDLE" "$APP_BUNDLE"; then
   exit 1
 fi
 printf 'Built local development app: %s\n' "$APP_BUNDLE"
+
+# Execute the packaged bridge exactly as ProcessBridge does: same Python from
+# LocalConfiguration.json, `-I`, the bundled --config, and a JSON request on
+# stdin.  Only the read-only `environment` action runs; it never opens a device.
+/usr/bin/python3 - "$APP_BUNDLE" <<'PY'
+import json
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+bundle = Path(sys.argv[1])
+config_path = bundle / "Contents/Resources/LocalConfiguration.json"
+script = bundle / "Contents/Resources/Bridge/bridge.py"
+
+
+def fail(message):
+    print(f"Packaged bridge smoke check failed: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+if script.is_symlink() or not script.is_file():
+    fail(f"missing bundled bridge entry {script}")
+if config_path.is_symlink() or not config_path.is_file():
+    fail(f"missing bundled configuration {config_path}")
+try:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    fail(f"unreadable LocalConfiguration.json: {error}")
+
+python = config.get("pythonPath")
+developer = config.get("developerDirectory")
+if not isinstance(python, str) or not os.path.isfile(python) or not os.access(python, os.X_OK):
+    fail(f"configured Python is not executable: {python!r}")
+if not isinstance(developer, str):
+    fail("LocalConfiguration.json has no developerDirectory")
+
+request_id = str(uuid.uuid4())
+request = json.dumps({"action": "environment", "requestID": request_id},
+                     separators=(",", ":")).encode("utf-8")
+environment = {
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "HOME": str(Path.home()),
+    "DEVELOPER_DIR": developer,
+    "PYTHONDONTWRITEBYTECODE": "1",
+}
+try:
+    completed = subprocess.run(
+        [python, "-I", str(script), "--config", str(config_path)],
+        input=request, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=environment, cwd="/", timeout=120, check=False,
+    )
+except subprocess.TimeoutExpired:
+    fail("environment action timed out after 120 seconds")
+
+stdout = completed.stdout.decode("utf-8", "replace")
+stderr = completed.stderr.decode("utf-8", "replace")
+if "Traceback (most recent call last)" in stderr:
+    print(stderr[-4096:], file=sys.stderr)
+    fail("environment action produced a Python traceback")
+if completed.returncode != 0:
+    print(stderr[-4096:], file=sys.stderr)
+    fail(f"environment action exited with status {completed.returncode}")
+try:
+    response = json.loads(stdout)
+except json.JSONDecodeError:
+    print(stdout[-4096:], file=sys.stderr)
+    fail("environment action did not return valid JSON")
+if (not isinstance(response, dict)
+        or response.get("status") != "ok"
+        or response.get("action") != "environment"
+        or response.get("requestID") != request_id
+        or not isinstance(response.get("payload"), dict)
+        or not isinstance(response["payload"].get("checks"), list)):
+    print(stdout[-4096:], file=sys.stderr)
+    fail("environment action returned an unexpected response")
+
+print("Packaged bridge environment smoke check passed.")
+PY
