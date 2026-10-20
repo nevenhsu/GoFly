@@ -28,3 +28,7 @@ xcuserdata/
 *.ipa
 *pairing*.plist
 *pairing*.json
+
+# Local screenshots in scratch notes
+.scratch/**/*.png
+.scratch/**/*.PNG
