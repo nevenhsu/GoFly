@@ -3,6 +3,12 @@ import Foundation
 
 public protocol TunnelProbing: Sendable {
     func check() async throws
+    /// Platform detail behind the most recent failed check, for display only.
+    var lastFailureDetail: String? { get }
+}
+
+extension TunnelProbing {
+    public var lastFailureDetail: String? { nil }
 }
 
 public enum TunnelProbeFailure: Error, Equatable, Sendable {
@@ -52,6 +58,8 @@ public struct OnboardingClock: Sendable {
 public final class OnboardingController: ObservableObject {
     @Published public private(set) var step: OnboardingStep = .welcome
     @Published public private(set) var vpnState: VPNCheckState = .unknown
+    /// iOS's own reason for the last failed check; nil unless `vpnState` is a failure.
+    @Published public private(set) var vpnFailureDetail: String?
     @Published public private(set) var isChecking = false
     @Published public private(set) var isAdvancing = false
     @Published public private(set) var isRequestingLocation = false
@@ -100,6 +108,11 @@ public final class OnboardingController: ObservableObject {
         locationAuthorization = result
         skipLocation()
     }
+    /// Settings may change permission while the location page is visible.
+    public func refreshLocationAuthorization() {
+        guard step == .location, !isRequestingLocation else { return }
+        locationAuthorization = location.authorization
+    }
     public func goBack() {
         switch step {
         case .location:
@@ -145,6 +158,7 @@ public final class OnboardingController: ObservableObject {
             pendingRefresh = false
             isAdvancing = false
             vpnState = .unknown
+            vpnFailureDetail = nil
         }
     }
     public func checkConnection() {
@@ -167,6 +181,10 @@ public final class OnboardingController: ObservableObject {
             guard self.generation == token, self.vpnActive, self.step == .vpn else {
                 self.drainPendingCheck()
                 return
+            }
+            switch result {
+            case .success, .failure(is CancellationError): self.vpnFailureDetail = nil
+            case .failure: self.vpnFailureDetail = probe.lastFailureDetail
             }
             switch result {
             case .success:

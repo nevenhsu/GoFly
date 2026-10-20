@@ -170,6 +170,30 @@ struct OnboardingControllerTests {
         #expect(!controller.canAdvanceVPN)
     }
 
+    @Test func failedCheckPublishesProbeDetailAndInactivePageClearsIt() async {
+        let controller = OnboardingController(probe: DetailProbe(), location: PermissionStub(.authorized))
+        controller.advanceWelcome()
+        controller.skipLocation()
+        controller.setVPNActive(true)
+        await wait { controller.vpnState == .timedOut }
+        #expect(controller.vpnFailureDetail == DetailProbe.detail)
+        controller.setVPNActive(false)
+        #expect(controller.vpnFailureDetail == nil)
+    }
+
+    @Test func locationPageRefreshesAuthorizationChangedInSettings() {
+        let permission = PermissionStub(.denied)
+        let controller = OnboardingController(probe: ProbeStub(), location: permission)
+        controller.refreshLocationAuthorization()
+        #expect(controller.locationAuthorization == .denied)
+        controller.advanceWelcome()
+        permission.authorization = .authorized
+        controller.refreshLocationAuthorization()
+        #expect(controller.locationAuthorization == .authorized)
+        #expect(permission.requests == 0)
+        #expect(controller.step == .location)
+    }
+
     private func wait(_ condition: @MainActor () async -> Bool) async {
         let deadline = ContinuousClock.now + .seconds(1)
         while !(await condition()) && ContinuousClock.now < deadline { await Task.yield() }
@@ -206,6 +230,12 @@ private final class ControlledPermission: LocationAuthorizing {
 private actor ProbeStub: TunnelProbing {
     var requests = 0
     func check() async throws { requests += 1 }
+}
+
+private struct DetailProbe: TunnelProbing {
+    static let detail = "timed out after 2.0s; last state waiting: POSIXErrorCode(rawValue: 50): Network is down"
+    var lastFailureDetail: String? { Self.detail }
+    func check() async throws { throw TunnelProbeFailure.timedOut }
 }
 
 private actor ControlledProbe: TunnelProbing {

@@ -8,9 +8,47 @@ import Testing
 struct NetworkTunnelProbeTests {
     @Test func temporaryNetworkWaitIsNotATerminalFailure() {
         // Replay the actual NWConnection state used while a VPN route settles.
-        if NetworkConnection.probeState(for: .waiting(.posix(.ENETDOWN))) != nil {
-            Issue.record("A temporary VPN path wait must remain pending until ready, failure, cancellation or deadline")
+        switch NetworkConnection.probeState(for: .waiting(.posix(.ENETDOWN))) {
+        case .pending(let detail): #expect(detail.contains("waiting"))
+        default: Issue.record("A temporary VPN path wait must remain pending until ready, failure, cancellation or deadline")
         }
+    }
+
+    @Test func refusedConnectionFailsWithoutWaitingForDeadline() {
+        switch NetworkConnection.probeState(for: .waiting(.posix(.ECONNREFUSED))) {
+        case .unavailable(let detail): #expect(detail?.contains("refused") == true)
+        default: Issue.record("A refused connection has no listener to wait for")
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1))) func timeoutReportsLastPendingDetail() async throws {
+        let connection = ControlledConnection()
+        let probe = NetworkTunnelProbe(timeout: 0.03, makeConnection: { connection })
+        let task = Task { try await probe.check() }
+        defer { task.cancel() }
+        try await connection.waitForStart()
+        connection.emitNetworkState(.waiting(.posix(.ENETDOWN)))
+        await #expect(throws: TunnelProbeFailure.timedOut) { try await task.value }
+        let detail = try #require(probe.lastFailureDetail)
+        #expect(detail.contains("timed out"))
+        #expect(detail.contains("waiting"))
+    }
+
+    @Test(.timeLimit(.minutes(1))) func failureDetailIsClearedBySuccess() async throws {
+        let failing = ControlledConnection()
+        let passing = ControlledConnection()
+        let connections = ConnectionQueue([failing, passing])
+        let probe = NetworkTunnelProbe(timeout: 1, makeConnection: { connections.next() })
+        let first = Task { try await probe.check() }
+        try await failing.waitForStart()
+        failing.emitNetworkState(.failed(.posix(.ECONNREFUSED)))
+        await #expect(throws: TunnelProbeFailure.unavailable) { try await first.value }
+        #expect(probe.lastFailureDetail?.contains("failed") == true)
+        let second = Task { try await probe.check() }
+        try await passing.waitForStart()
+        passing.emit(.ready)
+        try await second.value
+        #expect(probe.lastFailureDetail == nil)
     }
 
     @Test(.timeLimit(.minutes(1))) func waitingThenReadyCanCompleteTheSameProbe() async throws {
@@ -78,7 +116,7 @@ struct NetworkTunnelProbeTests {
         let task = Task { try await probe.check() }
         defer { task.cancel() }
         try await connection.waitForStart()
-        connection.emit(.unavailable)
+        connection.emit(.unavailable(detail: nil))
         connection.emit(.ready)
         await #expect(throws: TunnelProbeFailure.unavailable) { try await task.value }
         await connection.drain()
@@ -114,7 +152,7 @@ struct NetworkTunnelProbeTests {
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
         connection.emit(.ready)
-        connection.emit(.unavailable)
+        connection.emit(.unavailable(detail: nil))
         await connection.drain()
         #expect(connection.counts.cancelled == 1)
     }
@@ -126,7 +164,7 @@ struct NetworkTunnelProbeTests {
         defer { task.cancel() }
         try await connection.waitForStart()
         connection.emit(.ready)
-        for _ in 0..<100 { connection.emit(.unavailable); connection.emit(.ready) }
+        for _ in 0..<100 { connection.emit(.unavailable(detail: nil)); connection.emit(.ready) }
         try await task.value
         await connection.drain()
         #expect(connection.counts.started == 1)
@@ -199,6 +237,15 @@ private final class LoopbackEndpoint {
 }
 
 private enum FixtureFailure: Error { case socket, notStarted }
+
+private final class ConnectionQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var remaining: [ControlledConnection]
+
+    init(_ connections: [ControlledConnection]) { remaining = connections }
+
+    func next() -> ControlledConnection { lock.withLock { remaining.removeFirst() } }
+}
 
 private final class ControlledConnection: TunnelConnection, @unchecked Sendable {
     private let lock = NSLock()

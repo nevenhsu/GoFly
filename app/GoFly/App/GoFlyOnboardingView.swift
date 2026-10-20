@@ -5,6 +5,8 @@ import UIKit
 struct GoFlyOnboardingView: View {
     @ObservedObject var controller: OnboardingController
     let onComplete: @MainActor () -> Void
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var settingsOpenFailed = false
 
     private enum Page: Hashable { case location, vpn }
 
@@ -53,6 +55,7 @@ struct GoFlyOnboardingView: View {
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("onboarding.location")
+            locationStatus
         } actions: {
             Button {
                 Task { await controller.allowLocation() }
@@ -67,13 +70,62 @@ struct GoFlyOnboardingView: View {
             .disabled(controller.isRequestingLocation)
             .accessibilityIdentifier("onboarding.location.allow")
 
-            Button {
-                controller.skipLocation()
-            } label: {
-                Text(goFlyString("onboarding.location.skip"))
+            if controller.locationAuthorization == .denied {
+                Button(action: openLocationSettings) {
+                    Text(goFlyString("onboarding.location.openSettings"))
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("onboarding.location.openSettings")
+            } else if controller.locationAuthorization == .notDetermined {
+                Button {
+                    controller.skipLocation()
+                } label: {
+                    Text(goFlyString("onboarding.location.skip"))
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("onboarding.location.skip")
             }
-            .buttonStyle(GoFlyActionStyle())
-            .accessibilityIdentifier("onboarding.location.skip")
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { controller.refreshLocationAuthorization() }
+        }
+    }
+
+    /// iOS shows its permission sheet only once, so a decided permission is
+    /// stated here instead of leaving "Next" looking like a missing prompt.
+    @ViewBuilder private var locationStatus: some View {
+        switch controller.locationAuthorization {
+        case .notDetermined:
+            EmptyView()
+        case .authorized:
+            Label(goFlyString("onboarding.location.authorized"), systemImage: "checkmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .accessibilityIdentifier("onboarding.location.status")
+        case .denied:
+            VStack(alignment: .leading, spacing: 8) {
+                Label(goFlyString("onboarding.location.denied"), systemImage: GoFlySymbols.warning)
+                    .font(.subheadline)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("onboarding.location.status")
+                if settingsOpenFailed {
+                    Text(goFlyString("settings.externalOpenFailed"))
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.errorForeground)
+                }
+            }
+        }
+    }
+
+    private func openLocationSettings() {
+        settingsOpenFailed = false
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            settingsOpenFailed = true
+            return
+        }
+        UIApplication.shared.open(url) { accepted in
+            settingsOpenFailed = !accepted
         }
     }
 
@@ -86,13 +138,9 @@ struct GoFlyWelcomeView: View {
     let onNext: @MainActor () -> Void
 
     var body: some View {
+        // LocalDevVPN setup belongs to the VPN page, so Welcome carries no body copy.
         GoFlyOnboardingPage(title: "onboarding.welcome.title", symbol: "paperplane.fill") {
-            Text(goFlyString("onboarding.welcome.message"))
-                .font(.title3)
-                .foregroundStyle(GoFlyStyle.secondary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("onboarding.welcome")
+            EmptyView()
         } actions: {
             if isPreparing {
                 ProgressView(goFlyString("setup.preparing.message"))
@@ -249,6 +297,9 @@ private struct GoFlyVPNOnboardingView: View {
                     errorMessage(controller.vpnState == .timedOut
                         ? "onboarding.vpn.timedOut" : "onboarding.vpn.unavailable")
                         .accessibilityIdentifier("onboarding.vpn.failure")
+                    if let detail = controller.vpnFailureDetail {
+                        failureDetail(detail)
+                    }
                 }
                 if externalOpenFailed {
                     errorMessage(externalOpenFailureKey)
@@ -334,6 +385,7 @@ private struct GoFlyVPNOnboardingView: View {
                     helpStep(1, symbol: "1.circle.fill")
                     helpStep(2, symbol: "2.circle.fill")
                     helpStep(3, symbol: "3.circle.fill")
+                    helpStep(4, symbol: "4.circle.fill")
                 }
 
                 Label {
@@ -475,6 +527,23 @@ private struct GoFlyVPNOnboardingView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+    }
+
+    /// iOS's own network reason, shown verbatim so a device report can be diagnosed.
+    private func failureDetail(_ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(goFlyString("onboarding.vpn.failureDetail"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(GoFlyStyle.secondary)
+            Text(detail)
+                .font(.caption.monospaced())
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("onboarding.vpn.failureDetail")
     }
 
     private func errorMessage(_ key: String) -> some View {

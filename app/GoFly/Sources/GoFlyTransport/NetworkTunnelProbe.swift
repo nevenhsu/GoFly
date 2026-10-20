@@ -6,6 +6,7 @@ import GoFlyCore
 public struct NetworkTunnelProbe: TunnelProbing {
     private let timeout: TimeInterval
     private let makeConnection: @Sendable () -> any TunnelConnection
+    private let diagnostics = ProbeDiagnostics()
 
     public init() {
         self.init(host: LocalTunnelEndpoint.host, port: LocalTunnelEndpoint.port,
@@ -22,8 +23,11 @@ public struct NetworkTunnelProbe: TunnelProbing {
         self.makeConnection = makeConnection
     }
 
+    /// The last non-ready connection detail of the most recent failed check.
+    public var lastFailureDetail: String? { diagnostics.value }
+
     public func check() async throws {
-        let operation = ProbeOperation(connection: makeConnection(), timeout: timeout)
+        let operation = ProbeOperation(connection: makeConnection(), timeout: timeout, diagnostics: diagnostics)
         try await withTaskCancellationHandler {
             try await operation.run()
         } onCancel: {
@@ -40,6 +44,16 @@ public struct NetworkTunnelProbe: TunnelProbing {
     #endif
 }
 
+private final class ProbeDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: String?
+
+    var value: String? {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
+    }
+}
+
 /// All mutable state, including cancellation before continuation installation,
 /// lives on this one queue. The first terminal result closes and resumes once.
 private final class ProbeOperation: @unchecked Sendable {
@@ -49,10 +63,13 @@ private final class ProbeOperation: @unchecked Sendable {
     private var continuation: CheckedContinuation<Void, Error>?
     private var result: Result<Void, Error>?
     private var timer: DispatchWorkItem?
+    private let diagnostics: ProbeDiagnostics
+    private var lastDetail: String?
 
-    init(connection: any TunnelConnection, timeout: TimeInterval) {
+    init(connection: any TunnelConnection, timeout: TimeInterval, diagnostics: ProbeDiagnostics) {
         self.connection = connection
         self.timeout = timeout
+        self.diagnostics = diagnostics
     }
 
     func run() async throws {
@@ -81,9 +98,13 @@ private final class ProbeOperation: @unchecked Sendable {
         self.timer = timer
         queue.asyncAfter(deadline: .now() + timeout, execute: timer)
         connection.start(on: queue) { [weak self] state in
+            guard let self else { return }
             switch state {
-            case .ready: self?.finish(.success(()))
-            case .unavailable: self?.finish(.failure(TunnelProbeFailure.unavailable))
+            case .ready: self.finish(.success(()))
+            case .unavailable(let detail):
+                if let detail { self.lastDetail = detail }
+                self.finish(.failure(TunnelProbeFailure.unavailable))
+            case .pending(let detail): self.lastDetail = detail
             }
         }
     }
@@ -91,6 +112,13 @@ private final class ProbeOperation: @unchecked Sendable {
     private func finish(_ result: Result<Void, Error>) {
         guard self.result == nil else { return }
         self.result = result
+        switch result {
+        case .success: diagnostics.value = nil
+        case .failure(is CancellationError): break
+        case .failure(TunnelProbeFailure.timedOut):
+            diagnostics.value = "timed out after \(timeout)s; last state " + (lastDetail ?? "none reported")
+        case .failure: diagnostics.value = lastDetail ?? "no detail reported"
+        }
         timer?.cancel()
         timer = nil
         connection.cancel()
