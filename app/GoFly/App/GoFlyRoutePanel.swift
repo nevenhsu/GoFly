@@ -6,10 +6,13 @@ struct GoFlyRoutePanel: View {
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
     var onSettings: () -> Void = { }
+    var onFocusPoint: (GeoCoordinate) -> Void = { _ in }
     var currentLocationAvailable: Bool? = nil
     var currentRouteOrigin: @MainActor () -> GeoCoordinate? = { nil }
     @State private var contentHeight: CGFloat = 240
     @State private var showingDetails = false
+    @State private var showingImports = false
+    @State private var showingAllPoints = false
     @State private var showingFavoriteRoutes = false
     @State private var showingSaveFavorite = false
     @State private var confirmingCancellation = false
@@ -33,13 +36,39 @@ struct GoFlyRoutePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
-            .frame(height: min(contentHeight, max(100, maximumHeight)))
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                fixedControls.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 4)
+                    .background(GoFlyStyle.surface)
+            }
+            .frame(height: min(contentHeight + 76, max(100, maximumHeight)))
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("route.panel.content")
         }
+        .accessibilityHidden(showingDetails || showingImports || showingAllPoints || showingFavoriteRoutes || showingSaveFavorite)
         .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
+        .sheet(isPresented: $showingImports) {
+            NavigationStack {
+                GoFlyImportedRoutesView(controller: controller, onLoaded: { showingImports = false }, onFocusPoint: { coordinate in
+                    showingImports = false
+                    onFocusPoint(coordinate)
+                })
+            }
+        }
+        .sheet(isPresented: $showingAllPoints) {
+            if let source = controller.draft.gpxSource {
+                NavigationStack {
+                    GoFlyGPXPointsView(document: source.document, title: source.displayFilename, onFocus: onFocusPoint)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(goFlyString("common.back")) { showingAllPoints = false }
+                            }
+                        }
+                }
+            }
+        }
         .sheet(isPresented: $showingDetails) {
             GoFlyRouteDetailsView(controller: controller) { showingDetails = false }
         }
@@ -53,6 +82,8 @@ struct GoFlyRoutePanel: View {
         .onChange(of: controller.canEdit) { _, canEdit in
             if !canEdit {
                 showingDetails = false
+                showingImports = false
+                showingAllPoints = false
                 showingFavoriteRoutes = false
                 showingSaveFavorite = false
             }
@@ -68,11 +99,26 @@ struct GoFlyRoutePanel: View {
 
     private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 16) {
+            if let error = controller.error {
+                failure(error)
+            } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {
+                failure(.currentLocationUnavailable)
+            }
             HStack {
                 Text(goFlyString("route.title"))
                     .font(.title3.weight(.bold))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
+                Button { showingImports = true } label: {
+                    Image(systemName: "folder")
+                        .goFlyControlSymbol(size: 20, weight: .regular)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!controller.canEdit)
+                .accessibilityLabel(goFlyString("imports.title"))
+                .accessibilityIdentifier("route.importedRoutes")
                 Button { showingSaveFavorite = true } label: {
                     Image(systemName: GoFlySymbols.favorite)
                         .goFlyControlSymbol(size: 20, weight: .regular)
@@ -105,6 +151,8 @@ struct GoFlyRoutePanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("route.importedSummary")
+                GoFlyGPXPointList(points: imported.document.segments.flatMap { $0 }, summarized: true,
+                                   onFocus: onFocusPoint, onShowAll: { showingAllPoints = true })
                 Button(goFlyString("imports.clearLoaded")) { _ = controller.clearImportedRoute() }
                     .buttonStyle(GoFlyActionStyle())
                     .disabled(!controller.canClearImportedRoute)
@@ -117,6 +165,15 @@ struct GoFlyRoutePanel: View {
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
                     onScroll: scrollTo
                 )
+                if controller.draft.nodes.count >= 2 {
+                    Button(action: exchangeEndpoints) {
+                        Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!controller.canEdit)
+                    .accessibilityIdentifier("route.exchange")
+                }
                 Button { _ = controller.openNewPicker() } label: {
                     Label(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
                                     (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")),
@@ -131,25 +188,30 @@ struct GoFlyRoutePanel: View {
                 .accessibilityIdentifier("route.addNode")
                 .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             }
+            if let route = controller.plannedRoute {
+                Text(goFlyLocalizedFormat(goFlyString("route.summary"), route.totalDistanceMeters / 1_000,
+                     Int((route.totalDistanceMeters / controller.draft.speed.metersPerSecond / 60).rounded(.up)),
+                     controller.draft.speed.kilometersPerHour))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .accessibilityIdentifier("route.summary")
+            } else {
+                Text(goFlyLocalizedFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
+                    .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
+            }
+            GoFlyRoundTripControl(controller: controller)
             Button { showingFavoriteRoutes = true } label: {
                 Label(goFlyString("favoriteRoutes.title"), systemImage: GoFlySymbols.favorite)
             }
             .buttonStyle(GoFlyActionStyle())
             .disabled(!controller.canEdit)
             .accessibilityIdentifier("route.favorite.list")
-            if let error = controller.error {
-                failure(error)
-            } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {
-                failure(.currentLocationUnavailable)
-            }
-            Button(goFlyString("route.start")) { _ = controller.start() }
-                .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(!controller.canStart)
-                .accessibilityIdentifier("route.start")
+
         }
     }
 
     @ViewBuilder private var executionContent: some View {
+        if let error = controller.error { failure(error) }
         if [.planning, .preparing, .pausing, .cancelling].contains(controller.phase) {
             ProgressView(goFlyString("route.phase.\(controller.phase.rawValue)"))
                 .font(.headline)
@@ -182,7 +244,15 @@ struct GoFlyRoutePanel: View {
                 }
             }
         }
-        if let error = controller.error { failure(error) }
+    }
+
+    @ViewBuilder private var fixedControls: some View {
+        if controller.canEdit {
+            Button(goFlyString("route.start")) { _ = controller.start() }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .disabled(!controller.canStart)
+                .accessibilityIdentifier("route.start")
+        } else {
         switch controller.phase {
         case .running, .paused:
             HStack(alignment: .center, spacing: 12) {
@@ -228,6 +298,7 @@ struct GoFlyRoutePanel: View {
         case .preparing, .cancelling, .editing:
             EmptyView()
         }
+        }
     }
 
     private var roundTripControl: some View {
@@ -235,9 +306,8 @@ struct GoFlyRoutePanel: View {
     }
 
     private var cancelButton: some View {
-        Button(goFlyString("route.cancel")) {
-            if controller.phase == .paused { confirmingCancellation = true }
-            else { _ = controller.cancel() }
+        Button { confirmingCancellation = true } label: {
+            Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
         }
         .buttonStyle(GoFlyActionStyle())
         .disabled(!controller.canCancel)
@@ -251,14 +321,14 @@ struct GoFlyRoutePanel: View {
     }
 
     private func failure(_ error: RouteExecutionFailure) -> some View {
-        Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
-            .font(.footnote)
-            .foregroundStyle(GoFlyStyle.errorForeground)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("route.error")
+        GoFlyStatusBanner(tone: .danger, title: goFlyString(error.localizationKey), message: goFlyString("status.repairGuidance"), identifier: "route.error")
+    }
+
+    private func exchangeEndpoints() {
+        let nodes = controller.draft.nodes
+        guard controller.canEdit, nodes.count >= 2, let first = nodes.first, let last = nodes.last else { return }
+        guard controller.moveNode(id: last.id, toIndex: 0) else { return }
+        _ = controller.moveNode(id: first.id, toIndex: nodes.count - 1)
     }
 
     private var playbackButton: some View {
@@ -281,18 +351,6 @@ private struct GoFlyRouteDetailsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    NavigationLink {
-                        GoFlyImportedRoutesView(controller: controller, onLoaded: onDismiss)
-                    } label: {
-                        HStack {
-                            Text(goFlyString("imports.title"))
-                            Spacer(minLength: 12)
-                            Image(systemName: GoFlySymbols.disclosure)
-                        }
-                    }
-                    .buttonStyle(GoFlyActionStyle())
-                    .disabled(!controller.canEdit)
-                    .accessibilityIdentifier("route.importedRoutes")
                     GoFlyRoundTripControl(controller: controller)
                     Text(goFlyString("route.speed")).font(.headline)
                     Text(goFlyLocalizedFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))

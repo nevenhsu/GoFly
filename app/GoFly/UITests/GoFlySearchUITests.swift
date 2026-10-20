@@ -8,30 +8,30 @@ final class GoFlySearchUITests: XCTestCase {
         try simulatorOnly()
         let app = makeApp()
         app.launch()
+        app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 10))
         query.tap()
-        query.typeText("25.0478, 121.5170")
+        query.typeText("25.0, 181.0")
+        XCTAssertTrue(app.staticTexts["search.inputError.title"].waitForExistence(timeout: 5))
+        // Documented rule: invalid input keeps the previous valid candidate but
+        // offers no new coordinate result and never sends a point.
+        XCTAssertFalse(app.buttons["search.result.25.000000, 18.000000"].exists)
+        XCTAssertEqual(query.value as? String, "25.0, 181.0")
+        replace(query, with: "25.0478, 121.5170")
+        let result = app.buttons["search.result.\(coordinate)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        result.tap()
         let pin = app.buttons["map.candidate.pin"]
         let go = app.buttons["map.candidate.go"]
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         XCTAssertTrue(go.isEnabled)
-        XCTAssertEqual(pin.value as? String, coordinate)
-
-        replace(query, with: "25.0, 181.0")
-        XCTAssertTrue(app.staticTexts["search.inputError"].waitForExistence(timeout: 5))
-        XCTAssertFalse(go.isEnabled)
-        XCTAssertEqual(pin.value as? String, "25.000000, 18.000000")
-
-        replace(query, with: "25.0330, 121.5654")
-        XCTAssertTrue(go.isEnabled)
-        dismissKeyboard(app)
+        XCTAssertTrue(app.buttons["placeDetails.go"].isEnabled)
         go.tap()
         let error = app.staticTexts["map.serviceError.message"]
         XCTAssertTrue(error.waitForExistence(timeout: 5))
         XCTAssertTrue(error.label.contains("prepared physical iPhone"))
         XCTAssertTrue(pin.exists)
-        XCTAssertTrue(go.isEnabled)
         XCTAssertEqual(app.alerts.count, 0)
     }
 
@@ -39,6 +39,7 @@ final class GoFlySearchUITests: XCTestCase {
         try simulatorOnly()
         let app = makeApp()
         app.launch()
+        app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 10))
         query.tap()

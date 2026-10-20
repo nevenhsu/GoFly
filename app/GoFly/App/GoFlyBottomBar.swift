@@ -51,9 +51,9 @@ struct GoFlyBottomBar: View {
 
     private func symbol(for mode: SessionMapMode) -> String {
         switch mode {
-        case .teleport: GoFlySymbols.place
+        case .teleport: "mappin"
         case .route: GoFlySymbols.route
-        case .joystick: GoFlySymbols.manualMovement
+        case .joystick: GoFlySymbols.joystick
         }
     }
 }

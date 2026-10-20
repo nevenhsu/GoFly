@@ -519,3 +519,35 @@ private extension SetupFailure {
         }
     }
 }
+
+/// Matches LaunchScreen while the setup check runs off the main actor.
+struct GoFlyStartupView: View {
+    @State private var showsProgress = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                GoFlyStyle.surface.ignoresSafeArea()
+                Image("GoFlyLogo")
+                    .resizable()
+                    .frame(width: 96, height: 96)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .accessibilityLabel("GoFly")
+                if showsProgress {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .frame(width: 120)
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2 + 80)
+                        .accessibilityLabel(goFlyString("setup.preparing.message"))
+                        .accessibilityIdentifier("setup.preparing.progress")
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityIdentifier("setup.preparing")
+        .task {
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            showsProgress = true
+        }
+    }
+}

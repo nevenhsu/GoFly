@@ -123,7 +123,7 @@
 "favorites.unavailable" = "Favorite places unavailable";
 "favorites.empty" = "No favorite places yet";
 "favorites.search" = "Search places";
-"favorites.editLabel" = "Edit label";
+"favorites.editLabel" = "Edit favorite";
 "favorites.label" = "Label";
 "favorites.removed" = "Removed from favorites";
 "favorites.save" = "Save";
@@ -161,7 +161,6 @@
 "route.progress" = "Route progress";
 "route.useCurrentLocation" = "Use current location";
 "route.picker.cancel" = "Cancel";
-"route.picker.confirm" = "Confirm";
 "route.cancelConfirmation.title" = "Cancel this route?";
 "route.cancelConfirmation.message" = "Confirmation ends this route and returns to editing. Your last simulated position and route draft will be kept.";
 "route.cancelConfirmation.return" = "Return";
@@ -401,8 +400,8 @@
 "settings.status.unavailable" = "Unavailable";
 "settings.status.timedOut" = "Timed out";
 "settings.status.locationServicesOff" = "Location Services off";
-"settings.status.authorized" = "Allowed";
-"settings.status.authorizedApproximate" = "Allowed · Approximate";
+"settings.status.authorized" = "While using the app";
+"settings.status.authorizedApproximate" = "While using the app · Approximate";
 "settings.status.denied" = "Not allowed";
 "settings.status.notDetermined" = "Not determined";
 "settings.status.restricted" = "Restricted";
@@ -498,3 +497,80 @@
 "status.pill.simulating" = "Simulating";
 "status.pill.standby" = "Standby";
 "status.pill.error" = "Needs attention";
+
+"search.recent" = "Recent places";
+
+"search.coordinateHint" = "Enter a place or latitude, longitude.";
+
+"placeDetails.setStart" = "Set as start";
+
+"placeDetails.setEnd" = "Set as destination";
+
+"placeDetails.copy" = "Copy coordinates";
+
+"status.repairGuidance" = "If this continues, open Settings › VPN Tunnel to repair the connection.";
+
+"execution.followHeading" = "Follow direction";
+
+"teleport.completed" = "Moved to %@";
+
+"onboarding.step" = "Step %d of 3";
+
+"settings.languageAndAppearance" = "Language & appearance";
+
+"route.exchange" = "Exchange start and destination";
+
+"route.summary" = "%.1f km · %d min · %d km/h";
+
+"imports.points.middle" = "%d intermediate points";
+
+"imports.points.allCount" = "View all %d points";
+
+"imports.points.all" = "View all points";
+
+"imports.points.point" = "Point";
+
+"imports.deleteAction" = "Delete route";
+
+"imports.imported" = "Imported “%@”";
+
+"imports.error.guidance" = "Choose a valid GPX or XML file up to 2 MiB. Your existing routes are unchanged.";
+
+"favorites.noMatches" = "No matching favorite places";
+
+"favorites.select" = "Select";
+
+"favorites.deleteCount" = "Delete (%ld)";
+
+"favorites.deletedCount" = "Deleted %ld item(s)";
+
+"favorites.searchSaved" = "Search favorite places";
+
+"favorites.pendingRemoval" = "Removal pending. Tap again to cancel.";
+
+"favorites.delete" = "Delete favorite";
+
+"operation.failureGuidance" = "If this keeps failing, open Settings › VPN Tunnel for repair guidance.";
+
+"recovery.connectionGuidance" = "If the connection remains unavailable, connect to Wi-Fi and open Settings › VPN Tunnel for repair guidance.";
+
+"recovery.storageGuidance" = "Check available device storage. If saving remains unavailable, export diagnostics from Settings › Device Info.";
+
+"search.title" = "Search";
+
+"status.pill.limited" = "Limited";
+
+"search.viewAll" = "View all";
+"search.goToCoordinate" = "Go to %@";
+"search.validCoordinate" = "Valid latitude and longitude";
+"search.nearby" = "Nearby places";
+"search.choosing" = "Choosing: %@";
+"route.chooseOrigin" = "Choose origin";
+"route.chooseDestination" = "Choose destination";
+"route.chooseWaypoint" = "Choose waypoint %ld";
+"sheet.currentPosition" = "Current simulated position";
+"sheet.noPosition" = "No position yet";
+"sheet.noPositionHint" = "Use search or tap the map to set a simulated position.";
+"placeDetails.favorite" = "Favorite";
+"placeDetails.distanceMeters" = "%ld m from here";
+"placeDetails.distanceKilometers" = "%@ km from here";

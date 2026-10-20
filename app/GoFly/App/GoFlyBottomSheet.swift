@@ -60,6 +60,7 @@ struct GoFlyBottomSheet<Content: View>: View {
         .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: -4)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: detent)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: onHeightChange)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.sheet")
         .accessibilityValue(detent.rawValue)
     }

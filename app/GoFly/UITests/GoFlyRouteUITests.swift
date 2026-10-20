@@ -40,7 +40,7 @@ final class GoFlyRouteUITests: XCTestCase {
         app.launch()
         openRoute(app)
         openDetails(app)
-        let roundTrip = app.descendants(matching: .any)["route.roundTrip"]
+        let roundTrip = app.scrollViews["route.details.content"].switches["route.roundTrip"]
         XCTAssertEqual(roundTrip.value as? String, "0")
         roundTrip.tap()
         XCTAssertEqual(roundTrip.value as? String, "1")
@@ -55,7 +55,6 @@ final class GoFlyRouteUITests: XCTestCase {
         let app = makeApp(gpx: "valid")
         app.launch()
         openRoute(app)
-        app.buttons["route.details"].tap()
         let imported = app.buttons["route.importedRoutes"]
         XCTAssertTrue(imported.waitForExistence(timeout: 5))
         imported.tap()
@@ -68,7 +67,7 @@ final class GoFlyRouteUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(record.waitForExistence(timeout: 8))
         record.tap()
-        let load = app.buttons["imports.load"]
+        let load = app.buttons.matching(identifier: "imports.load").firstMatch
         XCTAssertTrue(load.waitForExistence(timeout: 5))
         XCTAssertTrue(load.isEnabled)
         load.tap()
@@ -107,7 +106,7 @@ final class GoFlyRouteUITests: XCTestCase {
 
     private func openDetails(_ app: XCUIApplication) {
         app.buttons["route.details"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["route.roundTrip"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["route.details.content"].switches["route.roundTrip"].waitForExistence(timeout: 5))
     }
 
     private func waitEnabled(_ element: XCUIElement, timeout: TimeInterval = 8) {
@@ -120,14 +119,12 @@ final class GoFlyRouteUITests: XCTestCase {
         if app.buttons[id].exists { app.buttons[id].tap() }
         else { app.buttons["route.addNode"].tap() }
         typeCoordinate(app, coordinate)
-        confirm(app)
         XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5))
     }
 
     private func addNode(_ app: XCUIApplication, coordinate: String) {
         app.buttons["route.addNode"].tap()
         typeCoordinate(app, coordinate)
-        confirm(app)
     }
 
     private func typeCoordinate(_ app: XCUIApplication, _ coordinate: String) {
@@ -138,13 +135,9 @@ final class GoFlyRouteUITests: XCTestCase {
         let old = query.value as? String ?? ""
         let count = old == "Search places, addresses or coordinates" ? 0 : old.count
         query.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count) + coordinate)
-        if app.keyboards.buttons["Done"].exists { app.keyboards.buttons["Done"].tap() }
+        let result = app.buttons["search.result.\(coordinate)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        result.tap()
     }
 
-    private func confirm(_ app: XCUIApplication) {
-        let confirm = app.buttons["route.picker.confirm"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(confirm.isEnabled)
-        confirm.tap()
-    }
 }

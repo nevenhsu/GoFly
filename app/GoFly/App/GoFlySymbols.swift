@@ -63,6 +63,8 @@ enum GoFlySymbols {
     static let successFilled = "checkmark.circle.fill"
     static let dangerFilled = "exclamationmark.circle.fill"
     static let warningFilled = "exclamationmark.triangle.fill"
+    static let flag = "flag"
+    static let joystick = "arcade.stick"
 }
 
 /// Standalone glyphs grow gently with Dynamic Type without overflowing a 44 pt

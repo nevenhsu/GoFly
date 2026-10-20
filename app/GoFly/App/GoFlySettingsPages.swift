@@ -1,5 +1,6 @@
 import CoreLocation
 import GoFlyCore
+import Observation
 import SwiftUI
 import UIKit
 
@@ -88,11 +89,16 @@ struct GoFlyLocationSettingsPage: View {
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.location", rootIdentifier: "settings.location.page") {
-            GoFlySettingsStatusCard(
-                titleKey: "settings.location",
-                status: locationStatus,
-                identifier: "settings.location.status"
-            )
+            if status.locationAuthorization == .denied {
+                GoFlyStatusBanner(tone: .warning, title: locationStatus,
+                                  message: goFlyString("settings.location.purpose"),
+                                  identifier: "settings.location.status")
+            } else {
+                GoFlySettingsStatusCard(
+                    titleKey: "settings.location", status: locationStatus,
+                    identifier: "settings.location.status"
+                )
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 Text(goFlyString("settings.location.purpose"))
@@ -104,10 +110,7 @@ struct GoFlyLocationSettingsPage: View {
                     identifier: "settings.location.open"
                 )
                 if status.externalOpenFailed {
-                    Text(goFlyString("settings.externalOpenFailed"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .fixedSize(horizontal: false, vertical: true)
+                    GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
                 }
             }
             .settingsCard()
@@ -151,10 +154,7 @@ struct GoFlyBackgroundSettingsPage: View {
                     identifier: "settings.background.open"
                 )
                 if status.externalOpenFailed {
-                    Text(goFlyString("settings.externalOpenFailed"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .fixedSize(horizontal: false, vertical: true)
+                    GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
                 }
             }
             .settingsCard()
@@ -172,6 +172,7 @@ struct GoFlyVPNSettingsPage: View {
     @ObservedObject var recovery: ConnectionRecoveryController
     @StateObject private var status = GoFlySystemStatus()
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var showingHelp = false
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.vpn", rootIdentifier: "settings.vpn.page") {
@@ -190,11 +191,15 @@ struct GoFlyVPNSettingsPage: View {
                     action: status.openLocalDevVPN,
                     identifier: "settings.vpn.open"
                 )
+                NavigationLink {
+                    GoFlyVPNHelpPage()
+                } label: {
+                    Label(goFlyString("onboarding.vpn.help"), systemImage: GoFlySymbols.help)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .accessibilityIdentifier("settings.vpn.help")
                 if status.externalOpenFailed {
-                    Text(goFlyString("settings.vpn.externalOpenFailed"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .fixedSize(horizontal: false, vertical: true)
+                    GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
                 }
             }
             .settingsCard()
@@ -221,14 +226,19 @@ struct GoFlyVPNSettingsPage: View {
             }
 
             if recovery.connectionState == .unavailable || recovery.connectionState == .timedOut {
-                Text(goFlyString("settings.vpn.failureGuide"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .settingsCard()
+                GoFlyStatusBanner(tone: .danger,
+                                  title: goFlyString(recovery.connectionState.settingsStatusKey),
+                                  message: goFlyString("settings.vpn.failureGuide"),
+                                  actionTitle: goFlyString("onboarding.vpn.help"),
+                                  onAction: { showingHelp = true },
+                                  identifier: "settings.vpn.failure")
             }
         }
-        .onAppear { status.refresh() }
+        .navigationDestination(isPresented: $showingHelp) { GoFlyVPNHelpPage() }
+        .onAppear {
+            status.refresh()
+            if recovery.canCheck { recovery.checkConnection() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             status.refresh()
             if recovery.canCheck { recovery.checkConnection() }
@@ -299,10 +309,7 @@ struct GoFlyDeviceSettingsPage: View {
                 identifier: "settings.diagnostics.export"
             )
             if exportFailed {
-                Text(goFlyString("settings.diagnostics.exportFailed"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.errorForeground)
-                    .fixedSize(horizontal: false, vertical: true)
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.diagnostics.exportFailed"))
             }
         }
         .settingsCard()
@@ -433,15 +440,9 @@ struct GoFlyContinuationStatus: View {
             }
 
             if let key = continuation.noticeKey {
-                Label {
-                    Text(goFlyString(key))
-                } icon: {
-                    Image(systemName: GoFlySymbols.warning)
-                }
-                .font(.footnote)
-                .foregroundStyle(GoFlyStyle.errorForeground)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("background.notice")
+                GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
+                                  message: goFlyString("background.systemDecidesRuntime"),
+                                  identifier: "background.notice")
             }
         }
         .padding(16)
@@ -473,5 +474,38 @@ struct GoFlyContinuationStatus: View {
         case .expired: return "background.state.expired"
         case .finished: return "background.state.finished"
         }
+    }
+}
+
+struct GoFlyPreferencesSettingsPage: View {
+    @Bindable private var preferences = GoFlyPreferences.shared
+
+    var body: some View {
+        Form {
+            Picker(goFlyString("settings.language"), selection: Binding(
+                get: { preferences.language },
+                set: { preferences.setLanguage($0) }
+            )) {
+                ForEach(GoFlyLanguage.allCases) { language in
+                    Text(language.title).tag(language)
+                }
+            }
+            .accessibilityIdentifier("settings.language")
+
+            Picker(goFlyString("settings.appearance"), selection: Binding(
+                get: { preferences.appearance },
+                set: { preferences.setAppearance($0) }
+            )) {
+                ForEach(GoFlyAppearance.allCases) { appearance in
+                    Text(appearance.title).tag(appearance)
+                }
+            }
+            .accessibilityIdentifier("settings.appearance")
+        }
+        .pickerStyle(.menu)
+        .navigationTitle(goFlyString("settings.languageAndAppearance"))
+        .navigationBarTitleDisplayMode(.inline)
+        .goFlyNativeBackTitle()
+        .accessibilityIdentifier("settings.preferences.page")
     }
 }

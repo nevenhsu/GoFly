@@ -4,10 +4,7 @@ import SwiftUI
 
 @main
 struct GoFlyApp: App {
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var preferences = GoFlyPreferences.shared
     @StateObject private var bootstrap: GoFlySetupBootstrap
-    @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
 
     init() {
         Diagnostics.shared.start()
@@ -17,7 +14,20 @@ struct GoFlyApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // WindowGroup may evaluate its lazy builder on SwiftUI's renderer.
+        // Capture the view value; its body owns all main-actor state access.
+        let content = GoFlySceneContent(bootstrap: bootstrap)
+        WindowGroup { @Sendable in content }
+    }
+}
+
+private struct GoFlySceneContent: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var preferences = GoFlyPreferences.shared
+    @ObservedObject var bootstrap: GoFlySetupBootstrap
+    @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
+
+    var body: some View {
             Group {
                 galleryOrStartupContent
             }
@@ -33,7 +43,6 @@ struct GoFlyApp: App {
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()
             }
-        }
     }
 
     /// Simulator-only component gallery, reachable only with
@@ -55,11 +64,8 @@ struct GoFlyApp: App {
     private var startupContent: some View {
         if let runtime = bootstrap.runtime {
             normalRuntimeView(runtime)
-        } else if !onboardingComplete, bootstrap.phase == .preparing {
-            NavigationStack {
-                GoFlyWelcomeView(isPreparing: true, onNext: {})
-            }
-            .tint(GoFlyStyle.primary)
+        } else if bootstrap.phase == .preparing {
+            GoFlyStartupView()
         } else {
             GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
         }
@@ -94,7 +100,7 @@ struct GoFlyApp: App {
     }
 }
 
-private extension GoFlyApp {
+private extension GoFlySceneContent {
     static func label(_ phase: ScenePhase) -> String {
         switch phase {
         case .active: "active"

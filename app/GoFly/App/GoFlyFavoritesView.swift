@@ -8,50 +8,201 @@ struct GoFlyFavoritesView: View {
     var onSearch: () -> Void
     var onDismiss: () -> Void
     @State private var editing: FavoritePlace?
+    @State private var query = ""
+    @State private var selecting = false
+    @State private var selected: Set<FavoritePlaceKey> = []
+    @State private var pending: [FavoritePlaceKey: Task<Void, Never>] = [:]
+    @State private var snackbar: GoFlySnackbarMessage?
+
+    private var visible: [FavoritePlace] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return favorites.favorites.filter {
+            text.isEmpty || [$0.displayTitle, $0.place.title, $0.place.address ?? "", $0.place.coordinate.displayText]
+                .contains { $0.localizedStandardContains(text) }
+        }
+    }
 
     var body: some View {
         NavigationStack {
-            if let editing {
-                GoFlyFavoriteLabelEditor(favorite: editing) { self.editing = nil }
-                    .toolbar(.hidden, for: .navigationBar)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        GoFlyFavoriteFailureNotice()
-                        if favorites.loadState == .ready, favorites.favorites.isEmpty {
-                            GoFlyEmptyState(symbol: GoFlySymbols.favorite, message: goFlyString("favorites.empty"))
-                                .accessibilityIdentifier("favorites.empty")
-                        }
-                        ForEach(favorites.favorites) { favorite in
-                            GoFlyPlaceOptionCard(
-                                place: favorite.place, title: favorite.displayTitle,
-                                selected: candidate.flatMap(FavoritePlaceKey.init(place:)) == favorite.key,
-                                selectionIdentifier: "favorites.place.\(favorite.place.coordinate.displayText)",
-                                starIdentifier: "favorites.star.\(favorite.place.coordinate.displayText)",
-                                onSelect: { onSelect(favorite.place) },
-                                onLongPress: { editing = favorite }
-                            )
-                        }
-                        Button(goFlyString("favorites.search"), action: onSearch)
-                            .buttonStyle(GoFlyActionStyle())
-                            .accessibilityIdentifier("favorites.search")
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    failureNotice
+                    if favorites.loadState == .ready, visible.isEmpty {
+                        GoFlyEmptyState(symbol: GoFlySymbols.favorite,
+                            message: goFlyString(query.isEmpty ? "favorites.empty" : "favorites.noMatches"))
+                            .padding(.vertical, 24)
+                            .accessibilityIdentifier("favorites.empty")
                     }
-                    .padding(16)
+                    ForEach(visible) { favorite in
+                        row(favorite)
+                        Divider()
+                    }
                 }
-                .background(GoFlyStyle.canvas)
-                .navigationTitle(goFlyString("favorites.title"))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(.visible, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(goFlyString("common.dismiss"), action: onDismiss)
-                            .accessibilityIdentifier("favorites.dismiss")
+                .padding(.horizontal, 16)
+            }
+            .safeAreaInset(edge: .bottom) { bottomSearch }
+            .background(GoFlyStyle.canvas)
+            .navigationTitle(goFlyString("favorites.title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(goFlyString(selecting ? "favorites.cancel" : "favorites.select")) {
+                        selecting.toggle()
+                        selected.removeAll()
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!favorites.canMutate)
+                    .accessibilityIdentifier("favorites.select")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: onDismiss) {
+                        Image(systemName: GoFlySymbols.close)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(goFlyString("common.dismiss"))
+                    .accessibilityIdentifier("favorites.dismiss")
                 }
             }
+            .goFlySnackbar($snackbar)
         }
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
+        .sheet(item: $editing) { favorite in
+            GoFlyFavoriteLabelEditor(favorite: favorite, onReturn: { editing = nil }) {
+                delete([favorite.key])
+                if !favorites.isFavorite(favorite.place) { editing = nil }
+            }
+        }
+    }
+
+    @ViewBuilder private var failureNotice: some View {
+        if let failure = failure {
+            GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue),
+                onDismiss: favorites.canMutate ? { favorites.clearError() } : nil,
+                identifier: "favorites.error")
+                .padding(.vertical, 12)
+        }
+    }
+
+    private var failure: FavoritePlacesFailure? {
+        if case .blocked(let failure) = favorites.loadState { return failure }
+        return favorites.error
+    }
+
+    private var bottomSearch: some View {
+        VStack(spacing: 12) {
+            if selecting {
+                Button(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count)) {
+                    delete(selected)
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .foregroundStyle(GoFlyStyle.errorForeground)
+                .disabled(selected.isEmpty || !favorites.canMutate)
+                .accessibilityIdentifier("favorites.deleteSelected")
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(GoFlyStyle.secondary)
+                TextField(goFlyString("favorites.searchSaved"), text: $query)
+                    .textFieldStyle(.plain)
+                    .submitLabel(.search)
+                    .accessibilityIdentifier("favorites.search")
+                if !query.isEmpty {
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(goFlyString("search.clear"))
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 52)
+            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
+        }
+        .padding(16)
+        .background(GoFlyStyle.surface)
+    }
+
+    private func row(_ favorite: FavoritePlace) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                if selecting { toggleSelection(favorite.key) }
+                else { togglePending(favorite) }
+            } label: {
+                Image(systemName: selecting
+                    ? (selected.contains(favorite.key) ? "checkmark.circle.fill" : "circle")
+                    : (pending[favorite.key] == nil ? GoFlySymbols.favoriteSelected : GoFlySymbols.favorite))
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(!favorites.canMutate)
+            .accessibilityLabel(goFlyString(selecting ? "favorites.select"
+                : (pending[favorite.key] == nil ? "favorites.remove" : "favorites.cancel")))
+            .accessibilityValue(goFlyString(pending[favorite.key] == nil ? "favorites.saved" : "favorites.pendingRemoval"))
+            .accessibilityIdentifier("favorites.star.\(favorite.place.coordinate.displayText)")
+            Button {
+                if selecting { toggleSelection(favorite.key) }
+                else { onSelect(favorite.place) }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(favorite.displayTitle).font(.body.weight(.semibold))
+                    if let subtitle = favoriteSubtitle(favorite) {
+                        Text(subtitle)
+                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected.contains(favorite.key)
+                || candidate.flatMap(FavoritePlaceKey.init(place:)) == favorite.key ? .isSelected : [])
+            .accessibilityIdentifier("favorites.place.\(favorite.place.coordinate.displayText)")
+            if !selecting {
+                Button {
+                    editing = favorite
+                } label: {
+                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("favorites.editLabel"))
+                .accessibilityIdentifier("favorites.edit.\(favorite.place.coordinate.displayText)")
+            }
+        }
+        .foregroundStyle(GoFlyStyle.primary)
+    }
+
+    /// A coordinate favorite already shows its coordinate as the title; the
+    /// Figma list shows one subtitle, never the same line twice.
+    private func favoriteSubtitle(_ favorite: FavoritePlace) -> String? {
+        if let address = favorite.place.address, !address.isEmpty { return address }
+        let coordinate = favorite.place.coordinate.displayText
+        return favorite.displayTitle == coordinate ? nil : coordinate
+    }
+
+    private func toggleSelection(_ key: FavoritePlaceKey) {
+        if !selected.insert(key).inserted { selected.remove(key) }
+    }
+
+    private func togglePending(_ favorite: FavoritePlace) {
+        if let task = pending.removeValue(forKey: favorite.key) { task.cancel(); return }
+        pending[favorite.key] = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(500)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            pending.removeValue(forKey: favorite.key)
+            delete([favorite.key])
+        }
+    }
+
+    private func delete(_ keys: Set<FavoritePlaceKey>) {
+        let count = favorites.favorites.filter { keys.contains($0.key) }.count
+        guard favorites.delete(keys) else { return }
+        selected.subtract(keys)
+        snackbar = GoFlySnackbarMessage(
+            text: goFlyLocalizedFormat(goFlyString("favorites.deletedCount"), count),
+            actionTitle: goFlyString("common.undo"), action: { _ = favorites.undoDelete() })
     }
 }
 
@@ -59,71 +210,55 @@ private struct GoFlyFavoriteLabelEditor: View {
     @EnvironmentObject private var favorites: FavoritePlacesStore
     let favorite: FavoritePlace
     var onReturn: () -> Void
+    var onDelete: () -> Void
     @State private var draft: String
     @FocusState private var focused: Bool
 
-    init(favorite: FavoritePlace, onReturn: @escaping () -> Void) {
+    init(favorite: FavoritePlace, onReturn: @escaping () -> Void, onDelete: @escaping () -> Void) {
         self.favorite = favorite
         self.onReturn = onReturn
+        self.onDelete = onDelete
         _draft = State(initialValue: favorite.label ?? "")
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top, spacing: 12) {
-                    Text(goFlyString("favorites.editLabel"))
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    GoFlyFavoriteStar(place: favorite.place, identifier: "favorites.editor.star")
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(goFlyString("favorites.label"), text: $draft)
+                        .focused($focused).submitLabel(.done)
+                        .onSubmit { focused = false }
+                        .accessibilityIdentifier("favorites.editor.label")
+                    Text(favorite.place.title)
+                    if let address = favorite.place.address { Text(address).foregroundStyle(GoFlyStyle.secondary) }
+                    Text(favorite.place.coordinate.displayText).foregroundStyle(GoFlyStyle.secondary)
                 }
-                Text(favorite.place.title).font(.body)
-                TextField(goFlyString("favorites.label"), text: $draft)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .frame(minHeight: 52)
-                    .padding(.horizontal, 16)
-                    .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius)
-                            .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
-                                          lineWidth: focused ? 1.5 : 0.75)
-                            .allowsHitTesting(false)
+                Section {
+                    Button(role: .destructive, action: onDelete) { Text(goFlyString("favorites.delete")) }
+                        .disabled(!favorites.canMutate)
+                        .accessibilityIdentifier("favorites.editor.delete")
+                }
+                if let failure = favorites.error {
+                    GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
+                }
+            }
+            .accessibilityIdentifier("favorites.editor.form")
+            .navigationTitle(goFlyString("favorites.editLabel"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(goFlyString("favorites.cancel")) { favorites.clearError(); onReturn() }
+                        .accessibilityIdentifier("favorites.editor.cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(goFlyString("favorites.save")) {
+                        if favorites.saveLabel(for: favorite.key, draft: draft) { onReturn() }
                     }
-                    .focused($focused)
-                    .submitLabel(.done)
-                    .onSubmit { focused = false }
-                    .accessibilityIdentifier("favorites.editor.label")
-                if !favorites.isFavorite(favorite.place) {
-                    Text(goFlyString("favorites.removed"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .accessibilityIdentifier("favorites.editor.removed")
+                    .disabled(!favorites.canMutate || !favorites.isFavorite(favorite.place))
+                    .accessibilityIdentifier("favorites.editor.save")
                 }
-                GoFlyFavoriteFailureNotice()
             }
-            .padding(24)
         }
-        .accessibilityIdentifier("favorites.editor.form")
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 12) {
-                Button(goFlyString("favorites.save")) {
-                    if favorites.saveLabel(for: favorite.key, draft: draft) { onReturn() }
-                }
-                .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(!favorites.canMutate || !favorites.isFavorite(favorite.place))
-                .accessibilityIdentifier("favorites.editor.save")
-                Button(goFlyString("favorites.cancel")) {
-                    favorites.clearError()
-                    onReturn()
-                }
-                .buttonStyle(GoFlyActionStyle())
-                .accessibilityIdentifier("favorites.editor.cancel")
-            }
-            .padding(16)
-            .background(GoFlyStyle.surface)
-        }
-        .background(GoFlyStyle.surface)
         .task { focused = true }
     }
 }

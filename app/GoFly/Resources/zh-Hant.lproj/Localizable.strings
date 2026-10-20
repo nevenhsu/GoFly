@@ -123,7 +123,7 @@
 "favorites.unavailable" = "目前無法使用最愛地點";
 "favorites.empty" = "尚無最愛地點";
 "favorites.search" = "搜尋地點";
-"favorites.editLabel" = "編輯標籤";
+"favorites.editLabel" = "編輯最愛";
 "favorites.label" = "標籤";
 "favorites.removed" = "已移除最愛";
 "favorites.save" = "儲存";
@@ -161,7 +161,6 @@
 "route.progress" = "路線進度";
 "route.useCurrentLocation" = "使用目前位置";
 "route.picker.cancel" = "取消";
-"route.picker.confirm" = "確認";
 "route.cancelConfirmation.title" = "取消這次路線？";
 "route.cancelConfirmation.message" = "確認後將結束本次路線，回到編輯模式。最後模擬位置與路線草稿會保留。";
 "route.cancelConfirmation.return" = "返回";
@@ -401,8 +400,8 @@
 "settings.status.unavailable" = "無法連線";
 "settings.status.timedOut" = "檢查逾時";
 "settings.status.locationServicesOff" = "定位服務已關閉";
-"settings.status.authorized" = "已允許";
-"settings.status.authorizedApproximate" = "已允許・約略位置";
+"settings.status.authorized" = "使用 App 期間";
+"settings.status.authorizedApproximate" = "使用 App 期間 · 大概位置";
 "settings.status.denied" = "未允許";
 "settings.status.notDetermined" = "尚未決定";
 "settings.status.restricted" = "受限制";
@@ -498,3 +497,80 @@
 "status.pill.simulating" = "模擬中";
 "status.pill.standby" = "待命";
 "status.pill.error" = "需要注意";
+
+"search.recent" = "最近使用";
+
+"search.coordinateHint" = "輸入地點或緯度、經度。";
+
+"placeDetails.setStart" = "設為起點";
+
+"placeDetails.setEnd" = "設為終點";
+
+"placeDetails.copy" = "複製座標";
+
+"status.repairGuidance" = "持續失敗請到「設定 › VPN 通道」修復連線。";
+
+"execution.followHeading" = "跟隨方向";
+
+"teleport.completed" = "已移至 %@";
+
+"onboarding.step" = "第 %d 步，共 3 步";
+
+"settings.languageAndAppearance" = "語言與外觀";
+
+"route.exchange" = "交換起點與終點";
+
+"route.summary" = "%.1f 公里・%d 分鐘・%d 公里／小時";
+
+"imports.points.middle" = "中間 %d 點";
+
+"imports.points.allCount" = "查看全部 %d 點";
+
+"imports.points.all" = "查看全部點位";
+
+"imports.points.point" = "點位";
+
+"imports.deleteAction" = "刪除路線";
+
+"imports.imported" = "已匯入「%@」";
+
+"imports.error.guidance" = "請選擇有效的 GPX 或 XML 檔案，大小上限 2 MiB。既有路線不受影響。";
+
+"favorites.noMatches" = "沒有符合的最愛地點";
+
+"favorites.select" = "選取";
+
+"favorites.deleteCount" = "刪除（%ld）";
+
+"favorites.deletedCount" = "已刪除 %ld 項";
+
+"favorites.searchSaved" = "搜尋最愛地點";
+
+"favorites.pendingRemoval" = "即將刪除，再點一次取消。";
+
+"favorites.delete" = "刪除最愛";
+
+"operation.failureGuidance" = "若持續失敗，請到「設定 › VPN 通道」查看修復指引。";
+
+"recovery.connectionGuidance" = "若連線持續無法使用，請先連上 Wi-Fi，再到「設定 › VPN 通道」查看修復指引。";
+
+"recovery.storageGuidance" = "請檢查裝置可用儲存空間。若仍無法儲存，請到「設定 › 裝置資訊」匯出診斷記錄。";
+
+"search.title" = "搜尋";
+
+"status.pill.limited" = "受限";
+
+"search.viewAll" = "查看全部";
+"search.goToCoordinate" = "前往座標 %@";
+"search.validCoordinate" = "有效經緯度";
+"search.nearby" = "附近地點";
+"search.choosing" = "正在選：%@";
+"route.chooseOrigin" = "選擇起點";
+"route.chooseDestination" = "選擇終點";
+"route.chooseWaypoint" = "選擇途經點 %ld";
+"sheet.currentPosition" = "目前模擬位置";
+"sheet.noPosition" = "尚無位置";
+"sheet.noPositionHint" = "用搜尋或點地圖設定模擬位置。";
+"placeDetails.favorite" = "收藏";
+"placeDetails.distanceMeters" = "距目前位置 %ld 公尺";
+"placeDetails.distanceKilometers" = "距目前位置 %@ 公里";

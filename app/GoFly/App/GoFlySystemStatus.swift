@@ -101,14 +101,8 @@ final class GoFlySystemStatus: NSObject, ObservableObject, CLLocationManagerDele
 
     func openLocalDevVPN() {
         externalOpenFailed = false
-        guard let url = URL(string: "localdevvpn://") else {
-            externalOpenFailed = true
-            return
-        }
-        UIApplication.shared.open(url, options: [:]) { [weak self] opened in
-            Task { @MainActor in
-                if !opened { self?.externalOpenFailed = true }
-            }
+        GoFlyExternalLinks.openLocalDevVPN { [weak self] opened in
+            self?.externalOpenFailed = !opened
         }
     }
 

@@ -19,9 +19,8 @@ struct GoFlySaveFavoriteRouteView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if let saved = savedOmittingCurrent {
-                        Label(goFlyString("favoriteRoutes.savedOmittingCurrent"), systemImage: GoFlySymbols.success)
-                            .font(.body)
-                            .accessibilityIdentifier("favoriteRoutes.save.omittedResult")
+                        GoFlyStatusBanner(tone: .success, title: goFlyString("favoriteRoutes.savedOmittingCurrent"),
+                            identifier: "favoriteRoutes.save.omittedResult")
                         Text(goFlyFavoriteRouteEndpoints(saved)).font(.body)
                     } else {
                         Text(sourceSummary).font(.body)
@@ -161,14 +160,16 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     @EnvironmentObject private var favorites: FavoriteRoutesStore
     let record: FavoriteRouteRecord
     var onDismiss: () -> Void
+    var onDelete: (() -> Void)? = nil
     @State private var label: String
     @State private var saving = false
     @State private var saveTask: Task<Void, Never>?
     @FocusState private var focused: Bool
 
-    init(record: FavoriteRouteRecord, onDismiss: @escaping () -> Void) {
+    init(record: FavoriteRouteRecord, onDismiss: @escaping () -> Void, onDelete: (() -> Void)? = nil) {
         self.record = record
         self.onDismiss = onDismiss
+        self.onDelete = onDelete
         _label = State(initialValue: record.label ?? "")
     }
 
@@ -191,6 +192,14 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                         .onSubmit { focused = false }
                         .disabled(saving)
                         .accessibilityIdentifier("favoriteRoutes.editor.label")
+                    if let onDelete {
+                        Button(role: .destructive, action: onDelete) {
+                            Label(goFlyString("favorites.delete"), systemImage: GoFlySymbols.delete)
+                                .frame(minHeight: 44)
+                        }
+                        .disabled(saving || !favorites.canMutate)
+                        .accessibilityIdentifier("favoriteRoutes.editor.delete")
+                    }
                 }
                 .padding(24)
             }

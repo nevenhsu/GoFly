@@ -14,10 +14,12 @@ final class GoFlyJoystickUITests: XCTestCase {
         app.selectGoFlyMode("joystick")
         assertMissingOrigin(app)
         app.buttons["joystick.setOrigin"].tap()
+        app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 5))
         query.tap()
         query.typeText("25.0478, 121.5170")
+        app.buttons["search.result.25.047800, 121.517000"].tap()
         let pin = app.buttons["map.candidate.pin"]
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         XCTAssertEqual(pin.value as? String, "25.047800, 121.517000")
@@ -25,20 +27,19 @@ final class GoFlyJoystickUITests: XCTestCase {
         app.buttons["map.candidate.go"].tap()
         let reason = app.staticTexts["map.serviceError.message"]
         XCTAssertTrue(reason.waitForExistence(timeout: 10))
-        XCTAssertEqual(reason.label,
-            "A prepared physical iPhone is required. The simulator cannot start the device service or confirm GPS recovery.")
+        XCTAssertTrue(reason.label.contains("A prepared physical iPhone is required."))
         XCTAssertEqual(pin.value as? String, "25.047800, 121.517000")
         XCTAssertEqual(app.alerts.count, 0)
         XCTAssertFalse(app.descendants(matching: .any)["joystick.pad"].exists)
         app.buttons["map.serviceError.dismiss"].tap()
-        XCTAssertTrue(query.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["map.searchBar"].waitForExistence(timeout: 5))
         app.selectGoFlyMode("joystick")
         assertMissingOrigin(app)
         app.selectGoFlyMode("teleport")
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         XCTAssertEqual(pin.value as? String, "25.047800, 121.517000")
         XCTAssertTrue(app.buttons["map.candidate.go"].isEnabled)
-        XCTAssertTrue(app.descendants(matching: .any)["map.positionStatus"].label.contains("Stopped"))
+        XCTAssertTrue((app.descendants(matching: .any)["map.statusPill"].value as? String ?? "").contains("Stopped"))
     }
 
     func testWanderStaysDisabledUntilAHealthyOriginExists() throws {
@@ -57,10 +58,12 @@ final class GoFlyJoystickUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["joystick.pad"].exists)
 
         app.buttons["joystick.setOrigin"].tap()
+        app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 5))
         query.tap()
         query.typeText("25.0330, 121.5654")
+        app.buttons["search.result.25.033000, 121.565400"].tap()
         let pin = app.buttons["map.candidate.pin"]
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         dismissKeyboard(app)

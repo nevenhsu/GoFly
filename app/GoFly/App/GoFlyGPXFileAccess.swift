@@ -27,6 +27,21 @@ enum GoFlyGPXFileAccess {
         return await store.importData(data, filename: url.lastPathComponent)
     }
 
+    /// A bounded copy for the system share sheet; it never changes the imported payload.
+    static func shareURL(data: Data, filename: String) throws -> URL {
+        guard data.count <= GPXLimits.fileBytes else { throw GoFlyGPXFileFailure.tooLarge }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GoFlyGPXExports", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                               attributes: [.posixPermissions: 0o700])
+        let basename = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent
+        let url = directory.appendingPathComponent(basename.isEmpty ? "route.gpx" : basename + ".gpx")
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return url
+    }
+
     private static func readFile(_ url: URL) throws -> Data {
         guard url.isFileURL else { throw GoFlyGPXFileFailure.unsupported }
         let scoped = url.startAccessingSecurityScopedResource()

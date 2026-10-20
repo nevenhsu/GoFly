@@ -8,10 +8,14 @@ struct GoFlyCameraIntent: Equatable {
     var routeCoordinates: [GeoCoordinate]? = nil
     /// Resets rotation/pitch for the compass control without moving the center.
     var setsHeadingNorth = false
+    var ensureVisibleOnly = false
+    var headingDegrees: Double? = nil
 
-    init(coordinate: GeoCoordinate, setsHeadingNorth: Bool = false) {
+    init(coordinate: GeoCoordinate, setsHeadingNorth: Bool = false, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil) {
         self.coordinate = coordinate
         self.setsHeadingNorth = setsHeadingNorth
+        self.ensureVisibleOnly = ensureVisibleOnly
+        self.headingDegrees = headingDegrees
     }
     init(route: PlannedRoute) {
         coordinate = route.start
@@ -67,11 +71,6 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         tap.delegate = context.coordinator
         tap.cancelsTouchesInView = false
         map.addGestureRecognizer(tap)
-        let compass = MKCompassButton(mapView: map)
-        compass.compassVisibility = .visible
-        compass.accessibilityIdentifier = "map.compass"
-        map.addSubview(compass)
-        context.coordinator.compass = compass
         let coordinator = context.coordinator
         map.onLayout = { [weak map, weak coordinator] in
             guard let map, let coordinator else { return }
@@ -201,7 +200,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                   map.bounds.width > 0, map.bounds.height > 0 else { return }
             let visible = parent.viewport.intersection(map.bounds)
             guard visible.width > 1, visible.height > 1,
-                  intent.id != appliedIntent || (parent.adjustsFocusForViewportChanges
+                  intent.id != appliedIntent || ((parent.adjustsFocusForViewportChanges || intent.ensureVisibleOnly)
                     && (visible != appliedViewport || map.bounds != appliedBounds
                         || map.safeAreaInsets != appliedSafeArea)) else { return }
             appliedIntent = intent.id
@@ -209,6 +208,27 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             appliedBounds = map.bounds
             appliedSafeArea = map.safeAreaInsets
             correctionsRemaining = 2
+            if intent.ensureVisibleOnly {
+                correctionsRemaining = 0
+                let target = map.convert(intent.coordinate.clLocationCoordinate, toPointTo: map)
+                let safe = visible.insetBy(dx: 24, dy: min(48, visible.height / 4))
+                let desired = CGPoint(x: min(max(target.x, safe.minX), safe.maxX),
+                                      y: min(max(target.y, safe.minY), safe.maxY))
+                if abs(target.x - desired.x) > 0.5 || abs(target.y - desired.y) > 0.5 {
+                    let center = map.convert(map.centerCoordinate, toPointTo: map)
+                    map.setCenter(map.convert(CGPoint(x: center.x + target.x - desired.x,
+                        y: center.y + target.y - desired.y), toCoordinateFrom: map), animated: false)
+                }
+                return
+            }
+            if intent.setsHeadingNorth {
+                correctionsRemaining = 0
+                let camera = map.camera
+                camera.heading = 0
+                camera.pitch = 0
+                map.setCamera(camera, animated: false)
+                return
+            }
             let padding = UIEdgeInsets(
                 top: visible.minY, left: visible.minX,
                 bottom: map.bounds.maxY - visible.maxY, right: map.bounds.maxX - visible.maxX
@@ -240,11 +260,10 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             hasFocused = true
             map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
             correctFocusIfNeeded(on: map)
-            if intent.setsHeadingNorth {
-                var camera = map.camera
-                camera.heading = 0
-                camera.pitch = 0
-                map.setCamera(camera, animated: true)
+            if let heading = intent.headingDegrees {
+                let camera = map.camera
+                camera.heading = heading
+                map.setCamera(camera, animated: false)
             }
         }
 

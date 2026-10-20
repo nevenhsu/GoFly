@@ -1,5 +1,6 @@
 import GoFlyCore
 import SwiftUI
+import UIKit
 
 struct GoFlyJoystickPanel: View {
     @ObservedObject var controller: JoystickMovementController
@@ -9,51 +10,22 @@ struct GoFlyJoystickPanel: View {
     var onRandomDestination: () -> Void = { }
     var onSettings: () -> Void = { }
     @State private var contentHeight: CGFloat = 220
+    @State private var confirmingEnd = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let error = controller.error {
-                    Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("joystick.error")
-                }
-                if let error = controller.wanderError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Label(goFlyString(error.localizationKey), systemImage: GoFlySymbols.warning)
-                                .font(.footnote)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityIdentifier("joystick.wanderError.message")
-                            Button(action: controller.clearWanderError) {
-                                Image(systemName: GoFlySymbols.close)
-                                    .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
-                                    .frame(width: 44, height: 44)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(goFlyString("common.dismiss"))
-                            .accessibilityIdentifier("joystick.wanderError.dismiss")
-                        }
-                    }
-                    .foregroundStyle(GoFlyStyle.errorForeground)
-                    .padding(12)
-                    .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
-                }
-                if controller.canRetryWander {
-                    Button { _ = controller.retryWander() } label: {
-                        Text(goFlyString("operation.retry"))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(GoFlyActionStyle())
-                    .accessibilityHint(goFlyString("joystick.wanderRetryHint"))
-                    .accessibilityIdentifier("joystick.wanderRetry")
+                    GoFlyStatusBanner(tone: .danger, title: goFlyString(error.localizationKey),
+                        message: goFlyString("status.repairGuidance"),
+                        actionTitle: goFlyString("operation.settings"), onAction: onSettings,
+                        identifier: "joystick.error")
+                } else if let error = controller.wanderError {
+                    GoFlyStatusBanner(tone: .warning, title: goFlyString(error.localizationKey),
+                        message: goFlyString("status.repairGuidance"),
+                        actionTitle: controller.canRetryWander ? goFlyString("operation.retry") : nil,
+                        onAction: controller.canRetryWander ? { _ = controller.retryWander() } : nil,
+                        onDismiss: controller.clearWanderError, identifier: "joystick.wanderError")
                 }
                 wanderControls
                 if controller.requiresStop {
@@ -105,6 +77,18 @@ struct GoFlyJoystickPanel: View {
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
         .frame(height: min(contentHeight, max(76, maximumHeight)))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if controller.wanderEnabled {
+                GoFlyExecutionControls(progress: nil, isPaused: controller.phase == .paused || controller.phase == .suspended,
+                    canPause: controller.canPause, canResume: controller.canResume,
+                    onPause: { _ = controller.pause() }, onResume: { _ = controller.resume() },
+                    onEnd: { confirmingEnd = true })
+            }
+        }
+        .confirmationDialog(goFlyString("execution.end"), isPresented: $confirmingEnd, titleVisibility: .visible) {
+            Button(goFlyString("execution.end"), role: .destructive) { _ = controller.setWanderEnabled(false) }
+            Button(goFlyString("common.cancel"), role: .cancel) { }
+        }
         .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("joystick.panel")
@@ -149,13 +133,13 @@ struct GoFlyJoystickPanel: View {
             if controller.wanderEnabled {
                 Spacer(minLength: 0)
                 Button(action: onRandomDestination) {
-                    Text(goFlyString("joystick.randomDestination"))
+                    Label(goFlyString("joystick.randomDestination"), systemImage: GoFlySymbols.retry)
                         .font(.body)
                         .fixedSize(horizontal: true, vertical: false)
                         .frame(minWidth: 126, minHeight: 44)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GoFlyActionStyle())
                 .foregroundStyle(controller.canRandomizeWanderTarget ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
                 .disabled(!controller.canRandomizeWanderTarget)
                 .accessibilityIdentifier("joystick.randomDestination")
@@ -170,27 +154,28 @@ private struct GoFlyManualJoystickPad: View {
     let cameraHeadingDegrees: Double
     @Environment(\.scenePhase) private var scenePhase
     @GestureState private var touching = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var fingerID: UUID?
     @State private var attemptedBegin = false
     @State private var admitted = false
     @State private var endedWhileHeld = false
     @State private var screenVector = CGPoint.zero
-    private let diameter: CGFloat = 132
+    private let diameter: CGFloat = 150
     private let thumbDiameter: CGFloat = 44
     private var radius: CGFloat { (diameter - thumbDiameter) / 2 - 8 }
 
     var body: some View {
         ZStack {
             Circle().fill(GoFlyStyle.secondarySurface)
-            Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 1)
+            Circle().strokeBorder(touching ? GoFlyStyle.primary : GoFlyStyle.subtleBorder, lineWidth: touching ? 2 : 1)
             Circle().strokeBorder(GoFlyStyle.subtleBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 5]))
                 .padding(20)
-            ForEach(0..<4) { direction in
+            ForEach(0..<24) { direction in
                 Capsule()
                     .fill(GoFlyStyle.secondary.opacity(0.5))
-                    .frame(width: 2, height: 8)
+                    .frame(width: direction % 6 == 0 ? 2 : 1, height: direction % 6 == 0 ? 8 : 4)
                     .offset(y: -diameter / 2 + 12)
-                    .rotationEffect(.degrees(Double(direction) * 90))
+                    .rotationEffect(.degrees(Double(direction) * 15))
             }
             Circle()
                 .fill(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
@@ -198,8 +183,10 @@ private struct GoFlyManualJoystickPad: View {
                 .overlay { Circle().strokeBorder(GoFlyStyle.surface, lineWidth: 1) }
                 .shadow(color: .black.opacity(isEnabled ? 0.18 : 0), radius: 5, y: 3)
                 .offset(thumbOffset)
+                .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
         }
         .frame(width: diameter, height: diameter)
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
         .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .updating($touching) { _, touching, _ in touching = true }
@@ -207,6 +194,7 @@ private struct GoFlyManualJoystickPad: View {
             .onEnded { _ in finishTouch() })
         .onChange(of: touching) { _, touching in
             if !touching { finishTouch() }
+            else { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
         }
         .onChange(of: cameraHeadingDegrees) { _, _ in
             guard let fingerID, admitted, !endedWhileHeld, scenePhase == .active,

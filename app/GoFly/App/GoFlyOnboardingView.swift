@@ -58,25 +58,22 @@ struct GoFlyOnboardingView: View {
             locationStatus
         } actions: {
             Button {
-                Task { await controller.allowLocation() }
+                switch controller.locationAuthorization {
+                case .notDetermined: Task { await controller.allowLocation() }
+                case .authorized: controller.skipLocation()
+                case .denied: openLocationSettings()
+                }
             } label: {
                 HStack(spacing: 8) {
                     if controller.isRequestingLocation { ProgressView() }
-                    Text(goFlyString(controller.locationAuthorization == .notDetermined
-                        ? "onboarding.location.allow" : "onboarding.next"))
+                    Text(goFlyString(locationActionKey))
                 }
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .disabled(controller.isRequestingLocation)
             .accessibilityIdentifier("onboarding.location.allow")
 
-            if controller.locationAuthorization == .denied {
-                Button(action: openLocationSettings) {
-                    Text(goFlyString("onboarding.location.openSettings"))
-                }
-                .buttonStyle(GoFlyActionStyle())
-                .accessibilityIdentifier("onboarding.location.openSettings")
-            } else if controller.locationAuthorization == .notDetermined {
+            if controller.locationAuthorization != .authorized {
                 Button {
                     controller.skipLocation()
                 } label: {
@@ -91,30 +88,31 @@ struct GoFlyOnboardingView: View {
         }
     }
 
-    /// iOS shows its permission sheet only once, so a decided permission is
-    /// stated here instead of leaving "Next" looking like a missing prompt.
+    private var locationActionKey: String {
+        switch controller.locationAuthorization {
+        case .notDetermined: "onboarding.location.allow"
+        case .authorized: "onboarding.next"
+        case .denied: "onboarding.location.openSettings"
+        }
+    }
+
     @ViewBuilder private var locationStatus: some View {
         switch controller.locationAuthorization {
         case .notDetermined:
-            EmptyView()
-        case .authorized:
-            Label(goFlyString("onboarding.location.authorized"), systemImage: "checkmark.circle.fill")
-                .font(.subheadline)
+            Label(goFlyString("settings.status.notDetermined"), systemImage: "location.circle")
                 .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityIdentifier("onboarding.location.status")
+        case .authorized:
+            Label(goFlyString("onboarding.location.authorized"), systemImage: "checkmark.circle.fill")
+                .foregroundStyle(GoFlyStyle.successForeground)
+                .accessibilityIdentifier("onboarding.location.status")
         case .denied:
-            VStack(alignment: .leading, spacing: 8) {
-                Label(goFlyString("onboarding.location.denied"), systemImage: GoFlySymbols.warning)
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("onboarding.location.status")
-                if settingsOpenFailed {
-                    Text(goFlyString("settings.externalOpenFailed"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                }
-            }
+            GoFlyStatusBanner(tone: .warning, title: goFlyString("settings.status.denied"),
+                              message: goFlyString("onboarding.location.denied"),
+                              identifier: "onboarding.location.status")
+        }
+        if settingsOpenFailed {
+            GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
         }
     }
 
@@ -170,6 +168,7 @@ private struct GoFlyOnboardingPage<Content: View, Actions: View>: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                GoFlyOnboardingStepIndicator(step: title == "onboarding.welcome.title" ? 1 : 2)
                 GoFlyOnboardingEmblem(symbol: symbol)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -184,7 +183,8 @@ private struct GoFlyOnboardingPage<Content: View, Actions: View>: View {
         .navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 12) { actions() }
-                .padding(24)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
                 .background(GoFlyStyle.surface)
                 .overlay(alignment: .top) { Divider() }
         }
@@ -232,12 +232,22 @@ private struct GoFlyVPNOnboardingView: View {
     @State private var externalOpenFailed = false
     @State private var externalOpenFailureKey = "onboarding.vpn.externalOpenFailed"
 
-    private let appURL = URL(string: "localdevvpn://")!
-    private let storeURL = URL(string: "https://apps.apple.com/app/localdevvpn/id6755608044")!
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if controller.vpnState == .unavailable || controller.vpnState == .timedOut {
+                    errorMessage(controller.vpnState == .timedOut
+                        ? "onboarding.vpn.timedOut" : "onboarding.vpn.unavailable")
+                        .accessibilityIdentifier("onboarding.vpn.failure")
+                    if let detail = controller.vpnFailureDetail {
+                        failureDetail(detail)
+                    }
+                }
+                if externalOpenFailed {
+                    errorMessage(externalOpenFailureKey)
+                }
+                GoFlyOnboardingStepIndicator(step: 3)
                 HStack(alignment: .center, spacing: 14) {
                     Image(systemName: GoFlySymbols.network)
                         .goFlyControlSymbol(size: 24, weight: .medium)
@@ -247,9 +257,9 @@ private struct GoFlyVPNOnboardingView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(goFlyString("onboarding.vpn.title"))
                             .font(.headline)
-                        Text(goFlyString(statusKey))
+                        Label(goFlyString(statusKey), systemImage: vpnTone.symbol)
                             .font(.subheadline)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .foregroundStyle(vpnTone.foreground)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("onboarding.vpn.status")
                     }
@@ -273,7 +283,7 @@ private struct GoFlyVPNOnboardingView: View {
                 } label: {
                     Text(goFlyString("onboarding.vpn.open"))
                 }
-                .buttonStyle(GoFlyActionStyle())
+                .buttonStyle(GoFlyActionStyle(primary: true))
                 .accessibilityIdentifier("onboarding.vpn.open")
 
                 VStack(spacing: 0) {
@@ -293,17 +303,7 @@ private struct GoFlyVPNOnboardingView: View {
                 .buttonStyle(.plain)
                 .goFlyCard()
 
-                if controller.vpnState == .unavailable || controller.vpnState == .timedOut {
-                    errorMessage(controller.vpnState == .timedOut
-                        ? "onboarding.vpn.timedOut" : "onboarding.vpn.unavailable")
-                        .accessibilityIdentifier("onboarding.vpn.failure")
-                    if let detail = controller.vpnFailureDetail {
-                        failureDetail(detail)
-                    }
-                }
-                if externalOpenFailed {
-                    errorMessage(externalOpenFailureKey)
-                }
+
             }
             .padding(24)
         }
@@ -337,7 +337,8 @@ private struct GoFlyVPNOnboardingView: View {
                 .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
                 .accessibilityIdentifier("onboarding.vpn.next")
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
             .background(GoFlyStyle.surface)
             .overlay(alignment: .top) { Divider() }
         }
@@ -353,7 +354,15 @@ private struct GoFlyVPNOnboardingView: View {
             controller.setVPNActive(isVisible && phase == .active)
         }
         .navigationDestination(isPresented: $showingHelp) {
-            connectionHelp
+            GoFlyVPNHelpPage()
+        }
+    }
+
+    private var vpnTone: GoFlyStatusTone {
+        switch controller.vpnState {
+        case .reachable: .success
+        case .unavailable, .timedOut: .danger
+        default: .neutral
         }
     }
 
@@ -364,117 +373,6 @@ private struct GoFlyVPNOnboardingView: View {
         case .reachable: "onboarding.vpn.connected"
         case .unavailable, .timedOut: "onboarding.vpn.help.notReachable"
         }
-    }
-
-    private var connectionHelp: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: GoFlySymbols.network)
-                        .font(.largeTitle)
-                        .accessibilityHidden(true)
-                    Text(goFlyString("onboarding.vpn.help.heading"))
-                        .font(.title2.weight(.bold))
-                        .accessibilityAddTraits(.isHeader)
-                    Text(goFlyString("onboarding.vpn.help.intro"))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                }
-
-                VStack(spacing: 12) {
-                    helpStep(1, symbol: "1.circle.fill")
-                    helpStep(2, symbol: "2.circle.fill")
-                    helpStep(3, symbol: "3.circle.fill")
-                    helpStep(4, symbol: "4.circle.fill")
-                }
-
-                Label {
-                    Text(goFlyString("onboarding.vpn.help.confirmation"))
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: GoFlySymbols.information)
-                        .accessibilityHidden(true)
-                }
-                .font(.subheadline)
-                .foregroundStyle(GoFlyStyle.secondary)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(goFlyString("onboarding.vpn.help.troubleshooting"))
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
-                    VStack(alignment: .leading, spacing: 16) {
-                        helpTip("onboarding.vpn.help.permission", symbol: "hand.raised")
-                        Button(action: openSystemSettings) {
-                            Label(goFlyString("onboarding.vpn.help.openSettings"), systemImage: GoFlySymbols.settings)
-                        }
-                        .buttonStyle(GoFlyActionStyle())
-                        .accessibilityIdentifier("onboarding.vpn.help.openSettings")
-                        Divider()
-                        helpTip("onboarding.vpn.help.reconnect", symbol: GoFlySymbols.retry)
-                    }
-                    .padding(16)
-                    .goFlyCard()
-                }
-
-                if externalOpenFailed {
-                    errorMessage(externalOpenFailureKey)
-                }
-
-                VStack(spacing: 12) {
-                    Button(action: openLocalDevVPN) {
-                        Label(goFlyString("onboarding.vpn.open"), systemImage: GoFlySymbols.externalLink)
-                    }
-                    .buttonStyle(GoFlyActionStyle(primary: true))
-                    .accessibilityIdentifier("onboarding.vpn.help.openVPN")
-
-                    Button {
-                        // Returning reactivates the VPN page's existing serialized check pipeline.
-                        showingHelp = false
-                    } label: {
-                        Text(goFlyString("onboarding.vpn.help.returnAndCheck"))
-                    }
-                    .buttonStyle(GoFlyActionStyle())
-                    .accessibilityIdentifier("onboarding.vpn.help.return")
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-        }
-        .background(GoFlyStyle.canvas)
-        .navigationTitle(goFlyString("onboarding.vpn.help"))
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func helpStep(_ number: Int, symbol: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbol)
-                .font(.title2)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(goFlyString("onboarding.vpn.help.step\(number).title"))
-                    .font(.headline)
-                    .accessibilityIdentifier("onboarding.vpn.help.step\(number)")
-                Text(goFlyString("onboarding.vpn.help.step\(number).message"))
-                    .font(.body)
-                    .foregroundStyle(GoFlyStyle.secondary)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(16)
-        .goFlyCard()
-    }
-
-    private func helpTip(_ key: String, symbol: String) -> some View {
-        Label {
-            Text(goFlyString(key))
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: symbol)
-                .accessibilityHidden(true)
-        }
-        .font(.subheadline)
-        .foregroundStyle(GoFlyStyle.secondary)
     }
 
     private var checkButtonKey: String {
@@ -488,16 +386,15 @@ private struct GoFlyVPNOnboardingView: View {
     private func openStore() {
         externalOpenFailed = false
         externalOpenFailureKey = "onboarding.vpn.externalOpenFailed"
-        UIApplication.shared.open(storeURL) { accepted in
+        GoFlyExternalLinks.openStore { accepted in
             externalOpenFailed = !accepted
         }
     }
 
     private func openLocalDevVPN() {
         externalOpenFailed = false
-        UIApplication.shared.open(appURL) { accepted in
-            if !accepted { openStore() }
-        }
+        externalOpenFailureKey = "onboarding.vpn.externalOpenFailed"
+        GoFlyExternalLinks.openLocalDevVPN { externalOpenFailed = !$0 }
     }
 
     private func openSystemSettings() {
@@ -547,11 +444,22 @@ private struct GoFlyVPNOnboardingView: View {
     }
 
     private func errorMessage(_ key: String) -> some View {
-        Label(goFlyString(key), systemImage: GoFlySymbols.warning)
-            .font(.footnote)
-            .foregroundStyle(GoFlyStyle.errorForeground)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
+        GoFlyStatusBanner(tone: .danger, title: goFlyString(key),
+                          message: goFlyString("onboarding.vpn.help.intro"))
+    }
+}
+
+private struct GoFlyOnboardingStepIndicator: View {
+    let step: Int
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(1...3, id: \.self) { index in
+                Capsule().fill(index <= step ? GoFlyStyle.primary : GoFlyStyle.border)
+                    .frame(height: 4)
+            }
+            Text("\(step) / 3").font(.caption.monospacedDigit()).foregroundStyle(GoFlyStyle.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: goFlyString("onboarding.step"), step))
     }
 }

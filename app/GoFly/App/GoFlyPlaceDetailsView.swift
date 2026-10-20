@@ -1,72 +1,121 @@
+import CoreLocation
 import GoFlyCore
 import SwiftUI
+import UIKit
 
-/// The caller captures this place when its Pin is tapped; later candidates do
-/// not change either the displayed information or the star's identity.
 struct GoFlyPlaceDetailsView: View {
     let place: MapPlace
     var onDismiss: () -> Void
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var embedded = false
+    /// Current simulated position, used only to show the Figma distance line.
+    var distanceFrom: GeoCoordinate?
+    var canGo = false
+    var onGo: (() -> Void)? = nil
+    var onRouteStart: (() -> Void)? = nil
+    var onRouteEnd: (() -> Void)? = nil
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: GoFlySymbols.place)
-                            .goFlyControlSymbol(size: 24, weight: .medium)
-                            .foregroundStyle(GoFlyStyle.primary)
-                            .frame(width: 48, height: 48)
-                            .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .accessibilityHidden(true)
-                        Text(place.title)
-                            .font(.title2.bold())
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityIdentifier("placeDetails.title")
-                        GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite")
-                    }
-                    VStack(alignment: .leading, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Label(goFlyString("placeDetails.address"), systemImage: "map")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(GoFlyStyle.secondary)
-                            Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                                .font(.body)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("placeDetails.address")
-                        }
-                        Divider()
-                        VStack(alignment: .leading, spacing: 7) {
-                            Label(goFlyString("placeDetails.coordinates"), systemImage: GoFlySymbols.coordinates)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(GoFlyStyle.secondary)
-                            Text(place.coordinate.displayText)
-                                .font(.body.monospacedDigit())
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                                .accessibilityIdentifier("placeDetails.coordinates")
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .goFlyCard()
-                    GoFlyFavoriteFailureNotice()
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
+        if embedded {
+            content
+        } else {
+            NavigationStack {
+                ScrollView { content }
+                    .background(GoFlyStyle.surface)
+                    .navigationTitle(goFlyString("search.placeDetails"))
+                    .navigationBarTitleDisplayMode(.inline)
             }
-            .background(GoFlyStyle.canvas)
-            .navigationTitle(goFlyString("search.placeDetails"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(goFlyString("common.dismiss"), action: onDismiss)
-                        .accessibilityIdentifier("placeDetails.dismiss")
-                }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GoFlyFavoriteFailureNotice()
+            HStack(alignment: .top) {
+                Text(place.title).font(.title3.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("placeDetails.title")
+                Button(action: onDismiss) { Image(systemName: GoFlySymbols.close) }
+                    .buttonStyle(GoFlyIconStyle())
+                    .accessibilityLabel(goFlyString("common.dismiss"))
+                    .accessibilityIdentifier("placeDetails.dismiss")
+            }
+            Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
+                .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
+                .accessibilityIdentifier("placeDetails.address")
+            Text(coordinateLine)
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(GoFlyStyle.secondary)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("placeDetails.coordinates")
+            ScrollView(.horizontal, showsIndicators: false) {
+                actions
             }
         }
-        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
-        .presentationBackground(GoFlyStyle.canvas)
+        .padding(16)
+    }
+
+    private var coordinateLine: String {
+        guard let distance = distanceMeters else { return place.coordinate.displayText }
+        let formatted: String
+        if distance < 1_000 {
+            formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceMeters"), Int(distance.rounded()))
+        } else {
+            formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceKilometers"),
+                                             String(format: "%.1f", arguments: [distance / 1_000]))
+        }
+        return "\(place.coordinate.displayText) · \(formatted)"
+    }
+
+    private var distanceMeters: Double? {
+        guard let distanceFrom else { return nil }
+        let from = CLLocation(latitude: distanceFrom.latitude, longitude: distanceFrom.longitude)
+        let to = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+        let value = from.distance(from: to)
+        return value.isFinite ? value : nil
+    }
+
+    private var actions: some View {
+        HStack(spacing: 8) {
+            if let onGo {
+                Button(goFlyString("map.go"), action: onGo)
+                    .buttonStyle(GoFlyActionStyle(primary: true))
+                    .frame(minWidth: 56).disabled(!canGo)
+                    .accessibilityIdentifier("placeDetails.go")
+            }
+            GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite",
+                              labelTitle: goFlyString("placeDetails.favorite"))
+            if onRouteStart != nil || onRouteEnd != nil {
+                Menu {
+                    if let onRouteStart { Button(goFlyString("placeDetails.setStart"), action: onRouteStart) }
+                    if let onRouteEnd { Button(goFlyString("placeDetails.setEnd"), action: onRouteEnd) }
+                } label: {
+                    Label(goFlyString("placeDetails.setEnd"), systemImage: GoFlySymbols.flag)
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .background(GoFlyStyle.secondarySurface, in: Capsule())
+                        .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                        .contentShape(Capsule())
+                }
+                .accessibilityLabel(goFlyString("placeDetails.setEnd"))
+                .accessibilityIdentifier("placeDetails.route")
+            }
+            Button {
+                UIPasteboard.general.string = place.coordinate.displayText
+            } label: {
+                Label(goFlyString("placeDetails.copy"), systemImage: "doc.on.doc")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(GoFlyStyle.secondarySurface, in: Capsule())
+                    .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(goFlyString("placeDetails.copy"))
+            .accessibilityIdentifier("placeDetails.copy")
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -17,6 +17,14 @@ struct GoFlyRecoveryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                if let key = recovery.noticeKey {
+                    connectionBanner(key)
+                } else if recovery.requiresColdConfirmation {
+                    connectionBanner("recovery.coldClearPending")
+                }
+                if let failure = storageFailure {
+                    storageBanner(failure)
+                }
                 if hasSummary {
                     Text(goFlyString("recovery.previousTask"))
                         .font(.headline)
@@ -26,45 +34,16 @@ struct GoFlyRecoveryView: View {
                         recovery.discardUnverifiedMovement()
                     }
                 }
-                if let key = recovery.noticeKey {
-                    Label(goFlyString(key), systemImage: recovery.requiresColdConfirmation
-                          ? GoFlySymbols.warning : GoFlySymbols.network)
-                        .font(.subheadline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("recovery.notice")
-                }
-                if recovery.requiresColdConfirmation {
-                    action("service.restoreGPS", id: "recovery.restoreGPS") { _ = service.restoreGPS() }
-                        .disabled(!service.canRestoreGPS)
-                }
-                if recovery.noticeKey != nil {
+                if recovery.requiresColdConfirmation && recovery.noticeKey != nil {
                     action("onboarding.vpn.check", id: "recovery.checkConnection") { recovery.checkConnection() }
                         .disabled(!recovery.canCheck)
                 }
                 if recovery.requiresColdConfirmation || recovery.noticeKey != nil {
                     action("operation.settings", id: "recovery.settings", perform: onSettings)
                 }
-                if let failure = storageFailure {
-                    Label(goFlyString(failure.localizationKey), systemImage: GoFlySymbols.warning)
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityIdentifier("recovery.storageError")
-                    if store.loadState == .ready && store.hasUnsavedChanges
-                        && [.writeFailed, .unavailable, .unsafeFile].contains(failure) {
-                        action("operation.retry", id: "recovery.retrySaving") { _ = store.retrySaving() }
-                            .disabled(store.isSaving)
-                    }
-                }
                 if hasContent && store.isSaving {
                     ProgressView(goFlyString("recovery.saving"))
                         .font(.footnote)
-                } else if hasContent && store.hasUnsavedChanges && storageFailure != nil {
-                    Text(goFlyString("recovery.unsaved"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
                 }
             }
             .padding(16)
@@ -76,6 +55,33 @@ struct GoFlyRecoveryView: View {
         .goFlyCard(floating: true)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("recovery.panel")
+    }
+
+    private func connectionBanner(_ key: String) -> some View {
+        let cold = recovery.requiresColdConfirmation
+        let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .warning
+        return GoFlyStatusBanner(tone: tone, title: goFlyString(key),
+            message: goFlyString("recovery.connectionGuidance"),
+            actionTitle: goFlyString(cold ? "service.restoreGPS" : "onboarding.vpn.check"),
+            onAction: {
+                if cold { _ = service.restoreGPS() }
+                else { recovery.checkConnection() }
+            }, identifier: "recovery.connectionBanner",
+            actionEnabled: cold ? service.canRestoreGPS : recovery.canCheck,
+            actionIdentifier: cold ? "recovery.restoreGPS" : "recovery.checkConnection",
+            titleIdentifier: "recovery.notice")
+    }
+
+    private func storageBanner(_ failure: SessionRecoveryFailure) -> some View {
+        let canRetry = store.loadState == .ready && store.hasUnsavedChanges
+            && [.writeFailed, .unavailable, .unsafeFile].contains(failure)
+        let message = (store.hasUnsavedChanges ? goFlyString("recovery.unsaved") + " " : "")
+            + goFlyString("recovery.storageGuidance")
+        return GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.localizationKey), message: message,
+            actionTitle: canRetry ? goFlyString("operation.retry") : nil,
+            onAction: canRetry ? { _ = store.retrySaving() } : nil,
+            identifier: "recovery.storageError", actionEnabled: !store.isSaving,
+            actionIdentifier: "recovery.retrySaving")
     }
 
     private var storageFailure: SessionRecoveryFailure? {

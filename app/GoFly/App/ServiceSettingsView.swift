@@ -18,31 +18,14 @@ struct ServiceSettingsView: View {
                     serviceCard
                     settingsGroups
                     if let key = continuation.noticeKey {
-                        Label {
-                            Text(goFlyString(key))
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: GoFlySymbols.warning)
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-                        .accessibilityIdentifier("background.notice.compact")
+                        GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
+                                          message: goFlyString("background.systemDecidesRuntime"),
+                                          identifier: "background.notice.compact")
                     }
                     if let error = service.error, service.preparedOperation == nil {
-                        Label {
-                            Text(goFlyString(error.rawValue))
-                        } icon: {
-                            Image(systemName: GoFlySymbols.warning)
-                        }
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.errorForeground)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GoFlyStyle.errorSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius))
-                        .accessibilityIdentifier("service.error")
+                        GoFlyStatusBanner(tone: .danger, title: goFlyString(error.rawValue),
+                                          message: goFlyString("settings.vpn.failureGuide"),
+                                          identifier: "service.error")
                     }
                 }
                 .padding(16)
@@ -104,9 +87,11 @@ struct ServiceSettingsView: View {
             }
 
             settingsSection("settings.preferences") {
-                languagePicker
-                settingsDivider
-                appearancePicker
+                settingsLink(
+                    title: "settings.languageAndAppearance",
+                    value: GoFlyPreferences.shared.language.title,
+                    destination: { GoFlyPreferencesSettingsPage() }
+                )
             }
 
             settingsSection("settings.helpSection") {
@@ -169,9 +154,15 @@ struct ServiceSettingsView: View {
                     .multilineTextAlignment(.leading)
             } value: {
                 if let value {
-                    Text(value)
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                    if titleKey == "settings.location" && systemStatus.locationAuthorization == .denied {
+                        Label(value, systemImage: GoFlySymbols.warning)
+                            .font(.subheadline)
+                            .foregroundStyle(GoFlyStyle.warningForeground)
+                    } else {
+                        Text(value)
+                            .font(.subheadline)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                    }
                 }
             }
             Image(systemName: GoFlySymbols.disclosure)
@@ -200,48 +191,6 @@ struct ServiceSettingsView: View {
         case "settings.appearance": GoFlySymbols.appearance
         default: GoFlySymbols.help
         }
-    }
-
-    private var languagePicker: some View {
-        @Bindable var preferences = GoFlyPreferences.shared
-        return Menu {
-            Picker(goFlyString("settings.language"), selection: Binding(
-                get: { preferences.language },
-                set: { preferences.setLanguage($0) }
-            )) {
-                ForEach(GoFlyLanguage.allCases) { language in
-                    Text(language.title).tag(language)
-                }
-            }
-        } label: {
-            settingsRow(titleKey: "settings.language", value: preferences.language.title)
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(goFlyString("settings.language"))
-        .accessibilityValue(preferences.language.title)
-        .accessibilityIdentifier("settings.language")
-    }
-
-    private var appearancePicker: some View {
-        @Bindable var preferences = GoFlyPreferences.shared
-        return Menu {
-            Picker(goFlyString("settings.appearance"), selection: Binding(
-                get: { preferences.appearance },
-                set: { preferences.setAppearance($0) }
-            )) {
-                ForEach(GoFlyAppearance.allCases) { appearance in
-                    Text(appearance.title).tag(appearance)
-                }
-            }
-        } label: {
-            settingsRow(titleKey: "settings.appearance", value: preferences.appearance.title)
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(goFlyString("settings.appearance"))
-        .accessibilityValue(preferences.appearance.title)
-        .accessibilityIdentifier("settings.appearance")
     }
 
     private var serviceCard: some View {

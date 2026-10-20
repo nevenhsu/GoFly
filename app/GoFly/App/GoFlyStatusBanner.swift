@@ -14,6 +14,10 @@ struct GoFlyStatusBanner: View {
     var onAction: (() -> Void)?
     var onDismiss: (() -> Void)?
     var identifier: String?
+    var actionEnabled = true
+    var actionIdentifier: String? = nil
+    var titleIdentifier: String? = nil
+    var messageIdentifier: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -29,13 +33,13 @@ struct GoFlyStatusBanner: View {
                     .foregroundStyle(GoFlyStyle.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
-                    .accessibilityIdentifier(identifier.map { "\($0).title" } ?? "statusBanner.title")
+                    .accessibilityIdentifier(titleIdentifier ?? identifier.map { "\($0).title" } ?? "statusBanner.title")
                 if let message {
                     Text(message)
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier(identifier.map { "\($0).message" } ?? "statusBanner.message")
+                        .accessibilityIdentifier(messageIdentifier ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
                 }
                 if let actionTitle, let onAction {
                     Button(action: onAction) {
@@ -46,7 +50,8 @@ struct GoFlyStatusBanner: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier(identifier.map { "\($0).action" } ?? "statusBanner.action")
+                    .disabled(!actionEnabled)
+                    .accessibilityIdentifier(actionIdentifier ?? identifier.map { "\($0).action" } ?? "statusBanner.action")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
