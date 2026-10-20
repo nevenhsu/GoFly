@@ -19,7 +19,7 @@ struct GoFlyApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                startupContent
+                galleryOrStartupContent
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
@@ -34,6 +34,21 @@ struct GoFlyApp: App {
                 preferences.refreshSystemPreferences()
             }
         }
+    }
+
+    /// Simulator-only component gallery, reachable only with
+    /// `-gofly-ui-gallery`; every other launch path is unchanged.
+    @ViewBuilder
+    private var galleryOrStartupContent: some View {
+        #if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.contains("-gofly-ui-gallery") {
+            GoFlyComponentGallery()
+        } else {
+            startupContent
+        }
+        #else
+        startupContent
+        #endif
     }
 
     @ViewBuilder

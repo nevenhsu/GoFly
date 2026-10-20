@@ -16,6 +16,34 @@ enum GoFlyStyle {
     static let inputBorder = Color(uiColor: .systemGray)
     static let cornerRadius: CGFloat = 20
     static let controlRadius: CGFloat = 14
+
+    // 2026-10-20 Google Maps redesign: status colors are semantic and always
+    // paired with an icon and text, never color alone.
+    static let danger = Color(uiColor: .systemRed)
+    static let warning = Color(uiColor: .systemOrange)
+    static let success = Color(uiColor: .systemGreen)
+    static let dangerForeground = adaptive(
+        light: (0.843, 0.000, 0.082), dark: (1.000, 0.412, 0.380))
+    static let warningForeground = adaptive(
+        light: (0.788, 0.204, 0.000), dark: (1.000, 0.702, 0.251))
+    static let successForeground = adaptive(
+        light: (0.141, 0.541, 0.239), dark: (0.188, 0.820, 0.345))
+    static let snackbarSurface = adaptive(
+        light: (0.110, 0.110, 0.118), dark: (0.173, 0.173, 0.180))
+    static let snackbarForeground = Color.white
+    /// Execution-mode instruction card: dark in both appearances, per the
+    /// redesign spec (light #1C1C1E, dark #2C2C2E) with white text.
+    static let instructionSurface = snackbarSurface
+    static let instructionForeground = Color.white
+    static let sheetCornerRadius: CGFloat = 20
+
+    private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
+                                 dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+        Color(uiColor: UIColor { traits in
+            let value = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: value.0, green: value.1, blue: value.2, alpha: 1)
+        })
+    }
 }
 
 /// Opaque content keeps labels readable over every map style and in Reduce Transparency.

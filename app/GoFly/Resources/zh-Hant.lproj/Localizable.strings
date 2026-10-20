@@ -459,3 +459,33 @@
 "settings.diagnostics.description" = "把連線、移動與背景執行記錄存成可分享的檔案。座標只保留三位小數，不含配對資料與裝置識別碼。";
 "settings.diagnostics.export" = "匯出診斷記錄";
 "settings.diagnostics.exportFailed" = "無法建立診斷記錄檔。";
+
+"status.tone.neutral" = "等待中";
+"status.tone.active" = "執行中";
+"status.tone.danger" = "錯誤";
+"status.tone.warning" = "需要注意";
+"status.tone.success" = "成功";
+"map.statusPill.hint" = "在面板顯示目前狀態的詳細內容。";
+"statusBanner.repairHint" = "若持續發生，請到「設定 › VPN 通道」修復連線。";
+"sheet.grabber" = "面板";
+"sheet.grabber.hint" = "拖曳或點一下可改變面板高度。";
+"sheet.detent.collapsed" = "收合";
+"sheet.detent.half" = "半開";
+"sheet.detent.expanded" = "全開";
+"execution.end" = "結束";
+"common.undo" = "復原";
+"gallery.warningTitle" = "定位權限受限";
+"gallery.warningMessage" = "GoFly 只在 App 開啟時要求定位。";
+"gallery.successTitle" = "已移至此地點";
+"gallery.pillActive" = "模擬中";
+"gallery.pillDanger" = "錯誤";
+"gallery.pillNeutral" = "待命";
+"gallery.showSnackbar" = "顯示 snackbar";
+"gallery.snackbarText" = "已刪除 1 項";
+"gallery.executionTitle" = "前往 台北 101";
+"gallery.executionDetail" = "剩 1.2 km · 4 分鐘";
+"gallery.sheetTitle" = "目前模擬位置";
+"gallery.sheetBody" = "25.033, 121.565";
+"gallery.sheetRow" = "最近或最愛地點";
+
+"gallery.dangerTitle" = "裝置服務無法連線";

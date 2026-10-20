@@ -459,3 +459,33 @@
 "settings.diagnostics.description" = "Saves the connection, movement, and background records to a file you can share. Coordinates are rounded to three decimals; pairing data and device identifiers are not included.";
 "settings.diagnostics.export" = "Export diagnostics";
 "settings.diagnostics.exportFailed" = "Could not create the diagnostics file.";
+
+"status.tone.neutral" = "Waiting";
+"status.tone.active" = "Active";
+"status.tone.danger" = "Error";
+"status.tone.warning" = "Attention";
+"status.tone.success" = "Success";
+"map.statusPill.hint" = "Shows the current status details in the panel.";
+"statusBanner.repairHint" = "If this keeps happening, repair the connection in Settings › VPN tunnel.";
+"sheet.grabber" = "Sheet";
+"sheet.grabber.hint" = "Drag or tap to change the panel height.";
+"sheet.detent.collapsed" = "Collapsed";
+"sheet.detent.half" = "Half open";
+"sheet.detent.expanded" = "Expanded";
+"execution.end" = "End";
+"common.undo" = "Undo";
+"gallery.warningTitle" = "Location is limited";
+"gallery.warningMessage" = "GoFly only asks for location while the app is open.";
+"gallery.successTitle" = "Moved to this place";
+"gallery.pillActive" = "Simulating";
+"gallery.pillDanger" = "Error";
+"gallery.pillNeutral" = "Standby";
+"gallery.showSnackbar" = "Show snackbar";
+"gallery.snackbarText" = "Deleted 1 item";
+"gallery.executionTitle" = "Heading to 台北 101";
+"gallery.executionDetail" = "1.2 km left · 4 min";
+"gallery.sheetTitle" = "Current simulated location";
+"gallery.sheetBody" = "25.033, 121.565";
+"gallery.sheetRow" = "Recent or favorite place";
+
+"gallery.dangerTitle" = "Device service unavailable";

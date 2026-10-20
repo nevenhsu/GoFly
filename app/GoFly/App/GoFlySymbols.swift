@@ -48,6 +48,21 @@ enum GoFlySymbols {
     static let walking = "figure.walk"
     static let heading = "location.north.fill"
     static let waiting = "clock"
+    // 2026-10-20 redesign additions.
+    static let folder = "folder"
+    static let compass = "safari"
+    static let followHeading = "location.north.line"
+    static let ellipsis = "ellipsis"
+    static let selectItems = "checkmark.circle"
+    static let undo = "arrow.uturn.backward"
+    static let swap = "arrow.up.arrow.down"
+    static let addStop = "plus.circle"
+    static let recent = "clock.arrow.circlepath"
+    static let expandSheet = "chevron.up"
+    static let collapseSheet = "chevron.down"
+    static let successFilled = "checkmark.circle.fill"
+    static let dangerFilled = "exclamationmark.circle.fill"
+    static let warningFilled = "exclamationmark.triangle.fill"
 }
 
 /// Standalone glyphs grow gently with Dynamic Type without overflowing a 44 pt
