@@ -45,6 +45,26 @@ import Testing
         #expect((try FileManager.default.attributesOfItem(atPath: disk.fileURL.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
         #expect((try FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber)?.intValue == 0o700)
     }
+    @Test func favoritePlacesBatchDeleteUndoPreservesOrderAndLabels() throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let disk = FileFavoritePlacesPersistence(directory: root)
+        let store = FavoritePlacesStore(persistence: disk)
+        let places = (0..<3).map { index in
+            let coordinate = GeoCoordinate(latitude: 25 + Double(index), longitude: 121)!
+            return MapPlace(id: .coordinate(coordinate), title: "Place \(index)", coordinate: coordinate)
+        }
+        for place in places { #expect(store.toggle(place)) }
+        let keys = places.map { FavoritePlaceKey(place: $0)! }
+        #expect(store.saveLabel(for: keys[0], draft: "Home"))
+        #expect(store.saveLabel(for: keys[2], draft: "Office"))
+        let original = store.favorites
+        #expect(store.delete([keys[0], keys[2]]))
+        #expect(store.favorites.map(\.key) == [keys[1]])
+        #expect(store.undoDelete())
+        #expect(store.favorites == original)
+        #expect(FavoritePlacesStore(persistence: disk).favorites == original)
+        #expect(!store.canUndo)
+    }
     @Test func corruptFavoritePlacesBlocksMutationAndKeepsTheOriginalBytes() throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("favorites.json")
@@ -55,6 +75,30 @@ import Testing
         let coordinate = GeoCoordinate(latitude: 25, longitude: 121)!
         #expect(!store.toggle(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)))
         #expect(try Data(contentsOf: file) == corrupt)
+    }
+    @Test func importedRouteExportsOriginalXMLBytesAfterReload() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let original = Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:custom="urn:gofly:test" version="1.1" creator="Source App">
+          <metadata><name>Morning route</name></metadata>
+          <trk><name>River walk</name><trkseg>
+            <trkpt lat="25.000000" lon="121.000000"><ele>8.25</ele><time>2026-10-20T01:00:00Z</time></trkpt>
+            <trkpt lat="25.001000" lon="121.001000"><ele>9.50</ele><time>2026-10-20T01:01:00Z</time></trkpt>
+          </trkseg><extensions><custom:note>Keep this metadata</custom:note></extensions></trk>
+        </gpx>
+        """.utf8)
+        let store = ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: root))
+        await store.load()
+        #expect(await store.importData(original, filename: "source.gpx"))
+        let record = try #require(store.records.first)
+        #expect(record.byteCount == original.count)
+        #expect(record.sha256 == ImportedRouteArtifact.hash(original))
+        let reloaded = ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: root))
+        await reloaded.load()
+        await reloaded.select(record.id)
+        #expect(reloaded.selectedSnapshot?.document.pointCount == 2)
+        #expect(try await reloaded.exportSelected() == original)
     }
     @Test func importedRouteDeleteAndUndoAreStoreMemoryOnly() async throws {
         let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }

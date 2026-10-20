@@ -39,8 +39,14 @@ public struct ImportedRouteArtifact: Equatable, Sendable {
     public let filename: String
     public let payload: Data
     private let sha256: String
+    /// File imports retain their validated source bytes, including metadata that
+    /// the coordinate-only execution document does not model.
     public init(data: Data, filename: String) throws {
-        try self.init(document: GPXCodec.decode(data), filename: filename)
+        let document = try GPXCodec.decode(data)
+        guard ImportedRouteRecord.validFilename(filename) else { throw ImportedRoutesFailure.invalidFilename }
+        self.document = document; self.filename = filename
+        payload = data
+        sha256 = Self.hash(payload)
     }
     public init(document: GPXDocument, filename: String) throws {
         guard ImportedRouteRecord.validFilename(filename) else { throw ImportedRoutesFailure.invalidFilename }
@@ -63,6 +69,21 @@ public struct ImportedRouteSnapshot: Equatable, Sendable {
     public init(record: ImportedRouteRecord, document: GPXDocument) throws {
         let artifact = try ImportedRouteArtifact(document: document, filename: record.filename)
         guard try artifact.record(id: record.id) == record else { throw ImportedRoutesFailure.metadataMismatch }
+        self.record = record; self.document = document
+        source = try GPXRouteSource(document: document, displayFilename: record.filename)
+    }
+    /// Validates both original imports and older canonical GPX payloads using
+    /// their existing schema-one byte count, digest and coordinate metadata.
+    public init(record: ImportedRouteRecord, payload: Data) throws {
+        guard payload.count <= GPXLimits.fileBytes, payload.count == record.byteCount else {
+            throw ImportedRoutesFailure.metadataMismatch
+        }
+        guard ImportedRouteArtifact.hash(payload) == record.sha256 else { throw ImportedRoutesFailure.hashMismatch }
+        let document = try GPXCodec.decode(payload)
+        guard document.kind == record.kind, document.pointCount == record.pointCount,
+              document.segments.first?.first == record.start, document.segments.last?.last == record.end else {
+            throw ImportedRoutesFailure.metadataMismatch
+        }
         self.record = record; self.document = document
         source = try GPXRouteSource(document: document, displayFilename: record.filename)
     }

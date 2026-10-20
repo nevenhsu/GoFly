@@ -52,7 +52,20 @@
 `completeUntilFirstUserAuthentication`。路線新增先寫 payload 再換 manifest；刪除先換 manifest 再刪 payload，
 失敗只忽略；不做目錄掃描或 orphan cleanup。manifest 有但 payload 缺失的項目標為不可用，不自動移除。
 損壞或未知 schema 會封鎖後續寫入，不覆寫原檔；檔案不存在視為空資料，不先建立目錄。
-復原只在 store 記憶體保留最近一次刪除的 record＋payload，重啟後不可復原。
+匯入路線／最愛路線復原只在 store 記憶體保留最近一次刪除的 record＋payload，重啟後不可復原。
+
+2026-10-20 UI 改版所需的最小 Core 增補：
+- `FavoritePlacesStore.delete(Set<FavoritePlaceKey>)` 將選取項目合為一次原子持久化；`undoDelete()` 一次恢復最近一批的地點、標籤與原順序，重複存在的地點不新增副本。只保留最近一批的記憶體復原，不改 favorites schema。清單星號的 0.5 秒等待與取消屬 UI，取消不寫資料。
+- 新 GPX 匯入保留實際讀入的原始 bytes，manifest 記其大小與 SHA-256。選取與匯出核對 payload 大小、digest 及解析結果；匯出分享核對過的儲存 payload，不重新編碼。舊版已正規化儲存的 payload 繼續可讀，先前丟失的原始 metadata 無法還原；沒有 schema migration。
+
+## UI 呈現邊界
+
+- 地圖 view 的最近搜尋僅記憶體保存最多 8 筆，隨 view 生命週期結束而消失；不改 SessionRecovery 或偏好格式。
+- 全螢幕搜尋的路線結果點選只回填原節點；點圖最小避讓及跟隨方向只操作 camera，不建立送點命令。
+- 路線／漫步進行與暫停使用執行模式。路線結束沿用取消路線；漫步結束呼叫 `setWanderEnabled(false)`，沿用取消漫步、保留最後模擬位置；設定的 Stop／Restore 仍是清除定位入口。
+- 啟動先以 Logo 銜接既有 detached setup check，500ms 後才顯示進度；沒有提前建立第二份 runtime。
+- 首次引導與設定共用 `GoFlyVPNHelpPage`、`GoFlyExternalLinks`；URL 依 LocalDevVPN、App Store 順序嘗試，全部失敗才提示手動搜尋。權限只請求 When In Use，不新增背景定位模式。
+- UI 改版不改上述命令與送點不變量，#15 箭頭方向與移動停止根因修復不屬本輪。實作與驗證分開記錄於 `work/gofly-ios/redesign/RESULT.md`。
 
 ## 診斷
 
@@ -63,7 +76,7 @@
 2. 每個 tick 記序號、每個 FFI 呼叫的名稱與耗時、結果；失敗只記數字 `code`／`subcode` 與對應的
    `DeviceServiceFailure`。**不記 FFI message**（可能含配對資料、裝置 ID、路徑）。
 3. 座標最多三位小數；不記裝置識別碼、配對內容。檔案權限 0700／0600，沿用 `AtomicFile` 重寫。
-4. 匯出在「設定 › 裝置資訊」；只產生暫存分享檔，不改動 ring。
+4. 匯出在「設定 › 裝置與簽名」；只產生暫存分享檔，不改動 ring。
 
 ## VPN 通道需要 Wi‑Fi
 

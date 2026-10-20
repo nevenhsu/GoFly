@@ -66,7 +66,7 @@ public final class ImportedRoutesStore: ObservableObject {
             if selectionRevision == selectionAtStart { error = nil }
             if selectionRevision == selectionAtStart, let record = receipt.records.last {
                 let snapshot = try await Task.detached {
-                    try ImportedRouteSnapshot(record: record, document: artifact.document)
+                    try ImportedRouteSnapshot(record: record, payload: artifact.payload)
                 }.value
                 guard selectionRevision == selectionAtStart else { return true }
                 selectionRevision &+= 1
@@ -153,8 +153,15 @@ public final class ImportedRoutesStore: ObservableObject {
         do {
             let snapshot = try await persistence.validate(id)
                         guard selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
-            let data = try await Task.detached { try GPXCodec.encode(snapshot.document, name: snapshot.record.filename) }.value
+            let data = try await persistence.payload(id)
+            // Payload access is a separate await from validation. Verify the
+            // actual bytes being shared against the validated manifest record.
+            guard data.count <= GPXLimits.fileBytes, data.count == snapshot.record.byteCount else {
+                throw ImportedRoutesFailure.metadataMismatch
+            }
+            let digest = await Task.detached { ImportedRouteArtifact.hash(data) }.value
             guard selectionRevision == revision, selectedID == id else { throw ImportedRoutesFailure.noSelection }
+            guard digest == snapshot.record.sha256 else { throw ImportedRoutesFailure.hashMismatch }
             return data
         } catch {
             if selectionRevision == revision { recordFailure(error) }

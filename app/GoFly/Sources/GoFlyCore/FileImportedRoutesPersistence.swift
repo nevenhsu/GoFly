@@ -39,9 +39,7 @@ public actor FileImportedRoutesPersistence: ImportedRoutesPersistence {
             throw ImportedRoutesFailure.notFound
         }
         let data = try payload(id)
-        guard data.count == record.byteCount else { throw ImportedRoutesFailure.metadataMismatch }
-        guard ImportedRouteArtifact.hash(data) == record.sha256 else { throw ImportedRoutesFailure.hashMismatch }
-        return try ImportedRouteSnapshot(record: record, document: GPXCodec.decode(data))
+        return try ImportedRouteSnapshot(record: record, payload: data)
     }
 
     public func payload(_ id: UUID) throws -> Data {

@@ -6,6 +6,8 @@ public final class FavoritePlacesStore: ObservableObject {
     @Published public private(set) var favorites: [FavoritePlace] = []
     @Published public private(set) var loadState: FavoritePlacesLoadState = .ready
     @Published public private(set) var error: FavoritePlacesFailure?
+    @Published public private(set) var canUndo = false
+    private var deleted: [(index: Int, favorite: FavoritePlace)] = []
     private let persistence: any FavoritePlacesPersistence
     // A label editor may remove and re-add its immutable place snapshot. Only
     // successfully persisted labels enter this cache; drafts never reach it.
@@ -48,6 +50,29 @@ public final class FavoritePlacesStore: ObservableObject {
             if let removed { rememberedLabels[removed.key] = removed.label }
             return true
         } catch { self.error = error as? FavoritePlacesFailure ?? .writeFailed; return false }
+    }
+
+    /// One persisted transaction for the selected batch; undo retains each record's label and position.
+    @discardableResult public func delete(_ keys: Set<FavoritePlaceKey>) -> Bool {
+        guard canMutate else { return false }
+        let removed = favorites.enumerated().filter { keys.contains($0.element.key) }
+        guard !removed.isEmpty else { return false }
+        guard persist(favorites.filter { !keys.contains($0.key) }) else { return false }
+        deleted = removed.map { (index: $0.offset, favorite: $0.element) }
+        canUndo = true
+        return true
+    }
+
+    @discardableResult public func undoDelete() -> Bool {
+        guard canMutate, canUndo else { return false }
+        var proposed = favorites
+        for item in deleted where !proposed.contains(where: { $0.key == item.favorite.key }) {
+            proposed.insert(item.favorite, at: min(item.index, proposed.count))
+        }
+        guard persist(proposed) else { return false }
+        deleted = []
+        canUndo = false
+        return true
     }
 
     @discardableResult public func saveLabel(for key: FavoritePlaceKey, draft: String) -> Bool {
