@@ -91,6 +91,11 @@ public final class MovementContinuationController: ObservableObject {
     }
     public func releaseForInactiveScene() {
         sceneActive = false
+        diagnose("background.release", category: .background, level: .notice, [
+            "candidate": .flag(candidate != nil),
+            "pending": .flag(pending != nil),
+            "state": .text(String(describing: runtime.state))
+        ])
         service.setMovementSceneActive(false) // Fence before invoking any callbacks.
         let ungrantedCandidate = candidate
         let hadDemand = candidate != nil || pending != nil
@@ -167,6 +172,11 @@ public final class MovementContinuationController: ObservableObject {
         let last = lastAcknowledgement.flatMap {
             $0.movementID == demand.movementID && $0.lease == demand.lease ? $0.sequence : nil
         }
+        diagnose("background.demand", category: .background, level: .notice, [
+            "kind": .text(demand.kind.rawValue),
+            "hasGoal": .flag(demand.goal != nil),
+            "movement": .text(demand.movementID.uuidString)
+        ])
         pending = Epoch(demand: demand, origin: route.progress?.committedDistanceMeters ?? 0, lastSequence: last)
         if demand.goal == nil { pending = nil; synchronize(); return }
         drainPending()
@@ -262,6 +272,11 @@ public final class MovementContinuationController: ObservableObject {
         synchronize()
     }
     private func pauseForRuntimeLoss(_ current: Candidate, notice: String) {
+        diagnose("background.pause", category: .background, level: .notice, [
+            "notice": .text(notice),
+            "bound": .flag(current.boundGrant != nil),
+            "state": .text(String(describing: runtime.state))
+        ])
         noticeKey = notice; handlingRuntimeLoss = true
         if route.intent?.id == current.request.movementID, route.intent?.lease == current.request.lease {
             route.continuationDidBecomeUnavailable()
@@ -272,6 +287,8 @@ public final class MovementContinuationController: ObservableObject {
     }
     private func retireCurrent(reason: MovementContinuationRetirement) {
         guard let current = candidate else { return }
+        diagnose("background.retire", category: .background, level: .notice,
+                 ["reason": .text(reason.diagnosticsLabel)])
         candidate = nil // Retire identity before potentially reentrant driver callbacks.
         _ = service.retireMovementContinuation(requestID: current.request.requestID,
             lease: current.request.lease, reason: reason)
@@ -300,6 +317,10 @@ public final class MovementContinuationController: ObservableObject {
     }
     private func forwardProgress() {
         guard let current = candidate, let progress = current.epoch.progress else { return }
+        diagnose("background.progress", category: .background, [
+            "writes": .count(Int(progress.acknowledgedWrites)),
+            "distance_m": .number(progress.cumulativeAcknowledgedDistanceMeters, digits: 1)
+        ])
         let text = presentation(current.request.kind, progress)
         _ = runtime.update(requestID: current.request.requestID, progress: progress,
             title: text.title, subtitle: text.subtitle)
@@ -355,4 +376,9 @@ public final class MovementContinuationController: ObservableObject {
     private func synchronize() {
         receipts = runtime.receipts
     }
+}
+
+private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
+                      _ fields: [String: DiagnosticsField] = [:]) {
+    Diagnostics.shared.record(name, category: category, level: level, fields)
 }

@@ -47,10 +47,22 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
             if #available(iOS 27.0, *) { try await scheduler.submitTaskRequest(taskRequest) }
             else { try scheduler.submit(taskRequest) }
         } catch {
+            Diagnostics.shared.record("background.submitFailed", category: .background, level: .error, [
+                "request": .text(request.requestID.uuidString),
+                "cancelled": .flag(error is CancellationError),
+                "domain": .text((error as NSError).domain),
+                "code": .count((error as NSError).code)
+            ])
             if currentRequest?.requestID == request.requestID { clearCurrent() }
             throw error is CancellationError ? CancellationError() : ContinuedProcessingFailure.submissionRejected
         }
         guard currentRequest?.requestID == request.requestID else { throw CancellationError() }
+        Diagnostics.shared.record("background.submitted", category: .background, level: .notice, [
+            "request": .text(request.requestID.uuidString),
+            "kind": .text(request.kind.rawValue),
+            "ios27": .flag(ProcessInfo.processInfo.isOperatingSystemAtLeast(
+                OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)))
+        ])
         if Task.isCancelled { cancel(requestID: request.requestID); throw CancellationError() }
     }
 
@@ -68,6 +80,11 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
         currentTask.progress.totalUnitCount = units.total
         currentTask.progress.completedUnitCount = units.completed
         currentTask.updateTitle(title, subtitle: subtitle)
+        Diagnostics.shared.record("background.progressUnits", category: .background, [
+            "total": .count(Int(units.total)),
+            "completed": .count(Int(units.completed)),
+            "writes": .count(Int(progress.acknowledgedWrites))
+        ])
     }
 
     public func finish(requestID: UUID, success: Bool) -> ContinuedProcessingCompletionOutcome? {
@@ -98,6 +115,10 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
                                              movementID: request.movementID, lease: request.lease)
         currentTask = continued
         completion = ContinuedProcessingTaskCompletion(grant: grant)
+        Diagnostics.shared.record("background.taskLaunched", category: .background, level: .notice, [
+            "request": .text(request.requestID.uuidString),
+            "kind": .text(request.kind.rawValue)
+        ])
         continued.expirationHandler = { [weak self] in
             Task { @MainActor in self?.expire() }
         }
@@ -106,6 +127,10 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
 
     private func expire() {
         guard !completed else { return }
+        Diagnostics.shared.record("background.taskExpired", category: .background, level: .notice, [
+            "request": .text(currentRequest?.requestID.uuidString ?? "none"),
+            "kind": .text(currentRequest?.kind.rawValue ?? "none")
+        ])
         _ = completion?.claim(.expired)
         let requestID = currentRequest?.requestID
         complete(success: false)

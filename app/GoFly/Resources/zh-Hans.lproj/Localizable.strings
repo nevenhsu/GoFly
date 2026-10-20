@@ -454,3 +454,8 @@
 
 
 "recovery.coldClearPending" = "上次的模拟位置可能还在，请按“恢复 GPS”清除。";
+
+"settings.diagnostics.title" = "诊断记录";
+"settings.diagnostics.description" = "把连接、移动与后台运行记录保存为可分享的文件。坐标只保留三位小数，不含配对数据与设备标识符。";
+"settings.diagnostics.export" = "导出诊断记录";
+"settings.diagnostics.exportFailed" = "无法创建诊断记录文件。";

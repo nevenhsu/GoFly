@@ -10,6 +10,8 @@ struct GoFlyApp: App {
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
 
     init() {
+        Diagnostics.shared.start()
+        GoFlyPathMonitor.shared.start()
         _ = GoFlyPreferences.shared
         _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
@@ -22,6 +24,10 @@ struct GoFlyApp: App {
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
             .onChange(of: scenePhase) { _, phase in
+                Diagnostics.shared.record("background.scene", category: .background, level: .notice, [
+                    "phase": .text(Self.label(phase)),
+                    "onboarding": .flag(onboardingComplete)
+                ])
                 if phase == .active { preferences.refreshSystemPreferences() }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
@@ -69,6 +75,17 @@ struct GoFlyApp: App {
         .task {
             await runtime.importedRoutes.load()
             await runtime.favoriteRoutes.load()
+        }
+    }
+}
+
+private extension GoFlyApp {
+    static func label(_ phase: ScenePhase) -> String {
+        switch phase {
+        case .active: "active"
+        case .inactive: "inactive"
+        case .background: "background"
+        @unknown default: "unknown"
         }
     }
 }

@@ -9,6 +9,12 @@ public enum RouteSuspensionReason: String, Equatable, Sendable {
 
 @MainActor
 public final class RouteExecutionController: ObservableObject {
+
+private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
+                      _ fields: [String: DiagnosticsField] = [:]) {
+    Diagnostics.shared.record(name, category: category, level: level, fields)
+}
+
     @Published public private(set) var draft: RouteDraft
     @Published public private(set) var picker: RoutePickerSession? {
         didSet {
@@ -470,6 +476,11 @@ public final class RouteExecutionController: ObservableObject {
     }
 
     private func releaseForUnavailable(reason: RouteSuspensionReason) {
+        diagnose("route.suspended", category: .movement, level: .notice, [
+            "reason": .text(reason.rawValue),
+            "phase": .text(phase.rawValue),
+            "progress_m": .number(progress?.committedDistanceMeters ?? 0, digits: 1)
+        ])
         switch phase {
         case .running:
             pendingSuspensionReason = reason
@@ -535,8 +546,20 @@ public final class RouteExecutionController: ObservableObject {
             case .controlCancelled: continue
             case .notSent(let failure):
                 if phase == .pausing { return }
+                diagnose("route.stepFailed", category: .movement, level: .notice, [
+                    "seq": .count(Int(truncatingIfNeeded: sequence)),
+                    "failure": .text(failure.rawValue),
+                    "dispatched": .flag(false),
+                    "distance_m": .number(distance, digits: 1)
+                ])
                 freezeElapsed(); phase = .interrupted; error = .device(failure); return
-            case .unconfirmed(let failure): freezeElapsed(); phase = .unknown; error = .device(failure); return
+            case .unconfirmed(let failure):
+                diagnose("route.stepUnknown", category: .movement, level: .notice, [
+                    "seq": .count(Int(truncatingIfNeeded: sequence)),
+                    "failure": .text(failure.rawValue),
+                    "distance_m": .number(distance, digits: 1)
+                ])
+                freezeElapsed(); phase = .unknown; error = .device(failure); return
             }
         }
     }
@@ -563,6 +586,10 @@ public final class RouteExecutionController: ObservableObject {
 
     private func requestContinuationIfEligible(for intent: RouteExecutionIntent) {
         guard sceneActive else { return }
+        diagnose("background.requested", category: .background, level: .notice, [
+            "kind": .text(roundTripEnabled ? "roundTrip" : "finiteRoute"),
+            "movement": .text(intent.id.uuidString)
+        ])
         let current = progress?.committedDistanceMeters ?? 0
         let remaining = heading == .forward
             ? max(0, intent.route.totalDistanceMeters - current)
@@ -578,6 +605,11 @@ public final class RouteExecutionController: ObservableObject {
 
     private func withdrawContinuation(_ reason: MovementContinuationWithdrawalReason) {
         guard let identity = continuationIdentity else { return }
+        diagnose("background.withdrawn", category: .background, level: .notice, [
+            "reason": .text(reason.diagnosticsLabel),
+            "movement": .text(identity.movementID.uuidString),
+            "phase": .text(phase.rawValue)
+        ])
         continuationIdentity = nil
         continuationControlSubject.send(.withdrawn(identity, reason))
     }

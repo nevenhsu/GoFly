@@ -46,12 +46,24 @@
 | `ImportedRoutes/` | `manifest.json` 索引＋`<uuid>.gpx` payload。 |
 | `FavoriteRoutes/` | `manifest.json` 索引＋`<uuid>.route` payload。 |
 | `SessionRecovery/` | `session.json`（schemaVersion 1）。 |
+| `Diagnostics/` | `gofly.jsonl`：JSONL ring，上限 2 MiB，超出時在行邊界保留最新一半。 |
 
 `AtomicFile` 是唯一讀寫 primitive：no-follow、大小上限、`.atomic` 寫入、0700／0600、
 `completeUntilFirstUserAuthentication`。路線新增先寫 payload 再換 manifest；刪除先換 manifest 再刪 payload，
 失敗只忽略；不做目錄掃描或 orphan cleanup。manifest 有但 payload 缺失的項目標為不可用，不自動移除。
 損壞或未知 schema 會封鎖後續寫入，不覆寫原檔；檔案不存在視為空資料，不先建立目錄。
 復原只在 store 記憶體保留最近一次刪除的 record＋payload，重啟後不可復原。
+
+## 診斷
+
+1. 所有診斷同時送 `os.Logger`（subsystem `com.neven.gofly`，category 為 `movement`、`device`、
+   `background`、`tunnel`）與 `Diagnostics/gofly.jsonl`。關鍵事件（phase 轉換、watchdog、session
+   建立／關閉／重用、FFI 失敗、背景 submit／launch／expire、通道探測、路徑變化、scene 變化）用
+   `.notice` 以上；每個 tick 的細節用 `.debug`，只留在 App 內檔案。
+2. 每個 tick 記序號、每個 FFI 呼叫的名稱與耗時、結果；失敗只記數字 `code`／`subcode` 與對應的
+   `DeviceServiceFailure`。**不記 FFI message**（可能含配對資料、裝置 ID、路徑）。
+3. 座標最多三位小數；不記裝置識別碼、配對內容。檔案權限 0700／0600，沿用 `AtomicFile` 重寫。
+4. 匯出在「設定 › 裝置資訊」；只產生暫存分享檔，不改動 ring。
 
 ## VPN 通道需要 Wi‑Fi
 

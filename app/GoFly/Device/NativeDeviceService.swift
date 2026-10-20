@@ -14,18 +14,23 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.neven.gofly.device", qos: .userInitiated)
     // Access only on queue; neither handles nor the verified wrapper escape it.
     private var ownedSession: OwnedSession?
+    private var tickSequence: UInt64 = 0
+    private var sessionCreatedAt: UInt64?
 
     init() {}
 
     func prepare() async throws {
-        try await perform {
+        try await perform("prepare") {
             if let owned = self.ownedSession {
+                Self.recordSession("reused", age: self.sessionAgeMilliseconds())
                 try owned.verified.prepare()
                 return
             }
             try Self.consumeSetupHandoff()
             let fresh = try Self.makeSession()
             defer { fresh.native.close() }
+            self.sessionCreatedAt = DispatchTime.now().uptimeNanoseconds
+            Self.recordSession("created", age: 0)
             try fresh.verified.prepare()
         }
     }
@@ -34,35 +39,51 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
         await withCheckedContinuation { continuation in
             queue.async {
                 idevice_set_global_timeout(10)
+                self.tickSequence &+= 1
+                let sequence = self.tickSequence
+                let tickStarted = DispatchTime.now().uptimeNanoseconds
                 let candidate: OwnedSession
                 let wasOwned = self.ownedSession != nil
                 do {
                     if let owned = self.ownedSession {
+                        Self.recordSession("reused", age: self.sessionAgeMilliseconds())
                         candidate = owned
                     } else {
                         try Self.consumeSetupHandoff()
                         candidate = try Self.makeSession()
+                        self.sessionCreatedAt = DispatchTime.now().uptimeNanoseconds
+                        Self.recordSession("created", age: 0)
                     }
                 } catch {
-                    continuation.resume(returning: .notSent(Self.failure(error)))
+                    let failure = Self.failure(error)
+                    self.recordTick(nil, sequence: sequence, outcome: .notSent(failure),
+                                    reused: wasOwned, startedAt: tickStarted, stage: "session")
+                    continuation.resume(returning: .notSent(failure))
                     return
                 }
+                candidate.native.beginTrace()
                 do {
                     try candidate.verified.prepare()
                 } catch {
-                    if !wasOwned { candidate.native.close() }
-                    continuation.resume(returning: .notSent(Self.failure(error)))
+                    let failure = Self.failure(error)
+                    let trace = candidate.native.endTrace()
+                    self.recordTick(trace, sequence: sequence, outcome: .notSent(failure),
+                                    reused: wasOwned, startedAt: tickStarted, stage: "prepare")
+                    self.apply(NativeSessionRetentionPolicy().retention(after: .notSent(failure),
+                                                                        sessionWasOwned: wasOwned),
+                               to: candidate, wasOwned: wasOwned)
+                    continuation.resume(returning: .notSent(failure))
                     return
                 }
                 // VerifiedDeviceSession rechecks this same session's identity,
                 // then atomically claims the gate immediately before set.
                 let outcome = candidate.verified.movePoint(to: coordinate, dispatch: dispatch)
-                switch outcome {
-                case .acknowledged, .unconfirmed:
-                    self.ownedSession = candidate
-                case .notSent:
-                    if !wasOwned { candidate.native.close() }
-                }
+                let trace = candidate.native.endTrace()
+                self.recordTick(trace, sequence: sequence, outcome: outcome,
+                                reused: wasOwned, startedAt: tickStarted, stage: "dispatch")
+                self.apply(NativeSessionRetentionPolicy().retention(after: outcome,
+                                                                    sessionWasOwned: wasOwned),
+                           to: candidate, wasOwned: wasOwned)
                 continuation.resume(returning: outcome)
             }
         }
@@ -70,33 +91,117 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
 
     func clearLocation() async throws {
         // Independent of DDI/GPS/cancellation. Never resend an uncertain clear.
-        try await perform {
+        try await perform("clear") {
             let session = try self.ownedSession ?? Self.makeSession()
             defer {
                 // Release only after the real clear call returns, even on error.
                 session.native.close()
                 self.ownedSession = nil
+                self.sessionCreatedAt = nil
             }
-            try session.verified.clearLocation()
+            session.native.beginTrace()
+            let started = DispatchTime.now().uptimeNanoseconds
+            do {
+                try session.verified.clearLocation()
+                self.recordTick(session.native.endTrace(), sequence: nil, outcome: .acknowledged,
+                                reused: true, startedAt: started, stage: "clear")
+            } catch {
+                self.recordTick(session.native.endTrace(), sequence: nil,
+                                outcome: .notSent(Self.failure(error)), reused: true,
+                                startedAt: started, stage: "clear")
+                throw error
+            }
         }
     }
 
     func resetClientConnection() async throws {
-        try await perform {
-            guard self.ownedSession == nil else { throw DeviceServiceFailure.serviceUnavailable }
+        try await perform("reset") {
+            guard self.ownedSession == nil else {
+                Diagnostics.shared.record("device.resetRejected", category: .device, level: .notice, [
+                    "reason": .text("ownedSession"),
+                    "session_age_ms": .milliseconds(self.sessionAgeMilliseconds())
+                ])
+                throw DeviceServiceFailure.serviceUnavailable
+            }
             try TunnelProbe.run()
         }
     }
 
-    private func perform(_ operation: @escaping @Sendable () throws -> Void) async throws {
+    private func perform(_ label: String, _ operation: @escaping @Sendable () throws -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 // Never return early while an FFI call still owns handles.
                 idevice_set_global_timeout(10)
-                do { try operation(); continuation.resume() }
-                catch { continuation.resume(throwing: Self.failure(error)) }
+                do {
+                    try operation()
+                    continuation.resume()
+                } catch {
+                    let failure = Self.failure(error)
+                    Diagnostics.shared.record("device.operationFailed", category: .device, level: .notice, [
+                        "op": .text(label),
+                        "failure": .text(failure.rawValue)
+                    ])
+                    continuation.resume(throwing: failure)
+                }
             }
         }
+    }
+
+    /// Current behaviour: everything but an unowned failure keeps the session.
+    /// Stage C will change the policy, not the service.
+    private func apply(_ retention: NativeSessionRetention, to candidate: OwnedSession, wasOwned: Bool) {
+        switch retention {
+        case .reuse:
+            ownedSession = candidate
+        case .rebuild:
+            candidate.native.close()
+            ownedSession = nil
+        }
+        _ = wasOwned
+    }
+
+    private func recordTick(_ trace: FFITrace?, sequence: UInt64?, outcome: PointDeliveryOutcome,
+                            reused: Bool, startedAt: UInt64, stage: String) {
+        var fields: [String: DiagnosticsField] = [
+            "stage": .text(stage),
+            "reused": .flag(reused),
+            "session_age_ms": .milliseconds(sessionAgeMilliseconds()),
+            "total_ms": .milliseconds(Double(DispatchTime.now().uptimeNanoseconds &- startedAt) / 1_000_000)
+        ]
+        if let sequence { fields["seq"] = .count(Int(truncatingIfNeeded: sequence)) }
+        if let trace {
+            fields["ffi_ms"] = .milliseconds(trace.totalMilliseconds)
+            fields["calls"] = .text(trace.callsText)
+            if let operation = trace.failureOperation { fields["fail_op"] = .text(operation) }
+            if let code = trace.failureCode { fields["code"] = .code(code) }
+            if let subcode = trace.failureSubcode { fields["subcode"] = .code(subcode) }
+        }
+        var level = DiagnosticsLevel.debug
+        switch outcome {
+        case .acknowledged:
+            fields["outcome"] = .text("acked")
+        case .notSent(let failure):
+            fields["outcome"] = .text("notSent")
+            fields["failure"] = .text(failure.rawValue)
+            level = .notice
+        case .unconfirmed(let failure):
+            fields["outcome"] = .text("unconfirmed")
+            fields["failure"] = .text(failure.rawValue)
+            level = .notice
+        }
+        Diagnostics.shared.record("device.tick", category: .device, level: level, fields)
+    }
+
+    private func sessionAgeMilliseconds() -> Double {
+        guard let sessionCreatedAt else { return 0 }
+        return Double(DispatchTime.now().uptimeNanoseconds &- sessionCreatedAt) / 1_000_000
+    }
+
+    private static func recordSession(_ event: String, age: Double) {
+        Diagnostics.shared.record("device.session", category: .device, level: .notice, [
+            "event": .text(event),
+            "age_ms": .milliseconds(age)
+        ])
     }
 
     private static func failure(_ error: Error) -> DeviceServiceFailure {

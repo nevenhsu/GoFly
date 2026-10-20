@@ -454,3 +454,8 @@
 
 
 "recovery.coldClearPending" = "上次的模擬位置可能還在，請按「恢復 GPS」清除。";
+
+"settings.diagnostics.title" = "診斷記錄";
+"settings.diagnostics.description" = "把連線、移動與背景執行記錄存成可分享的檔案。座標只保留三位小數，不含配對資料與裝置識別碼。";
+"settings.diagnostics.export" = "匯出診斷記錄";
+"settings.diagnostics.exportFailed" = "無法建立診斷記錄檔。";

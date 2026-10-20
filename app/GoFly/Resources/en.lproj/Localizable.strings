@@ -454,3 +454,8 @@
 
 
 "recovery.coldClearPending" = "Last simulated position may still be active. Tap Restore to clear it.";
+
+"settings.diagnostics.title" = "Diagnostics";
+"settings.diagnostics.description" = "Saves the connection, movement, and background records to a file you can share. Coordinates are rounded to three decimals; pairing data and device identifiers are not included.";
+"settings.diagnostics.export" = "Export diagnostics";
+"settings.diagnostics.exportFailed" = "Could not create the diagnostics file.";

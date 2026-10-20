@@ -62,6 +62,17 @@ public enum MovementContinuationWithdrawalReason: Equatable, Sendable {
     case ended
 }
 
+extension MovementContinuationWithdrawalReason {
+    public var diagnosticsLabel: String {
+        switch self {
+        case .userPaused: "userPaused"
+        case .userCancelled: "userCancelled"
+        case .automaticDisabled(let manualInputContinues): manualInputContinues ? "automaticDisabled.manual" : "automaticDisabled"
+        case .ended: "ended"
+        }
+    }
+}
+
 public enum MovementContinuationControlEvent: Sendable {
     case requested(MovementContinuationDemand)
     case withdrawn(MovementContinuationIdentity, MovementContinuationWithdrawalReason)
@@ -71,4 +82,12 @@ public enum MovementContinuationRetirement: Equatable, Sendable {
     case ownerPausedOrEnded
     case foregroundGoalChange
     case foregroundManualAfterAutoOff
+
+    public var diagnosticsLabel: String {
+        switch self {
+        case .ownerPausedOrEnded: "ownerPausedOrEnded"
+        case .foregroundGoalChange: "foregroundGoalChange"
+        case .foregroundManualAfterAutoOff: "foregroundManualAfterAutoOff"
+        }
+    }
 }

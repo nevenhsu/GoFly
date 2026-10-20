@@ -246,6 +246,8 @@ struct GoFlyDeviceSettingsPage: View {
     @ObservedObject var service: ServiceController
     let setupMetadata: GoFlySetupMetadata?
     @StateObject private var status = GoFlySystemStatus()
+    @State private var exportItem: DiagnosticsShareItem?
+    @State private var exportFailed = false
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.device", rootIdentifier: "settings.device.page") {
@@ -270,10 +272,50 @@ struct GoFlyDeviceSettingsPage: View {
                 .foregroundStyle(GoFlyStyle.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            diagnosticsSection
+        }
+        .sheet(item: $exportItem) { item in
+            GoFlyShareSheet(url: item.url)
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             status.refresh()
+        }
+    }
+
+    /// Keeps the diagnostics export reachable from Settings › Device after the
+    /// UI redesign; it is the only way to collect evidence without USB.
+    private var diagnosticsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(goFlyString("settings.diagnostics.title"))
+                .font(.headline)
+            Text(goFlyString("settings.diagnostics.description"))
+                .font(.subheadline)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            GoFlySettingsAction(
+                titleKey: "settings.diagnostics.export",
+                action: exportDiagnostics,
+                identifier: "settings.diagnostics.export"
+            )
+            if exportFailed {
+                Text(goFlyString("settings.diagnostics.exportFailed"))
+                    .font(.footnote)
+                    .foregroundStyle(GoFlyStyle.errorForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .settingsCard()
+    }
+
+    private func exportDiagnostics() {
+        do {
+            exportItem = DiagnosticsShareItem(url: try Diagnostics.shared.export())
+            exportFailed = false
+            Diagnostics.shared.record("diagnostics.export", category: .device, level: .notice, [:])
+        } catch {
+            exportFailed = true
+            Diagnostics.shared.record("diagnostics.exportFailed", category: .device, level: .error, [:])
         }
     }
 

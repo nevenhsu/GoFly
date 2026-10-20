@@ -140,6 +140,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private var watchdog: Task<Void, Never>?
     private var activeResetID: UUID?
     private var activeResetToken: UInt64?
+    private var completedTickCount: UInt64 = 0
 
     public init(
         service: any DeviceService, operationTimeout: Duration = .seconds(30),
@@ -191,6 +192,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// head cannot claim between the two operations.
     public func setMovementConnectionAvailable(_ available: Bool) {
         guard movementConnectionAvailable != available else { return }
+        diagnose("tunnel.admission", category: .tunnel, level: .notice,
+                 ["available": .flag(available), "phase": .text(phase.rawValue)])
         movementAuthority.setAdmissionFence(connectionBlocked: !available, coldRecoveryHeld: false)
         routeAdmissionRevision &+= 1
         if !available { invalidateAvailableMovementGates() }
@@ -218,8 +221,17 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     public func bindMovementContinuation(_ grant: ContinuedProcessingGrant) -> Bool {
         guard grant.isValid, !clearScheduled, !routeUnconfirmed, !joystickUnconfirmed,
               let owner = movementOwner(movementID: grant.movementID, lease: grant.lease),
-              owner.isHealthyRunning else { return false }
-        return movementAuthority.bind(grant)
+              owner.isHealthyRunning else {
+            diagnose("background.bindRejected", category: .background, level: .notice, [
+                "valid": .flag(grant.isValid),
+                "clear": .flag(clearScheduled),
+                "unconfirmed": .flag(routeUnconfirmed || joystickUnconfirmed)
+            ])
+            return false
+        }
+        let bound = movementAuthority.bind(grant)
+        diagnose("background.bound", category: .background, level: .notice, ["bound": .flag(bound)])
+        return bound
     }
 
     public func hasMovementContinuation(movementID: UUID, lease: MovementTaskLease,
@@ -248,6 +260,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         guard !clearScheduled, !routeUnconfirmed, !joystickUnconfirmed,
               movementOwner(movementID: movementID, lease: lease)?.isHealthyRunning == true,
               movementAuthority.pauseForClosedBinding(movementID: movementID, lease: lease) else { return false }
+        diagnose("background.bindingClosed", category: .background, level: .notice,
+                 ["movement": .text(movementID.uuidString), "lease": .text(lease.id.uuidString)])
         routeSubject.send(.availabilityChanged)
         joystickSubject.send(.availabilityChanged)
         return true
@@ -355,6 +369,12 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     public func finishColdClear() { coldClearPending = false }
 
     private func invalidateAvailableMovementGates() {
+        diagnose("movement.gates.invalidated", level: .notice, [
+            "preparation": .flag(currentPreparation != nil),
+            "point": .flag(currentPoint != nil),
+            "routes": .count(routeOwners.count),
+            "joystick": .count(joystickOwners.count)
+        ])
         currentPreparation?.dispatch.invalidate()
         currentPoint?.dispatch.invalidate()
         for owner in routeOwners.values {
@@ -557,6 +577,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             guard let self else { return }
             owner?.pendingCalls -= 1
             joystick?.pendingCalls -= 1
+            self.diagnoseResult("preparation.attempt", result, op: context.source.diagnosticsLabel,
+                                matched: true, outstanding: self.outstandingWork)
             if let owner { self.quarantineCancelledRouteWrite(owner, gate: context.dispatch, result: result) }
             let retryable: Bool
             switch result {
@@ -623,6 +645,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     }
 
     private func beginClear() {
+        diagnose("clear.scheduled", level: .notice,
+                 ["phase": .text(phase.rawValue), "cold": .flag(coldClearAttempt)])
         clearScheduled = true
         clearAttempted = true
         clearState = .pending
@@ -715,6 +739,11 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         revision &+= 1
         let token = revision
         phase = operation
+        diagnose("phase.enter", level: .notice, [
+            "op": .text(operation.rawValue),
+            "token": .count(Int(truncatingIfNeeded: token)),
+            "was": .text(phase == operation ? "same" : "changed")
+        ])
         error = nil
         nativeBusy = true
         outstandingWork += 1
@@ -724,6 +753,14 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         watchdog = Task { [weak self] in
             do { try await watchdogSleep(timeout) } catch { return }
             guard let self, self.revision == token, self.nativeBusy else { return }
+            self.diagnose("watchdog.fired", level: .error, [
+                "op": .text(operation.rawValue),
+                "token": .count(Int(truncatingIfNeeded: token)),
+                "timeout_s": .number(Double(timeout.components.seconds), digits: 0),
+                "point": .flag(point != nil),
+                "preparation": .flag(preparation != nil),
+                "dispatched": .flag(point?.dispatch.hasDispatched ?? preparation?.dispatch.hasDispatched ?? false)
+            ])
             self.revision &+= 1
             self.phase = .repairRequired
             self.error = .operationTimedOut
@@ -787,6 +824,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         result: CommandResult, point: PointContext?, preparation: PreparationContext?, resetID: UUID?
     ) {
         outstandingWork -= 1
+        diagnoseResult("phase.exit", result, op: operation.rawValue,
+                       matched: token == revision, outstanding: outstandingWork)
         if operation == .stopping || operation == .restoring { clearScheduled = false }
         if token == revision {
             watchdog?.cancel()
@@ -871,6 +910,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
 
     private func completePoint(_ point: PointContext, outcome: PointDeliveryOutcome) {
         if point.dispatch.hasDispatched { pointDidDispatch(point.intent.id) }
+        diagnoseResult("point.outcome", .point(outcome), op: "point",
+                       matched: true, outstanding: outstandingWork, level: .notice)
         switch outcome {
         case .notSent(let failure):
             if point.dispatch.hasDispatched {
@@ -962,6 +1003,7 @@ extension ServiceController {
         }
         let tick = RouteTick(gate: gate, coordinate: coordinate, sequence: sequence)
         owner.tick = tick; owner.pendingCalls += 1
+        let tickStarted = DispatchTime.now().uptimeNanoseconds
         return await withCheckedContinuation { continuation in
             enqueueAdapter({ [weak self] service in
                 guard let self, self.routeTickIsCurrent(owner, tick), self.movementAdmissionAllowed,
@@ -976,6 +1018,12 @@ extension ServiceController {
                     guard self.routeTickIsCurrent(owner, tick), !owner.ended, !tick.controlCancelled,
                           self.movementAuthority.snapshot.lease == lease else { return }
                     if !tick.gate.hasDispatched, self.movementAuthority.snapshot.runState != .running { return }
+                    self.diagnose("watchdog.fired", level: .error, [
+                        "op": .text("route.tick"),
+                        "seq": .count(Int(truncatingIfNeeded: sequence)),
+                        "timeout_s": .number(Double(self.operationTimeout.components.seconds), digits: 0),
+                        "dispatched": .flag(tick.gate.hasDispatched)
+                    ])
                     tick.timedOut = true; tick.gate.invalidate()
                     if tick.gate.hasDispatched {
                         self.routeTickDidDispatch(executionID: executionID, sequence: sequence)
@@ -986,6 +1034,11 @@ extension ServiceController {
             }) { [weak self] result in
                 guard let self else { continuation.resume(returning: .cancelled); return }
                 tick.watchdog?.cancel()
+                self.diagnoseResult("route.tick", result, op: "route",
+                                    matched: true, outstanding: self.outstandingWork,
+                                    extra: ["seq": .count(Int(truncatingIfNeeded: sequence)),
+                                            "ms": .milliseconds(elapsedMilliseconds(since: tickStarted)),
+                                            "dispatched": .flag(tick.gate.hasDispatched)])
                 let outcome = self.completeRouteTick(owner, tick: tick, result: result)
                 owner.tick = nil; owner.pendingCalls -= 1
                 self.nativeBusy = self.outstandingWork > 0 || self.hasPendingRouteRepair
@@ -1148,6 +1201,10 @@ extension ServiceController {
     private func markRouteInterrupted(_ owner: RouteOwner, failure: DeviceServiceFailure) {
         guard !owner.ended, movementAuthority.snapshot.lease == owner.intent.lease,
               movementAuthority.snapshot.runState == .running else { return }
+        diagnose("route.interrupted", level: .notice, [
+            "failure": .text(failure.rawValue),
+            "pending": .count(owner.pendingCalls)
+        ])
         owner.interrupted = true
         movementAuthority.updateHealth(.interrupted(failure), for: owner.intent.lease)
         nativeBusy = outstandingWork > 0 || owner.pendingCalls > 0
@@ -1156,6 +1213,10 @@ extension ServiceController {
     }
     private func markRouteUnknown(_ owner: RouteOwner, failure: DeviceServiceFailure) {
         guard !owner.ended else { return }
+        diagnose("route.unknown", level: .notice, [
+            "failure": .text(failure.rawValue),
+            "pending": .count(owner.pendingCalls)
+        ])
         owner.unknown = true; owner.unknownFailure = failure; routeUnconfirmed = true
         if movementAuthority.snapshot.lease == owner.intent.lease { movementAuthority.updateHealth(.unknown, for: owner.intent.lease) }
         else { movementAuthority.revokeAll() }
@@ -1305,6 +1366,7 @@ extension ServiceController {
         let tick = JoystickTick(sequence: sequence, input: expectedInputRevision)
         owner.tick = tick; owner.pendingCalls += 1
         nativeBusy = true
+        let tickStarted = DispatchTime.now().uptimeNanoseconds
         return await withCheckedContinuation { continuation in
             enqueueAdapter({ [weak self] service in
                 guard let self, self.joystickTickIsCurrent(owner, tick), self.movementAdmissionAllowed else { return .failure(.operationCancelled) }
@@ -1345,6 +1407,12 @@ extension ServiceController {
                     do { try await self.watchdogSleep(self.operationTimeout) } catch { return }
                     guard self.joystickTickIsCurrent(owner, tick), !tick.inputCancelled else { return }
                     tick.timedOut = true
+                    self.diagnose("watchdog.fired", level: .error, [
+                        "op": .text("joystick.tick"),
+                        "seq": .count(Int(truncatingIfNeeded: sequence)),
+                        "timeout_s": .number(Double(self.operationTimeout.components.seconds), digits: 0),
+                        "dispatched": .flag(gate.hasDispatched)
+                    ])
                     // Atomic invalidation wins against the native claim, or a
                     // pre-existing invalidation already prevented dispatch.
                     if gate.invalidateIfAvailable() || !gate.hasDispatched {
@@ -1359,6 +1427,11 @@ extension ServiceController {
                 return .point(await service.movePoint(to: receipt.actualCoordinate, dispatch: gate))
             }) { [weak self] result in
                 guard let self else { continuation.resume(returning: .cancelled); return }
+                self.diagnoseResult("joystick.tick", result, op: "joystick",
+                                    matched: true, outstanding: self.outstandingWork,
+                                    extra: ["seq": .count(Int(truncatingIfNeeded: sequence)),
+                                            "ms": .milliseconds(elapsedMilliseconds(since: tickStarted)),
+                                            "dispatched": .flag(tick.gate?.hasDispatched == true)])
                 let outcome = self.completeJoystickTick(owner, tick, result: result)
                 tick.watchdog?.cancel()
                 owner.tick = nil; owner.pendingCalls -= 1
@@ -1445,6 +1518,11 @@ extension ServiceController {
     }
     private func unknownJoystick(_ owner: JoystickOwner, failure: DeviceServiceFailure) -> JoystickRecipeStepOutcome {
         guard owner.stopGeneration == routeStopGeneration else { return .cancelled }
+        diagnose("joystick.unknown", level: .notice, [
+            "failure": .text(failure.rawValue),
+            "pending": .count(owner.pendingCalls),
+            "installed": .flag(owner.installed)
+        ])
         owner.unknownFailure = failure; joystickUnconfirmed = true
         if movementAuthority.snapshot.lease == owner.intent.lease { movementAuthority.updateHealth(.unknown, for: owner.intent.lease) }
         else { movementAuthority.revokeAll() }
@@ -1514,4 +1592,66 @@ extension ServiceController {
         return await withCheckedContinuation { owner.idle.append($0) }
     }
 
+}
+
+// MARK: - Diagnostics
+
+private func elapsedMilliseconds(since start: UInt64) -> Double {
+    Double(DispatchTime.now().uptimeNanoseconds &- start) / 1_000_000
+}
+
+private extension ServiceController {
+    private func diagnose(_ name: String, category: DiagnosticsCategory = .movement,
+                  level: DiagnosticsLevel = .debug,
+                  _ fields: [String: DiagnosticsField] = [:]) {
+        Diagnostics.shared.record(name, category: category, level: level, fields)
+    }
+
+    /// Failures and uncertain writes are promoted to `.notice` so they survive
+    /// in the device's persistent log; routine ticks stay at `.debug`.
+    private func diagnoseResult(_ name: String, _ result: CommandResult, op: String,
+                        matched: Bool, outstanding: Int, level: DiagnosticsLevel? = nil,
+                        extra: [String: DiagnosticsField] = [:]) {
+        var fields = extra
+        fields["op"] = .text(op)
+        fields["matched"] = .flag(matched)
+        fields["outstanding"] = .count(outstanding)
+        var eventLevel = level ?? .debug
+        switch result {
+        case .success:
+            fields["result"] = .text("success")
+        case .failure(let failure):
+            fields["result"] = .text("failure")
+            fields["failure"] = .text(failure.rawValue)
+            eventLevel = .notice
+        case .point(let outcome):
+            switch outcome {
+            case .acknowledged:
+                fields["result"] = .text("acked")
+            case .notSent(let failure):
+                fields["result"] = .text("notSent")
+                fields["failure"] = .text(failure.rawValue)
+                eventLevel = .notice
+            case .unconfirmed(let failure):
+                fields["result"] = .text("unconfirmed")
+                fields["failure"] = .text(failure.rawValue)
+                eventLevel = .notice
+            }
+        }
+        diagnose(name, level: eventLevel, fields)
+        if name.hasSuffix(".tick") {
+            completedTickCount &+= 1
+            if completedTickCount % 20 == 0 {
+                // A periodic persistent-log heartbeat: ticks themselves stay at
+                // `.debug` in os_log, so a device log without an export still
+                // shows that the 500 ms cadence was alive.
+                diagnose("movement.heartbeat", level: .notice, [
+                    "ticks": .count(Int(truncatingIfNeeded: completedTickCount)),
+                    "phase": .text(phase.rawValue),
+                    "busy": .flag(nativeBusy),
+                    "op": .text(op)
+                ])
+            }
+        }
+    }
 }

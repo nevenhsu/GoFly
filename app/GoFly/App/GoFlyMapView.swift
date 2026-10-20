@@ -327,6 +327,13 @@ struct GoFlyMapView: View {
                 captureCheckpoint()
             }
             .onChange(of: scenePhase) { _, phase in
+                Diagnostics.shared.record("movement.scene", category: .movement, level: .notice, [
+                    "phase": .text(String(describing: phase)),
+                    "route": .text(String(describing: route.phase)),
+                    "joystick": .text(String(describing: joystick.phase)),
+                    "service": .text(service.phase.rawValue),
+                    "grant": .flag(continuation.hasRuntime)
+                ])
                 if phase == .active {
                     checkpointWindowStarted = false
                     finishCheckpointWindow(id: checkpointWindowID)

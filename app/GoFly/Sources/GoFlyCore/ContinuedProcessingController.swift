@@ -78,6 +78,11 @@ public final class ContinuedProcessingController: ObservableObject {
         runtimeLossPublished = false
         state = .submitting
         appendReceipt(for: request, event: .submitted)
+        diagnose("background.submit", category: .background, level: .notice, [
+            "kind": .text(request.kind.rawValue),
+            "goal": .text(goalLabel(request.goal)),
+            "request": .text(request.requestID.uuidString)
+        ])
 
         let eventHandler: @MainActor @Sendable (ContinuedProcessingEvent) -> Void = { [weak self] event in
             self?.receive(event, generation: submissionGeneration)
@@ -205,6 +210,8 @@ public final class ContinuedProcessingController: ObservableObject {
         error = .cancelled
         completionOutcome = nil
         appendReceipt(for: request, event: .cancelRequested)
+        diagnose("background.cancel", category: .background, level: .notice,
+                 ["request": .text(requestID.uuidString), "hadGrant": .flag(hadGrant)])
         driver.cancel(requestID: requestID)
         if hadGrant {
             publishRuntimeLoss(requestID: requestID, generation: oldGeneration, reason: .cancelled)
@@ -239,6 +246,10 @@ public final class ContinuedProcessingController: ObservableObject {
             grant = incomingGrant
             state = .running
             appendReceipt(for: request, event: .launched)
+            diagnose("background.launched", category: .background, level: .notice, [
+                "request": .text(request.requestID.uuidString),
+                "kind": .text(request.kind.rawValue)
+            ])
             let bufferedProgress = progress
             let bufferedTitle = currentTitle
             let bufferedSubtitle = currentSubtitle
@@ -261,6 +272,11 @@ public final class ContinuedProcessingController: ObservableObject {
             state = .expired
             completionOutcome = .expired
             appendReceipt(for: request, event: .expired)
+            diagnose("background.expired", category: .background, level: .notice, [
+                "request": .text(request.requestID.uuidString),
+                "writes": .count(Int(progress.acknowledgedWrites)),
+                "distance_m": .number(progress.cumulativeAcknowledgedDistanceMeters, digits: 1)
+            ])
             publishRuntimeLoss(requestID: requestID, generation: eventGeneration, reason: .expired)
         case .invalidated(let requestID):
             guard requestID == request.requestID,
@@ -269,6 +285,8 @@ public final class ContinuedProcessingController: ObservableObject {
             state = .finished
             completionOutcome = .invalidated
             appendReceipt(for: request, event: .invalidated)
+            diagnose("background.invalidated", category: .background, level: .notice,
+                     ["request": .text(request.requestID.uuidString)])
             publishRuntimeLoss(requestID: requestID, generation: eventGeneration, reason: .invalidated)
         }
     }
@@ -291,6 +309,8 @@ public final class ContinuedProcessingController: ObservableObject {
         state = .rejected
         error = failure
         appendReceipt(for: request, event: .rejected(failure))
+        diagnose("background.submitRejected", category: .background, level: .error,
+                 ["failure": .text(String(describing: failure))])
         driver.cancel(requestID: request.requestID)
         if hadGrant { publishRuntimeLoss(requestID: request.requestID, generation: retiredGeneration, reason: .submissionRejected) }
     }
@@ -364,4 +384,16 @@ public final class ContinuedProcessingController: ObservableObject {
         receipts.append(receipt)
         if receipts.count > 256 { receipts.removeFirst(receipts.count - 256) }
     }
+}
+
+private func goalLabel(_ goal: ContinuedProcessingGoal) -> String {
+    switch goal {
+    case .finiteDistance(let meters): "finite:\(DiagnosticsField.fixed(meters, 0))m"
+    case .experimentalIndeterminate: "indeterminate"
+    }
+}
+
+private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
+                      _ fields: [String: DiagnosticsField] = [:]) {
+    Diagnostics.shared.record(name, category: category, level: level, fields)
 }

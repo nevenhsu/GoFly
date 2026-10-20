@@ -121,6 +121,8 @@ public final class ConnectionRecoveryController: ObservableObject {
     @discardableResult
     public func resetTunnel() -> Bool {
         guard canResetTunnel else { return false }
+        diagnose("tunnel.reset.start", category: .tunnel, level: .notice,
+                 ["phase": .text(service.phase.rawValue), "busy": .flag(service.nativeBusy)])
         let consentID = UUID()
         let physicalID = UUID()
         resetConsentID = consentID
@@ -297,7 +299,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     }
 
     private func beginProbe(manual: Bool = false, showCheckingNotice: Bool = false) {
-                let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
+        let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
         guard sceneActive, eligible, checkTask == nil else { return }
         monitorTask?.cancel()
         monitorTask = nil
@@ -309,6 +311,12 @@ public final class ConnectionRecoveryController: ObservableObject {
         checkNoticeVisible = showCheckingNotice
         isChecking = true
         connectionState = .checking
+        let probeStartedAt = clock.now
+        diagnose("tunnel.probe.start", category: .tunnel, level: .notice, [
+            "manual": .flag(manual),
+            "phase": .text(service.phase.rawValue),
+            "busy": .flag(service.nativeBusy)
+        ])
         route.recoveryProbeDidStart()
         joystick.recoveryProbeDidStart()
         checkTask = Task { [weak self] in
@@ -338,10 +346,23 @@ public final class ConnectionRecoveryController: ObservableObject {
             self.route.recoveryProbeDidFinish()
             self.joystick.recoveryProbeDidFinish()
             self.lastProbeFinishedAt = self.clock.now
+            let elapsed = self.clock.now - probeStartedAt
+            let elapsedMs = Double(elapsed.components.seconds) * 1000
+                + Double(elapsed.components.attoseconds) / 1e15
             switch result {
             case .success:
+                diagnose("tunnel.probe.end", category: .tunnel, level: .notice, [
+                    "result": .text("reachable"),
+                    "ms": .milliseconds(elapsedMs),
+                    "recovered": .flag(self.probeStartedFromFailure)
+                ])
                 self.finishConnectionRecovery(recovered: self.probeStartedFromFailure)
             case .failure(let failure):
+                diagnose("tunnel.probe.end", category: .tunnel, level: .error, [
+                    "result": .text(failure == .timedOut ? "timedOut" : "unavailable"),
+                    "ms": .milliseconds(elapsedMs),
+                    "phase": .text(self.service.phase.rawValue)
+                ])
                 self.connectionState = failure == .timedOut ? .timedOut : .unavailable
                 self.service.setMovementConnectionAvailable(false)
                 self.route.connectionDidBecomeUnavailable()
@@ -374,11 +395,14 @@ public final class ConnectionRecoveryController: ObservableObject {
             }
         case .succeeded(let id):
             guard currentResetID == id else { return }
+            diagnose("tunnel.reset.end", category: .tunnel, level: .notice, ["result": .text("succeeded")])
             currentResetID = nil
             isResettingTunnel = false
             finishConnectionRecovery(recovered: false)
         case .failed(let id, let failure):
             guard currentResetID == id else { return }
+            diagnose("tunnel.reset.end", category: .tunnel, level: .error,
+                     ["result": .text("failed"), "failure": .text(failure.rawValue)])
             currentResetID = nil
             isResettingTunnel = false
             lastProbeFinishedAt = clock.now
@@ -548,4 +572,9 @@ public enum TunnelResetState: Equatable, Sendable {
     case running(id: UUID)
     case succeeded(id: UUID)
     case failed(id: UUID, failure: DeviceServiceFailure)
+}
+
+private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
+                      _ fields: [String: DiagnosticsField] = [:]) {
+    Diagnostics.shared.record(name, category: category, level: level, fields)
 }

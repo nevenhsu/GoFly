@@ -5,6 +5,16 @@ public enum PreparedOperationSource: Equatable, Sendable {
     case point(PointMoveIntent)
     case route(RouteExecutionIntent)
     case joystick(JoystickMovementIntent)
+
+    /// Stable, short label for diagnostics records. Never includes coordinates.
+    public var diagnosticsLabel: String {
+        switch self {
+        case .start: "start"
+        case .point: "point"
+        case .route: "route.begin"
+        case .joystick: "joystick.begin"
+        }
+    }
 }
 
 public struct PreparationAttempt: Equatable, Sendable {

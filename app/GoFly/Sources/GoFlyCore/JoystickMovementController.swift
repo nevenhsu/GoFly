@@ -74,6 +74,12 @@ public final class JoystickMovementController: ObservableObject {
     private var continuationIdentity: MovementContinuationIdentity?
     private static let cadence: Duration = .milliseconds(500)
 
+private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
+                      _ fields: [String: DiagnosticsField] = [:]) {
+    Diagnostics.shared.record(name, category: category, level: level, fields)
+}
+
+
     private func beginPhysicalOperation() -> UUID {
         let id = UUID(); physicalOperations.insert(id); return id
     }
@@ -326,6 +332,12 @@ public final class JoystickMovementController: ObservableObject {
     }
 
     private func releaseForUnavailable(reason: WanderSuspensionReason) {
+        diagnose("joystick.suspended", category: .movement, level: .notice, [
+            "reason": .text(reason.rawValue),
+            "phase": .text(phase.rawValue),
+            "wander": .flag(wanderEnabled),
+            "acknowledged": .flag(hasAcknowledgedLease)
+        ])
         // A new preclaim gesture has not replaced the resumed healthy owner yet.
         if let neutral = resumedNeutralIntent, neutral.id != intent?.id {
             if commands.releaseJoystick(executionID: neutral.id, lease: neutral.lease, disposition: .endGesture) {
@@ -418,12 +430,23 @@ public final class JoystickMovementController: ObservableObject {
                 if phase == .moving { returnToNeutral() }
                 return
             case .notSent(let failure):
+                diagnose("joystick.stepFailed", category: .movement, level: .notice, [
+                    "seq": .count(Int(truncatingIfNeeded: nextSequence)),
+                    "failure": .text(failure.localizationKey),
+                    "wander": .flag(wanderEnabled)
+                ])
                 withdrawContinuation(.ended)
                 error = failure
                 commands.releaseJoystick(executionID: operation.id, lease: operation.lease, disposition: .endGesture)
                 returnToNeutral()
                 return
-            case .unconfirmed(let failure): markUnknown(failure); return
+            case .unconfirmed(let failure):
+                diagnose("joystick.stepUnknown", category: .movement, level: .notice, [
+                    "seq": .count(Int(truncatingIfNeeded: nextSequence)),
+                    "failure": .text(failure.rawValue),
+                    "wander": .flag(wanderEnabled)
+                ])
+                markUnknown(failure); return
             }
         }
     }
@@ -440,6 +463,10 @@ public final class JoystickMovementController: ObservableObject {
     private func requestContinuationIfEligible() {
         guard sceneActive, wanderEnabled, let intent,
               phase == .preparing || phase == .moving else { return }
+        diagnose("background.requested", category: .background, level: .notice, [
+            "kind": .text("wander"),
+            "movement": .text(intent.id.uuidString)
+        ])
         continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
         continuationControlSubject.send(.requested(MovementContinuationDemand(
             movementID: intent.id, lease: intent.lease, kind: .wander,
@@ -448,6 +475,11 @@ public final class JoystickMovementController: ObservableObject {
 
     private func withdrawContinuation(_ reason: MovementContinuationWithdrawalReason) {
         guard let identity = continuationIdentity else { return }
+        diagnose("background.withdrawn", category: .background, level: .notice, [
+            "reason": .text(reason.diagnosticsLabel),
+            "movement": .text(identity.movementID.uuidString),
+            "phase": .text(phase.rawValue)
+        ])
         continuationIdentity = nil
         continuationControlSubject.send(.withdrawn(identity, reason))
     }
