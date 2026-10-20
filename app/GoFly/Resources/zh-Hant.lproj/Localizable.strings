@@ -489,3 +489,12 @@
 "gallery.sheetRow" = "最近或最愛地點";
 
 "gallery.dangerTitle" = "裝置服務無法連線";
+
+"map.searchHint" = "搜尋地點、地址或經緯度。";
+"map.north" = "地圖轉回正北";
+"status.pill.running" = "執行中";
+"status.pill.paused" = "已暫停";
+"status.pill.preparing" = "準備中";
+"status.pill.simulating" = "模擬中";
+"status.pill.standby" = "待命";
+"status.pill.error" = "需要注意";

@@ -40,6 +40,7 @@ struct GoFlyStatusPill: View {
         .overlay { Capsule().strokeBorder(tone.border, lineWidth: 0.75).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
         .padding(.vertical, 6)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .contentShape(Capsule())
     }
 }

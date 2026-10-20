@@ -38,13 +38,11 @@ struct GoFlyBottomSheet<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             grabber
-            ScrollView {
-                content()
-                    .padding(.bottom, 12)
-            }
-            .scrollDisabled(detent == .collapsed)
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollIndicators(.hidden)
+            // Content owns its scrolling: each panel keeps its own keyboard and
+            // scroll behaviour, so the sheet only provides chrome and height.
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipped()
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)

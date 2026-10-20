@@ -489,3 +489,12 @@
 "gallery.sheetRow" = "最近或收藏地点";
 
 "gallery.dangerTitle" = "设备服务无法连接";
+
+"map.searchHint" = "搜索地点、地址或经纬度。";
+"map.north" = "地图转回正北";
+"status.pill.running" = "执行中";
+"status.pill.paused" = "已暂停";
+"status.pill.preparing" = "准备中";
+"status.pill.simulating" = "模拟中";
+"status.pill.standby" = "待命";
+"status.pill.error" = "需要注意";

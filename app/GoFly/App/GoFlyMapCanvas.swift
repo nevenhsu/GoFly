@@ -6,8 +6,13 @@ struct GoFlyCameraIntent: Equatable {
     let id = UUID()
     let coordinate: GeoCoordinate
     var routeCoordinates: [GeoCoordinate]? = nil
+    /// Resets rotation/pitch for the compass control without moving the center.
+    var setsHeadingNorth = false
 
-    init(coordinate: GeoCoordinate) { self.coordinate = coordinate }
+    init(coordinate: GeoCoordinate, setsHeadingNorth: Bool = false) {
+        self.coordinate = coordinate
+        self.setsHeadingNorth = setsHeadingNorth
+    }
     init(route: PlannedRoute) {
         coordinate = route.start
         routeCoordinates = route.points
@@ -19,12 +24,15 @@ struct GoFlyMapProjection: Equatable {
     let wanderTargetPoint: CGPoint?
     let viewport: CGRect
     let cameraHeadingDegrees: Double
+    let centerCoordinate: GeoCoordinate?
 
     @MainActor init(candidatePoint: CGPoint?, wanderTargetPoint: CGPoint? = nil, viewport: CGRect, map: MKMapView) {
         self.candidatePoint = candidatePoint
         self.wanderTargetPoint = wanderTargetPoint
         self.viewport = viewport
         self.cameraHeadingDegrees = map.camera.heading
+        self.centerCoordinate = GeoCoordinate(latitude: map.centerCoordinate.latitude,
+                                              longitude: map.centerCoordinate.longitude)
     }
 }
 
@@ -232,6 +240,12 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             hasFocused = true
             map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
             correctFocusIfNeeded(on: map)
+            if intent.setsHeadingNorth {
+                var camera = map.camera
+                camera.heading = 0
+                camera.pitch = 0
+                map.setCamera(camera, animated: true)
+            }
         }
 
         func correctFocusIfNeeded(on map: MKMapView) {

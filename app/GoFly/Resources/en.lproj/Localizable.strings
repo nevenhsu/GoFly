@@ -489,3 +489,12 @@
 "gallery.sheetRow" = "Recent or favorite place";
 
 "gallery.dangerTitle" = "Device service unavailable";
+
+"map.searchHint" = "Search places, addresses or coordinates.";
+"map.north" = "Reset map to north";
+"status.pill.running" = "Running";
+"status.pill.paused" = "Paused";
+"status.pill.preparing" = "Preparing";
+"status.pill.simulating" = "Simulating";
+"status.pill.standby" = "Standby";
+"status.pill.error" = "Needs attention";

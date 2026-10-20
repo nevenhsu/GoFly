@@ -32,14 +32,18 @@ struct GoFlyBottomBar: View {
             }
         }
         .padding(.top, 4)
+        .padding(.bottom, 18)
         .padding(.horizontal, 8)
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.surface.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(GoFlyStyle.border)
                 .frame(height: 0.5)
                 .allowsHitTesting(false)
         }
+        // Chrome caps Dynamic Type the way UIKit tab bars do; the labels stay
+        // legible and equal-width even at accessibility sizes.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(goFlyString("mode.title"))
         .accessibilityIdentifier("map.bottomBar")

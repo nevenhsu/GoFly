@@ -50,6 +50,7 @@
 - 字級：標準字級與 Accessibility XXXL；文字不縮小來塞進固定框，長標籤／狀態可重排或捲動；搜尋、確認、取消與星號須可觸及。
 - 深淺色：文字、卡片與主次 CTA 依語意色切換；選取、失敗、停用不能只靠顏色判別。
 - 操作：最少 44 × 44 pt；選點、最愛、詳情、排序、刪除與開始各維持獨立目標；地圖露出區依實測面板高度計算。
+- 固定高度的 chrome（bottom bar、浮動搜尋列、狀態 pill）在 Accessibility 字級上限為 `accessibility1`（與 UIKit tab bar 相同），避免三個等寬 tab 互相擠壓；sheet 與面板內文不設上限。
 - 原生能力：保留系統鍵盤、手勢與 VoiceOver 標籤；裝飾圖示不加入朗讀；沒有新增持續動畫，支援減少動態效果。
 - 圖示：`GoFlySymbols` 為標準 SF Symbol 語意目錄；齒輪、重定位、關閉、重試、排序、匯入／匯出、外部連結同一用途用同一符號。`goFlyControlSymbol` 只調整獨立 glyph，文字不因固定圖示容器縮小；目前／模擬位置、候選 Pin 與目的地各可辨識。
 - 驗證順序：專案 `check.sh`、既有對應 UI 測試、模擬器截圖檢視；手機 VoiceOver、觸感與定位／背景效果集中於裝置驗收。
@@ -130,3 +131,10 @@ App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的
 - 系統拒絕、不支援或讓任務到期時，移動暫停，回到前景以 StatusBanner 說明原因（`background.expired`／`background.rejected`／`background.unavailable`）；前景執行中、系統尚未啟動背景任務時被拒絕，只提示、不中斷前景移動。
 - 切到其他 App 與鎖定螢幕後是否持續送點、任務多久會到期、到期後是否正確暫停，均**待真機驗證**；目前只有程式實作與單元測試，未有裝置結果。
 
+### 改版實作狀態（2026-10-20）
+
+- 步驟 0 盤點：完成，清單在 `work/gofly-ios/redesign/INVENTORY.md`（`work/` 不進版控）。
+- 步驟 1 共用元件：**已實作**（`GoFlyStatusBanner`、`GoFlySnackbar`、`GoFlyStatusPill`、三段式 `GoFlyBottomSheet`、`GoFlyBottomBar`、執行模式 header／controls 骨架、danger／warning／success token）。**模擬器已驗證**淺色、深色、Accessibility XXXL，截圖在 `work/gofly-ios/redesign/step-1/`。
+- 步驟 2 主畫面骨架：**已實作**浮動搜尋列＋齒輪、狀態 pill、右側指北／置中、三段式 sheet 骨架、三個等寬 bottom tab；舊的頂部狀態卡與面板內膠囊模式列已移除。**模擬器已驗證**淺色、深色、Accessibility XXXL，截圖在 `work/gofly-ios/redesign/step-2/`。
+- 尚未實作：全螢幕搜尋與地點 sheet（步驟 3）、路線規劃／匯入與執行模式（4）、搖桿與漫步執行模式（5）、最愛（6）、錯誤全面統一（7）、首次引導與設定（8）、全面驗收與 UI 測試（9）。過渡期點搜尋列會展開 sheet 並聚焦既有搜尋欄位，步驟 3 會取代。
+- 以上皆為**模擬器**結果，**未經真機驗證**；沒有宣稱 GPS、VPN、背景任務或觸覺已在裝置上通過。
