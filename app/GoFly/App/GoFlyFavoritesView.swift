@@ -23,7 +23,8 @@ struct GoFlyFavoritesView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            header
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     failureNotice
@@ -41,30 +42,9 @@ struct GoFlyFavoritesView: View {
                 .padding(.horizontal, 16)
             }
             .safeAreaInset(edge: .bottom) { bottomSearch }
-            .background(GoFlyStyle.canvas)
-            .navigationTitle(goFlyString("favorites.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(goFlyString(selecting ? "favorites.cancel" : "favorites.select")) {
-                        selecting.toggle()
-                        selected.removeAll()
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!favorites.canMutate)
-                    .accessibilityIdentifier("favorites.select")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: onDismiss) {
-                        Image(systemName: GoFlySymbols.close)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(goFlyString("common.dismiss"))
-                    .accessibilityIdentifier("favorites.dismiss")
-                }
-            }
-            .goFlySnackbar($snackbar)
         }
+        .background(GoFlyStyle.surface)
+        .goFlySnackbar($snackbar)
         .presentationDetents([.large])
         .presentationBackground(GoFlyStyle.surface)
         .sheet(item: $editing) { favorite in
@@ -73,6 +53,39 @@ struct GoFlyFavoritesView: View {
                 if !favorites.isFavorite(favorite.place) { editing = nil }
             }
         }
+    }
+
+    /// Figma C1 uses a plain title bar: 選取 on the left, the title in the
+    /// middle and a bare close glyph on the right, without a navigation bar.
+    private var header: some View {
+        ZStack {
+            Text(goFlyString("favorites.title"))
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            HStack {
+                Button(goFlyString(selecting ? "favorites.cancel" : "favorites.select")) {
+                    selecting.toggle()
+                    selected.removeAll()
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .disabled(!favorites.canMutate)
+                .accessibilityIdentifier("favorites.select")
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: GoFlySymbols.close)
+                        .goFlyControlSymbol(size: 17, weight: .semibold)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("common.dismiss"))
+                .accessibilityIdentifier("favorites.dismiss")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder private var failureNotice: some View {
