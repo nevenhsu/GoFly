@@ -15,9 +15,13 @@ struct GoFlySnackbar: View {
     var onDismiss: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            Image(systemName: GoFlySymbols.successFilled)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(GoFlyStyle.snackbarForeground)
+                .accessibilityHidden(true)
             Text(message.text)
-                .font(.subheadline)
+                .font(.footnote)
                 .foregroundStyle(GoFlyStyle.snackbarForeground)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -27,7 +31,7 @@ struct GoFlySnackbar: View {
                     onDismiss()
                 } label: {
                     Text(actionTitle)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(GoFlyStyle.snackbarForeground)
                         .padding(.vertical, 8)
                         .contentShape(Rectangle())
@@ -36,7 +40,7 @@ struct GoFlySnackbar: View {
                 .accessibilityIdentifier("snackbar.action")
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))

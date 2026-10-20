@@ -32,7 +32,7 @@ struct GoFlyPlaceDetailsView: View {
         VStack(alignment: .leading, spacing: 12) {
             GoFlyFavoriteFailureNotice()
             HStack(alignment: .top) {
-                Text(place.title).font(.title3.bold())
+                Text(place.title).font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("placeDetails.title")
                 Button(action: onDismiss) { Image(systemName: GoFlySymbols.close) }
@@ -41,7 +41,7 @@ struct GoFlyPlaceDetailsView: View {
                     .accessibilityIdentifier("placeDetails.dismiss")
             }
             Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
+                .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityIdentifier("placeDetails.address")
             Text(coordinateLine)
                 .font(.footnote.monospacedDigit())
@@ -79,8 +79,8 @@ struct GoFlyPlaceDetailsView: View {
         HStack(spacing: 8) {
             if let onGo {
                 Button(goFlyString("map.go"), action: onGo)
-                    .buttonStyle(GoFlyActionStyle(primary: true))
-                    .frame(minWidth: 56).disabled(!canGo)
+                    .buttonStyle(GoFlyActionStyle(primary: true, small: true))
+                    .frame(minWidth: 64).disabled(!canGo)
                     .accessibilityIdentifier("placeDetails.go")
             }
             GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite",

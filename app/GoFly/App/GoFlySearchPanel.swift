@@ -97,10 +97,10 @@ struct GoFlySearchPanel: View {
                 }
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 48)
-            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(minHeight: 44)
+            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
                                   lineWidth: focused ? 1.5 : 0.75)
             }
@@ -241,7 +241,7 @@ struct GoFlySearchPanel: View {
                                action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(.subheadline.weight(.semibold))
+                .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
@@ -277,8 +277,8 @@ struct GoFlySearchPanel: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 10)
-                .frame(minHeight: 64)
+                .padding(.vertical, 9)
+                .frame(minHeight: 60)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -286,8 +286,8 @@ struct GoFlySearchPanel: View {
             GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(place.coordinate.displayText)")
         }
         .padding(.horizontal, 16)
-        .padding(.top, 8)
-        Divider().padding(.leading, 64)
+        .padding(.top, 4)
+        Divider().padding(.leading, 56)
         }
     }
 
@@ -312,8 +312,8 @@ struct GoFlySearchPanel: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 10)
-                .frame(minHeight: 64)
+                .padding(.vertical, 9)
+                .frame(minHeight: 60)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -321,7 +321,7 @@ struct GoFlySearchPanel: View {
             GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(identifier.coordinate.displayText)")
         }
         .padding(.horizontal, 16)
-        Divider().padding(.leading, 64)
+        Divider().padding(.leading, 56)
         }
     }
 
@@ -350,11 +350,10 @@ struct GoFlySearchPanel: View {
     /// Figma list instead of a bare glyph.
     private func iconTile(_ symbol: String, filled: Bool = false) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(filled ? GoFlyStyle.surface : GoFlyStyle.primary)
-            .frame(width: 36, height: 36)
-            .background(filled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .frame(width: 28, height: 28)
+            .background(filled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface, in: Circle())
             .accessibilityHidden(true)
     }
 

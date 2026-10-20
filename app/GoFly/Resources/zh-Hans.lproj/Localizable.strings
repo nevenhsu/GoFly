@@ -574,3 +574,13 @@
 "placeDetails.favorite" = "收藏";
 "placeDetails.distanceMeters" = "距当前位置 %ld 米";
 "placeDetails.distanceKilometers" = "距当前位置 %@ 公里";
+
+"service.statusPill.ready" = "已启动";
+"service.statusPill.stopped" = "已停止";
+"service.statusPill.error" = "需要修复";
+
+"route.distance" = "%.1f 公里";
+"route.duration" = "约 %d 分钟";
+"route.noRouteYet" = "选择两个地点后显示距离";
+"route.speedUnit" = "公里/小时";
+"joystick.wanderDetail" = "自动前往随机目的地";

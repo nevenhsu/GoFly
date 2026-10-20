@@ -14,14 +14,14 @@ struct GoFlyBottomBar: View {
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: symbol(for: mode))
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 22, weight: .regular))
                             .accessibilityHidden(true)
                         Text(goFlyString("mode.\(mode.rawValue)"))
-                            .font(.caption.weight(.medium))
+                            .font(.caption2.weight(.medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .frame(maxWidth: .infinity, minHeight: 56)
                     .foregroundStyle(selection == mode ? GoFlyStyle.primary : GoFlyStyle.secondary)
                     .contentShape(Rectangle())
                 }
@@ -32,15 +32,9 @@ struct GoFlyBottomBar: View {
             }
         }
         .padding(.top, 4)
-        .padding(.bottom, 18)
+        .padding(.bottom, 16)
         .padding(.horizontal, 8)
         .background(GoFlyStyle.surface.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(GoFlyStyle.border)
-                .frame(height: 0.5)
-                .allowsHitTesting(false)
-        }
         // Chrome caps Dynamic Type the way UIKit tab bars do; the labels stay
         // legible and equal-width even at accessibility sizes.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)

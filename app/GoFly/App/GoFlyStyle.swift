@@ -15,7 +15,12 @@ enum GoFlyStyle {
     static let inputSurface = Color(uiColor: .systemGray5)
     static let inputBorder = Color(uiColor: .systemGray)
     static let cornerRadius: CGFloat = 20
+    static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 14
+    static let inputRadius: CGFloat = 12
+    static let primaryButtonHeight: CGFloat = 56
+    static let secondaryButtonHeight: CGFloat = 48
+    static let smallButtonHeight: CGFloat = 40
 
     // 2026-10-20 Google Maps redesign: status colors are semantic and always
     // paired with an icon and text, never color alone.
@@ -113,38 +118,47 @@ func goFlyLocalizedFormat(_ format: String, _ arguments: CVarArg...) -> String {
     String(format: format, locale: GoFlyPreferences.shared.locale, arguments: arguments)
 }
 
+/// Figma 0 board buttons: 56 pt black primary, 48 pt gray secondary,
+/// 40 pt action-row capsules and a filled red destructive variant.
 struct GoFlyActionStyle: ButtonStyle {
     var primary = false
     var compactAtAccessibilitySizes = false
+    var destructive = false
+    var small = false
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    private var height: CGFloat {
+        small ? GoFlyStyle.smallButtonHeight
+            : (primary || destructive ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight)
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(small ? .subheadline.weight(.semibold) : .body.weight(.semibold))
             .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .padding(.horizontal, 16)
-            .padding(.vertical, compactAtAccessibilitySizes && dynamicTypeSize.isAccessibilitySize ? 0 : (primary ? 6 : 2))
+            .frame(maxWidth: .infinity, minHeight: height)
+            .padding(.horizontal, small ? 14 : 16)
+            .padding(.vertical, compactAtAccessibilitySizes && dynamicTypeSize.isAccessibilitySize ? 0 : 0)
             .foregroundStyle(foreground)
             .tint(foreground)
-            .background(
-                isEnabled ? (primary ? GoFlyStyle.primary : GoFlyStyle.secondarySurface) : GoFlyStyle.disabledSurface,
-                in: Capsule()
-            )
-            .overlay {
-                if !primary {
-                    Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
-                }
-            }
-            .brightness(isEnabled && configuration.isPressed ? (primary ? 0.12 : -0.04) : 0)
+            .background(background, in: Capsule())
+            .brightness(isEnabled && configuration.isPressed ? (primary || destructive ? 0.12 : -0.04) : 0)
             .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
             .contentShape(Capsule())
     }
 
+    private var background: Color {
+        guard isEnabled else { return GoFlyStyle.disabledSurface }
+        if destructive { return GoFlyStyle.danger }
+        return primary ? GoFlyStyle.primary : GoFlyStyle.secondarySurface
+    }
+
     private var foreground: Color {
-        isEnabled ? (primary ? GoFlyStyle.surface : GoFlyStyle.primary) : GoFlyStyle.disabledForeground
+        guard isEnabled else { return GoFlyStyle.disabledForeground }
+        if destructive { return .white }
+        return primary ? GoFlyStyle.surface : GoFlyStyle.primary
     }
 }
 

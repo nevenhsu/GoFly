@@ -15,6 +15,9 @@ struct GoFlyBottomSheet<Content: View>: View {
     @Binding var detent: GoFlySheetDetent
     let availableHeight: CGFloat
     let collapsedHeight: CGFloat
+    /// Intrinsic content height; the sheet never grows past it, so short
+    /// panels do not leave a large empty area under their last row.
+    var contentHeight: CGFloat = 0
     var onHeightChange: (CGFloat) -> Void = { _ in }
     @ViewBuilder let content: () -> Content
 
@@ -32,7 +35,10 @@ struct GoFlyBottomSheet<Content: View>: View {
     }
 
     private var height: CGFloat {
-        max(collapsedHeight, min(expandedHeight, restingHeight - drag))
+        let hugging = contentHeight > 0
+            ? min(restingHeight, max(collapsedHeight, contentHeight + 44))
+            : restingHeight
+        return max(collapsedHeight, min(expandedHeight, hugging - drag))
     }
 
     var body: some View {

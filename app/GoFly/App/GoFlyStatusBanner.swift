@@ -20,65 +20,66 @@ struct GoFlyStatusBanner: View {
     var messageIdentifier: String? = nil
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: tone.symbol)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(tone.foreground)
-                .padding(.top, 2)
+                .foregroundStyle(tone.tint)
+                .padding(.top, 1)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(GoFlyStyle.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
-                    .accessibilityIdentifier(titleIdentifier ?? identifier.map { "\($0).title" } ?? "statusBanner.title")
+                    .accessibilityIdentifier(titleIdentifier
+                        ?? identifier.map { "\($0).title" } ?? "statusBanner.title")
                 if let message {
                     Text(message)
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier(messageIdentifier ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
-                }
-                if let actionTitle, let onAction {
-                    Button(action: onAction) {
-                        Text(actionTitle)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(tone.foreground)
-                            .frame(minHeight: 44, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!actionEnabled)
-                    .accessibilityIdentifier(actionIdentifier ?? identifier.map { "\($0).action" } ?? "statusBanner.action")
+                        .accessibilityIdentifier(messageIdentifier
+                            ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            if let actionTitle, let onAction {
+                Button(action: onAction) {
+                    Text(actionTitle)
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 32)
+                        .background(GoFlyStyle.surface, in: Capsule())
+                        .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(GoFlyStyle.primary)
+                .disabled(!actionEnabled)
+                .accessibilityIdentifier(actionIdentifier
+                    ?? identifier.map { "\($0).action" } ?? "statusBanner.action")
+            }
+
             if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: GoFlySymbols.close)
-                        .goFlyControlSymbol(size: 14, maximum: 18, weight: .semibold)
+                        .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
                         .foregroundStyle(GoFlyStyle.secondary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(goFlyString("common.dismiss"))
                 .accessibilityIdentifier(identifier.map { "\($0).dismiss" } ?? "statusBanner.dismiss")
-                .padding(.trailing, -8)
+                .padding(.trailing, -4)
             }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, onDismiss == nil ? 14 : 6)
-        .padding(.vertical, 10)
-        .background(tone.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(tone.border, lineWidth: 0.75)
-                .allowsHitTesting(false)
-        }
+        .padding(12)
+        .background(tone.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier ?? "statusBanner")
     }

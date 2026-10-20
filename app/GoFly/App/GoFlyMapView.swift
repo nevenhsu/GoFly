@@ -469,6 +469,7 @@ struct GoFlyMapView: View {
                 detent: $sheetDetent,
                 availableHeight: sheetAvailableHeight(in: geometry),
                 collapsedHeight: 132,
+                contentHeight: bottomContentHeight,
                 onHeightChange: { sheetHeight = $0 }
             ) {
                 sheetContent(in: geometry)

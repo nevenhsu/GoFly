@@ -574,3 +574,13 @@
 "placeDetails.favorite" = "Favorite";
 "placeDetails.distanceMeters" = "%ld m from here";
 "placeDetails.distanceKilometers" = "%@ km from here";
+
+"service.statusPill.ready" = "Running";
+"service.statusPill.stopped" = "Stopped";
+"service.statusPill.error" = "Needs repair";
+
+"route.distance" = "%.1f km";
+"route.duration" = "%d min";
+"route.noRouteYet" = "Choose two places to see the distance";
+"route.speedUnit" = "km/h";
+"joystick.wanderDetail" = "Walks to a random destination automatically";
