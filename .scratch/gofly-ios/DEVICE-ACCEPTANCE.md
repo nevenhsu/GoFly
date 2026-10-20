@@ -55,6 +55,10 @@
 - [ ] 標準與最大字級、深淺色及 VoiceOver 可操作搜尋、sheet、結束確認、狀態嚴重度及語言／外觀 Picker；底部動作與地圖控制不被 safe area 遮住。
 - [ ] 設定 › 裝置與簽名仍可匯出診斷 JSONL；移動停止階段 B 依 `work/gofly-ios/debug-movement-stops/DEVICE-STEPS.md` 蒐證，未據推測修根因。
 
+建置與離線證據（2026-10-20）：`check.sh` 196 tests、`check.sh --device` 建置、`GoFlyUITests` 12 tests
+全過；代表性截圖 `work/gofly-ios/redesign/step-3/`～`step-8/`。執行模式（路線／漫步）與附近地點
+清單尚未有模擬器截圖，列入待真機或後續補強。
+
 ## 驗收用 build
 
 準備（實際產物已用 `ls` 確認）：
