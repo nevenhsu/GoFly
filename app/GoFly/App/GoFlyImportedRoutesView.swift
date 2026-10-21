@@ -159,19 +159,26 @@ struct GoFlyImportedRoutesView: View {
                 showingActions = true
             }
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(record.filename).font(.body.weight(.semibold)).lineLimit(2)
-                Text(record.start.displayText + " → " + record.end.displayText)
-                    .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(goFlyImportedRouteMetadata(record))
-                    .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let failure = imports.unavailable[record.id] {
-                    Text(goFlyString(failure.localizationKey))
-                        .font(.footnote).foregroundStyle(GoFlyStyle.errorForeground)
-                        .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(record.filename).font(.body.weight(.semibold)).lineLimit(2)
+                    Text(record.start.displayText + " → " + record.end.displayText)
+                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(goFlyImportedRouteMetadata(record))
+                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let failure = imports.unavailable[record.id] {
+                        Text(goFlyString(failure.localizationKey))
+                            .font(.footnote).foregroundStyle(GoFlyStyle.errorForeground)
+                            .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: GoFlySymbols.disclosure)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 63, alignment: .leading)
             .padding(.horizontal, 16)

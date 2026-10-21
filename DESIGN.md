@@ -38,4 +38,6 @@
 
 2026-10-18 使用者要求直接精修 iOS App，不修改 Figma。線框繼續作為操作流程來源；正式視覺細節以 [iOS UI 設計與驗收規格](docs/IOS-UI-DESIGN.md) 及 App 實作為準。已細化共用按鈕、地圖浮層、搜尋焦點、選取、路線、搖桿、首次引導、設定與詳情／空白狀態；這是 App 介面實作更新，不能推定 Figma 已同步或手機驗收已通過。
 
+2026-10-21 使用者指示：**Figma「04 · iOS Redesign（Google Maps 參考）」頁為視覺唯一基準**（含 Dark 版 80 張）；文字規格只補行為與無障礙，衝突時以 Figma 為準。
+
 2026-10-20 Google Maps 參考改版：步驟 1–8 已實作。新增 danger／warning／success 語意狀態、StatusBanner、2 秒 snackbar、全螢幕搜尋、最愛延遲刪除與批次復原、執行模式，以及共用 VPN 說明／設定子頁。啟動使用深淺色 Logo，背景檢查超過約 0.5 秒才顯示進度。定位只請求使用 App 期間。詳細規則與實作狀態取代舊版面描述，以 [iOS 規格](docs/IOS-UI-DESIGN.md) 為準；最終檢查及 3 個代表性視覺樣本見 `work/gofly-ios/redesign/RESULT.md`，不代表所有狀態或真機能力已驗證。本輪未修改 Figma，箭頭方向 #15 與移動停止問題仍留在獨立修正軌。

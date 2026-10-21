@@ -506,7 +506,7 @@
 
 "placeDetails.setEnd" = "Set as destination";
 
-"placeDetails.copy" = "Copy coordinates";
+"placeDetails.copy" = "Copy";
 
 "status.repairGuidance" = "If this continues, open Settings › VPN Tunnel to repair the connection.";
 
@@ -569,7 +569,7 @@
 "route.chooseDestination" = "Choose destination";
 "route.chooseWaypoint" = "Choose waypoint %ld";
 "sheet.currentPosition" = "Current simulated position";
-"sheet.noPosition" = "No position yet";
+"sheet.noPosition" = "Not set";
 "sheet.noPositionHint" = "Use search or tap the map to set a simulated position.";
 "placeDetails.favorite" = "Favorite";
 "placeDetails.distanceMeters" = "%ld m from here";
@@ -578,15 +578,42 @@
 "service.statusPill.ready" = "Running";
 "service.statusPill.stopped" = "Stopped";
 "service.statusPill.error" = "Needs repair";
+"service.stopService" = "Stop service";
+"service.startService" = "Start service";
 
+"onboarding.location.continue" = "Skip and continue";
+"onboarding.location.currentStatus" = "Current permission";
+"onboarding.location.status.notDetermined" = "Not requested";
+"onboarding.location.status.denied" = "Not allowed";
+"onboarding.location.status.authorized" = "While using the app";
+"onboarding.location.deniedTitle" = "Location permission is off";
+"onboarding.vpn.helpLink" = "Connection guide ›";
+"onboarding.vpn.step1" = "Open LocalDevVPN";
+"onboarding.vpn.step2" = "Tap Connect";
+"onboarding.vpn.step3" = "Return to GoFly to recheck automatically";
+"onboarding.vpn.unavailableTitle" = "Unable to connect to device service";
+"onboarding.vpn.complete" = "Done";
+"onboarding.vpn.help.permissionTitle" = "Local Network permission";
+"onboarding.vpn.help.reconnectTitle" = "Reconnect";
+
+"route.planTitle" = "Plan route";
+"route.roundTripShort" = "Round trip";
+"route.startShort" = "Start";
+"route.zeroDistance" = "0 km";
+"route.zeroDuration" = "~0 min";
 "route.distance" = "%.1f km";
 "route.duration" = "%d min";
 "route.noRouteYet" = "Choose two places to see the distance";
 "route.speedUnit" = "km/h";
+"route.error.shortTitle" = "Unable to plan route";
 "joystick.wanderDetail" = "Walks to a random destination automatically";
+"joystick.currentDestinationLabel" = "Current destination";
+"joystick.endWander" = "End wander";
 
 "favorites.selectedCount" = "%d selected";
+"favorites.selectAll" = "Select all";
 
 "settings.permissionsAndConnection" = "Permissions and connection";
+"settings.permissionsFooter" = "Only \"While Using the App\" is needed; background continuation is handled by system background tasks.";
 
 "settings.deviceSection" = "Device";

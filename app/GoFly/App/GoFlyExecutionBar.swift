@@ -79,7 +79,7 @@ struct GoFlyExecutionControls<Leading: View>: View {
     private var actionLayout: AnyLayout {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 8))
     }
 
     var body: some View {
@@ -94,21 +94,27 @@ struct GoFlyExecutionControls<Leading: View>: View {
                 if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
                 Button(action: onEnd) {
                     Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
+                        .lineLimit(1)
                 }
                 .buttonStyle(GoFlyActionStyle())
+                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                 .accessibilityIdentifier("execution.end")
                 if isPaused {
                     Button(action: onResume) {
                         Label(goFlyString("route.resume"), systemImage: GoFlySymbols.play)
+                            .lineLimit(1)
                     }
                     .buttonStyle(GoFlyActionStyle(primary: true))
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                     .disabled(!canResume)
                     .accessibilityIdentifier("execution.resume")
                 } else {
                     Button(action: onPause) {
                         Label(goFlyString("route.pause"), systemImage: GoFlySymbols.pause)
+                            .lineLimit(1)
                     }
                     .buttonStyle(GoFlyActionStyle(primary: true))
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                     .disabled(!canPause)
                     .accessibilityIdentifier("execution.pause")
                 }
@@ -156,6 +162,7 @@ struct GoFlyExecutionToggle: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
         .accessibilityIdentifier(identifier)
     }
 }

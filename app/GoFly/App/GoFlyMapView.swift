@@ -375,11 +375,22 @@ struct GoFlyMapView: View {
         }
     }
 
+    /// Intermediate stops of a manually planned route, numbered on the map.
+    private var manualRouteWaypoints: [GeoCoordinate] {
+        let nodes = route.draft.nodes
+        guard nodes.count > 2 else { return [] }
+        return nodes.dropFirst().dropLast().compactMap {
+            if case .place(let place) = $0.value { return place.coordinate }
+            return nil
+        }
+    }
+
     private func mapCanvas(viewport: CGRect) -> some View {
         GoFlyMapCanvas(
             marker: service.positionMarker, candidate: activeCandidate,
             viewport: viewport, cameraIntent: cameraIntent,
             route: mode == .route ? route.plannedRoute : nil,
+            routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
             markerBearingDegrees: joystickMarkerBearing,
             adjustsFocusForViewportChanges: false,
@@ -470,8 +481,8 @@ struct GoFlyMapView: View {
                 detent: $sheetDetent,
                 availableHeight: sheetAvailableHeight(in: geometry),
                 collapsedHeight: 116,
-                maximumHeight: max(132, geometry.size.height - max(topFrame.maxY, 96) - 96 - 49),
-                contentHeight: mode == .teleport ? bottomContentHeight : 0,
+                maximumHeight: sheetMaxHeight(in: geometry),
+                contentHeight: bottomContentHeight,
                 onHeightChange: { sheetHeight = $0 }
             ) {
                 sheetContent(in: geometry)
@@ -506,6 +517,7 @@ struct GoFlyMapView: View {
             if mode != .teleport || route.picker != nil {
                 // Mode panels own their scroll viewport and pinned controls.
                 bottomPanelContent(in: geometry)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
             } else {
                 ScrollView {
                     bottomPanelContent(in: geometry)
@@ -582,7 +594,7 @@ struct GoFlyMapView: View {
         }
     }
 
-    private var isExecutionMode: Bool { !route.canEdit || joystick.wanderEnabled }
+    private var isExecutionMode: Bool { !route.canEdit }
 
     private var executionTitle: String {
         if joystick.wanderEnabled { return joystick.wanderTarget?.place.title ?? goFlyString("joystick.wander") }
@@ -679,9 +691,11 @@ struct GoFlyMapView: View {
                         .monospacedDigit()
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(service.positionMarker?.coordinate.displayText ?? goFlyString(sheetPositionDetailKey))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                    if let coordinate = service.positionMarker?.coordinate {
+                        Text(coordinate.displayText)
+                            .font(.footnote)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                    }
                 }
                 Spacer(minLength: 8)
                 if let coordinate = service.positionMarker?.coordinate {
@@ -717,11 +731,6 @@ struct GoFlyMapView: View {
             ?? MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
     }
 
-    private var sheetPositionDetailKey: String {
-        guard let marker = service.positionMarker else { return "sheet.noPositionHint" }
-        return marker.source == .simulation ? "map.simulatedLocation" : "map.currentLocation"
-    }
-
     private var expandedTeleportContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let error = service.error, !serviceNoticeDismissed {
@@ -737,9 +746,7 @@ struct GoFlyMapView: View {
                 GoFlyPlaceDetailsView(place: candidate.place, onDismiss: { activeSearch.resetSelection() },
                     embedded: true, distanceFrom: service.positionMarker?.coordinate,
                     canGo: isWanderMap ? wanderSearch.canGo && joystick.canApplyWanderTarget : search.canGo && service.canTeleport,
-                    onGo: { performGo(candidate) },
-                    onRouteStart: { useCandidateInRoute(candidate, asStart: true) },
-                    onRouteEnd: { useCandidateInRoute(candidate, asStart: false) })
+                    onGo: { performGo(candidate) })
             } else {
                 collapsedPositionSummary
                     .padding(.bottom, 12)
@@ -765,20 +772,6 @@ struct GoFlyMapView: View {
                         teleportPlaceRow(place, title: place.title, symbol: GoFlySymbols.recent,
                                          identifier: "search.recent.\(place.coordinate.displayText)")
                     }
-                } else {
-                    HStack(spacing: 8) {
-                        Image(systemName: GoFlySymbols.coordinates)
-                            .goFlyControlSymbol(size: 14, maximum: 16, weight: .medium)
-                        Text(goFlyString("search.coordinateHint"))
-                            .font(.footnote)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.secondarySurface,
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
         }
@@ -1003,7 +996,7 @@ struct GoFlyMapView: View {
                 .accessibilityIdentifier("map.north")
             }
             Button { recenter() } label: {
-                Image(systemName: GoFlySymbols.recenter)
+                GoFlyRecenterIcon(size: 22)
             }
             .buttonStyle(GoFlyIconStyle(floating: true))
             .accessibilityLabel(goFlyString("map.recenter"))
@@ -1075,8 +1068,23 @@ struct GoFlyMapView: View {
         return CGRect(x: 16, y: top, width: max(1, geometry.size.width - 32), height: max(1, bottom - top))
     }
 
+    private func sheetMaxHeight(in geometry: GeometryProxy) -> CGFloat {
+        max(132, geometry.size.height - max(topFrame.maxY, 96) - 96 - 49)
+    }
+
+    private func sheetRestingHeight(in geometry: GeometryProxy) -> CGFloat {
+        let available = sheetAvailableHeight(in: geometry)
+        let expanded = max(117, min(available * 0.88, sheetMaxHeight(in: geometry)))
+        let half = min(expanded, max(116, available * 0.5))
+        switch sheetDetent {
+        case .collapsed: return 116
+        case .half: return half
+        case .expanded: return expanded
+        }
+    }
+
     private func panelMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(96, sheetHeight - 12)
+        max(96, sheetRestingHeight(in: geometry) - 12)
     }
 
     private var minimumMapBand: CGFloat {
@@ -1086,7 +1094,7 @@ struct GoFlyMapView: View {
     }
 
     private func contentMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(96, sheetHeight - 20)
+        max(96, sheetRestingHeight(in: geometry) - 20)
     }
 
     private var unconfirmedID: UUID? {
@@ -1124,7 +1132,7 @@ struct GoFlyMapView: View {
 
     private func goButton(_ candidate: TeleportCandidate) -> some View {
         Button { performGo(candidate) } label: {
-            Label(goFlyString("map.go"), systemImage: "play.fill")
+            Text(goFlyString("map.go"))
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 14)
                 .frame(minWidth: 44, minHeight: 28)

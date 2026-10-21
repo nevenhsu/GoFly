@@ -506,7 +506,7 @@
 
 "placeDetails.setEnd" = "设为终点";
 
-"placeDetails.copy" = "复制坐标";
+"placeDetails.copy" = "复制";
 
 "status.repairGuidance" = "持续失败请到“设置 › VPN 通道”修复连接。";
 
@@ -569,7 +569,7 @@
 "route.chooseDestination" = "选择终点";
 "route.chooseWaypoint" = "选择途经点 %ld";
 "sheet.currentPosition" = "当前模拟位置";
-"sheet.noPosition" = "尚无位置";
+"sheet.noPosition" = "尚未设置";
 "sheet.noPositionHint" = "用搜索或点地图设置模拟位置。";
 "placeDetails.favorite" = "收藏";
 "placeDetails.distanceMeters" = "距当前位置 %ld 米";
@@ -578,15 +578,42 @@
 "service.statusPill.ready" = "已启动";
 "service.statusPill.stopped" = "已停止";
 "service.statusPill.error" = "需要修复";
+"service.stopService" = "停止服务";
+"service.startService" = "启动服务";
 
-"route.distance" = "%.1f 公里";
-"route.duration" = "约 %d 分钟";
+"onboarding.location.continue" = "跳过并继续";
+"onboarding.location.currentStatus" = "当前权限";
+"onboarding.location.status.notDetermined" = "尚未请求";
+"onboarding.location.status.denied" = "未允许";
+"onboarding.location.status.authorized" = "使用 App 期间";
+"onboarding.location.deniedTitle" = "定位权限未开启";
+"onboarding.vpn.helpLink" = "连接说明 ›";
+"onboarding.vpn.step1" = "打开 LocalDevVPN";
+"onboarding.vpn.step2" = "点击 Connect";
+"onboarding.vpn.step3" = "回到 GoFly，自动重新检查";
+"onboarding.vpn.unavailableTitle" = "无法连接到设备服务";
+"onboarding.vpn.complete" = "完成";
+"onboarding.vpn.help.permissionTitle" = "本地网络权限";
+"onboarding.vpn.help.reconnectTitle" = "重新连接";
+
+"route.planTitle" = "规划路线";
+"route.roundTripShort" = "往返";
+"route.startShort" = "开始";
+"route.zeroDistance" = "0 km";
+"route.zeroDuration" = "约 0 分";
+"route.distance" = "%.1f km";
+"route.duration" = "约 %d 分";
 "route.noRouteYet" = "选择两个地点后显示距离";
-"route.speedUnit" = "公里/小时";
+"route.speedUnit" = "km/h";
+"route.error.shortTitle" = "无法规划路线";
 "joystick.wanderDetail" = "自动前往随机目的地";
+"joystick.currentDestinationLabel" = "当前目的地";
+"joystick.endWander" = "结束漫步";
 
 "favorites.selectedCount" = "已选择 %d 项";
+"favorites.selectAll" = "全选";
 
 "settings.permissionsAndConnection" = "权限与连接";
+"settings.permissionsFooter" = "只需“使用 App 期间”；后台由系统后台任务延续。";
 
 "settings.deviceSection" = "设备";

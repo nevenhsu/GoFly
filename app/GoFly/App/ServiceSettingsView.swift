@@ -58,7 +58,7 @@ struct ServiceSettingsView: View {
 
     private var settingsGroups: some View {
         VStack(alignment: .leading, spacing: 20) {
-            settingsSection("settings.permissionsAndConnection") {
+            settingsSection("settings.permissionsAndConnection", footerKey: "settings.permissionsFooter") {
                 settingsLink(title: "settings.location", value: locationSummary,
                              destination: { GoFlyLocationSettingsPage() })
                 settingsDivider
@@ -89,10 +89,6 @@ struct ServiceSettingsView: View {
                 settingsLink(title: "settings.device", value: nil,
                              destination: { GoFlyDeviceSettingsPage(service: service, setupMetadata: setupMetadata) })
             }
-            settingsSection("settings.helpSection") {
-                settingsLink(title: "settings.help", value: nil,
-                             destination: { GoFlyHelpSettingsPage() })
-            }
         }
     }
 
@@ -102,6 +98,7 @@ struct ServiceSettingsView: View {
     @ViewBuilder
     private func settingsSection<Content: View>(
         _ titleKey: String,
+        footerKey: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -114,6 +111,12 @@ struct ServiceSettingsView: View {
                 content()
             }
             .goFlyCard(radius: 14)
+            if let footerKey {
+                Text(goFlyString(footerKey))
+                    .font(.footnote)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .padding(.horizontal, 16)
+            }
         }
     }
 
@@ -133,11 +136,8 @@ struct ServiceSettingsView: View {
 
     private func settingsRow(titleKey: String, value: String?) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: settingsSymbol(for: titleKey))
-                .goFlyControlSymbol(size: 17, weight: .semibold)
-                .foregroundStyle(GoFlyStyle.surface)
-                .frame(width: 30, height: 30)
-                .background(GoFlyStyle.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            GoFlySettingsBadgeIcon(kind: settingsIconKind(for: titleKey))
+                .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
             GoFlySettingsValueRow {
                 Text(goFlyString(titleKey))
@@ -172,15 +172,14 @@ struct ServiceSettingsView: View {
         Divider().padding(.leading, 60)
     }
 
-    private func settingsSymbol(for key: String) -> String {
+    private func settingsIconKind(for key: String) -> GoFlySettingsIconKind {
         switch key {
-        case "settings.location": GoFlySymbols.location
-        case "settings.background": GoFlySymbols.background
-        case "settings.vpn": GoFlySymbols.network
-        case "settings.device": GoFlySymbols.device
-        case "settings.language": GoFlySymbols.language
-        case "settings.appearance": GoFlySymbols.appearance
-        default: GoFlySymbols.help
+        case "settings.location": .location
+        case "settings.background": .background
+        case "settings.vpn": .vpn
+        case "settings.language": .language
+        case "settings.appearance": .appearance
+        default: .device
         }
     }
 

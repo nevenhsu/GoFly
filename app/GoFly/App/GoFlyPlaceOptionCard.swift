@@ -11,16 +11,18 @@ struct GoFlyFavoriteStar: View {
     var body: some View {
         Button { _ = favorites.toggle(place) } label: {
             if let labelTitle {
-                Label(labelTitle, systemImage: symbol)
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 44)
-                    .background(GoFlyStyle.secondarySurface, in: Capsule())
-                    .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                    .contentShape(Capsule())
+                HStack(spacing: 6) {
+                    GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
+                    Text(labelTitle)
+                        .font(.subheadline.weight(.medium))
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(GoFlyStyle.secondarySurface, in: Capsule())
+                .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                .contentShape(Capsule())
             } else {
-                Image(systemName: symbol)
-                    .goFlyControlSymbol(size: 20, weight: .semibold)
+                GoFlyStarIcon(size: 18, filled: favorites.isFavorite(place))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

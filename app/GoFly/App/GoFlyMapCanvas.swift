@@ -49,6 +49,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var viewport: CGRect
     var cameraIntent: GoFlyCameraIntent?
     var route: PlannedRoute? = nil
+    /// Numbered intermediate stops; when nil, 1/3 and 2/3 of long routes are marked.
+    var routeWaypoints: [GeoCoordinate]? = nil
     var wanderTarget: MapPlace? = nil
     var markerBearingDegrees: Double? = nil
     var adjustsFocusForViewportChanges = true
@@ -113,6 +115,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var routePoints: [GeoCoordinate] = []
         private var routeOverlay: MKPolyline?
         private var routeRenderer: MKPolylineRenderer?
+        private var routeWaypointsApplied: [GeoCoordinate]?
+        private var routeNodeAnnotations: [RouteNodeAnnotation] = []
         private var annotationLocaleIdentifier = ""
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
@@ -183,8 +187,11 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func updateRoute(on map: MKMapView) {
             let points = parent.route?.points ?? []
-            guard points != routePoints else { return }
+            guard points != routePoints || parent.routeWaypoints != routeWaypointsApplied else { return }
             routePoints = points
+            routeWaypointsApplied = parent.routeWaypoints
+            map.removeAnnotations(routeNodeAnnotations)
+            routeNodeAnnotations = []
             if let routeOverlay { map.removeOverlay(routeOverlay) }
             routeOverlay = nil
             routeRenderer = nil
@@ -193,6 +200,15 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             let overlay = MKPolyline(coordinates: coordinates, count: coordinates.count)
             routeOverlay = overlay
             map.addOverlay(overlay, level: .aboveRoads)
+            var waypoints = parent.routeWaypoints ?? []
+            if parent.routeWaypoints == nil, points.count >= 4 {
+                waypoints = [points[points.count / 3], points[points.count * 2 / 3]]
+            }
+            var annotations = [RouteNodeAnnotation(points[0], kind: .start)]
+            annotations += waypoints.enumerated().map { RouteNodeAnnotation($1, kind: .waypoint($0 + 1)) }
+            annotations.append(RouteNodeAnnotation(points[points.count - 1], kind: .destination))
+            routeNodeAnnotations = annotations
+            map.addAnnotations(annotations)
         }
 
         func applyCameraIfNeeded(on map: MKMapView) {
@@ -313,6 +329,16 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
+            if let node = annotation as? RouteNodeAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: "routeNode")
+                    ?? MKAnnotationView(annotation: node, reuseIdentifier: "routeNode")
+                view.annotation = node
+                view.image = node.kind.image
+                view.centerOffset = node.kind.centerOffset
+                view.canShowCallout = false
+                view.isAccessibilityElement = false
+                return view
+            }
             guard annotation is PositionAnnotation, let marker = parent.marker else { return nil }
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "position") as? GoFlyPositionArrowView
                 ?? GoFlyPositionArrowView(annotation: annotation, reuseIdentifier: "position")
@@ -360,6 +386,60 @@ private final class LayoutMapView: MKMapView {
             guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
             view.onTraitChange?()
         }
+    }
+}
+
+private final class RouteNodeAnnotation: NSObject, MKAnnotation {
+    enum Kind {
+        case start, waypoint(Int), destination
+
+        var centerOffset: CGPoint {
+            if case .destination = self { return CGPoint(x: 0, y: -11) }
+            return .zero
+        }
+
+        /// Figma D1/D6 route nodes: white ring start, numbered waypoints, black destination pin.
+        var image: UIImage {
+            switch self {
+            case .start:
+                return Self.render(CGSize(width: 22, height: 22)) { rect in
+                    UIColor.white.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+                    let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 4.5, dy: 4.5))
+                    ring.lineWidth = 3; UIColor.black.setStroke(); ring.stroke()
+                }
+            case .waypoint(let number):
+                return Self.render(CGSize(width: 24, height: 24)) { rect in
+                    let circle = rect.insetBy(dx: 2, dy: 2)
+                    UIColor.white.setFill(); UIBezierPath(ovalIn: circle).fill()
+                    let ring = UIBezierPath(ovalIn: circle.insetBy(dx: 1.25, dy: 1.25))
+                    ring.lineWidth = 2.5; UIColor.black.setStroke(); ring.stroke()
+                    let text = NSAttributedString(string: "\(number)", attributes: [
+                        .font: UIFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: UIColor.black])
+                    let size = text.size()
+                    text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
+                }
+            case .destination:
+                return Self.render(CGSize(width: 26, height: 34)) { rect in
+                    UIColor.black.setFill()
+                    UIBezierPath(roundedRect: CGRect(x: rect.midX - 1.25, y: 20, width: 2.5, height: 10),
+                                 cornerRadius: 1.25).fill()
+                    UIBezierPath(ovalIn: CGRect(x: rect.midX - 11, y: 0, width: 22, height: 22)).fill()
+                    UIColor.white.setFill()
+                    UIBezierPath(ovalIn: CGRect(x: rect.midX - 3, y: 8, width: 6, height: 6)).fill()
+                }
+            }
+        }
+
+        private static func render(_ size: CGSize, _ draw: @escaping (CGRect) -> Void) -> UIImage {
+            UIGraphicsImageRenderer(size: size).image { _ in draw(CGRect(origin: .zero, size: size)) }
+        }
+    }
+
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    let kind: Kind
+    init(_ coordinate: GeoCoordinate, kind: Kind) {
+        self.coordinate = coordinate.clLocationCoordinate
+        self.kind = kind
     }
 }
 

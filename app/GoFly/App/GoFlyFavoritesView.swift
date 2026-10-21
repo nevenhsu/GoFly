@@ -61,10 +61,15 @@ struct GoFlyFavoritesView: View {
                 if selecting { selecting = false; selected.removeAll() }
                 else { onDismiss() }
             } label: {
-                Label(goFlyString(selecting ? "favorites.cancel" : "common.back"),
-                      systemImage: "chevron.backward")
-                    .labelStyle(.titleAndIcon)
-                    .frame(minHeight: 44)
+                Group {
+                    if selecting {
+                        Text(goFlyString("favorites.cancel"))
+                    } else {
+                        Label(goFlyString("common.back"), systemImage: "chevron.backward")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favorites.dismiss")
@@ -75,19 +80,36 @@ struct GoFlyFavoritesView: View {
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            Button {
-                selecting.toggle()
-                selected.removeAll()
-            } label: {
-                Image(systemName: selecting ? "xmark.circle" : "checkmark.circle")
-                    .font(.system(size: 21))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+            if selecting {
+                Button {
+                    let keys = Set(visible.map(\.key))
+                    if keys.isSubset(of: selected) { selected.subtract(keys) }
+                    else { selected.formUnion(keys) }
+                } label: {
+                    Text(goFlyString("favorites.selectAll"))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!favorites.canMutate)
+                .accessibilityIdentifier("favorites.selectAll")
+            } else {
+                Button {
+                    selecting = true
+                    selected.removeAll()
+                } label: {
+                    Text(goFlyString("favorites.select"))
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 32)
+                        .background(GoFlyStyle.secondarySurface, in: Capsule())
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!favorites.canMutate)
+                .accessibilityIdentifier("favorites.select")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(goFlyString(selecting ? "favorites.cancel" : "favorites.select"))
-            .disabled(!favorites.canMutate)
-            .accessibilityIdentifier("favorites.select")
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
@@ -111,8 +133,13 @@ struct GoFlyFavoritesView: View {
     private var bottomSearch: some View {
         VStack(spacing: 12) {
             if selecting {
-                Button(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count)) {
+                Button {
                     delete(selected)
+                } label: {
+                    HStack(spacing: 8) {
+                        GoFlyTrashIcon(size: 17)
+                        Text(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count))
+                    }
                 }
                 .buttonStyle(GoFlyActionStyle(destructive: true))
                 .disabled(selected.isEmpty || !favorites.canMutate)
@@ -147,13 +174,16 @@ struct GoFlyFavoritesView: View {
                 if selecting { toggleSelection(favorite.key) }
                 else { togglePending(favorite) }
             } label: {
-                Image(systemName: selecting
-                    ? (selected.contains(favorite.key) ? "checkmark.circle.fill" : "circle")
-                    : (pending[favorite.key] == nil ? GoFlySymbols.favoriteSelected : GoFlySymbols.favorite))
-                    .font(.system(size: 20, weight: .semibold))
-                    .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
-                    .frame(width: 44, height: 44)
+                Group {
+                    if selecting {
+                        GoFlyCheckboxIcon(selected: selected.contains(favorite.key), size: 22)
+                    } else {
+                        GoFlyStarIcon(size: 16, filled: false)
+                            .frame(width: 36, height: 36)
+                            .background(GoFlyStyle.secondarySurface, in: Circle())
+                    }
+                }
+                .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .disabled(!favorites.canMutate)
@@ -304,8 +334,11 @@ private struct GoFlyFavoriteLabelEditor: View {
             .accessibilityIdentifier("favorites.editor.form")
             .safeAreaInset(edge: .bottom) {
                 Button(role: .destructive, action: onDelete) {
-                    Label(goFlyString("favorites.delete"), systemImage: "trash")
-                        .foregroundStyle(GoFlyStyle.dangerForeground)
+                    HStack(spacing: 8) {
+                        GoFlyTrashIcon(size: 17)
+                        Text(goFlyString("favorites.delete"))
+                    }
+                    .foregroundStyle(GoFlyStyle.dangerForeground)
                 }
                 .buttonStyle(GoFlyActionStyle())
                 .foregroundStyle(GoFlyStyle.dangerForeground)

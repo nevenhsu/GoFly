@@ -42,9 +42,14 @@ final class GoFlyRedesignScreenshots: XCTestCase {
             app.buttons["onboarding.location.skip"].tap()
             wait(app.buttons["onboarding.vpn.next"])
             snapshot(app, "precision-onboarding-vpn-\(sample)")
+            wait(app.descendants(matching: .any)["onboarding.vpn.failure"])
+            app.swipeUp()
+            Thread.sleep(forTimeInterval: 0.3)
             let help = app.buttons["onboarding.vpn.help.open"]
-            for _ in 0..<6 where !help.isHittable { app.swipeUp() }
+            wait(help)
             help.tap()
+            wait(app.staticTexts["onboarding.vpn.help.step1"])
+            Thread.sleep(forTimeInterval: 0.45)
             snapshot(app, "precision-vpn-help-\(sample)")
             app.terminate()
         }
@@ -55,24 +60,40 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Visual samples run on the simulator.")
         #else
-        let app = XCUIApplication()
-        app.launchArguments = ["-gofly-ui-gallery", "-gofly-ui-preferences-store", UUID().uuidString,
-                               "-gofly-ui-preferences-language", "zh-Hant",
-                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        app.launch()
-        let shuffle = app.buttons["joystick.randomDestination"]
-        for _ in 0..<10 where !shuffle.isHittable { app.swipeUp() }
-        wait(shuffle)
-        XCTAssertTrue(shuffle.isHittable)
-        XCTAssertGreaterThanOrEqual(shuffle.frame.height, 44)
-        snapshot(app, "precision-execution-destination-axxxl")
-        let pause = app.buttons["execution.pause"]
-        for _ in 0..<8 where !pause.isHittable { app.swipeUp() }
-        wait(pause)
-        XCTAssertTrue(pause.isHittable)
-        XCTAssertGreaterThanOrEqual(pause.frame.height, 44)
-        snapshot(app, "precision-execution-controls-axxxl")
-        app.terminate()
+        for sample in ["light", "dark", "axxxl"] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "-gofly-ui-gallery",
+                "-gofly-ui-preferences-store", UUID().uuidString,
+                "-gofly-ui-preferences-language", "zh-Hant",
+                "-gofly-ui-preferences-appearance", sample == "dark" ? "dark" : "light",
+                "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+            ]
+            if sample == "axxxl" {
+                app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            }
+            app.launch()
+            if sample == "axxxl" {
+                let shuffle = app.buttons["joystick.randomDestination"]
+                for _ in 0..<10 where !shuffle.isHittable { app.swipeUp() }
+                wait(shuffle)
+                XCTAssertTrue(shuffle.isHittable)
+                XCTAssertGreaterThanOrEqual(shuffle.frame.height, 44)
+                snapshot(app, "precision-execution-destination-axxxl")
+                let pause = app.buttons["execution.pause"]
+                for _ in 0..<8 where !pause.isHittable { app.swipeUp() }
+                wait(pause)
+                XCTAssertTrue(pause.isHittable)
+                XCTAssertGreaterThanOrEqual(pause.frame.height, 44)
+                snapshot(app, "precision-execution-controls-axxxl")
+            }
+            let pad = app.descendants(matching: .any)["joystick.pad"]
+            for _ in 0..<10 where !pad.isHittable { app.swipeUp() }
+            wait(pad)
+            Thread.sleep(forTimeInterval: 0.3)
+            snapshot(app, "step-5-joystick-pad-\(sample)")
+            app.terminate()
+        }
         #endif
     }
 
@@ -126,7 +147,8 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         app.buttons["favorites.select"].tap()
         app.buttons["favorites.star.25.047800, 121.517000"].tap()
         snapshot(app, "precision-favorite-selection-\(sample)")
-        app.buttons["favorites.select"].tap()
+        app.buttons["favorites.dismiss"].tap()
+        wait(app.buttons["favorites.select"])
         app.buttons["favorites.dismiss"].tap()
         app.selectGoFlyMode("route")
         wait(app.buttons["route.importedRoutes"])
@@ -141,7 +163,7 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         let load = app.buttons.matching(identifier: "imports.load").firstMatch
         wait(load)
         load.tap()
-        wait(app.buttons["route.clearImported"])
+        wait(app.buttons["route.start"])
         snapshot(app, "step-4-imported-\(sample)")
         app.selectGoFlyMode("joystick")
         wait(app.buttons["joystick.setOrigin"])
@@ -149,13 +171,25 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         app.buttons["map.settings"].tap()
         wait(app.buttons["settings.languageAndAppearance"])
         snapshot(app, "step-8-settings-\(sample)")
-        for page in ["location", "vpn", "background", "languageAndAppearance", "device", "help"] {
+        let pageRootIdentifiers: [String: String] = [
+            "location": "settings.location.page",
+            "vpn": "settings.vpn.page",
+            "background": "settings.background.page",
+            "languageAndAppearance": "settings.preferences.page",
+            "device": "settings.device.page"
+        ]
+        for page in ["location", "vpn", "background", "languageAndAppearance", "device"] {
             let link = app.buttons["settings.\(page)"]
             for _ in 0..<6 where !link.isHittable { app.swipeUp() }
             wait(link)
             link.tap()
+            if let rootID = pageRootIdentifiers[page] {
+                wait(app.descendants(matching: .any)[rootID])
+            }
+            Thread.sleep(forTimeInterval: 0.45)
             snapshot(app, "precision-settings-\(page)-\(sample)")
             app.navigationBars.buttons.firstMatch.tap()
+            Thread.sleep(forTimeInterval: 0.35)
         }
         app.terminate()
     }

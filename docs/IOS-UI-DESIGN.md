@@ -71,6 +71,8 @@ App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的
 
 ## Google Maps 參考改版（2026-10-20）
 
+**視覺主來源（2026-10-21 使用者確認）：Figma 檔案 `RtPV8PXCQJ2WXK3jk3kPrq`（「GoFly · UI 線框討論」）→ 頁面「`04 · iOS Redesign（Google Maps 參考）`」（`node-id=121-50359`，含同頁「`Dark · `」前綴深色版）是唯一主要視覺基準（`https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359`）；本節文字只用來補行為與無障礙，與 Figma 衝突時以該頁線框為準並同步更新本文件。地圖底圖仍為 Apple Maps，Figma 的地圖為線框示意，不視為不一致。**
+
 **狀態：使用者已核可方向與決策；Figma「04 · iOS Redesign（Google Maps 參考）」已畫正式版精細度靜態畫面（淺色 40 張：共用元件 1、A 5、B 7、C 4、D 12、E 3、F 8；同頁右側「Dark · 」前綴為對應深色版 40 張；2026-10-20 第二輪：移除 R03、新增 R05 連線說明、D5–D12 匯入路線（清單、超過 10 點摘要、全部點位唯讀清單、匯入與匯出流程）、F4–F8 設定子頁），不含 prototype。App 步驟 1–8 已實作；步驟 9 的完整檢查、既有 UI 測試與代表性畫面驗證由本輪交付結果記錄，未宣稱全部驗收通過；真機項目仍待驗證。** 計畫、comments 對照與待補事項見 `work/gofly-planning/IOS-GOOGLE-MAPS-REDESIGN-PLAN.md`。
 
 ### 取代的規則

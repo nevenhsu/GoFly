@@ -31,7 +31,7 @@ private struct GoFlySettingsGroup<Content: View>: View {
         VStack(spacing: 0) {
             content()
         }
-        .background(GoFlyStyle.surface,
+        .background(GoFlyStyle.cardSurface,
                     in: RoundedRectangle(cornerRadius: 14,
                                          style: .continuous))
         .overlay {
@@ -46,10 +46,13 @@ private struct GoFlySettingsRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        content()
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
+        HStack(alignment: .center, spacing: 12) {
+            content()
+        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 
@@ -166,15 +169,15 @@ struct GoFlyBackgroundSettingsPage: View {
         GoFlySettingsPageContainer(titleKey: "settings.background", rootIdentifier: "settings.background.page") {
             GoFlySettingsGroup {
                 GoFlySettingsRow {
-                    GoFlySettingsValueRow {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(goFlyString("settings.background.purposeTitle"))
                             .font(.body)
-                    } value: {
                         Text(goFlyString("background.systemDecidesRuntime"))
-                            .font(.body)
+                            .font(.subheadline)
                             .foregroundStyle(GoFlyStyle.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Divider().padding(.leading, 16)
                 Button(action: status.openSystemSettings) {
@@ -239,15 +242,6 @@ struct GoFlyVPNSettingsPage: View {
                                         action: nil,
                                         identifier: "settings.vpn.status")
                     }
-                }
-                Divider().padding(.leading, 16)
-                GoFlySettingsRow {
-                    Text(goFlyString("settings.vpn.check"))
-                        .font(.body)
-                    Spacer(minLength: 8)
-                    Text(goFlyString(recovery.connectionState.settingsStatusKey))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
                 }
             }
 
@@ -371,15 +365,15 @@ struct GoFlyDeviceSettingsPage: View {
             let snapshot = status.deviceSnapshot(service: service, setupMetadata: setupMetadata)
             GoFlySettingsGroup {
                 deviceField("settings.device.pairing", value: snapshot.pairingStatus, identifier: "settings.device.pairing")
-                Divider()
+                Divider().padding(.leading, 16)
                 deviceField("settings.device.signingExpiry", value: snapshot.signingExpiryStatus, identifier: "settings.device.signingExpiry")
-                Divider()
+                Divider().padding(.leading, 16)
                 deviceField("settings.device.teamID", value: snapshot.teamIDStatus, identifier: "settings.device.teamID")
-                Divider()
+                Divider().padding(.leading, 16)
                 deviceField("settings.device.service", value: snapshot.serviceStatus, identifier: "settings.device.service")
-                Divider()
+                Divider().padding(.leading, 16)
                 deviceField("settings.device.version", value: snapshot.appVersion, identifier: "settings.device.version")
-                Divider()
+                Divider().padding(.leading, 16)
                 deviceField("settings.device.system", value: "\(snapshot.deviceName) · \(snapshot.deviceModel) · \(snapshot.systemName) \(snapshot.systemVersion)", identifier: "settings.device.system")
             }
 
@@ -444,6 +438,7 @@ struct GoFlyDeviceSettingsPage: View {
         }
         .frame(minHeight: 52)
         .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
     }

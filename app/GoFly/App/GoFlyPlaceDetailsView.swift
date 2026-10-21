@@ -49,8 +49,9 @@ struct GoFlyPlaceDetailsView: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier("placeDetails.coordinates")
             ScrollView(.horizontal, showsIndicators: false) {
-                actions.padding(.vertical, 2)
+                actions.padding(.horizontal, 20).padding(.vertical, 2)
             }
+            .padding(.horizontal, -20)
             .padding(.top, 10)
         }
         .padding(.horizontal, 20)
@@ -81,7 +82,7 @@ struct GoFlyPlaceDetailsView: View {
     private var actions: some View {
         HStack(spacing: 8) {
             if let onGo {
-                Button(action: onGo) { Label(goFlyString("map.go"), systemImage: "play.fill") }
+                Button(action: onGo) { Text(goFlyString("map.go")) }
                     .buttonStyle(GoFlyActionStyle(primary: true, small: true))
                     .frame(minWidth: 64).disabled(!canGo)
                     .accessibilityIdentifier("placeDetails.go")

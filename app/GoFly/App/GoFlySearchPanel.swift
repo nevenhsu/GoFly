@@ -283,7 +283,6 @@ struct GoFlySearchPanel: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search.result.\(place.coordinate.displayText)")
-            GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(place.coordinate.displayText)")
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
@@ -318,7 +317,6 @@ struct GoFlySearchPanel: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search.result.\(identifier.coordinate.displayText)")
-            GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(identifier.coordinate.displayText)")
         }
         .padding(.horizontal, 20)
         Divider().padding(.leading, 68)

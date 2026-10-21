@@ -14,11 +14,9 @@ struct GoFlyBottomBar: View {
                     selection = mode
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: symbol(for: mode))
-                            .font(.system(size: 22, weight: .regular))
-                            .accessibilityHidden(true)
+                        GoFlyTabIcon(mode: mode, selected: selection == mode, size: 22)
                         Text(goFlyString("mode.\(mode.rawValue)"))
-                            .font(.caption2.weight(.medium))
+                            .font(.caption2.weight(selection == mode ? .bold : .medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }

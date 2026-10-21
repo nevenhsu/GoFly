@@ -45,10 +45,12 @@ final class GoFlySearchUITests: XCTestCase {
         query.tap()
         query.typeText("25.0478, 121.5170")
         dismissKeyboard(app)
-        let star = app.buttons["search.favorite.\(coordinate)"]
+        let result = app.buttons["search.result.\(coordinate)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        result.tap()
+        let star = app.buttons["placeDetails.favorite"]
         XCTAssertTrue(star.waitForExistence(timeout: 5))
         star.tap()
-        XCTAssertEqual(star.value as? String, "Favorite")
 
         app.terminate()
         app.launch()

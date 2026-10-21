@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import Combine
 import GoFlyCore
 import SwiftUI
 
@@ -9,6 +10,7 @@ struct GoFlyComponentGallery: View {
     @State private var snackbar: GoFlySnackbarMessage?
     @State private var detent: GoFlySheetDetent = .half
     @State private var mode: SessionMapMode = .teleport
+    @StateObject private var joystick = JoystickMovementController(commands: GalleryJoystickCommands())
 
     var body: some View {
         ScrollView {
@@ -18,6 +20,7 @@ struct GoFlyComponentGallery: View {
                 snackbarSection
                 bottomBarSection
                 executionSection
+                joystickSection
                 sheetSection
             }
             .padding(16)
@@ -113,6 +116,25 @@ struct GoFlyComponentGallery: View {
         }
     }
 
+    private var joystickSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("JoystickPanel")
+            GoFlyJoystickPanel(
+                controller: joystick,
+                cameraHeadingDegrees: 0,
+                maximumHeight: 420,
+                onSetOrigin: {},
+                onRandomDestination: {},
+                onSettings: {}
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+            }
+        }
+    }
+
     private var sheetSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("BottomSheet")
@@ -139,5 +161,23 @@ struct GoFlyComponentGallery: View {
             .font(.title3.weight(.semibold))
             .accessibilityAddTraits(.isHeader)
     }
+}
+
+@MainActor
+private final class GalleryJoystickCommands: JoystickCommanding {
+    private let subject = PassthroughSubject<JoystickCommandEvent, Never>()
+    var canBeginJoystick: Bool { true }
+    var currentJoystickOrigin: GeoCoordinate? { GeoCoordinate(latitude: 25.0330, longitude: 121.5654) }
+    var movementAdmissionRevision: UInt64 { 1 }
+    var joystickEvents: AnyPublisher<JoystickCommandEvent, Never> { subject.eraseToAnyPublisher() }
+    func beginJoystick(_ intent: JoystickMovementIntent, expectedMovementAdmissionRevision: UInt64) async -> JoystickPreparationOutcome { .cancelled }
+    func joystickInputRevision(executionID: UUID, lease: MovementTaskLease) -> JoystickInputRevision? { nil }
+    func reviseJoystickInput(executionID: UUID, lease: MovementTaskLease) -> JoystickInputRevision? { nil }
+    func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedInputRevision: JoystickInputRevision, displacement: JoystickDisplacement) async -> JoystickStepOutcome { .cancelled }
+    func sendJoystickStep(executionID: UUID, lease: MovementTaskLease, sequence: UInt64, expectedInputRevision: JoystickInputRevision, recipe: JoystickStepRecipe) async -> JoystickRecipeStepOutcome { .cancelled }
+    func releaseJoystick(executionID: UUID, lease: MovementTaskLease, disposition: JoystickReleaseDisposition) -> Bool { false }
+    func resumeJoystick(executionID: UUID, lease: MovementTaskLease) -> Bool { false }
+    func resumeJoystickStream(executionID: UUID, lease: MovementTaskLease) -> Bool { false }
+    func waitForJoystickIdle(executionID: UUID, lease: MovementTaskLease) async -> JoystickIdleSettlement { .settled }
 }
 #endif

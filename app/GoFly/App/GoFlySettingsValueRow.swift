@@ -14,6 +14,7 @@ struct GoFlySettingsValueRow<Title: View, Value: View>: View {
     var body: some View {
         layout {
             title
+                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 12) }
             value
                 .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
