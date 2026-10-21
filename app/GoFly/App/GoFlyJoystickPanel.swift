@@ -27,15 +27,11 @@ struct GoFlyJoystickPanel: View {
                         onAction: controller.canRetryWander ? { _ = controller.retryWander() } : nil,
                         onDismiss: controller.clearWanderError, identifier: "joystick.wanderError")
                 }
-                wanderControls
                 if controller.wanderEnabled {
-                    Button(action: onRandomDestination) {
-                        Label(goFlyString("joystick.randomDestination"), systemImage: GoFlySymbols.retry)
-                    }
-                    .buttonStyle(GoFlyActionStyle(small: true))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .disabled(!controller.canRandomizeWanderTarget)
-                    .accessibilityIdentifier("joystick.randomDestination")
+                    destinationRow
+                } else {
+                    wanderControls
+                    Divider().padding(.top, 4)
                 }
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
@@ -57,10 +53,11 @@ struct GoFlyJoystickPanel: View {
                     VStack(spacing: 8) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(goFlyString("route.speed"))
+                                .foregroundStyle(GoFlyStyle.secondary)
                             Spacer(minLength: 12)
                             HStack(alignment: .firstTextBaseline, spacing: 3) {
                                 Text("\(controller.speed.kilometersPerHour)")
-                                    .font(.title3.weight(.semibold))
+                                    .font(.title.weight(.semibold))
                                     .monospacedDigit()
                                 Text(goFlyString("route.speedUnit"))
                                     .font(.footnote)
@@ -84,7 +81,9 @@ struct GoFlyJoystickPanel: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
@@ -126,10 +125,9 @@ struct GoFlyJoystickPanel: View {
 
     private var wanderRow: some View {
         HStack(spacing: 12) {
-            Image(systemName: GoFlySymbols.walking)
+            Image(systemName: "shuffle")
                 .font(.system(size: 16, weight: .semibold))
                 .frame(width: 28, height: 28)
-                .background(GoFlyStyle.secondarySurface, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(goFlyString("joystick.wander"))
@@ -153,6 +151,68 @@ struct GoFlyJoystickPanel: View {
         .frame(minHeight: 44)
     }
 
+    private var destinationRow: some View {
+        GoFlyWanderDestinationRow(title: controller.wanderTarget?.place.title ?? goFlyString("joystick.wander"),
+                                 caption: wanderDestinationLabel,
+                                 canRandomize: controller.canRandomizeWanderTarget,
+                                 onRandomDestination: onRandomDestination)
+    }
+
+    private var wanderDestinationLabel: String {
+        let format = goFlyString("joystick.currentTarget")
+        let prefix = format.components(separatedBy: "%@").first ?? format
+        return prefix.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":：")))
+    }
+
+}
+
+/// The live destination row is also rendered by the simulator component gallery.
+struct GoFlyWanderDestinationRow: View {
+    let title: String
+    let caption: String
+    let canRandomize: Bool
+    let onRandomDestination: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
+
+    var body: some View {
+        layout {
+            HStack(spacing: 12) {
+                Image(systemName: GoFlySymbols.place)
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(width: 36, height: 36)
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(caption).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
+                    Text(title).font(.body.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button(action: onRandomDestination) {
+                Label(goFlyString("joystick.randomDestination"), systemImage: "shuffle")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 40)
+                    .background(GoFlyStyle.secondarySurface, in: Capsule())
+                    .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                    .frame(minHeight: 44)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canRandomize)
+            .accessibilityIdentifier("joystick.randomDestination")
+        }
+        .frame(minHeight: 48)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("joystick.destination")
+    }
 }
 
 private struct GoFlyManualJoystickPad: View {
@@ -184,9 +244,14 @@ private struct GoFlyManualJoystickPad: View {
                     .rotationEffect(.degrees(Double(direction) * 15))
             }
             Circle()
-                .fill(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                .fill(isEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledSurface)
                 .frame(width: thumbDiameter, height: thumbDiameter)
-                .overlay { Circle().strokeBorder(GoFlyStyle.surface, lineWidth: 1) }
+                .overlay {
+                    Circle().strokeBorder(isEnabled ? GoFlyStyle.subtleBorder : GoFlyStyle.border, lineWidth: 1)
+                    Circle()
+                        .fill(isEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
+                        .frame(width: 20, height: 20)
+                }
                 .shadow(color: .black.opacity(isEnabled ? 0.18 : 0), radius: 5, y: 3)
                 .offset(thumbOffset)
                 .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)

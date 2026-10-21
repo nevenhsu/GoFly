@@ -33,7 +33,7 @@ struct GoFlySearchPanel: View {
                     if let error = search.inputError {
                         GoFlyStatusBanner(tone: .warning, title: goFlyString(error.rawValue),
                                           identifier: "search.inputError")
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 20)
                             .padding(.top, 12)
                     }
                     if search.isSearching {
@@ -97,7 +97,7 @@ struct GoFlySearchPanel: View {
                 }
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+            .frame(minHeight: 50)
             .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -105,7 +105,7 @@ struct GoFlySearchPanel: View {
                                   lineWidth: focused ? 1.5 : 0.75)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 10)
     }
@@ -121,7 +121,7 @@ struct GoFlySearchPanel: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .background(GoFlyStyle.secondarySurface, in: Capsule())
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.bottom, 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("search.role")
@@ -141,7 +141,7 @@ struct GoFlySearchPanel: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.bottom, 4)
         .accessibilityIdentifier("search.coordinateHint")
     }
@@ -241,7 +241,7 @@ struct GoFlySearchPanel: View {
                                action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
@@ -252,7 +252,7 @@ struct GoFlySearchPanel: View {
                     .accessibilityIdentifier("favorites.open")
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.top, 16)
         .padding(.bottom, 2)
         .accessibilityIdentifier("search.section.\(key)")
@@ -277,17 +277,17 @@ struct GoFlySearchPanel: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 9)
-                .frame(minHeight: 60)
+                .padding(.vertical, 8)
+                .frame(minHeight: 64)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search.result.\(place.coordinate.displayText)")
             GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(place.coordinate.displayText)")
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.top, 4)
-        Divider().padding(.leading, 56)
+        Divider().padding(.leading, 68)
         }
     }
 
@@ -312,16 +312,16 @@ struct GoFlySearchPanel: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 9)
-                .frame(minHeight: 60)
+                .padding(.vertical, 8)
+                .frame(minHeight: 64)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("search.result.\(identifier.coordinate.displayText)")
             GoFlyFavoriteStar(place: place, identifier: "search.favorite.\(identifier.coordinate.displayText)")
         }
-        .padding(.horizontal, 16)
-        Divider().padding(.leading, 56)
+        .padding(.horizontal, 20)
+        Divider().padding(.leading, 68)
         }
     }
 
@@ -342,7 +342,7 @@ struct GoFlySearchPanel: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .accessibilityIdentifier(identifier)
     }
 
@@ -352,7 +352,7 @@ struct GoFlySearchPanel: View {
         Image(systemName: symbol)
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(filled ? GoFlyStyle.surface : GoFlyStyle.primary)
-            .frame(width: 28, height: 28)
+            .frame(width: 36, height: 36)
             .background(filled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface, in: Circle())
             .accessibilityHidden(true)
     }

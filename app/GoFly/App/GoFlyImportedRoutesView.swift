@@ -33,7 +33,17 @@ struct GoFlyImportedRoutesView: View {
                     GoFlyEmptyState(symbol: GoFlySymbols.importEmpty, message: goFlyString("imports.empty"))
                         .accessibilityIdentifier("imports.empty")
                 }
-                ForEach(imports.records.reversed()) { record in recordCard(record) }
+                if !imports.records.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(imports.records.reversed().enumerated()), id: \.element.id) { index, record in
+                            recordCard(record)
+                            if index < imports.records.count - 1 { Divider().padding(.leading, 16) }
+                        }
+                    }
+                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                }
             }
             .padding(16)
         }
@@ -132,7 +142,7 @@ struct GoFlyImportedRoutesView: View {
         } label: {
             Label(goFlyString("imports.import"), systemImage: GoFlySymbols.importFile)
         }
-        .buttonStyle(GoFlyActionStyle())
+        .buttonStyle(GoFlyActionStyle(primary: true))
         .disabled(isBusy || !imports.canMutate)
         .accessibilityIdentifier("imports.import")
     }
@@ -149,26 +159,28 @@ struct GoFlyImportedRoutesView: View {
                 showingActions = true
             }
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(record.filename).font(.body.weight(.semibold)).lineLimit(2)
                 Text(record.start.displayText + " → " + record.end.displayText)
                     .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(goFlyImportedRouteMetadata(record))
                     .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let failure = imports.unavailable[record.id] {
                     Text(goFlyString(failure.localizationKey))
                         .font(.footnote).foregroundStyle(GoFlyStyle.errorForeground)
                         .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 63, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isBusy || imports.loadState != .ready)
         .accessibilityIdentifier("imports.record.\(record.id.uuidString)")
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func deleteSelected() {

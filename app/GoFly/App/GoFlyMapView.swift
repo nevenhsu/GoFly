@@ -111,6 +111,7 @@ struct GoFlyMapView: View {
     @State private var recentPlaces: [MapPlace] = []
     @State private var snackbar: GoFlySnackbarMessage?
     @State private var followsHeading = false
+    @State private var bottomBarHeight: CGFloat = 83
     @State private var candidateHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
@@ -279,7 +280,7 @@ struct GoFlyMapView: View {
                     }
                 }
             }
-            .sheet(item: $presentedSheet) { sheet in
+            .fullScreenCover(item: $presentedSheet) { sheet in
                 switch sheet.content {
                 case .favorites:
                     GoFlyFavoritesView(
@@ -332,7 +333,7 @@ struct GoFlyMapView: View {
             }
         }
         .background(GoFlyStyle.surface)
-        .sheet(isPresented: $searchFavorites) {
+        .fullScreenCover(isPresented: $searchFavorites) {
             GoFlyFavoritesView(candidate: activeSearch.candidate?.place,
                 onSelect: { place in
                     activeSearch.select(place)
@@ -359,11 +360,11 @@ struct GoFlyMapView: View {
             mapCanvas(viewport: viewport)
             mapPins(viewport: viewport)
             if isExecutionMode {
-                GoFlyExecutionHeader(title: executionTitle, detail: goFlyString(displayStatusKey))
+                GoFlyExecutionHeader(title: executionTitle, detail: executionDetail, symbol: executionSymbol)
                     .padding(.horizontal, 16).padding(.top, 8)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
             } else { topBar }
-            mapControls
+            mapControls(bottomInset: geometry.safeAreaInsets.bottom)
             bottomChrome(in: geometry)
         }
         .goFlySnackbar($snackbar)
@@ -459,7 +460,7 @@ struct GoFlyMapView: View {
             if isExecutionMode {
                 bottomPanelContent(in: geometry)
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
-                    .background(GoFlyStyle.surface)
+                    .background(GoFlyStyle.cardSurface)
                     .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
                         panelFrame = $0; sheetHeight = $0.height
@@ -468,8 +469,9 @@ struct GoFlyMapView: View {
             GoFlyBottomSheet(
                 detent: $sheetDetent,
                 availableHeight: sheetAvailableHeight(in: geometry),
-                collapsedHeight: 132,
-                contentHeight: bottomContentHeight,
+                collapsedHeight: 116,
+                maximumHeight: max(132, geometry.size.height - max(topFrame.maxY, 96) - 96 - 49),
+                contentHeight: mode == .teleport ? bottomContentHeight : 0,
                 onHeightChange: { sheetHeight = $0 }
             ) {
                 sheetContent(in: geometry)
@@ -477,8 +479,10 @@ struct GoFlyMapView: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
             }
             if showsBottomBar {
-                GoFlyBottomBar(selection: Binding(get: { mode }, set: { selectMode($0) }))
+                GoFlyBottomBar(selection: Binding(get: { mode }, set: { selectMode($0) }),
+                                 bottomInset: geometry.safeAreaInsets.bottom)
                     .disabled(!canSwitchMode)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomBarHeight = $0 }
             }
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
@@ -508,7 +512,7 @@ struct GoFlyMapView: View {
                         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
                 }
                 .scrollIndicators(.hidden)
-                .frame(height: min(bottomContentHeight, max(96, sheetHeight - 44)))
+                .frame(height: min(bottomContentHeight, max(96, sheetHeight - 12)))
                 .accessibilityIdentifier("map.panels.scroll")
             }
         }
@@ -516,8 +520,7 @@ struct GoFlyMapView: View {
     }
 
     private func sheetAvailableHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(200, geometry.size.height - max(topFrame.maxY, 96) - minimumMapBand
-            - (showsBottomBar ? 74 : 0) - bottomPadding)
+        max(200, geometry.size.height - (showsBottomBar ? 49 : 0))
     }
 
     private func bottomPanelContent(in geometry: GeometryProxy) -> some View {
@@ -587,6 +590,30 @@ struct GoFlyMapView: View {
         return goFlyString("mode.route")
     }
 
+    private var executionSymbol: String {
+        if joystick.wanderEnabled {
+            return [.paused, .suspended, .interrupted].contains(joystick.phase) ? GoFlySymbols.pause : "shuffle"
+        }
+        return [.paused, .interrupted].contains(route.phase) ? GoFlySymbols.pause : GoFlySymbols.heading
+    }
+
+    private var executionDetail: String {
+        if joystick.wanderEnabled {
+            return goFlyString("joystick.phase.\(joystick.phase.rawValue)") + " · "
+                + goFlyLocalizedFormat(goFlyString("route.speedValue"), joystick.speed.kilometersPerHour)
+        }
+        let speed = goFlyLocalizedFormat(goFlyString("route.speedValue"), route.draft.speed.kilometersPerHour)
+        guard !route.roundTripEnabled, let progress = route.progress else {
+            return goFlyString("route.phase.\(route.phase.rawValue)") + " · " + speed
+        }
+        let remaining = max(0, route.heading == .reverse
+            ? progress.committedDistanceMeters
+            : progress.totalDistanceMeters - progress.committedDistanceMeters)
+        let minutes = Int(ceil(Double(max(0, progress.estimatedRemaining.components.seconds)) / 60))
+        return goFlyLocalizedFormat(goFlyString("route.distance"), remaining / 1_000) + " · "
+            + goFlyLocalizedFormat(goFlyString("route.duration"), minutes) + " · " + speed
+    }
+
     private func selectSearchPlace(_ place: MapPlace) {
         activeSearch.select(place)
         recentPlaces.removeAll { $0.coordinate == place.coordinate }
@@ -647,22 +674,26 @@ struct GoFlyMapView: View {
                 .foregroundStyle(GoFlyStyle.secondary)
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(service.positionMarker?.coordinate.displayText ?? goFlyString("sheet.noPosition"))
+                    Text(currentPositionPlace?.title ?? goFlyString("sheet.noPosition"))
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text(goFlyString(sheetPositionDetailKey))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(service.positionMarker?.coordinate.displayText ?? goFlyString(sheetPositionDetailKey))
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
                 }
                 Spacer(minLength: 8)
                 if let coordinate = service.positionMarker?.coordinate {
-                    let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText,
+                    let place = currentPositionPlace ?? MapPlace(id: .coordinate(coordinate), title: coordinate.displayText,
                                          coordinate: coordinate)
                     GoFlyFavoriteStar(place: place, identifier: "map.position.favorite")
+                        .background(GoFlyStyle.secondarySurface, in: Circle())
+                        .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                     Button { UIPasteboard.general.string = coordinate.displayText } label: {
                         Image(systemName: "doc.on.doc").frame(width: 44, height: 44)
+                            .background(GoFlyStyle.secondarySurface, in: Circle())
+                            .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(goFlyString("placeDetails.copy"))
@@ -673,6 +704,17 @@ struct GoFlyMapView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.collapsedPosition")
+    }
+
+    /// Reuse known place metadata; a visual summary never starts location work.
+    private var currentPositionPlace: MapPlace? {
+        guard let coordinate = service.positionMarker?.coordinate else { return nil }
+        if let favorite = favorites.favorites.first(where: { $0.place.coordinate == coordinate }) {
+            return MapPlace(id: .coordinate(coordinate), title: favorite.displayTitle,
+                            coordinate: coordinate, address: favorite.place.address)
+        }
+        return recentPlaces.first(where: { $0.coordinate == coordinate })
+            ?? MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
     }
 
     private var sheetPositionDetailKey: String {
@@ -699,17 +741,9 @@ struct GoFlyMapView: View {
                     onRouteStart: { useCandidateInRoute(candidate, asStart: true) },
                     onRouteEnd: { useCandidateInRoute(candidate, asStart: false) })
             } else {
-                if let coordinate = service.positionMarker?.coordinate {
-                    let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
-                    HStack {
-                        Text(coordinate.displayText).font(.subheadline.monospacedDigit())
-                        Spacer(minLength: 0)
-                        GoFlyFavoriteStar(place: place, identifier: "map.position.favorite")
-                        Button { UIPasteboard.general.string = coordinate.displayText } label: {
-                            Image(systemName: "doc.on.doc").frame(width: 44, height: 44)
-                        }.accessibilityLabel(goFlyString("placeDetails.copy"))
-                    }
-                }
+                collapsedPositionSummary
+                    .padding(.bottom, 12)
+                Divider()
                 teleportSectionHeader("favorites.title", actionTitle: "search.viewAll") {
                     presentedSheet = GoFlyMapSheet(content: .favorites)
                 }
@@ -748,14 +782,15 @@ struct GoFlyMapView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, activeCandidate == nil ? 20 : 0)
+        .padding(.vertical, activeCandidate == nil ? 10 : 0)
     }
 
     private func teleportSectionHeader(_ key: String, actionTitle: String? = nil,
                                        action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
@@ -775,8 +810,7 @@ struct GoFlyMapView: View {
                 Image(systemName: symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.secondarySurface,
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.body).lineLimit(1)
@@ -789,7 +823,8 @@ struct GoFlyMapView: View {
                     .foregroundStyle(GoFlyStyle.secondary)
                     .accessibilityHidden(true)
             }
-            .frame(minHeight: 56)
+            .frame(minHeight: 64)
+            .overlay(alignment: .bottom) { Divider().padding(.leading, 48) }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -852,9 +887,9 @@ struct GoFlyMapView: View {
 
     /// Floating search entry and settings gear; execution mode supplies its own header.
     /// Floating search bar and status pill (plan 3). The gear and the clear
-    /// control live inside the same capsule, as in Figma B1/B5.
+    /// control live inside the same rounded search field, as in Figma B1/B5.
     private var topBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             HStack(spacing: 0) {
                 Button(action: beginSearch) {
                     HStack(spacing: 10) {
@@ -902,9 +937,9 @@ struct GoFlyMapView: View {
                 .accessibilityIdentifier("map.settings")
                 .padding(.trailing, 4)
             }
-            .frame(minHeight: 48)
-            .background(GoFlyStyle.surface, in: Capsule())
-            .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+            .frame(minHeight: 50)
+            .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
             .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 3)
 
             HStack {
@@ -942,7 +977,7 @@ struct GoFlyMapView: View {
         if sheetDetent == .collapsed { sheetDetent = .half }
     }
 
-    private var mapControls: some View {
+    private func mapControls(bottomInset: CGFloat) -> some View {
         VStack(spacing: 8) {
             if isExecutionMode {
                 Button {
@@ -953,7 +988,7 @@ struct GoFlyMapView: View {
                 } label: {
                     Image(systemName: GoFlySymbols.followHeading)
                 }
-                .buttonStyle(GoFlyIconStyle())
+                .buttonStyle(GoFlyIconStyle(floating: true))
                 .accessibilityLabel(goFlyString("execution.followHeading"))
                 .accessibilityValue(followsHeading ? "1" : "0")
                 .accessibilityIdentifier("map.followHeading")
@@ -963,20 +998,20 @@ struct GoFlyMapView: View {
                 Button { recenter(resetHeading: true) } label: {
                     Image(systemName: GoFlySymbols.compass)
                 }
-                .buttonStyle(GoFlyIconStyle())
+                .buttonStyle(GoFlyIconStyle(floating: true))
                 .accessibilityLabel(goFlyString("map.north"))
                 .accessibilityIdentifier("map.north")
             }
             Button { recenter() } label: {
                 Image(systemName: GoFlySymbols.recenter)
             }
-            .buttonStyle(GoFlyIconStyle())
+            .buttonStyle(GoFlyIconStyle(floating: true))
             .accessibilityLabel(goFlyString("map.recenter"))
             .accessibilityHint(goFlyString("map.recenterHint"))
             .accessibilityIdentifier("map.recenter")
         }
         .padding(.trailing, 16)
-        .padding(.bottom, sheetHeight + (showsBottomBar ? 74 : 0) + 16)
+        .padding(.bottom, max(0, sheetHeight + (showsBottomBar ? bottomBarHeight : 0) - bottomInset) + 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
@@ -1041,7 +1076,7 @@ struct GoFlyMapView: View {
     }
 
     private func panelMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(96, sheetHeight - 44)
+        max(96, sheetHeight - 12)
     }
 
     private var minimumMapBand: CGFloat {
@@ -1051,7 +1086,7 @@ struct GoFlyMapView: View {
     }
 
     private func contentMaximumHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(96, sheetHeight - 52)
+        max(96, sheetHeight - 20)
     }
 
     private var unconfirmedID: UUID? {
@@ -1079,7 +1114,7 @@ struct GoFlyMapView: View {
     }
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {
-        VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
+        VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 0) {
             if route.picker == nil { goButton(candidate) }
             pinButton(candidate)
         }
@@ -1089,8 +1124,8 @@ struct GoFlyMapView: View {
 
     private func goButton(_ candidate: TeleportCandidate) -> some View {
         Button { performGo(candidate) } label: {
-            Text(goFlyString("map.go"))
-                .font(.subheadline.weight(.semibold))
+            Label(goFlyString("map.go"), systemImage: "play.fill")
+                .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 14)
                 .frame(minWidth: 44, minHeight: 28)
                 .foregroundStyle(GoFlyStyle.surface)

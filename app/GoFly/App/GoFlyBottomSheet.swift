@@ -15,6 +15,7 @@ struct GoFlyBottomSheet<Content: View>: View {
     @Binding var detent: GoFlySheetDetent
     let availableHeight: CGFloat
     let collapsedHeight: CGFloat
+    var maximumHeight: CGFloat? = nil
     /// Intrinsic content height; the sheet never grows past it, so short
     /// panels do not leave a large empty area under their last row.
     var contentHeight: CGFloat = 0
@@ -23,8 +24,8 @@ struct GoFlyBottomSheet<Content: View>: View {
 
     @GestureState private var drag: CGFloat = 0
 
-    private var expandedHeight: CGFloat { max(collapsedHeight + 1, availableHeight * 0.88) }
-    private var halfHeight: CGFloat { max(collapsedHeight, availableHeight * 0.46) }
+    private var expandedHeight: CGFloat { max(collapsedHeight + 1, min(availableHeight * 0.88, maximumHeight ?? availableHeight)) }
+    private var halfHeight: CGFloat { min(expandedHeight, max(collapsedHeight, availableHeight * 0.5)) }
 
     private var restingHeight: CGFloat {
         switch detent {
@@ -34,11 +35,14 @@ struct GoFlyBottomSheet<Content: View>: View {
         }
     }
 
-    private var height: CGFloat {
-        let hugging = contentHeight > 0
-            ? min(restingHeight, max(collapsedHeight, contentHeight + 44))
+    private var settledHeight: CGFloat {
+        contentHeight > 0
+            ? min(restingHeight, max(collapsedHeight, contentHeight + 12))
             : restingHeight
-        return max(collapsedHeight, min(expandedHeight, hugging - drag))
+    }
+
+    private var height: CGFloat {
+        max(collapsedHeight, min(expandedHeight, settledHeight - drag))
     }
 
     var body: some View {
@@ -52,7 +56,7 @@ struct GoFlyBottomSheet<Content: View>: View {
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.cardSurface)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: GoFlyStyle.sheetCornerRadius,
                                           topTrailingRadius: GoFlyStyle.sheetCornerRadius,
                                           style: .continuous))
@@ -72,31 +76,33 @@ struct GoFlyBottomSheet<Content: View>: View {
     }
 
     private var grabber: some View {
-        VStack(spacing: 0) {
-            Capsule()
-                .fill(GoFlyStyle.border)
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-        }
-        .frame(maxWidth: .infinity, minHeight: 44, alignment: .top)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 4)
-                .updating($drag) { value, state, _ in state = value.translation.height }
-                .onEnded { value in
-                    let projected = restingHeight - value.translation.height
-                        - value.predictedEndTranslation.height * 0.2
-                    detent = nearestDetent(to: projected)
-                }
-        )
-        .onTapGesture { detent = detent == .collapsed ? .half : .collapsed }
-        .accessibilityElement()
-        .accessibilityLabel(goFlyString("sheet.grabber"))
-        .accessibilityValue(goFlyString("sheet.detent.\(detent.rawValue)"))
-        .accessibilityHint(goFlyString("sheet.grabber.hint"))
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("map.sheet.grabber")
+        Color.clear
+            .frame(height: 12)
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(GoFlyStyle.border)
+                    .frame(width: 36, height: 5)
+                    .padding(.top, 6)
+                    .frame(width: 72, height: 44, alignment: .top)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 4)
+                            .updating($drag) { value, state, _ in state = value.translation.height }
+                            .onEnded { value in
+                                let projected = settledHeight - value.translation.height
+                                    - value.predictedEndTranslation.height * 0.2
+                                detent = nearestDetent(to: projected)
+                            }
+                    )
+                    .onTapGesture { detent = detent == .collapsed ? .half : .collapsed }
+                    .accessibilityElement()
+                    .accessibilityLabel(goFlyString("sheet.grabber"))
+                    .accessibilityValue(goFlyString("sheet.detent.\(detent.rawValue)"))
+                    .accessibilityHint(goFlyString("sheet.grabber.hint"))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("map.sheet.grabber")
+            }
+            .zIndex(1)
     }
 
     private func nearestDetent(to projected: CGFloat) -> GoFlySheetDetent {

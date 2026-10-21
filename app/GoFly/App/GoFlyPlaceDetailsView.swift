@@ -29,10 +29,10 @@ struct GoFlyPlaceDetailsView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             GoFlyFavoriteFailureNotice()
             HStack(alignment: .top) {
-                Text(place.title).font(.title3.weight(.semibold))
+                Text(place.title).font(.title2.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("placeDetails.title")
                 Button(action: onDismiss) { Image(systemName: GoFlySymbols.close) }
@@ -41,7 +41,7 @@ struct GoFlyPlaceDetailsView: View {
                     .accessibilityIdentifier("placeDetails.dismiss")
             }
             Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityIdentifier("placeDetails.address")
             Text(coordinateLine)
                 .font(.footnote.monospacedDigit())
@@ -49,10 +49,13 @@ struct GoFlyPlaceDetailsView: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier("placeDetails.coordinates")
             ScrollView(.horizontal, showsIndicators: false) {
-                actions
+                actions.padding(.vertical, 2)
             }
+            .padding(.top, 10)
         }
-        .padding(16)
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 18)
     }
 
     private var coordinateLine: String {
@@ -78,7 +81,7 @@ struct GoFlyPlaceDetailsView: View {
     private var actions: some View {
         HStack(spacing: 8) {
             if let onGo {
-                Button(goFlyString("map.go"), action: onGo)
+                Button(action: onGo) { Label(goFlyString("map.go"), systemImage: "play.fill") }
                     .buttonStyle(GoFlyActionStyle(primary: true, small: true))
                     .frame(minWidth: 64).disabled(!canGo)
                     .accessibilityIdentifier("placeDetails.go")

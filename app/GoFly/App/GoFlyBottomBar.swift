@@ -5,6 +5,7 @@ import SwiftUI
 /// on full-screen pages; switching tabs only changes what is browsed.
 struct GoFlyBottomBar: View {
     @Binding var selection: SessionMapMode
+    var bottomInset: CGFloat = 34
 
     var body: some View {
         HStack(spacing: 0) {
@@ -21,7 +22,7 @@ struct GoFlyBottomBar: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .frame(maxWidth: .infinity, minHeight: 49)
                     .foregroundStyle(selection == mode ? GoFlyStyle.primary : GoFlyStyle.secondary)
                     .contentShape(Rectangle())
                 }
@@ -31,10 +32,9 @@ struct GoFlyBottomBar: View {
                 .accessibilityIdentifier("mode.\(mode.rawValue)")
             }
         }
-        .padding(.top, 4)
-        .padding(.bottom, 16)
-        .padding(.horizontal, 8)
-        .background(GoFlyStyle.surface.ignoresSafeArea(edges: .bottom))
+        .padding(.bottom, bottomInset)
+        .overlay(alignment: .top) { Divider() }
+        .background(GoFlyStyle.cardSurface.ignoresSafeArea(edges: .bottom))
         // Chrome caps Dynamic Type the way UIKit tab bars do; the labels stay
         // legible and equal-width even at accessibility sizes.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -45,7 +45,7 @@ struct GoFlyBottomBar: View {
 
     private func symbol(for mode: SessionMapMode) -> String {
         switch mode {
-        case .teleport: "mappin"
+        case .teleport: "mappin.circle"
         case .route: GoFlySymbols.route
         case .joystick: GoFlySymbols.joystick
         }

@@ -3,7 +3,7 @@ import SwiftUI
 /// SF Symbols by meaning, shared by controls and their help illustrations.
 /// A location arrow is reserved for a position; a pin always represents a place.
 enum GoFlySymbols {
-    static let recenter = "location.viewfinder"
+    static let recenter = "scope"
     static let location = "location"
     static let place = "mappin.and.ellipse"
     static let sample = "circle.fill"

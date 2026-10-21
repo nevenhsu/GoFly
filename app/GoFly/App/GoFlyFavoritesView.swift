@@ -36,10 +36,10 @@ struct GoFlyFavoritesView: View {
                     }
                     ForEach(visible) { favorite in
                         row(favorite)
-                        Divider()
+                        Divider().padding(.leading, 48)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
             }
             .safeAreaInset(edge: .bottom) { bottomSearch }
         }
@@ -55,37 +55,43 @@ struct GoFlyFavoritesView: View {
         }
     }
 
-    /// Figma C1 uses a plain title bar: 選取 on the left, the title in the
-    /// middle and a bare close glyph on the right, without a navigation bar.
     private var header: some View {
-        ZStack {
-            Text(goFlyString("favorites.title"))
+        HStack(spacing: 12) {
+            Button {
+                if selecting { selecting = false; selected.removeAll() }
+                else { onDismiss() }
+            } label: {
+                Label(goFlyString(selecting ? "favorites.cancel" : "common.back"),
+                      systemImage: "chevron.backward")
+                    .labelStyle(.titleAndIcon)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("favorites.dismiss")
+            Spacer(minLength: 0)
+            Text(selecting
+                 ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
+                 : goFlyString("favorites.title"))
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
-            HStack {
-                Button(goFlyString(selecting ? "favorites.cancel" : "favorites.select")) {
-                    selecting.toggle()
-                    selected.removeAll()
-                }
-                .buttonStyle(.plain)
-                .frame(minHeight: 44)
-                .disabled(!favorites.canMutate)
-                .accessibilityIdentifier("favorites.select")
-                Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: GoFlySymbols.close)
-                        .goFlyControlSymbol(size: 17, weight: .semibold)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(goFlyString("common.dismiss"))
-                .accessibilityIdentifier("favorites.dismiss")
+            Spacer(minLength: 0)
+            Button {
+                selecting.toggle()
+                selected.removeAll()
+            } label: {
+                Image(systemName: selecting ? "xmark.circle" : "checkmark.circle")
+                    .font(.system(size: 21))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(goFlyString(selecting ? "favorites.cancel" : "favorites.select"))
+            .disabled(!favorites.canMutate)
+            .accessibilityIdentifier("favorites.select")
         }
         .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
 
     @ViewBuilder private var failureNotice: some View {
@@ -108,8 +114,7 @@ struct GoFlyFavoritesView: View {
                 Button(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count)) {
                     delete(selected)
                 }
-                .buttonStyle(GoFlyActionStyle())
-                .foregroundStyle(GoFlyStyle.errorForeground)
+                .buttonStyle(GoFlyActionStyle(destructive: true))
                 .disabled(selected.isEmpty || !favorites.canMutate)
                 .accessibilityIdentifier("favorites.deleteSelected")
             }
@@ -130,6 +135,7 @@ struct GoFlyFavoritesView: View {
             .padding(.horizontal, 12)
             .frame(minHeight: 52)
             .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
+            .overlay { RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius).strokeBorder(GoFlyStyle.inputBorder, lineWidth: 0.75) }
         }
         .padding(16)
         .background(GoFlyStyle.surface)
@@ -145,6 +151,8 @@ struct GoFlyFavoritesView: View {
                     ? (selected.contains(favorite.key) ? "checkmark.circle.fill" : "circle")
                     : (pending[favorite.key] == nil ? GoFlySymbols.favoriteSelected : GoFlySymbols.favorite))
                     .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
@@ -158,14 +166,14 @@ struct GoFlyFavoritesView: View {
                 else { onSelect(favorite.place) }
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(favorite.displayTitle).font(.body.weight(.semibold))
+                    Text(favorite.displayTitle).font(.body)
                     if let subtitle = favoriteSubtitle(favorite) {
                         Text(subtitle)
                             .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                 .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -234,44 +242,82 @@ private struct GoFlyFavoriteLabelEditor: View {
         _draft = State(initialValue: favorite.label ?? "")
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(goFlyString("favorites.label"), text: $draft)
-                        .focused($focused).submitLabel(.done)
-                        .onSubmit { focused = false }
-                        .accessibilityIdentifier("favorites.editor.label")
-                    Text(favorite.place.title)
-                    if let address = favorite.place.address { Text(address).foregroundStyle(GoFlyStyle.secondary) }
-                    Text(favorite.place.coordinate.displayText).foregroundStyle(GoFlyStyle.secondary)
+        VStack(spacing: 0) {
+            HStack {
+                Button(goFlyString("favorites.cancel")) { favorites.clearError(); onReturn() }
+                    .accessibilityIdentifier("favorites.editor.cancel")
+                Spacer()
+                Text(goFlyString("favorites.editLabel")).font(.headline)
+                Spacer()
+                Button(goFlyString("favorites.save")) {
+                    if favorites.saveLabel(for: favorite.key, draft: draft) { onReturn() }
                 }
-                Section {
-                    Button(role: .destructive, action: onDelete) { Text(goFlyString("favorites.delete")) }
-                        .disabled(!favorites.canMutate)
-                        .accessibilityIdentifier("favorites.editor.delete")
+                .fontWeight(.semibold)
+                .disabled(!favorites.canMutate || !favorites.isFavorite(favorite.place))
+                .accessibilityIdentifier("favorites.editor.save")
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: 44)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let failure = favorites.error {
+                        GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(goFlyString("favorites.label"))
+                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                        HStack {
+                            TextField(goFlyString("favorites.label"), text: $draft)
+                                .focused($focused).submitLabel(.done)
+                                .onSubmit { focused = false }
+                                .accessibilityIdentifier("favorites.editor.label")
+                            if !draft.isEmpty {
+                                Button { draft = "" } label: {
+                                    Image(systemName: "xmark").frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                                .accessibilityLabel(goFlyString("search.clear"))
+                            }
+                        }
+                        .padding(.leading, 16)
+                        .frame(minHeight: 48)
+                        .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder, lineWidth: focused ? 1.5 : 0.75) }
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(favorite.place.address ?? favorite.place.title).font(.subheadline)
+                        Text(favorite.place.coordinate.displayText)
+                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
                 }
-                if let failure = favorites.error {
-                    GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
-                }
+                .padding(20)
             }
             .accessibilityIdentifier("favorites.editor.form")
-            .navigationTitle(goFlyString("favorites.editLabel"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(goFlyString("favorites.cancel")) { favorites.clearError(); onReturn() }
-                        .accessibilityIdentifier("favorites.editor.cancel")
+            .safeAreaInset(edge: .bottom) {
+                Button(role: .destructive, action: onDelete) {
+                    Label(goFlyString("favorites.delete"), systemImage: "trash")
+                        .foregroundStyle(GoFlyStyle.dangerForeground)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(goFlyString("favorites.save")) {
-                        if favorites.saveLabel(for: favorite.key, draft: draft) { onReturn() }
-                    }
-                    .disabled(!favorites.canMutate || !favorites.isFavorite(favorite.place))
-                    .accessibilityIdentifier("favorites.editor.save")
-                }
+                .buttonStyle(GoFlyActionStyle())
+                .foregroundStyle(GoFlyStyle.dangerForeground)
+                .disabled(!favorites.canMutate)
+                .accessibilityIdentifier("favorites.editor.delete")
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+                .background(GoFlyStyle.cardSurface)
             }
         }
-        .task { focused = true }
+        .background(GoFlyStyle.cardSurface)
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(338), .large])
+        .presentationDragIndicator(.visible)
     }
 }

@@ -386,12 +386,12 @@
 "settings.preferences" = "Preferences";
 "settings.language" = "Language";
 "settings.helpSection" = "Help";
-"settings.location" = "Phone location";
-"settings.background" = "Background App Refresh";
+"settings.location" = "Location permission";
+"settings.background" = "Background execution";
 "settings.background.on" = "On";
 "settings.background.off" = "Off";
 "settings.vpn" = "VPN tunnel";
-"settings.device" = "Device information";
+"settings.device" = "Device and signing";
 "settings.help" = "How to use GoFly";
 "settings.notObtained" = "Not obtained";
 "settings.status.unknown" = "Unknown";
@@ -584,3 +584,9 @@
 "route.noRouteYet" = "Choose two places to see the distance";
 "route.speedUnit" = "km/h";
 "joystick.wanderDetail" = "Walks to a random destination automatically";
+
+"favorites.selectedCount" = "%d selected";
+
+"settings.permissionsAndConnection" = "Permissions and connection";
+
+"settings.deviceSection" = "Device";

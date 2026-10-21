@@ -14,17 +14,20 @@ struct GoFlySettingsValueRow<Title: View, Value: View>: View {
     var body: some View {
         layout {
             title
-            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
-            value.multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 12) }
+            value
+                .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var layout: AnyLayout {
         if dynamicTypeSize.isAccessibilitySize {
-            AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
         } else {
-            AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+            AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 16))
         }
     }
 }

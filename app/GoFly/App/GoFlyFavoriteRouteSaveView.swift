@@ -49,7 +49,7 @@ struct GoFlySaveFavoriteRouteView: View {
                             .accessibilityIdentifier("favoriteRoutes.save.label")
                     }
                 }
-                .padding(24)
+                .padding(20)
             }
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .accessibilityIdentifier("favoriteRoutes.save.content")
@@ -201,7 +201,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                         .accessibilityIdentifier("favoriteRoutes.editor.delete")
                     }
                 }
-                .padding(24)
+                .padding(20)
             }
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .accessibilityIdentifier("favoriteRoutes.editor.content")

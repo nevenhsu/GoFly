@@ -98,6 +98,9 @@ struct GoFlyComponentGallery: View {
     private var executionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Execution")
+            GoFlyWanderDestinationRow(title: goFlyString("gallery.executionTitle"),
+                                     caption: goFlyString("joystick.wander"), canRandomize: true,
+                                     onRandomDestination: {})
             GoFlyExecutionHeader(title: goFlyString("gallery.executionTitle"),
                                  detail: goFlyString("gallery.executionDetail"))
             GoFlyExecutionControls(progress: 0.42, isPaused: false, canPause: true, canResume: false,

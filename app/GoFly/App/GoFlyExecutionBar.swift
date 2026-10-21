@@ -4,19 +4,28 @@ import SwiftUI
 struct GoFlyExecutionHeader: View {
     let title: String
     var detail: String?
+    var symbol: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline)
+        HStack(spacing: 12) {
+            Image(systemName: instructionSymbol)
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(GoFlyStyle.instructionForeground)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            if let detail {
-                Text(detail)
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.instructionForeground.opacity(0.75))
-                    .lineLimit(1)
+                .frame(width: 44, height: 44)
+                .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(GoFlyStyle.instructionForeground)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.instructionForeground.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -28,11 +37,23 @@ struct GoFlyExecutionHeader: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("execution.header")
     }
+
+    private var instructionSymbol: String {
+        if let symbol { return symbol }
+        // The wander status is exposed as a localized detail string. The route
+        // header keeps the navigation arrow used by the execution design.
+        if detail == goFlyString("joystick.phase.moving") { return "shuffle" }
+        if detail == goFlyString("joystick.phase.suspended") || detail == goFlyString("joystick.phase.interrupted") || detail == goFlyString("joystick.phase.paused") {
+            return GoFlySymbols.pause
+        }
+        return GoFlySymbols.heading
+    }
 }
 
 /// Fixed bottom control bar for execution mode: progress, optional leading
 /// controls (round trip / heading), pause-resume and an explicit end action.
 struct GoFlyExecutionControls<Leading: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let progress: Double?
     let isPaused: Bool
     let canPause: Bool
@@ -55,6 +76,12 @@ struct GoFlyExecutionControls<Leading: View>: View {
         self.leading = leading
     }
 
+    private var actionLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             if let progress {
@@ -62,40 +89,35 @@ struct GoFlyExecutionControls<Leading: View>: View {
                     .tint(GoFlyStyle.primary)
                     .accessibilityIdentifier("execution.progress")
             }
-            HStack(spacing: 12) {
+            actionLayout {
                 leading()
-                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                Button(action: onEnd) {
+                    Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("execution.end")
                 if isPaused {
                     Button(action: onResume) {
                         Label(goFlyString("route.resume"), systemImage: GoFlySymbols.play)
-                            .labelStyle(.iconOnly)
                     }
-                    .buttonStyle(GoFlyIconStyle())
+                    .buttonStyle(GoFlyActionStyle(primary: true))
                     .disabled(!canResume)
-                    .accessibilityLabel(goFlyString("route.resume"))
                     .accessibilityIdentifier("execution.resume")
                 } else {
                     Button(action: onPause) {
                         Label(goFlyString("route.pause"), systemImage: GoFlySymbols.pause)
-                            .labelStyle(.iconOnly)
                     }
-                    .buttonStyle(GoFlyIconStyle())
+                    .buttonStyle(GoFlyActionStyle(primary: true))
                     .disabled(!canPause)
-                    .accessibilityLabel(goFlyString("route.pause"))
                     .accessibilityIdentifier("execution.pause")
                 }
-                Button(action: onEnd) {
-                    Image(systemName: GoFlySymbols.close)
-                }
-                .buttonStyle(GoFlyIconStyle())
-                .accessibilityLabel(goFlyString("execution.end"))
-                .accessibilityIdentifier("execution.end")
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.cardSurface)
         .overlay(alignment: .top) {
             Rectangle().fill(GoFlyStyle.border).frame(height: 0.5).allowsHitTesting(false)
         }

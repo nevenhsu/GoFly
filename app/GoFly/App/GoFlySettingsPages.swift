@@ -24,6 +24,35 @@ private struct GoFlySettingsPageContainer<Content: View>: View {
     }
 }
 
+private struct GoFlySettingsGroup<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(GoFlyStyle.surface,
+                    in: RoundedRectangle(cornerRadius: 14,
+                                         style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+private struct GoFlySettingsRow<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+    }
+}
+
 private struct GoFlySettingsStatusCard: View {
     let titleKey: String
     let status: String
@@ -89,31 +118,36 @@ struct GoFlyLocationSettingsPage: View {
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.location", rootIdentifier: "settings.location.page") {
-            if status.locationAuthorization == .denied {
-                GoFlyStatusBanner(tone: .warning, title: locationStatus,
-                                  message: goFlyString("settings.location.purpose"),
-                                  identifier: "settings.location.status")
-            } else {
-                GoFlySettingsStatusCard(
-                    titleKey: "settings.location", status: locationStatus,
-                    identifier: "settings.location.status"
-                )
+            GoFlySettingsGroup {
+                Button(action: status.openSystemSettings) {
+                    GoFlySettingsRow {
+                        GoFlySettingsValueRow {
+                            Text(goFlyString("settings.location"))
+                                .font(.body)
+                        } value: {
+                            Text(locationStatus)
+                                .font(.body)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                        }
+                        Image(systemName: GoFlySymbols.disclosure)
+                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.location.status")
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(goFlyString("settings.location.purpose"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                GoFlySettingsAction(
-                    titleKey: "settings.openSystemSettings",
-                    action: status.openSystemSettings,
-                    identifier: "settings.location.open"
-                )
-                if status.externalOpenFailed {
-                    GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
-                }
+            Text(goFlyString("settings.location.purpose"))
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .accessibilityIdentifier("settings.location.purpose")
+            if status.externalOpenFailed {
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
             }
-            .settingsCard()
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -130,34 +164,53 @@ struct GoFlyBackgroundSettingsPage: View {
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.background", rootIdentifier: "settings.background.page") {
-            GoFlySettingsStatusCard(
-                titleKey: "settings.background",
-                status: backgroundStatus,
-                identifier: "settings.background.status"
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(goFlyString("settings.background.purposeTitle"))
-                    .font(.headline)
-                Text(goFlyString("settings.background.purpose"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .settingsCard()
-
-            GoFlyContinuationStatus(continuation: continuation)
-
-            VStack(alignment: .leading, spacing: 12) {
-                GoFlySettingsAction(
-                    titleKey: "settings.openSystemSettings",
-                    action: status.openSystemSettings,
-                    identifier: "settings.background.open"
-                )
-                if status.externalOpenFailed {
-                    GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
+            GoFlySettingsGroup {
+                GoFlySettingsRow {
+                    GoFlySettingsValueRow {
+                        Text(goFlyString("settings.background.purposeTitle"))
+                            .font(.body)
+                    } value: {
+                        Text(goFlyString("background.systemDecidesRuntime"))
+                            .font(.body)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Divider().padding(.leading, 16)
+                Button(action: status.openSystemSettings) {
+                    GoFlySettingsRow {
+                        GoFlySettingsValueRow {
+                            Text(goFlyString("settings.background"))
+                                .font(.body)
+                        } value: {
+                            Text(backgroundStatus)
+                                .font(.body)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                        }
+                        Image(systemName: GoFlySymbols.disclosure)
+                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.background.open")
             }
-            .settingsCard()
+
+            Text(goFlyString("settings.background.purpose"))
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .accessibilityIdentifier("background.description")
+
+            if continuation.hasRuntime || continuation.noticeKey != nil {
+                GoFlyContinuationStatus(continuation: continuation)
+            }
+
+            if status.externalOpenFailed {
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
+            }
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -171,52 +224,102 @@ struct GoFlyBackgroundSettingsPage: View {
 struct GoFlyVPNSettingsPage: View {
     @ObservedObject var recovery: ConnectionRecoveryController
     @StateObject private var status = GoFlySystemStatus()
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showingHelp = false
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.vpn", rootIdentifier: "settings.vpn.page") {
-            GoFlySettingsStatusCard(
-                titleKey: "settings.vpn",
-                status: goFlyString(recovery.connectionState.settingsStatusKey),
-                identifier: "settings.vpn.status"
-            )
+            GoFlySettingsGroup {
+                GoFlySettingsRow {
+                    GoFlySettingsValueRow {
+                        Text(goFlyString("settings.vpn"))
+                            .font(.body)
+                    } value: {
+                        GoFlyStatusPill(text: goFlyString(recovery.connectionState.settingsStatusKey),
+                                        tone: vpnTone,
+                                        action: nil,
+                                        identifier: "settings.vpn.status")
+                    }
+                }
+                Divider().padding(.leading, 16)
+                GoFlySettingsRow {
+                    Text(goFlyString("settings.vpn.check"))
+                        .font(.body)
+                    Spacer(minLength: 8)
+                    Text(goFlyString(recovery.connectionState.settingsStatusKey))
+                        .font(.body)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                }
+            }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(goFlyString("settings.vpn.steps"))
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                GoFlySettingsAction(
-                    titleKey: "settings.vpn.openLocalDevVPN",
-                    action: status.openLocalDevVPN,
-                    identifier: "settings.vpn.open"
-                )
+            GoFlySettingsGroup {
+                Button(action: recovery.checkConnection) {
+                    GoFlySettingsRow {
+                        Text(goFlyString("settings.vpn.check"))
+                            .font(.body)
+                        Spacer(minLength: 8)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!recovery.canCheck || recovery.isResettingTunnel)
+                .accessibilityIdentifier("settings.vpn.check")
+                Divider().padding(.leading, 16)
+                Button(action: status.openLocalDevVPN) {
+                    GoFlySettingsRow {
+                        Text(goFlyString("settings.vpn.openLocalDevVPN"))
+                            .font(.body)
+                        Spacer(minLength: 8)
+                        Image(systemName: GoFlySymbols.disclosure)
+                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.vpn.open")
+                Divider().padding(.leading, 16)
+                Button(action: { _ = recovery.resetTunnel() }) {
+                    GoFlySettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(goFlyString("service.resetTunnel"))
+                                .font(.body)
+                            Text(goFlyString("service.stopBeforeRepair"))
+                                .font(.caption)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!recovery.canResetTunnel)
+                .accessibilityIdentifier("settings.vpn.reset")
+            }
+
+            GoFlySettingsGroup {
                 NavigationLink {
                     GoFlyVPNHelpPage()
                 } label: {
-                    Label(goFlyString("onboarding.vpn.help"), systemImage: GoFlySymbols.help)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    GoFlySettingsRow {
+                        Text(goFlyString("onboarding.vpn.help"))
+                            .font(.body)
+                        Spacer(minLength: 8)
+                        Image(systemName: GoFlySymbols.disclosure)
+                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .accessibilityHidden(true)
+                    }
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("settings.vpn.help")
-                if status.externalOpenFailed {
-                    GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
-                }
             }
-            .settingsCard()
 
-            actionsLayout {
-                GoFlySettingsAction(
-                    titleKey: "settings.vpn.check",
-                    action: recovery.checkConnection,
-                    identifier: "settings.vpn.check",
-                    disabled: !recovery.canCheck || recovery.isResettingTunnel
-                )
-                GoFlySettingsAction(
-                    titleKey: "service.resetTunnel",
-                    action: { _ = recovery.resetTunnel() },
-                    identifier: "settings.vpn.reset",
-                    disabled: !recovery.canResetTunnel
-                )
+            Text(goFlyString("settings.vpn.steps"))
+                .font(.footnote)
+                .foregroundStyle(GoFlyStyle.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+            if status.externalOpenFailed {
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
             }
 
             if recovery.isChecking || recovery.isResettingTunnel {
@@ -245,11 +348,15 @@ struct GoFlyVPNSettingsPage: View {
         }
     }
 
-    private var actionsLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 12))
+    private var vpnTone: GoFlyStatusTone {
+        switch recovery.connectionState {
+        case .reachable: .success
+        case .unavailable, .timedOut: .danger
+        case .checking: .warning
+        case .unknown: .neutral
+        }
     }
+
 }
 
 struct GoFlyDeviceSettingsPage: View {
@@ -262,7 +369,7 @@ struct GoFlyDeviceSettingsPage: View {
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.device", rootIdentifier: "settings.device.page") {
             let snapshot = status.deviceSnapshot(service: service, setupMetadata: setupMetadata)
-            VStack(alignment: .leading, spacing: 0) {
+            GoFlySettingsGroup {
                 deviceField("settings.device.pairing", value: snapshot.pairingStatus, identifier: "settings.device.pairing")
                 Divider()
                 deviceField("settings.device.signingExpiry", value: snapshot.signingExpiryStatus, identifier: "settings.device.signingExpiry")
@@ -275,12 +382,12 @@ struct GoFlyDeviceSettingsPage: View {
                 Divider()
                 deviceField("settings.device.system", value: "\(snapshot.deviceName) · \(snapshot.deviceModel) · \(snapshot.systemName) \(snapshot.systemVersion)", identifier: "settings.device.system")
             }
-            .settingsCard()
 
             Text(goFlyString("settings.device.pairingNote"))
                 .font(.footnote)
                 .foregroundStyle(GoFlyStyle.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
 
             diagnosticsSection
         }
@@ -335,8 +442,8 @@ struct GoFlyDeviceSettingsPage: View {
                 .font(.subheadline)
                 .foregroundStyle(GoFlyStyle.secondary)
         }
-        .frame(minHeight: 48)
-        .padding(.vertical, 6)
+        .frame(minHeight: 52)
+        .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
     }
@@ -482,25 +589,34 @@ struct GoFlyPreferencesSettingsPage: View {
 
     var body: some View {
         Form {
-            Picker(goFlyString("settings.language"), selection: Binding(
-                get: { preferences.language },
-                set: { preferences.setLanguage($0) }
-            )) {
-                ForEach(GoFlyLanguage.allCases) { language in
-                    Text(language.title).tag(language)
+            Section {
+                Picker(goFlyString("settings.language"), selection: Binding(
+                    get: { preferences.language },
+                    set: { preferences.setLanguage($0) }
+                )) {
+                    ForEach(GoFlyLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
                 }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.language")
+            } header: {
+                Text(goFlyString("settings.language"))
             }
-            .accessibilityIdentifier("settings.language")
-
-            Picker(goFlyString("settings.appearance"), selection: Binding(
-                get: { preferences.appearance },
-                set: { preferences.setAppearance($0) }
-            )) {
-                ForEach(GoFlyAppearance.allCases) { appearance in
-                    Text(appearance.title).tag(appearance)
+            Section {
+                Picker(goFlyString("settings.appearance"), selection: Binding(
+                    get: { preferences.appearance },
+                    set: { preferences.setAppearance($0) }
+                )) {
+                    ForEach(GoFlyAppearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
                 }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.appearance")
+            } header: {
+                Text(goFlyString("settings.appearance"))
             }
-            .accessibilityIdentifier("settings.appearance")
         }
         .pickerStyle(.menu)
         .navigationTitle(goFlyString("settings.languageAndAppearance"))

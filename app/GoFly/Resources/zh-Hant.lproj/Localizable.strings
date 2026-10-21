@@ -386,12 +386,12 @@
 "settings.preferences" = "偏好設定";
 "settings.language" = "語言";
 "settings.helpSection" = "說明";
-"settings.location" = "手機定位";
-"settings.background" = "背景 App 重新整理";
+"settings.location" = "定位權限";
+"settings.background" = "背景執行";
 "settings.background.on" = "開啟";
 "settings.background.off" = "關閉";
 "settings.vpn" = "VPN 通道";
-"settings.device" = "裝置資訊";
+"settings.device" = "裝置與簽名";
 "settings.help" = "操作說明";
 "settings.notObtained" = "尚未取得";
 "settings.status.unknown" = "未知";
@@ -584,3 +584,9 @@
 "route.noRouteYet" = "選擇兩個地點後顯示距離";
 "route.speedUnit" = "公里／小時";
 "joystick.wanderDetail" = "自動前往隨機目的地";
+
+"favorites.selectedCount" = "已選取 %d 項";
+
+"settings.permissionsAndConnection" = "權限與連線";
+
+"settings.deviceSection" = "裝置";

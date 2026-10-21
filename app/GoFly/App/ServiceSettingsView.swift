@@ -14,7 +14,7 @@ struct ServiceSettingsView: View {
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 16) {
                     serviceCard
                     settingsGroups
                     if let key = continuation.noticeKey {
@@ -58,48 +58,40 @@ struct ServiceSettingsView: View {
 
     private var settingsGroups: some View {
         VStack(alignment: .leading, spacing: 20) {
-            settingsSection("settings.permissions") {
-                settingsLink(
-                    title: "settings.location",
-                    value: locationSummary,
-                    destination: { GoFlyLocationSettingsPage() }
-                )
+            settingsSection("settings.permissionsAndConnection") {
+                settingsLink(title: "settings.location", value: locationSummary,
+                             destination: { GoFlyLocationSettingsPage() })
                 settingsDivider
-                settingsLink(
-                    title: "settings.background",
-                    value: backgroundSummary,
-                    destination: { GoFlyBackgroundSettingsPage(continuation: continuation) }
-                )
-            }
-
-            settingsSection("settings.connectionAndDevice") {
-                settingsLink(
-                    title: "settings.vpn",
-                    value: goFlyString(recovery.connectionState.settingsStatusKey),
-                    destination: { GoFlyVPNSettingsPage(recovery: recovery) }
-                )
+                settingsLink(title: "settings.vpn", value: goFlyString(recovery.connectionState.settingsStatusKey),
+                             destination: { GoFlyVPNSettingsPage(recovery: recovery) })
                 settingsDivider
-                settingsLink(
-                    title: "settings.device",
-                    value: systemStatus.deviceSnapshot(service: service, setupMetadata: setupMetadata).pairingStatus,
-                    destination: { GoFlyDeviceSettingsPage(service: service, setupMetadata: setupMetadata) }
-                )
+                settingsLink(title: "settings.background", value: backgroundSummary,
+                             destination: { GoFlyBackgroundSettingsPage(continuation: continuation) })
             }
-
             settingsSection("settings.preferences") {
-                settingsLink(
-                    title: "settings.languageAndAppearance",
-                    value: GoFlyPreferences.shared.language.title,
-                    destination: { GoFlyPreferencesSettingsPage() }
-                )
+                NavigationLink {
+                    GoFlyPreferencesSettingsPage()
+                } label: {
+                    settingsRow(titleKey: "settings.language", value: GoFlyPreferences.shared.language.title)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.languageAndAppearance")
+                settingsDivider
+                NavigationLink {
+                    GoFlyPreferencesSettingsPage()
+                } label: {
+                    settingsRow(titleKey: "settings.appearance", value: GoFlyPreferences.shared.appearance.title)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.appearanceEntry")
             }
-
+            settingsSection("settings.deviceSection") {
+                settingsLink(title: "settings.device", value: nil,
+                             destination: { GoFlyDeviceSettingsPage(service: service, setupMetadata: setupMetadata) })
+            }
             settingsSection("settings.helpSection") {
-                settingsLink(
-                    title: "settings.help",
-                    value: nil,
-                    destination: { GoFlyHelpSettingsPage() }
-                )
+                settingsLink(title: "settings.help", value: nil,
+                             destination: { GoFlyHelpSettingsPage() })
             }
         }
     }
@@ -121,7 +113,7 @@ struct ServiceSettingsView: View {
             VStack(spacing: 0) {
                 content()
             }
-            .goFlyCard(radius: GoFlyStyle.cardRadius)
+            .goFlyCard(radius: 14)
         }
     }
 
@@ -170,8 +162,7 @@ struct ServiceSettingsView: View {
                 .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -194,15 +185,15 @@ struct ServiceSettingsView: View {
     }
 
     private var serviceCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goFlyString("service.title")).font(.headline)
-                    status
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 GoFlyStatusPill(text: goFlyString(servicePillKey), tone: servicePillTone,
                                 action: nil, identifier: "service.statusPill")
+                    .accessibilityValue(goFlyString(service.statusKey))
             }
             Button {
                 if offersStop {
@@ -228,35 +219,31 @@ struct ServiceSettingsView: View {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 12) { repairButtons }
             } else {
-                HStack(spacing: 12) { repairButtons }
+                HStack(spacing: 8) { repairButtons }
             }
 
-            if service.phase == .ready || service.phase == .preparing {
-                Text(goFlyString("service.stopBeforeRepair"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
-            }
-
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                Label(goFlyString("gps.title"), systemImage: "location.circle")
-                    .font(.subheadline.weight(.semibold))
-                Text(goFlyString(service.gpsStatusKey))
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .accessibilityIdentifier("service.gpsStatus")
-                if let date = service.clearConfirmedAt {
-                    HStack(spacing: 4) {
-                        Text(goFlyString("gps.clearConfirmedAt"))
-                        Text(date, style: .time)
+            if service.phase == .repairRequired || service.clearConfirmedAt != nil {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(goFlyString("gps.title"), systemImage: "location.circle")
+                        .font(.subheadline.weight(.semibold))
+                    Text(goFlyString(service.gpsStatusKey))
+                        .font(.subheadline)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .accessibilityIdentifier("service.gpsStatus")
+                    if let date = service.clearConfirmedAt {
+                        HStack(spacing: 4) {
+                            Text(goFlyString("gps.clearConfirmedAt"))
+                            Text(date, style: .time)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(GoFlyStyle.secondary)
                     }
-                    .font(.caption)
-                    .foregroundStyle(GoFlyStyle.secondary)
                 }
             }
         }
-        .padding(20)
-        .goFlyCard()
+        .padding(16)
+        .goFlyCard(radius: 14)
     }
 
     private var servicePillKey: String {

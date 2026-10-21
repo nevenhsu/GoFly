@@ -34,7 +34,7 @@ struct GoFlyRouteNodeList: View {
     @State private var previewOrder: [RouteNodeID] = []
     @State private var rowFrames: [RouteNodeID: CGRect] = [:]
     @State private var listFrame: CGRect = .zero
-    @State private var dragHeight: CGFloat = 72
+    @State private var dragHeight: CGFloat = 60
     @State private var pointer = CGPoint.zero
     @State private var touchOffset: CGFloat = 0
     @State private var autoscroll: Task<Void, Never>?
@@ -66,7 +66,7 @@ struct GoFlyRouteNodeList: View {
                 }
             }
         }
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { listFrame = $0 }
         .overlay(alignment: .topLeading) {
@@ -110,14 +110,14 @@ struct GoFlyRouteNodeList: View {
                 }
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(goFlyRouteRoleTitle(role)).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(title(node.value)).font(.body.weight(.semibold))
+                    Text(title(node.value)).font(.body)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -136,7 +136,7 @@ struct GoFlyRouteNodeList: View {
             .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
             .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
         }
-        .frame(minHeight: 72)
+        .frame(minHeight: 60)
         .foregroundStyle(isEditable ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.row.\(node.id.rawValue.uuidString)")

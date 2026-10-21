@@ -27,9 +27,20 @@ struct GoFlyFavoriteRoutesView: View {
                             .font(.body)
                             .accessibilityIdentifier("favoriteRoutes.working")
                     }
-                    ForEach(favorites.records) { record in card(record) }
+                    if !favorites.records.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(Array(favorites.records.enumerated()), id: \.element.id) { index, record in
+                                card(record)
+                                if index < favorites.records.count - 1 { Divider().padding(.leading, 16) }
+                            }
+                        }
+                        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                    }
                 }
-                .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             }
             .accessibilityIdentifier("favoriteRoutes.content")
             .safeAreaInset(edge: .bottom) {
@@ -78,8 +89,8 @@ struct GoFlyFavoriteRoutesView: View {
                         .accessibilityIdentifier("favoriteRoutes.unavailable.\(record.id.uuidString)")
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 63, alignment: .leading)
+            .padding(.horizontal, 16)
             .contentShape(Rectangle())
             .gesture(LongPressGesture(minimumDuration: 0.6).exclusively(before: TapGesture())
                 .onEnded { gesture in
@@ -113,12 +124,11 @@ struct GoFlyFavoriteRoutesView: View {
             .accessibilityIdentifier("favoriteRoutes.edit.\(record.id.uuidString)")
             .padding(.trailing, 6)
         }
-        .background(favorites.selectedID == record.id ? GoFlyStyle.secondarySurface : GoFlyStyle.surface,
-                    in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(favorites.selectedID == record.id ? GoFlyStyle.primary : GoFlyStyle.border,
-                              lineWidth: favorites.selectedID == record.id ? 1.5 : 0.5)
+        .background(favorites.selectedID == record.id ? GoFlyStyle.secondarySurface : .clear)
+        .overlay(alignment: .leading) {
+            if favorites.selectedID == record.id {
+                Capsule().fill(GoFlyStyle.primary).frame(width: 3).padding(.vertical, 8)
+            }
         }
     }
 

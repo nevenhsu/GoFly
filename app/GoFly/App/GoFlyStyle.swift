@@ -2,8 +2,9 @@ import SwiftUI
 
 enum GoFlyStyle {
     static let surface = Color(uiColor: .systemBackground)
+    static let cardSurface = Color(uiColor: .secondarySystemGroupedBackground)
     static let canvas = Color(uiColor: .systemGroupedBackground)
-    static let secondarySurface = Color(uiColor: .secondarySystemBackground)
+    static let secondarySurface = Color(uiColor: .tertiarySystemGroupedBackground)
     static let primary = Color.primary
     static let secondary = Color.secondary
     static let disabledForeground = Color(uiColor: .secondaryLabel)
@@ -60,7 +61,7 @@ private struct GoFlyCard: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
@@ -140,12 +141,12 @@ struct GoFlyActionStyle: ButtonStyle {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: height)
             .padding(.horizontal, small ? 14 : 16)
-            .padding(.vertical, compactAtAccessibilitySizes && dynamicTypeSize.isAccessibilitySize ? 0 : 0)
             .foregroundStyle(foreground)
             .tint(foreground)
             .background(background, in: Capsule())
             .brightness(isEnabled && configuration.isPressed ? (primary || destructive ? 0.12 : -0.04) : 0)
             .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
+            .frame(minHeight: 44)
             .contentShape(Capsule())
     }
 
@@ -163,6 +164,7 @@ struct GoFlyActionStyle: ButtonStyle {
 }
 
 struct GoFlyIconStyle: ButtonStyle {
+    var floating = false
     @Environment(\.isEnabled) private var isEnabled
     @ScaledMetric(relativeTo: .body) private var symbolSize: CGFloat = 18
 
@@ -172,8 +174,9 @@ struct GoFlyIconStyle: ButtonStyle {
             .frame(minWidth: 44, minHeight: 44)
             .foregroundStyle(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-            .background(isEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface, in: Circle())
+            .background(isEnabled ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.secondarySurface) : GoFlyStyle.disabledSurface, in: Circle())
             .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
+            .shadow(color: .black.opacity(floating ? 0.09 : 0), radius: 12, x: 0, y: 5)
             .contentShape(Circle())
             .opacity(isEnabled && configuration.isPressed ? 0.65 : 1)
     }

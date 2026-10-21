@@ -9,25 +9,26 @@ struct GoFlyVPNHelpPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: GoFlySymbols.network)
-                        .font(.largeTitle)
-                        .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(goFlyString("onboarding.vpn.help.heading"))
-                        .font(.title2.weight(.bold))
+                        .font(.title2.weight(.semibold))
                         .accessibilityAddTraits(.isHeader)
                     Text(goFlyString("onboarding.vpn.help.intro"))
-                        .font(.body)
+                        .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
                 }
 
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     helpStep(1, symbol: "1.circle.fill")
+                    Divider().padding(.leading, 56)
                     helpStep(2, symbol: "2.circle.fill")
+                    Divider().padding(.leading, 56)
                     helpStep(3, symbol: "3.circle.fill")
+                    Divider().padding(.leading, 56)
                     helpStep(4, symbol: "4.circle.fill")
                 }
+                .goFlyCard(radius: 14)
 
                 Label {
                     Text(goFlyString("onboarding.vpn.help.confirmation"))
@@ -41,70 +42,82 @@ struct GoFlyVPNHelpPage: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text(goFlyString("onboarding.vpn.help.troubleshooting"))
-                        .font(.headline)
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.secondary)
                         .accessibilityAddTraits(.isHeader)
                     VStack(alignment: .leading, spacing: 16) {
+                        helpTip("onboarding.vpn.help.reconnect", symbol: GoFlySymbols.retry)
+                        Divider()
+                            .padding(.leading, 0)
                         helpTip("onboarding.vpn.help.permission", symbol: "hand.raised")
                         Button(action: openSystemSettings) {
                             Label(goFlyString("onboarding.vpn.help.openSettings"), systemImage: GoFlySymbols.settings)
                         }
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("onboarding.vpn.help.openSettings")
-                        Divider()
-                        helpTip("onboarding.vpn.help.reconnect", symbol: GoFlySymbols.retry)
+                        Button(action: openLocalDevVPN) {
+                            Label(goFlyString("onboarding.vpn.open"), systemImage: GoFlySymbols.externalLink)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(GoFlyStyle.primary)
+                        .accessibilityIdentifier("onboarding.vpn.help.openVPN")
                     }
                     .padding(16)
-                    .goFlyCard()
+                    .goFlyCard(radius: 14)
                 }
 
                 if externalOpenFailed {
                     errorMessage(externalOpenFailureKey)
                 }
 
-                VStack(spacing: 12) {
-                    Button(action: openLocalDevVPN) {
-                        Label(goFlyString("onboarding.vpn.open"), systemImage: GoFlySymbols.externalLink)
-                    }
-                    .buttonStyle(GoFlyActionStyle(primary: true))
-                    .accessibilityIdentifier("onboarding.vpn.help.openVPN")
-
-                    Button {
-                        // Returning reactivates the VPN page's existing serialized check pipeline.
-                        dismiss()
-                    } label: {
-                        Text(goFlyString("onboarding.vpn.help.returnAndCheck"))
-                    }
-                    .buttonStyle(GoFlyActionStyle())
-                    .accessibilityIdentifier("onboarding.vpn.help.return")
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
         }
         .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("onboarding.vpn.help"))
         .navigationBarTitleDisplayMode(.inline)
+        .goFlyNativeBackTitle()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button {
+                // Returning reactivates the VPN page's existing serialized check pipeline.
+                dismiss()
+            } label: {
+                Text(goFlyString("onboarding.vpn.help.returnAndCheck"))
+            }
+            .buttonStyle(GoFlyActionStyle(primary: true))
+            .accessibilityIdentifier("onboarding.vpn.help.return")
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+            .background(GoFlyStyle.canvas)
+            .overlay(alignment: .top) { Divider() }
+        }
         .accessibilityIdentifier("vpn.help.page")
     }
 
     private func helpStep(_ number: Int, symbol: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol)
-                .font(.title2)
+                .font(.title3)
+                .foregroundStyle(GoFlyStyle.primary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
                 Text(goFlyString("onboarding.vpn.help.step\(number).title"))
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
                     .accessibilityIdentifier("onboarding.vpn.help.step\(number)")
                 Text(goFlyString("onboarding.vpn.help.step\(number).message"))
-                    .font(.body)
+                    .font(.footnote)
                     .foregroundStyle(GoFlyStyle.secondary)
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .goFlyCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private func helpTip(_ key: String, symbol: String) -> some View {

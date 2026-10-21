@@ -15,6 +15,67 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         #endif
     }
 
+    func testCaptureOnboardingScreens() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Visual samples run on the simulator.")
+        #else
+        continueAfterFailure = false
+        for sample in ["light", "dark", "axxxl"] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "-gofly-ui-session-store", UUID().uuidString,
+                "-gofly.onboarding.complete", "NO", "-gofly-ui-unreachable",
+                "-gofly-ui-preferences-store", UUID().uuidString,
+                "-gofly-ui-preferences-language", "zh-Hant",
+                "-gofly-ui-preferences-appearance", sample == "dark" ? "dark" : "light",
+                "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+            ]
+            if sample == "axxxl" {
+                app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            }
+            app.launch()
+            wait(app.buttons["onboarding.welcome.next"])
+            snapshot(app, "precision-onboarding-welcome-\(sample)")
+            app.buttons["onboarding.welcome.next"].tap()
+            wait(app.buttons["onboarding.location.skip"])
+            snapshot(app, "precision-onboarding-location-\(sample)")
+            app.buttons["onboarding.location.skip"].tap()
+            wait(app.buttons["onboarding.vpn.next"])
+            snapshot(app, "precision-onboarding-vpn-\(sample)")
+            let help = app.buttons["onboarding.vpn.help.open"]
+            for _ in 0..<6 where !help.isHittable { app.swipeUp() }
+            help.tap()
+            snapshot(app, "precision-vpn-help-\(sample)")
+            app.terminate()
+        }
+        #endif
+    }
+
+    func testExecutionControlsAtAccessibilitySize() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Visual samples run on the simulator.")
+        #else
+        let app = XCUIApplication()
+        app.launchArguments = ["-gofly-ui-gallery", "-gofly-ui-preferences-store", UUID().uuidString,
+                               "-gofly-ui-preferences-language", "zh-Hant",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let shuffle = app.buttons["joystick.randomDestination"]
+        for _ in 0..<10 where !shuffle.isHittable { app.swipeUp() }
+        wait(shuffle)
+        XCTAssertTrue(shuffle.isHittable)
+        XCTAssertGreaterThanOrEqual(shuffle.frame.height, 44)
+        snapshot(app, "precision-execution-destination-axxxl")
+        let pause = app.buttons["execution.pause"]
+        for _ in 0..<8 where !pause.isHittable { app.swipeUp() }
+        wait(pause)
+        XCTAssertTrue(pause.isHittable)
+        XCTAssertGreaterThanOrEqual(pause.frame.height, 44)
+        snapshot(app, "precision-execution-controls-axxxl")
+        app.terminate()
+        #endif
+    }
+
     private func captureScreens(style: String, largeText: Bool) {
         let sample = largeText ? "axxxl" : style
         let app = XCUIApplication()
@@ -57,6 +118,15 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         app.buttons["favorites.open"].tap()
         wait(app.textFields["favorites.search"])
         snapshot(app, "step-6-favorites-\(sample)")
+        app.buttons["favorites.edit.25.047800, 121.517000"].tap()
+        wait(app.textFields["favorites.editor.label"])
+        snapshot(app, "precision-favorite-editor-\(sample)")
+        app.buttons["favorites.editor.cancel"].tap()
+        wait(app.buttons["favorites.select"])
+        app.buttons["favorites.select"].tap()
+        app.buttons["favorites.star.25.047800, 121.517000"].tap()
+        snapshot(app, "precision-favorite-selection-\(sample)")
+        app.buttons["favorites.select"].tap()
         app.buttons["favorites.dismiss"].tap()
         app.selectGoFlyMode("route")
         wait(app.buttons["route.importedRoutes"])
@@ -79,6 +149,14 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         app.buttons["map.settings"].tap()
         wait(app.buttons["settings.languageAndAppearance"])
         snapshot(app, "step-8-settings-\(sample)")
+        for page in ["location", "vpn", "background", "languageAndAppearance", "device", "help"] {
+            let link = app.buttons["settings.\(page)"]
+            for _ in 0..<6 where !link.isHittable { app.swipeUp() }
+            wait(link)
+            link.tap()
+            snapshot(app, "precision-settings-\(page)-\(sample)")
+            app.navigationBars.buttons.firstMatch.tap()
+        }
         app.terminate()
     }
 

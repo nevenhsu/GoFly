@@ -29,17 +29,16 @@ struct GoFlyStatusPill: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(text)
-                .font(.caption.weight(.medium))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(GoFlyStyle.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(GoFlyStyle.surface, in: Capsule())
-        .overlay { Capsule().strokeBorder(tone.border, lineWidth: 0.75).allowsHitTesting(false) }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 30)
+        .background(GoFlyStyle.cardSurface, in: Capsule())
+        .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
         .shadow(color: .black.opacity(0.06), radius: 5, x: 0, y: 2)
-        .padding(.vertical, 6)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .contentShape(Capsule())
     }

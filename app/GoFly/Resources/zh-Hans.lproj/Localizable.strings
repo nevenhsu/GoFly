@@ -386,12 +386,12 @@
 "settings.preferences" = "偏好设置";
 "settings.language" = "语言";
 "settings.helpSection" = "帮助";
-"settings.location" = "手机定位";
-"settings.background" = "后台 App 刷新";
+"settings.location" = "定位权限";
+"settings.background" = "后台运行";
 "settings.background.on" = "已开启";
 "settings.background.off" = "已关闭";
 "settings.vpn" = "VPN 通道";
-"settings.device" = "设备信息";
+"settings.device" = "设备与签名";
 "settings.help" = "操作说明";
 "settings.notObtained" = "尚未取得";
 "settings.status.unknown" = "未知";
@@ -584,3 +584,9 @@
 "route.noRouteYet" = "选择两个地点后显示距离";
 "route.speedUnit" = "公里/小时";
 "joystick.wanderDetail" = "自动前往随机目的地";
+
+"favorites.selectedCount" = "已选择 %d 项";
+
+"settings.permissionsAndConnection" = "权限与连接";
+
+"settings.deviceSection" = "设备";
