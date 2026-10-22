@@ -54,11 +54,7 @@ final class GoFlySetupBootstrap: ObservableObject {
         }
         phase = .preparing
 
-        #if targetEnvironment(simulator)
         let requiresMacSetup = false
-        #else
-        let requiresMacSetup = (Bundle.main.object(forInfoDictionaryKey: "GoFlyRequiresMacSetup") as? Bool) == true
-        #endif
 
         startupTask = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {

@@ -383,18 +383,25 @@ private struct GoFlyVPNOnboardingView: View {
                     .disabled(controller.isAdvancing)
                     .accessibilityIdentifier("onboarding.vpn.check")
 
-                    Button {
-                        controller.advanceVPN(onAdvance: onComplete)
-                    } label: {
-                        HStack(spacing: 8) {
-                            if controller.isAdvancing { ProgressView() }
-                            Text(goFlyString("onboarding.vpn.complete"))
+                    if !controller.canAdvanceVPN {
+                        Button(action: onComplete) {
+                            Text(goFlyString("common.skip"))
                         }
+                        .buttonStyle(GoFlyCompactActionStyle())
+                        .accessibilityIdentifier("onboarding.vpn.skip")
+                    } else {
+                        Button {
+                            controller.advanceVPN(onAdvance: onComplete)
+                        } label: {
+                            HStack(spacing: 8) {
+                                if controller.isAdvancing { ProgressView() }
+                                Text(goFlyString("onboarding.vpn.complete"))
+                            }
+                        }
+                        .buttonStyle(GoFlyCompactActionStyle(primary: true))
+                        .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
+                        .accessibilityIdentifier("onboarding.vpn.next")
                     }
-                    .buttonStyle(GoFlyCompactActionStyle(primary: true))
-                    .disabled(!controller.canAdvanceVPN)
-                    .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
-                    .accessibilityIdentifier("onboarding.vpn.next")
                 }
             }
             .padding(.horizontal, 24)

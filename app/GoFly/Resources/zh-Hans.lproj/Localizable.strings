@@ -630,3 +630,4 @@
 "joystick.wanderActive" = "漫步中";
 "joystick.wanderPaused" = "漫步暂停";
 "common.done" = "完成";
+"common.skip" = "跳过";

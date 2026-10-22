@@ -630,3 +630,4 @@
 "joystick.wanderActive" = "Wandering";
 "joystick.wanderPaused" = "Wander Paused";
 "common.done" = "Done";
+"common.skip" = "Skip";
