@@ -395,8 +395,15 @@ public struct MacSetupSnapshot: Equatable, Sendable {
 
     public var failure: MacSetupFailure? { errorCode.map(MacSetupFailure.service) }
 
+    /// A legacy signed-only renew may be replaced, but is not device-ready.
+    public var canReplaceCompletedTransaction: Bool {
+        isComplete || (mode == .renew && stage == .complete && outcome == .confirmed &&
+            installationConfirmed && !pairingImported && !supportObserved &&
+            !canResume && receiptSHA256 != nil && appBuild != nil && errorCode == nil)
+    }
+
     public var isComplete: Bool {
-        let imported = mode == .renew || (pairingImported && supportObserved)
+        let imported = pairingImported && supportObserved
         return stage == .complete && outcome == .confirmed && installationConfirmed &&
             imported && receiptSHA256 != nil && appBuild != nil && errorCode == nil
     }

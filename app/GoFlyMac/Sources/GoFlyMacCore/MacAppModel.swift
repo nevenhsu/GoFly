@@ -226,7 +226,7 @@ public final class MacAppModel {
               let setup, setup.isRestored, !setup.isBusy,
               let team = selectedTeam?.teamID,
               let options = try? MacSetupOptions(teamID: team) else { return }
-        if setup.hasRecordedTransaction && setup.snapshot?.isComplete != true {
+        if setup.hasRecordedTransaction && setup.snapshot?.canReplaceCompletedTransaction != true {
             page = .install
             return
         }

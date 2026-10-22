@@ -371,11 +371,15 @@ class RenewDevice:
             raise RuntimeError("controlled process death")
         return InstalledAppObservation(True, "com.neven.gofly", build=artifact.build)
 
+    def prepare_pairing(self, _device_id: str, candidate: Path) -> None:
+        candidate.write_bytes(b"pairing")
+        candidate.chmod(0o600)
+
     def pair(self, *_args: object) -> PairingObservation:
-        raise AssertionError("renew must not pair")
+        return PairingObservation("verified", "com.neven.gofly", "d" * 64)
 
     def verify_pairing(self, *_args: object) -> PairingObservation:
-        raise AssertionError("renew must not verify pairing")
+        return PairingObservation("verified", "com.neven.gofly", "d" * 64)
 
     def deliver_pairing(self, *_args: object) -> None:
         raise AssertionError("renew must not deliver pairing")
@@ -426,25 +430,31 @@ class RenewB1Tests(unittest.TestCase):
                         "preflight", mode="renew", options=self.options(root)
                     )).encode()))
 
-    def test_renew_apply_installs_without_pairing_or_support(self) -> None:
+    def test_renew_apply_requires_pairing_and_full_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             device = RenewDevice()
             producer = self.producer(directory, device)
-            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
+            def confirmed_handoff(journal, *_args):
+                journal = producer.store.checkpoint(journal, "support", "confirmed", proof={"supportObserved": True})
+                return producer.store.checkpoint(journal, "handoff", "confirmed", proof={"pairingImported": True})
+
+            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact), \
+                 mock.patch.object(producer, "_handoff", side_effect=confirmed_handoff) as handoff:
                 result = producer.handle(decode_request(json.dumps(request(
                     "apply", mode="renew", options=self.options(root)
                 )).encode()))
+            handoff.assert_called_once()
             self.assertEqual(result.stage, "complete", result.as_dict())
             self.assertEqual(result.outcome, "confirmed")
             self.assertTrue(result.installation_confirmed)
-            self.assertFalse(result.pairing_imported)
-            self.assertFalse(result.support_observed)
+            self.assertTrue(result.pairing_imported)
+            self.assertTrue(result.support_observed)
             self.assertEqual(result.expires_at, "2030-01-01T00:00:00Z")
             journal = JournalStore(root / "state").read()
-            self.assertEqual(set(journal["stages"]), {"artifact", "install", "complete"})
-            for absent in ("pairing", "support", "handoff"):
-                self.assertNotIn(absent, journal["stages"])
+            self.assertEqual(set(journal["stages"]), {"artifact", "pairing", "install", "support", "handoff", "complete"})
+            self.assertIs(journal["intent"]["fullSetup"], True)
+            self.assertEqual(journal["stages"]["pairing"]["state"], "confirmed")
             self.assertEqual(device.install_calls, 1)
 
     def test_renew_unknown_install_resume_does_not_resubmit(self) -> None:
@@ -473,6 +483,49 @@ class RenewB1Tests(unittest.TestCase):
                         "preflight", mode="install", options=self.options(root)
                     )).encode()))
 
+
+
+class FullRenewRegressionTests(unittest.TestCase):
+    producer = RenewB1Tests.producer
+    options = RenewB1Tests.options
+    def test_legacy_incomplete_renew_resume_does_not_call_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            producer = self.producer(directory, mock.Mock())
+            producer.store.create(SETUP_ID, DEVICE, {
+                "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
+            }, mode="renew")
+            before = producer.store.journal_path.read_bytes()
+            result = producer.handle(decode_request(request("resume", mode="renew")))
+            self.assertFalse(result.can_resume)
+            self.assertNotEqual(result.outcome, "confirmed")
+            self.assertEqual(producer.store.journal_path.read_bytes(), before)
+            self.assertEqual(producer.device.mock_calls, [])
+
+    def test_renew_pairing_unknown_never_installs_or_generates_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            device = RenewDevice()
+            producer = self.producer(directory, device)
+            with mock.patch.object(device, "pair", side_effect=SetupBridgeError("pairing-unknown")) as pair, \
+                 mock.patch.object(device, "verify_pairing", return_value=PairingObservation("unknown")), \
+                 mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
+                with self.assertRaisesRegex(SetupBridgeError, "pairing-unknown"):
+                    producer.handle(decode_request(request("apply", mode="renew", options=self.options(Path(directory)))))
+                with self.assertRaisesRegex(SetupBridgeError, "pairing-unknown"):
+                    producer.handle(decode_request(request("resume", mode="renew")))
+            self.assertEqual(pair.call_count, 1)
+            self.assertEqual(device.install_calls, 0)
+
+    def test_renew_handoff_failure_cannot_report_complete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            producer = self.producer(directory, RenewDevice())
+            with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact), \
+                 mock.patch.object(producer, "_handoff", side_effect=SetupBridgeError("handoff-unknown")):
+                with self.assertRaisesRegex(SetupBridgeError, "handoff-unknown"):
+                    producer.handle(decode_request(request("apply", mode="renew", options=self.options(Path(directory)))))
+            result = producer.handle(decode_request(request("status", mode="renew")))
+            self.assertFalse(result.pairing_imported)
+            self.assertNotEqual(result.stage, "complete")
 
 
 class AdapterBoundaryTests(unittest.TestCase):

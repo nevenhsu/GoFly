@@ -71,10 +71,20 @@ ls -ld work/gofly-mac/GoFly.app \
 ```
 
 - Mac App：`work/gofly-mac/GoFly.app`。
-- iOS：一律由 Mac GoFly 從 `app/GoFly/GoFly.xcodeproj` 建置並簽署；**不要用 Xcode 直接安裝**，否則會繞過首次安裝與配對交接。
+- iOS：AI 實機測試改用 `bash scripts/install-ios-test.sh`（先 preflight，再於授權內 apply）；與 Mac GoFly 共用 producer，必須取得配對／支援及 App 精確回報。Mac GUI 從 `app/GoFly/GoFly.xcodeproj` 建置並簽署；**不要用 Xcode 直接安裝**，否則會繞過首次安裝與配對交接。
 - `work/gofly-ios/iphoneos/.../GoFly.app` 只是 device build 驗證產物，不是安裝來源。
 
 驗收順序：
 1. 手機已有 main 版 GoFly：Mac 裝置頁選取手機，應自動觸發 renew。驗證完成、到期日、原本最愛／匯入路線／最愛路線／設定仍在，且能開到地圖。
 2. 照上方勾選表驗收；冷啟動測法：路線執行中直接從 App 切換器滑掉 GoFly，再重開。VPN 已連上時應自動清除模擬位置；VPN 未連上時不彈錯誤、地圖有提示，按 Restore 可清除。
 3. 選做：刪除手機上的 GoFly，從 Mac 重跑首次安裝（M1）。**這一步會清除 App 資料。**
+
+## 2026-10-22 瞬移假成功回歸（真機待重驗）
+
+- 裝置日誌確認 build 20 在 session 建立失敗時仍 ACK，且配對資料夾為空；本輪修正錯誤傳遞，不宣告外部地圖已恢復。
+- [ ] 無配對時按 Go：顯示配對修復指引、保留候選，不移動模擬箭頭、不顯示瞬移成功；Stop／恢復 GPS 也不能假成功。
+- [ ] 由正式 Mac 交接恢復配對後，Wi-Fi／LocalDevVPN 就緒，選擇與原位置明顯不同的座標按 Go；Apple 地圖及 Google Maps 按目前位置後皆移至目標，記錄時間及診斷。
+- [ ] 恢復 GPS 後確認外部地圖回到原定位；錯誤或未知回覆維持待確認，不盲目重送。
+- [ ] 不刪除 App 或資料；透過正式 Mac 更新及配對流程操作。
+
+- [ ] 更新／重新簽名後偏好、最愛與路線均保留；完整配對及支援回報通過。再執行一次相同腳本更新，核對已完成交接控制檔可安全封存，不碰使用者資料。

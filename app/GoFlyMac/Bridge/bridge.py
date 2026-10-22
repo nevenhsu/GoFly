@@ -746,9 +746,9 @@ def establish_process_group() -> None:
 def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
     if config is not None:
         try:
-            from Setup.setup_journal import JournalStore
+            from Setup.setup_journal import JournalStore, stages_for, uses_full_setup
         except ImportError:
-            from setup_journal import JournalStore
+            from setup_journal import JournalStore, stages_for, uses_full_setup
         try:
             journal = JournalStore(config.state_root).read()
             if isinstance(journal, dict) and (
@@ -758,9 +758,7 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
             ):
                 stages = journal.get("stages", {})
                 mode = journal.get("mode", "install")
-                order = ("artifact", "install", "complete") if mode == "renew" else (
-                    "artifact", "pairing", "install", "support", "handoff", "complete"
-                )
+                order = stages_for(journal)
                 current, outcome = "complete", "confirmed"
                 for stage in order:
                     state = stages.get(stage, {}).get("state")
@@ -773,7 +771,7 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
                 proof = journal.get("proof", {})
                 if current == "complete" and outcome == "confirmed" and not (
                     proof.get("installationConfirmed") is True
-                    and (mode == "renew" or (
+                    and (not uses_full_setup(journal) or (
                         proof.get("pairingImported") is True and proof.get("supportObserved") is True
                     ))
                     and isinstance(journal.get("receiptSHA256"), str)
@@ -783,7 +781,7 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
                 delivery_state = journal.get("delivery", {}).get("state")
                 payload: dict[str, Any] = {
                     "stage": current, "outcome": outcome,
-                    "canResume": outcome != "confirmed" and delivery_state not in {"inflight", "unknown"},
+                    "canResume": uses_full_setup(journal) and outcome != "confirmed" and delivery_state not in {"inflight", "unknown"},
                     "proof": {
                         "installationConfirmed": proof.get("installationConfirmed") is True,
                         "pairingImported": proof.get("pairingImported") is True,

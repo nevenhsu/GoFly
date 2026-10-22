@@ -70,11 +70,11 @@ public final class MacSetupModel {
         isRestored && !isBusy && !journalBlocked && journalIdentity != nil && snapshot?.canResume == true
     }
     public var hasRecordedTransaction: Bool { journalIdentity != nil }
-    public var locksDevice: Bool { isBusy || journalBlocked || (journalIdentity != nil && snapshot?.isComplete != true) }
+    public var locksDevice: Bool { isBusy || journalBlocked || (journalIdentity != nil && snapshot?.canReplaceCompletedTransaction != true) }
 
     public func resetSelection() {
         guard isRestored, !isBusy, !journalBlocked,
-              journalIdentity == nil || snapshot?.isComplete == true else { return }
+              journalIdentity == nil || snapshot?.canReplaceCompletedTransaction == true else { return }
         if let journalIdentity { previousCompletedIdentity = journalIdentity }
         journalIdentity = nil
         // Retire only the completed UI projection. The producer alone may
@@ -110,7 +110,7 @@ public final class MacSetupModel {
         start(.preflight)
     }
     public func beginRenew(deviceID: String, options: MacSetupOptions) throws {
-        if snapshot?.isComplete == true { resetSelection() }
+        if snapshot?.canReplaceCompletedTransaction == true { resetSelection() }
         try configure(deviceID: deviceID, options: options, mode: .renew)
         preflight()
     }

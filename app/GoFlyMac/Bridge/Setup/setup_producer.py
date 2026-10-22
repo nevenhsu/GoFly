@@ -28,7 +28,7 @@ try:
     )
     from .setup_config import SetupConfiguration
     from .setup_delivery import deliver_v1_once
-    from .setup_journal import JournalStore
+    from .setup_journal import JournalStore, uses_full_setup, stages_for
     from .setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 except ImportError:  # script execution from the packaged Setup directory
     from setup_adapters import (
@@ -45,7 +45,7 @@ except ImportError:  # script execution from the packaged Setup directory
     )
     from setup_config import SetupConfiguration
     from setup_delivery import deliver_v1_once
-    from setup_journal import JournalStore
+    from setup_journal import JournalStore, uses_full_setup, stages_for
     from setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
 
 
@@ -195,6 +195,7 @@ class SetupProducer:
                     "targetBundleID": self.config.target_bundle_id,
                     "targetName": self.config.target_name,
                     "artifact": None,
+                    "fullSetup": True,
                 },
                 mode=mode,
             )
@@ -219,7 +220,7 @@ class SetupProducer:
                 )
                 journal["intent"]["artifact"] = self._artifact_dict(artifact)
                 journal = self.store.checkpoint(journal, "artifact", "confirmed")
-                if mode == "install":
+                if uses_full_setup(journal):
                     journal = self.store.checkpoint(journal, "pairing", "inflight")
                     journal = self._pair(journal, request)
                     journal = self.store.checkpoint(
@@ -268,7 +269,7 @@ class SetupProducer:
                     "confirmed",
                     proof={"installationConfirmed": True},
                 )
-                if mode == "install":
+                if uses_full_setup(journal):
                     journal = self._handoff(journal, request, artifact)
                 journal = self.store.checkpoint(
                     journal,
@@ -276,8 +277,8 @@ class SetupProducer:
                     "confirmed",
                     proof={
                         "installationConfirmed": True,
-                        "pairingImported": mode == "install",
-                        "supportObserved": mode == "install",
+                        "pairingImported": uses_full_setup(journal),
+                        "supportObserved": uses_full_setup(journal),
                     },
                 )
                 receipt = self._receipt_digest(journal)
@@ -334,10 +335,13 @@ class SetupProducer:
             self._bind(journal, request)
             mode = journal.get("mode", "install")
             stages = journal["stages"]
+            if not uses_full_setup(journal):
+                # An old incomplete renew cannot be upgraded or replayed.
+                return self._payload_from_journal(journal, can_resume=False)
             if stages["artifact"]["state"] in {"pending", "unknown", "inflight"}:
                 journal = self._resume_artifact(journal, request)
                 stages = journal["stages"]
-            if mode == "install":
+            if uses_full_setup(journal):
                 if stages["pairing"]["state"] in {"unknown", "inflight"}:
                     # Pair setup may have completed while the Mac lost its
                     # process.  Verify the retained candidate over a fresh USB
@@ -417,7 +421,7 @@ class SetupProducer:
                 return self._payload_from_journal(journal, can_resume=True)
             if stages["install"]["state"] != "confirmed":
                 return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
-            if mode == "install":
+            if uses_full_setup(journal):
                 # A handoff resume must consume its frozen pre-effect plan before
                 # any support query/install.  The first App readback and PID stop
                 # establish the safe phase for those device boundaries.
@@ -440,8 +444,8 @@ class SetupProducer:
                     "confirmed",
                     proof={
                         "installationConfirmed": True,
-                        "pairingImported": mode == "install",
-                        "supportObserved": mode == "install",
+                        "pairingImported": uses_full_setup(journal),
+                        "supportObserved": uses_full_setup(journal),
                     },
                 )
                 receipt = self._receipt_digest(journal)
@@ -1412,15 +1416,15 @@ class SetupProducer:
 
     @staticmethod
     def _can_resume(journal: Mapping[str, Any]) -> bool:
+        if not uses_full_setup(journal):
+            return False
         if journal.get("delivery", {}).get("state") in {"inflight", "unknown"}:
             return False
         return any(stage["state"] in {"pending", "inflight", "unknown"} for stage in journal["stages"].values())
 
     @staticmethod
     def _inflight_stage(journal: Mapping[str, Any]) -> str | None:
-        order = ("artifact", "install", "complete") if journal.get("mode") == "renew" else (
-            "artifact", "pairing", "install", "support", "handoff", "complete"
-        )
+        order = stages_for(journal)
         for stage in order:
             if journal.get("stages", {}).get(stage, {}).get("state") == "inflight":
                 return stage
@@ -1482,9 +1486,7 @@ class SetupProducer:
         stages = journal["stages"]
         proof = journal.get("proof", {})
         mode = journal.get("mode", "install")
-        order = ("artifact", "install", "complete") if mode == "renew" else (
-            "artifact", "pairing", "install", "support", "handoff", "complete"
-        )
+        order = stages_for(journal)
         for stage in order:
             state = stages[stage]["state"]
             if state in {"unknown", "inflight"}:
@@ -1502,7 +1504,7 @@ class SetupProducer:
             receipt_value = journal.get("receiptSHA256")
             proof_complete = (
                 proof.get("installationConfirmed") is True
-                if mode == "renew"
+                if not uses_full_setup(journal)
                 else all(proof.get(key) is True for key in (
                     "installationConfirmed", "pairingImported", "supportObserved"
                 ))

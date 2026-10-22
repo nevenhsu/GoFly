@@ -18,6 +18,12 @@
 
 本次實機修正已進入共用安裝來源：USB 連線保留裝置實際序號大小寫；配對檔保留依賴回傳的文字或二進位 remote unlock 欄位；iOS 26／27 程序控制走已核對身分的 RSD。Apple BuildManifest 的 4 MiB 上限、支援檔案總量的 4 GiB 上限與 256 KiB 交易 JSON 上限分開。Cryptex 優先使用本機 Xcode 支援資料，缺少才下載；實際版本取自受雜湊保護的 `Image.dmg.cryptex_info`，不拿 BuildManifest 的佔位版本比較。已執行中的 GoFly 回報 `app-running`，介面提示關閉手機 App 後繼續原交易，不強制停止或重裝。
 
+## 重新簽名與實機測試更新（2026-10-22）
+
+重新簽名／更新現在也走完整的配對核對、交付與必要裝置準備，手機精確回報後才完成；保留同一 App 的偏好、最愛及路線，不卸載。配對綁定選定 USB iPhone，身分不符或結果不明即停止。這條實作流程目前限 USB；VPN 及外部地圖定位分開驗收。
+
+AI 實機測試一律使用 `bash scripts/install-ios-test.sh --device <UDID> --team <TEAM> --action preflight`，取得安裝授權後改 `--action apply`。已有 App 預設 renew；首次加 `--mode install`。未知寫入沿用輸出的 setupID 查詢／明確續行，不單獨用 devicectl 補裝。完整範例見 [AI 安裝說明](../../docs/AI-INSTALL.md)。
+
 ## 開啟
 
 在專案根目錄執行：

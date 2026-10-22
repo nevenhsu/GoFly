@@ -24,3 +24,9 @@ and implementation specification have not been selected yet.
   credentials and testing scope must be configured before a security test.
 - Keep credentials and generated research output out of version control.
 - Do not run Prettier unless explicitly requested.
+
+## iOS 實機測試安裝
+
+- 實機測試安裝／更新一律使用 `bash scripts/install-ios-test.sh`，或相同的正式 Mac setup producer；不可只執行 Xcode／`devicectl install` 後宣告完成。先指定並核對 USB 裝置與既有簽署 Team，`--action preflight` 唯讀檢查後，已有使用者安裝授權才執行 `--action apply`。
+- 首次 `--mode install`；已有 App 使用預設 `--mode renew`。兩者都須確認 App、這支手機的配對匯入與必要裝置支援；重新簽名／更新也不能略過配對。不卸載、不清除偏好設定／最愛／路線，不為了成功更換 Team。
+- 寫入中斷保留原 `setupID`，用同一腳本 `--action status` 核對；只有明確可續時才 `--action resume`，不可另開交易盲目重送。操作範例與限制見 `docs/AI-INSTALL.md`。

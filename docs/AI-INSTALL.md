@@ -2,12 +2,34 @@
 
 [English](#english) · [繁體中文](#繁體中文) · [简体中文](#简体中文)
 
+## Device-test install/update / 實機測試安裝更新（2026-10-22）
+
+Use the shared entry below for every AI-assisted device test; do not use an install-only Xcode/devicectl command. Existing apps use `renew`, which now includes pairing and device preparation. This is an implemented USB development workflow; device success must be recorded separately from offline checks.
+
+AI 實機測試固定用以下腳本，與 Mac App 共用正式 producer。`renew` 覆蓋同一 App 並保留偏好、最愛及路線，同時核對並交付該手機的配對資料、準備必要支援；不是移除 App 後重裝。不要以單獨 Xcode／devicectl 安裝取代。既有 Team 不任意更換，裝置身分不符立即停止。目前這條完整交接限 USB。
+
+```sh
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team <EXISTING_TEAM_ID> --action preflight
+# With the user's installation authorization / 已取得使用者安裝授權：
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team <EXISTING_TEAM_ID> --action apply
+# Query an interrupted operation; preserve the printed setupID / 中斷後沿用原 setupID：
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --action status --setup-id <ORIGINAL_SETUP_ID>
+# Only when continuation is safe / 確認可續時才執行：
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --action resume --setup-id <ORIGINAL_SETUP_ID>
+```
+
+First installation adds `--mode install`; default `--mode renew` requires an installed app. Provisioning network access is off by default; use `--allow-provisioning-updates` only within the user's authorization. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall, data reset or fallback to a different phone/team.
+
+首次安裝加 `--mode install`，預設 `renew` 要求已有 App。預設不連 Apple 更新佈建資料；僅在授權範圍內加 `--allow-provisioning-updates`。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。舊版只有簽署的 renew 回報可查詢，但不代表配對已備妥；未完成的舊交易不自動升級或重送。
+
+AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；未知结果保留原事务，不卸载、不清数据、不盲目重试。只有完整安装、配对、设备准备回报全部通过才算完成。
+
 ## English
 
 ### Establish the task
 
 1. Read the selected root README, this guide, [Mac capabilities](../app/GoFlyMac/README.md), and applicable workspace rules. Identify whether the user wants a GoFly release or a Mac development-preview run. Continue within existing authorization without asking for the same permission repeatedly.
-2. **Current state, 2026-10-18:** no verified public DMG is recorded. The development GUI implements formal USB first installation; iPhone acceptance is deferred. Renewal and portable packaging remain in development. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
+2. **Current state, 2026-10-18:** no verified public DMG is recorded. The development GUI implements formal USB first installation; iPhone acceptance is deferred. Renewal includes full pairing/preparation as of 2026-10-22; portable packaging remains in development. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
 3. Check Mac/Xcode, iPhone/iOS, USB, and signing team. Use only the intended phone. Resolve ambiguous device/team selection before writing.
 4. The user handles Apple sign-in, passwords, 2FA, terms, Keychain prompts, iPhone trust/Developer Mode, and VPN permission. Do not request credentials or pairing private keys in chat. Report pending physical phone actions.
 
@@ -28,7 +50,7 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 確認任務
 
 1. 先讀選用語言的根目錄 README、本文、[Mac 現況](../app/GoFlyMac/README.md)及適用的工作目錄規則。確認使用者要 GoFly 發行版還是 Mac 開發預覽。沿用已有授權，不重複詢問同一權限。
-2. **2026-10-18 現況：**尚無已驗證的公開 DMG。開發版 GUI 已實作正式 USB 首次安裝，手機驗收延後；續簽與可攜包仍在開發。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
+2. **2026-10-18 現況：**尚無已驗證的公開 DMG。開發版 GUI 已實作正式 USB 首次安裝，手機驗收延後；2026-10-22 起續簽納入完整配對／準備交接，可攜包仍在開發。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
 3. 檢查 Mac／Xcode、iPhone／iOS、USB 及簽署 Team，只操作指定手機。多裝置／Team 且意圖不明時，寫入前先釐清。
 4. Apple 登入、密碼、雙重認證、條款、鑰匙圈提示、手機信任／開發者模式及 VPN 權限由使用者處理。不在聊天索取憑證或配對私鑰；需要實體手機操作時回報待辦。
 
@@ -49,7 +71,7 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 确认任务
 
 1. 先读所选语言的根目录 README、本文、[Mac 现状](../app/GoFlyMac/README.md)及适用的工作目录规则。确认用户要 GoFly 发布版还是 Mac 开发预览。沿用已有授权，不重复询问同一权限。
-2. **2026-10-18 现状：**尚无已验证的公开 DMG。开发版 GUI 已实现正式 USB 首次安装，手机验收延后；续签与可移植包仍在开发。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
+2. **2026-10-18 现状：**尚无已验证的公开 DMG。开发版 GUI 已实现正式 USB 首次安装，手机验收延后；2026-10-22 起续签纳入完整配对／准备交接，可移植包仍在开发。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
 3. 检查 Mac／Xcode、iPhone／iOS、USB 及签名 Team，只操作指定手机。多设备／Team 且意图不明时，写入前先明确。
 4. Apple 登录、密码、双重认证、条款、钥匙串提示、手机信任／开发者模式及 VPN 权限由用户处理。不在聊天索取凭证或配对私钥；需要实体手机操作时报告待办。
 

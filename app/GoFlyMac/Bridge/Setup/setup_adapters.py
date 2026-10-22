@@ -1199,7 +1199,8 @@ class PinnedPymobiledeviceAdapter:
                     return InstalledAppObservation(False)
                 if not isinstance(value, Mapping):
                     raise SetupBridgeError("runtime-api-mismatch")
-                return InstalledAppObservation(True, TARGET_BUNDLE_ID)
+                build = value.get("CFBundleVersion")
+                return InstalledAppObservation(True, TARGET_BUNDLE_ID, build=str(build) if build is not None else None)
         except SetupBridgeError:
             raise
         except Exception:
@@ -1415,8 +1416,8 @@ class PinnedPymobiledeviceAdapter:
         """Publish one immutable App readback request through HouseArrest.
 
         The request is staged and read back before the remote rename.  A
-        pre-existing request is retained only when it is byte-for-byte the
-        same transaction request; a different request is a conflict.
+        same request is retained byte-for-byte. A different request requires
+        archiving the exact controls of a fully committed active handoff.
         """
 
         request = {
@@ -1452,9 +1453,9 @@ class PinnedPymobiledeviceAdapter:
                 _run(service.makedirs(APP_SETUP_ROOT))
                 if self._remote_exists(service, READBACK_REQUEST):
                     existing = self._read_remote_bounded(service, READBACK_REQUEST)
-                    if existing != data:
-                        raise SetupBridgeError("transaction-conflict")
-                    return
+                    if existing == data:
+                        return
+                self._retire_completed_controls(service, device_id=device_id)
                 if self._remote_exists(service, temporary):
                     raise SetupBridgeError("transaction-conflict")
                 _run(service.set_file_contents(temporary, data))
@@ -1479,6 +1480,76 @@ class PinnedPymobiledeviceAdapter:
             with contextlib.suppress(Exception):
                 if client is not None:
                     _run(client.close())
+
+    def _retire_completed_controls(self, service: Any, *, device_id: str) -> None:
+        """Archive only a complete active handshake; partial rollover stays unknown.
+
+        The producer has already durably entered handoff before this call.
+        Never delete activation, support generations, pairing or user data.
+        """
+        paths = (READBACK_REQUEST, READBACK_RESPONSE, FORMAL_INPUT)
+        present = [self._remote_exists(service, path) for path in paths]
+        if not any(present):
+            if self._remote_exists(service, ACTIVATION_RECEIPT):
+                raise SetupBridgeError("transaction-unknown")
+            return
+        if not all(present) or self._remote_exists(service, V1_INCOMING):
+            raise SetupBridgeError("transaction-unknown")
+        names = _run(service.listdir(APP_SETUP_ROOT))
+        if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+            raise SetupBridgeError("handoff-unknown")
+        if any(name.endswith(".staging") for name in names):
+            raise SetupBridgeError("transaction-unknown")
+        snapshots = {path: self._read_remote_bounded(service, path, max_bytes=MAX_MANIFEST_BYTES) for path in paths}
+        request = _parse_object(snapshots[READBACK_REQUEST], limit=64 * 1024)
+        if set(request) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app"} or type(request.get("version")) is not int or request["version"] != 1:
+            raise SetupBridgeError("transaction-conflict")
+        old_id, old_nonce = _uuid(request.get("setupID")), _uuid(request.get("nonce"))
+        active_raw = self._read_remote_bounded(service, ACTIVATION_RECEIPT, max_bytes=MAX_MANIFEST_BYTES)
+        active = _parse_object(active_raw, limit=MAX_MANIFEST_BYTES)
+        if _uuid(active.get("activeSetupID")) != old_id:
+            raise SetupBridgeError("transaction-conflict")
+        receipt = self._decode_activation_receipt(active_raw, device_id=device_id, setup_id=old_id, nonce=old_nonce)
+        formal = self._decode_formal_manifest(snapshots[FORMAL_INPUT], device_id=device_id, setup_id=old_id, nonce=old_nonce)
+        self._decode_readback(snapshots[READBACK_RESPONSE], device_id=device_id, setup_id=old_id, nonce=old_nonce)
+        response = _parse_object(snapshots[READBACK_RESPONSE], limit=64 * 1024)
+        active_entry = next(item for item in active["receipts"] if _uuid(item["setupID"]) == old_id)
+        if (normalized_device(request["expectedDeviceUDID"]) != normalized_device(device_id)
+                or request["app"] != formal["app"] or response["app"] != request["app"]
+                or hashlib.sha256(snapshots[FORMAL_INPUT]).hexdigest() != receipt.raw_manifest_sha256
+                or any(active_entry.get(key) != value for key, value in formal.items())):
+            raise SetupBridgeError("transaction-conflict")
+        parent = f"{APP_SETUP_ROOT}/retired"
+        try:
+            info = _run(service.stat(parent))
+        except Exception as error:
+            if not _is_remote_missing(error):
+                raise SetupBridgeError("handoff-unknown") from None
+            _run(service.makedirs(parent))
+            info = _run(service.stat(parent))
+        if not isinstance(info, Mapping) or info.get("st_ifmt") != "S_IFDIR":
+            raise SetupBridgeError("storage-unavailable")
+        archive = f"{parent}/{old_id}-{old_nonce}"
+        try:
+            _run(service.stat(archive))
+        except Exception as error:
+            if not _is_remote_missing(error):
+                raise SetupBridgeError("handoff-unknown") from None
+        else:
+            # Any previous attempt, even an empty directory, stays unknown.
+            raise SetupBridgeError("transaction-unknown")
+        _run(service.makedirs(archive))
+        try:
+            for path in paths:
+                if self._read_remote_bounded(service, path, max_bytes=MAX_MANIFEST_BYTES) != snapshots[path]:
+                    raise SetupBridgeError("transaction-unknown")
+                destination = f"{archive}/{path.rsplit('/', 1)[1]}"
+                _run(service.rename(path, destination))
+                if self._read_remote_bounded(service, destination, max_bytes=MAX_MANIFEST_BYTES) != snapshots[path] or self._remote_exists(service, path):
+                    raise SetupBridgeError("transaction-unknown")
+        except Exception:
+            # Do not continue a partial remote multi-file archive on retry.
+            raise SetupBridgeError("transaction-unknown") from None
 
     def deliver_pairing(self, device_id: str, setup_id: str) -> None:
         """Publish the one-shot LocalGo v1 envelope through VendContainer."""

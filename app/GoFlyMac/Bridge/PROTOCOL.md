@@ -44,9 +44,18 @@ state remains a conflict.
 `mode: "install"` runs `artifact → pairing → install → support → handoff →
 complete`; it refuses an already installed app. `mode: "renew"` requires an
 installed app (`app-not-installed` otherwise), overwrites the same bundle, and
-runs only `artifact → install → complete`. Renew never pairs, installs support,
-or hands off; its confirmed payload carries the signed profile's `expiresAt`
-(or `null`). An unknown install is never adopted or resubmitted.
+runs the same full pairing, support and handoff stages as installation, while
+overwriting the same bundle without uninstalling or resetting app data. Both
+modes require exact App activation proof. New journals freeze `intent.fullSetup`
+as true. Historical renew journals without it retain their original three-stage
+shape; incomplete historical renews cannot resume writes, and signed-only
+completion is not device-ready. An unknown install is never adopted or resubmitted.
+
+Before a subsequent full handoff, only the three fixed control files from the
+exact active committed activation may be archived under `GoFlySetup/retired`.
+Activation, support generations, pairing receipts and user files are retained.
+Pending/foreign controls, staging, an existing archive or an interrupted rename
+remain unknown; rollover is never blindly replayed.
 
 `preflight` validates options and device state without writing. `apply` creates
 the journal and performs the stages. `status` and `resume` bind the original

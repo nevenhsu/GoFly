@@ -35,6 +35,17 @@ import GoFlyMacCore
         }
     }
 
+    @Test func legacyRenewCanBeReadButNeedsPairingBeforeCompletion() throws {
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, mode: .renew)
+        var legacy = payload()
+        legacy["proof"] = ["installationConfirmed": true, "pairingImported": false, "supportObserved": false]
+        let snapshot = try MacSetupResponseDecoder.decode(response(for: request, payload: legacy), for: request)
+        #expect(!snapshot.isComplete)
+        #expect(snapshot.canReplaceCompletedTransaction)
+        let current = try MacSetupResponseDecoder.decode(response(for: request), for: request)
+        #expect(current.isComplete)
+    }
+
     @Test func matchingCompleteReceiptCanFinishButPartialEvidenceCannot() throws {
         let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
         let snapshot = try MacSetupResponseDecoder.decode(response(for: request), for: request)

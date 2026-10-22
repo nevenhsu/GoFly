@@ -31,6 +31,8 @@ build() {
   tail -3 "$log"
 }
 
+bash "$task_root/app/GoFly/scripts/test-native-service.sh"
+
 build iphonesimulator
 if ((device)); then
   bash "$task_root/app/GoFly/NativeBridge/build.sh"

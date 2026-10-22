@@ -291,6 +291,44 @@ import GoFlyMacCore
     }
 
 
+    @Test func legacySignedOnlyRenewCanStartAFullRenewFromDevicePage() async throws {
+        let runner = HeldSetupRunner()
+        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device, mode: .renew)
+        let setup = MacSetupModel(runner: runner, journal: ModelJournal(original))
+        let app = MacAppModel(live: RenewChecker(), setup: setup)
+        await app.restoreSetup()
+        setup.status()
+        #expect(await waitForRequests(1, runner))
+        let status = try #require(await runner.requests.last)
+        var root = try #require(JSONSerialization.jsonObject(with: response(status, stage: "complete", outcome: "confirmed")) as? [String: Any])
+        var payload = try #require(root["payload"] as? [String: Any])
+        payload["proof"] = ["installationConfirmed": true, "pairingImported": false, "supportObserved": false]
+        payload["canResume"] = false
+        payload["app"] = ["bundleID": "com.neven.gofly", "build": "20",
+                          "profileSHA256": String(repeating: "a", count: 64),
+                          "executableSHA256": String(repeating: "b", count: 64)]
+        payload["teamID"] = "ABCDE12345"
+        payload["receiptSHA256"] = String(repeating: "c", count: 64)
+        root["payload"] = payload
+        await runner.returnData(try JSONSerialization.data(withJSONObject: root), action: .status)
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.snapshot?.isComplete == false)
+        app.checkEnvironment()
+        #expect(await waitForAppCheck(app))
+        app.openDevices(firstInstall: false)
+        #expect(await waitForAppCheck(app))
+        app.select(device)
+        app.inspectSelected()
+        #expect(await waitForAppCheck(app))
+        app.startRenew()
+        #expect(await waitForRequests(2, runner))
+        let preflight = try #require(await runner.requests.last)
+        #expect(preflight.action == .preflight && preflight.mode == .renew)
+        #expect(preflight.setupID != original.setupID)
+        await runner.fail(.cancelled)
+        #expect(await waitUntilIdle(setup))
+    }
+
     @Test func inspectionDoesNotStartRenewAndManualStartsOne() async throws {
         let runner = HeldSetupRunner()
         let journal = ModelJournal(nil)

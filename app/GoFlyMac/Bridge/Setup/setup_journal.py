@@ -35,8 +35,13 @@ _RENEW_STAGES = ("artifact", "install", "complete")
 _MODES = frozenset({"install", "renew"})
 
 
-def _stages_for(mode: str) -> tuple[str, ...]:
-    return _RENEW_STAGES if mode == "renew" else _INSTALL_STAGES
+def uses_full_setup(journal: Mapping[str, Any]) -> bool:
+    """New renews include pairing; old journals keep their original shape."""
+    return journal.get("mode", "install") == "install" or journal.get("intent", {}).get("fullSetup") is True
+
+
+def stages_for(journal: Mapping[str, Any]) -> tuple[str, ...]:
+    return _INSTALL_STAGES if uses_full_setup(journal) else _RENEW_STAGES
 _STATES = frozenset({"pending", "inflight", "confirmed", "unknown", "failed"})
 _TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 _OS_RE = re.compile(r"(?:26|27)(?:\.\d+){1,2}\Z")
@@ -218,9 +223,9 @@ def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
         mode = journal.get("mode", "install")
         if mode not in _MODES:
             return False
-        if not all(stages[name]["state"] == "confirmed" for name in _stages_for(mode)):
+        if not all(stages[name]["state"] == "confirmed" for name in stages_for(journal)):
             return False
-        if mode == "renew":
+        if not uses_full_setup(journal):
             return proof.get("installationConfirmed") is True
         if not all(proof[name] is True for name in ("installationConfirmed", "pairingImported", "supportObserved")):
             return False
@@ -256,7 +261,7 @@ def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
             return False
         if activation.get("setupID") != journal["setupID"] or activation.get("deviceID") != journal["deviceID"]:
             return False
-        if activation.get("nonce") != handoff.get("nonce"):
+        if _validate_setup_id(activation.get("nonce")) != _validate_setup_id(handoff.get("nonce")):
             return False
         if activation.get("rawManifestSHA256") != handoff.get("manifestSHA256"):
             return False
@@ -425,6 +430,8 @@ class JournalStore:
             raise SetupBridgeError("storage-unavailable")
         if type(intent.get("allowProvisioningUpdates")) is not bool:
             raise SetupBridgeError("storage-unavailable")
+        if "fullSetup" in intent and intent["fullSetup"] is not True:
+            raise SetupBridgeError("storage-unavailable")
         observation = intent.get("deviceObservation")
         if observation is not None:
             if not isinstance(observation, dict) or set(observation) != {
@@ -460,7 +467,7 @@ class JournalStore:
         mode = value.get("mode", "install")
         if mode not in _MODES:
             raise SetupBridgeError("storage-unavailable")
-        expected_stages = _stages_for(mode)
+        expected_stages = stages_for(value)
         if set(stages) != set(expected_stages):
             raise SetupBridgeError("storage-unavailable")
         for stage in expected_stages:
@@ -563,8 +570,8 @@ class JournalStore:
         if self.read() is not None:
             raise SetupBridgeError("transaction-conflict")
         self.transaction_root(setup_id)
-        stage = {name: {"state": "pending"} for name in _stages_for(mode)}
         intent_value = copy.deepcopy(dict(intent))
+        stage = {name: {"state": "pending"} for name in stages_for({"mode": mode, "intent": intent_value})}
         # The pairing transaction is part of immutable intent.  It is created
         # before any pair boundary and survives a reopen, so resume never has
         # to invent a second transaction identity.
