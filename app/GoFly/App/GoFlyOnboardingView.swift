@@ -49,27 +49,30 @@ struct GoFlyOnboardingView: View {
 
     private var location: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 16) {
                 GoFlyOnboardingStepIndicator(step: 2)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
-                GoFlyOnboardingFeatureIcon(symbol: GoFlySymbols.location)
-                    .padding(.top, 12)
-                VStack(alignment: .leading, spacing: 8) {
+                GoFlyOnboardingEmblem(symbol: "location.fill")
+                    .padding(.top, 48)
+                VStack(spacing: 8) {
                     Text(goFlyString("onboarding.location.title"))
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(GoFlyStyle.primary)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(goFlyString("onboarding.location.message"))
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundStyle(GoFlyStyle.secondary)
+                        .multilineTextAlignment(.center)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("onboarding.location")
                 }
+                .padding(.top, 8)
                 locationStatus
             }
-            .frame(maxWidth: 520, alignment: .leading)
+            .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
@@ -111,6 +114,7 @@ struct GoFlyOnboardingView: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
             .background(GoFlyStyle.surface)
+            .overlay(alignment: .top) { Divider() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { controller.refreshLocationAuthorization() }
@@ -126,29 +130,23 @@ struct GoFlyOnboardingView: View {
     }
 
     @ViewBuilder private var locationStatus: some View {
-        HStack {
-            Text(goFlyString("onboarding.location.currentStatus"))
-                .font(.subheadline)
-                .foregroundStyle(GoFlyStyle.primary)
-            Spacer(minLength: 12)
-            switch controller.locationAuthorization {
-            case .notDetermined:
-                GoFlyStatusPill(text: goFlyString("onboarding.location.status.notDetermined"),
-                                tone: .neutral,
-                                identifier: "onboarding.location.status")
-            case .authorized:
-                GoFlyStatusPill(text: goFlyString("onboarding.location.status.authorized"),
-                                tone: .success,
-                                identifier: "onboarding.location.status")
-            case .denied:
-                GoFlyStatusPill(text: goFlyString("onboarding.location.status.denied"),
-                                tone: .warning,
-                                identifier: "onboarding.location.status")
-            }
+        switch controller.locationAuthorization {
+        case .notDetermined:
+            GoFlyStatusPill(text: goFlyLocalizedFormat(goFlyString("onboarding.location.statusFormat"),
+                                goFlyString("onboarding.location.status.notDetermined")),
+                            tone: .neutral, identifier: "onboarding.location.status")
+                .padding(.top, 8)
+        case .authorized:
+            GoFlyStatusPill(text: goFlyLocalizedFormat(goFlyString("onboarding.location.statusFormat"),
+                                goFlyString("onboarding.location.status.authorized")),
+                            tone: .success, identifier: "onboarding.location.status")
+                .padding(.top, 8)
+        case .denied:
+            GoFlyStatusPill(text: goFlyLocalizedFormat(goFlyString("onboarding.location.statusFormat"),
+                                goFlyString("onboarding.location.status.denied")),
+                            tone: .warning, identifier: "onboarding.location.status")
+                .padding(.top, 8)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 54)
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
         if controller.locationAuthorization == .denied {
             GoFlyStatusBanner(tone: .warning,
@@ -303,15 +301,13 @@ private struct GoFlyVPNOnboardingView: View {
                 GoFlyOnboardingStepIndicator(step: 3)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
-                GoFlyOnboardingFeatureIcon(symbol: GoFlySymbols.network)
-                    .padding(.top, 8)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(goFlyString("onboarding.vpn.title"))
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(GoFlyStyle.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(goFlyString("onboarding.vpn.help.intro"))
-                        .font(.subheadline)
+                    Text(goFlyString("onboarding.vpn.subtitle"))
+                        .font(.body)
                         .foregroundStyle(GoFlyStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -333,7 +329,9 @@ private struct GoFlyVPNOnboardingView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(GoFlyStyle.secondary)
                     vpnStepRow(number: 1, title: "onboarding.vpn.step1")
+                    Divider().padding(.leading, 32)
                     vpnStepRow(number: 2, title: "onboarding.vpn.step2")
+                    Divider().padding(.leading, 32)
                     vpnStepRow(number: 3, title: "onboarding.vpn.step3")
                 }
                 .padding(14)
@@ -367,7 +365,7 @@ private struct GoFlyVPNOnboardingView: View {
                 Button {
                     openLocalDevVPN()
                 } label: {
-                    Text(goFlyString("onboarding.vpn.open"))
+                    Label(goFlyString("onboarding.vpn.open"), systemImage: "arrow.up.forward.square")
                 }
                 .buttonStyle(GoFlyActionStyle(primary: true))
                 .accessibilityIdentifier("onboarding.vpn.open")
@@ -402,6 +400,7 @@ private struct GoFlyVPNOnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.top, 16)
             .background(GoFlyStyle.surface)
+            .overlay(alignment: .top) { Divider() }
         }
         .onAppear {
             isVisible = true
@@ -491,9 +490,9 @@ private struct GoFlyVPNOnboardingView: View {
         HStack(alignment: .center, spacing: 10) {
             Text("\(number)")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(GoFlyStyle.primary)
+                .foregroundStyle(GoFlyStyle.surface)
                 .frame(width: 22, height: 22)
-                .background(GoFlyStyle.surface, in: Circle())
+                .background(GoFlyStyle.primary, in: Circle())
                 .accessibilityHidden(true)
             Text(goFlyString(title))
                 .font(.subheadline)

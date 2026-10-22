@@ -98,15 +98,13 @@ struct GoFlyFavoritesView: View {
                     selecting = true
                     selected.removeAll()
                 } label: {
-                    Text(goFlyString("favorites.select"))
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 32)
-                        .background(GoFlyStyle.secondarySurface, in: Capsule())
-                        .frame(minHeight: 44)
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 21))
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("favorites.select"))
                 .disabled(!favorites.canMutate)
                 .accessibilityIdentifier("favorites.select")
             }
@@ -166,6 +164,7 @@ struct GoFlyFavoritesView: View {
         }
         .padding(16)
         .background(GoFlyStyle.surface)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func row(_ favorite: FavoritePlace) -> some View {
@@ -178,7 +177,7 @@ struct GoFlyFavoritesView: View {
                     if selecting {
                         GoFlyCheckboxIcon(selected: selected.contains(favorite.key), size: 22)
                     } else {
-                        GoFlyStarIcon(size: 16, filled: false)
+                        GoFlyStarIcon(size: 16, filled: pending[favorite.key] == nil)
                             .frame(width: 36, height: 36)
                             .background(GoFlyStyle.secondarySurface, in: Circle())
                     }

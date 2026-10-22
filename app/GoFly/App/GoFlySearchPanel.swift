@@ -268,7 +268,7 @@ struct GoFlySearchPanel: View {
                     iconTile(GoFlySymbols.heading, filled: true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(goFlyLocalizedFormat(goFlyString("search.goToCoordinate"),
-                                                  place.coordinate.displayText))
+                                                  place.coordinate.shortDisplayText))
                             .font(.body)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(goFlyString("search.validCoordinate"))

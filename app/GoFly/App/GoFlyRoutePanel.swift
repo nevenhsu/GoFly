@@ -147,9 +147,7 @@ struct GoFlyRoutePanel: View {
                 )
                 HStack(spacing: 16) {
                     Button { _ = controller.openNewPicker() } label: {
-                        Label(goFlyString(controller.draft.nodes.isEmpty ? "route.addOrigin" :
-                                        (controller.draft.nodes.count == 1 ? "route.addDestination" : "route.addWaypoint")),
-                              systemImage: GoFlySymbols.add)
+                        Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
                             .font(.subheadline.weight(.semibold))
                             .frame(minHeight: 44, alignment: .leading)
                             .contentShape(Rectangle())
@@ -215,18 +213,22 @@ struct GoFlyRoutePanel: View {
                 .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
             Button { showingDetails = true } label: {
                 HStack(spacing: 4) {
-                    Text(goFlyLocalizedFormat(goFlyString("route.speedValue"),
+                    Image(systemName: "speedometer")
+                        .font(.system(size: 14, weight: .regular))
+                        .accessibilityHidden(true)
+                    Text(goFlyLocalizedFormat(goFlyString("route.speedShort"),
                                               controller.draft.speed.kilometersPerHour))
                         .font(.footnote.weight(.semibold))
                         .monospacedDigit()
-                    Image(systemName: "chevron.down")
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.secondary)
                         .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 12)
                 .frame(minHeight: 34)
-                .background(GoFlyStyle.secondarySurface, in: Capsule())
-                .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                .background(GoFlyStyle.surface, in: Capsule())
+                .overlay { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) }
                 .frame(minHeight: 44)
                 .contentShape(Capsule())
             }
@@ -467,7 +469,8 @@ private struct GoFlyRoundTripControl: View {
         .font(.footnote.weight(.semibold))
         .padding(.horizontal, 12)
         .frame(minHeight: 34)
-        .background(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface, in: Capsule())
+        .background(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
+        .overlay { if !controller.roundTripEnabled { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) } }
         .contentShape(Capsule())
         .foregroundStyle(!controller.canSetRoundTrip ? GoFlyStyle.disabledForeground
                          : (controller.roundTripEnabled ? GoFlyStyle.surface : GoFlyStyle.primary))

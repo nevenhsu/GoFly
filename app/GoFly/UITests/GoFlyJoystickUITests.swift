@@ -13,7 +13,7 @@ final class GoFlyJoystickUITests: XCTestCase {
         app.launch()
         app.selectGoFlyMode("joystick")
         assertMissingOrigin(app)
-        app.buttons["joystick.setOrigin"].tap()
+        app.selectGoFlyMode("teleport")
         app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 5))
@@ -55,9 +55,8 @@ final class GoFlyJoystickUITests: XCTestCase {
         wander.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(wander.value as? String, "0")
         XCTAssertFalse(app.buttons["joystick.randomDestination"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["joystick.pad"].exists)
 
-        app.buttons["joystick.setOrigin"].tap()
+        app.selectGoFlyMode("teleport")
         app.buttons["map.searchBar"].tap()
         let query = app.textFields["search.query"]
         XCTAssertTrue(query.waitForExistence(timeout: 5))
@@ -96,11 +95,8 @@ final class GoFlyJoystickUITests: XCTestCase {
     }
 
     private func assertMissingOrigin(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["joystick.setOrigin"].waitForExistence(timeout: 5))
-        assertTarget(app.buttons["joystick.setOrigin"], app)
-        XCTAssertFalse(app.descendants(matching: .any)["joystick.pad"].exists)
-        XCTAssertFalse(app.sliders["joystick.speed"].exists)
-        XCTAssertFalse(app.buttons["joystick.randomDestination"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["joystick.pad"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["joystick.setOrigin"].exists)
         let wander = app.switches["joystick.wander"]
         XCTAssertTrue(wander.exists)
         XCTAssertFalse(wander.isEnabled)

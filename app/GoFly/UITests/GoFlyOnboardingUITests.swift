@@ -25,8 +25,6 @@ final class GoFlyOnboardingUITests: XCTestCase {
         XCTAssertFalse(next.isEnabled)
         let failure = app.descendants(matching: .any)["onboarding.vpn.failure"]
         XCTAssertTrue(failure.waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["onboarding.vpn.status"].label, "Not reachable")
-        XCTAssertTrue(app.descendants(matching: .any)["onboarding.vpn.failureDetail"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["map.serviceControl"].exists)
         XCTAssertFalse(app.buttons["onboarding.location.skip"].exists)
         XCTAssertEqual(app.alerts.count, 0)

@@ -66,14 +66,14 @@ struct GoFlyRouteNodeList: View {
                 }
             }
         }
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { listFrame = $0 }
         .overlay(alignment: .topLeading) {
             if let id = draggingID, let node = draft.nodes.first(where: { $0.id == id }) {
                 row(node)
                     .frame(width: listFrame.width, height: dragHeight)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
                     .scaleEffect(1.02)
                     .position(x: listFrame.width / 2, y: pointer.y - touchOffset - listFrame.minY)

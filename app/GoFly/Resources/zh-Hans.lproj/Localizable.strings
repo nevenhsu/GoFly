@@ -45,8 +45,8 @@
 "error.storageUnavailable" = "无法读取设备设置数据。请检查可用存储空间，并在 Mac App 修复这部 iPhone。";
 "onboarding.welcome.title" = "欢迎使用 GoFly";
 "onboarding.next" = "下一步";
-"onboarding.location.title" = "手机定位";
-"onboarding.location.message" = "用于在地图上显示真实位置；定位为可选，可跳过。";
+"onboarding.location.title" = "允许 GoFly 使用定位";
+"onboarding.location.message" = "在地图显示你的真实位置，并作为路线与漫步的起点。只需“使用 App 期间”。";
 "onboarding.location.allow" = "允许定位";
 "onboarding.location.skip" = "跳过";
 "onboarding.location.authorized" = "已允许定位。";
@@ -61,18 +61,18 @@
 "onboarding.vpn.help.heading" = "四步完成连接";
 "onboarding.vpn.help.intro" = "先建立本机通道，再让 GoFly 确认连接。";
 "onboarding.vpn.help.step1.title" = "连上 Wi‑Fi";
-"onboarding.vpn.help.step1.message" = "打开 Wi‑Fi 并加入网络。只用蜂窝网络（4G／5G）时，GoFly 无法连接。";
+"onboarding.vpn.help.step1.message" = "打开 Wi‑Fi 并加入网络。只用蜂窝网络（4G / 5G）时无法连接。";
 "onboarding.vpn.help.step2.title" = "打开 LocalDevVPN";
-"onboarding.vpn.help.step2.message" = "若尚未安装，请先从 App Store 安装 LocalDevVPN，再打开 App。";
+"onboarding.vpn.help.step2.message" = "尚未安装时，先从 App Store 安装再打开。";
 "onboarding.vpn.help.step3.title" = "等待显示 Connected";
-"onboarding.vpn.help.step3.message" = "按 Connect。若 iOS 询问，请允许添加 VPN 配置，并等待 LocalDevVPN 显示 Connected。";
+"onboarding.vpn.help.step3.message" = "点 Connect；iOS 询问时允许加入 VPN 设置。";
 "onboarding.vpn.help.step4.title" = "返回 GoFly 检查";
-"onboarding.vpn.help.step4.message" = "回到此处检查连接。GoFly 显示“连接成功”后，即可按“下一步”。";
+"onboarding.vpn.help.step4.message" = "显示“连接成功”后即可点“下一步”。";
 "onboarding.vpn.help.confirmation" = "LocalDevVPN 显示 Connected，代表它的 VPN 已开启。GoFly 仍需要确认能否通过本机通道连接。";
 "onboarding.vpn.help.troubleshooting" = "仍然无法连接？";
 "onboarding.vpn.help.openSettings" = "打开 iPhone 系统设置";
-"onboarding.vpn.help.permission" = "若 iOS 询问，请允许“本地网络”访问。iPhone 系统设置中若有 GoFly 的“本地网络”选项，请将它开启；若没有，不必继续寻找，请返回 GoFly 重新检查。";
-"onboarding.vpn.help.reconnect" = "先确认 iPhone 连着 Wi‑Fi，再在 LocalDevVPN 断开后重新连接，等待显示 Connected，回到此处重新检查。";
+"onboarding.vpn.help.permission" = "iOS 询问时请允许“本地网络”。点此打开 iPhone 系统设置。";
+"onboarding.vpn.help.reconnect" = "确认已连上 Wi‑Fi，在 LocalDevVPN 中断后重新连接，再回来检查。";
 "onboarding.vpn.help.returnAndCheck" = "返回并检查连接";
 "onboarding.vpn.help.notChecked" = "尚未检查";
 "onboarding.vpn.help.notReachable" = "无法连接";
@@ -217,7 +217,7 @@
 "route.status.roundTrip.pausing.forward" = "来回路线暂停中…・顺向往终点";
 "route.status.roundTrip.pausing.reverse" = "来回路线暂停中…・逆向往起点";
 "imports.title" = "已导入路线";
-"imports.import" = "GPX 导入";
+"imports.import" = "导入 GPX 文件";
 "imports.export" = "GPX 导出";
 "imports.load" = "载入路线";
 "imports.empty" = "尚未导入路线。";
@@ -228,7 +228,7 @@
 "imports.undo" = "撤销";
 "imports.delete" = "删除%@";
 "imports.preview" = "路线预览";
-"imports.loadedPath" = "GPX 路径";
+"imports.loadedPath" = "导入路线 · 不可编辑";
 "imports.clearLoaded" = "清除已载入的 GPX";
 "imports.metadata" = "%@・%ld 个点";
 "imports.kind.tracks" = "轨迹";
@@ -495,7 +495,7 @@
 "status.pill.paused" = "已暂停";
 "status.pill.preparing" = "准备中";
 "status.pill.simulating" = "模拟中";
-"status.pill.standby" = "待命";
+"status.pill.standby" = "服务待命";
 "status.pill.error" = "需要注意";
 
 "search.recent" = "最近使用";
@@ -514,11 +514,11 @@
 
 "teleport.completed" = "已移至 %@";
 
-"onboarding.step" = "第 %d 步，共 3 步";
+"onboarding.step" = "步骤 %d / 3";
 
 "settings.languageAndAppearance" = "语言与外观";
 
-"route.exchange" = "交换起点与终点";
+"route.exchange" = "反转顺序";
 
 "route.summary" = "%.1f 公里・%d 分钟・%d 公里／小时";
 
@@ -583,7 +583,7 @@
 
 "onboarding.location.continue" = "跳过并继续";
 "onboarding.location.currentStatus" = "当前权限";
-"onboarding.location.status.notDetermined" = "尚未请求";
+"onboarding.location.status.notDetermined" = "尚未设置";
 "onboarding.location.status.denied" = "未允许";
 "onboarding.location.status.authorized" = "使用 App 期间";
 "onboarding.location.deniedTitle" = "定位权限未开启";
@@ -592,7 +592,7 @@
 "onboarding.vpn.step2" = "点击 Connect";
 "onboarding.vpn.step3" = "回到 GoFly，自动重新检查";
 "onboarding.vpn.unavailableTitle" = "无法连接到设备服务";
-"onboarding.vpn.complete" = "完成";
+"onboarding.vpn.complete" = "下一步";
 "onboarding.vpn.help.permissionTitle" = "本地网络权限";
 "onboarding.vpn.help.reconnectTitle" = "重新连接";
 
@@ -617,3 +617,10 @@
 "settings.permissionsFooter" = "只需“使用 App 期间”；后台由系统后台任务延续。";
 
 "settings.deviceSection" = "设备";
+"onboarding.location.statusFormat" = "当前权限：%@";
+"onboarding.vpn.subtitle" = "GoFly 通过 LocalDevVPN 与设备服务通信。";
+"route.addStop" = "添加停靠点";
+"route.speedShort" = "%ld km/h";
+"imports.pointsFormat" = "%@ 点";
+"imports.footnote" = "点一下打开操作菜单：载入、查看全部点位、导出、删除。导入路线不可编辑；需要调整请修改源文件后重新导入。";
+"settings.backToMap" = "地图";

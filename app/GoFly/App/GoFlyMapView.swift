@@ -566,7 +566,6 @@ struct GoFlyMapView: View {
                     GoFlyJoystickPanel(
                         controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                         maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                        onSetOrigin: beginJoystickOriginSelection,
                         onRandomDestination: {
                             if joystick.randomizeWanderTarget() { wanderSearch.resetSelection() }
                         },
@@ -845,12 +844,6 @@ struct GoFlyMapView: View {
         joystickOriginIntentID = nil
         mode = value
         if value != .teleport { sheetDetent = .expanded }
-    }
-
-    private func beginJoystickOriginSelection() {
-        settingJoystickOrigin = true
-        joystickOriginIntentID = nil
-        mode = .teleport
     }
 
     /// Camera-only tangent from acknowledged route progress. The route arrow

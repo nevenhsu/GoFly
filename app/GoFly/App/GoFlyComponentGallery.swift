@@ -123,7 +123,6 @@ struct GoFlyComponentGallery: View {
                 controller: joystick,
                 cameraHeadingDegrees: 0,
                 maximumHeight: 420,
-                onSetOrigin: {},
                 onRandomDestination: {},
                 onSettings: {}
             )

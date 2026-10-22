@@ -43,6 +43,11 @@ struct GoFlyImportedRoutesView: View {
                     .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                    Text(goFlyString("imports.footnote"))
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .padding(.horizontal, 16)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(16)
@@ -61,7 +66,8 @@ struct GoFlyImportedRoutesView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
-                    Text(goFlyString("common.back"))
+                    Label(goFlyString("route.title"), systemImage: "chevron.backward")
+                        .labelStyle(.titleAndIcon)
                         .fixedSize(horizontal: true, vertical: false)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -162,10 +168,9 @@ struct GoFlyImportedRoutesView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(record.filename).font(.body.weight(.semibold)).lineLimit(2)
-                    Text(record.start.displayText + " → " + record.end.displayText)
-                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(goFlyImportedRouteMetadata(record))
+                    Text(record.start.displayText + " → " + record.end.displayText + " · "
+                         + goFlyLocalizedFormat(goFlyString("imports.pointsFormat"),
+                                                record.pointCount.formatted(.number.locale(GoFlyPreferences.shared.locale))))
                         .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let failure = imports.unavailable[record.id] {

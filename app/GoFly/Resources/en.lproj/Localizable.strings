@@ -45,8 +45,8 @@
 "error.storageUnavailable" = "Device setup information could not be read. Check available storage and repair this iPhone in the Mac app.";
 "onboarding.welcome.title" = "Welcome to GoFly";
 "onboarding.next" = "Next";
-"onboarding.location.title" = "Phone location";
-"onboarding.location.message" = "Show your GPS location on the map. You can skip this; location access is optional.";
+"onboarding.location.title" = "Allow GoFly to use location";
+"onboarding.location.message" = "Show your real location on the map and use it as the start of routes and wandering. Only “While Using the App” is needed.";
 "onboarding.location.allow" = "Allow location";
 "onboarding.location.skip" = "Skip";
 "onboarding.location.authorized" = "Location access is already allowed.";
@@ -59,20 +59,20 @@
 "onboarding.vpn.appStore" = "Go to App Store";
 "onboarding.vpn.help" = "Connection help";
 "onboarding.vpn.help.heading" = "Connect in four steps";
-"onboarding.vpn.help.intro" = "Set up the local tunnel, then let GoFly confirm the connection.";
+"onboarding.vpn.help.intro" = "Set up the local tunnel first, then let GoFly confirm the connection.";
 "onboarding.vpn.help.step1.title" = "Connect to Wi‑Fi";
-"onboarding.vpn.help.step1.message" = "Turn on Wi‑Fi and join a network. GoFly’s connection does not work over cellular data alone.";
+"onboarding.vpn.help.step1.message" = "Turn on Wi‑Fi and join a network. It does not work over cellular (4G / 5G) alone.";
 "onboarding.vpn.help.step2.title" = "Open LocalDevVPN";
-"onboarding.vpn.help.step2.message" = "Install LocalDevVPN from the App Store if needed, then open it.";
+"onboarding.vpn.help.step2.message" = "If it is not installed, install it from the App Store first, then open it.";
 "onboarding.vpn.help.step3.title" = "Wait for Connected";
-"onboarding.vpn.help.step3.message" = "Tap Connect. Allow the VPN configuration if iOS asks, then wait until LocalDevVPN shows Connected.";
+"onboarding.vpn.help.step3.message" = "Tap Connect; allow the VPN configuration when iOS asks.";
 "onboarding.vpn.help.step4.title" = "Return to GoFly and check";
-"onboarding.vpn.help.step4.message" = "Return here and check the connection. Next becomes available when GoFly reports Connection successful.";
+"onboarding.vpn.help.step4.message" = "After “Connection successful” appears, tap “Next”.";
 "onboarding.vpn.help.confirmation" = "Connected in LocalDevVPN means its VPN is on. GoFly still needs to confirm that it can reach the local tunnel.";
 "onboarding.vpn.help.troubleshooting" = "Still unable to connect?";
 "onboarding.vpn.help.openSettings" = "Open iPhone Settings";
-"onboarding.vpn.help.permission" = "Allow Local Network access if iOS asks. In iPhone Settings, enable GoFly’s Local Network option if it appears. If it is missing, stop searching and return to GoFly to check again.";
-"onboarding.vpn.help.reconnect" = "Confirm iPhone is on Wi‑Fi. Then disconnect and reconnect in LocalDevVPN, wait for Connected, and return here to check again.";
+"onboarding.vpn.help.permission" = "Allow “Local Network” when iOS asks. Tap here to open iPhone Settings.";
+"onboarding.vpn.help.reconnect" = "Make sure Wi‑Fi is connected, disconnect and reconnect in LocalDevVPN, then come back and check.";
 "onboarding.vpn.help.returnAndCheck" = "Return and check";
 "onboarding.vpn.help.notChecked" = "Not checked";
 "onboarding.vpn.help.notReachable" = "Not reachable";
@@ -217,7 +217,7 @@
 "route.status.roundTrip.pausing.forward" = "Round-trip route pausing… · Forward to destination";
 "route.status.roundTrip.pausing.reverse" = "Round-trip route pausing… · Reverse to origin";
 "imports.title" = "Imported routes";
-"imports.import" = "GPX import";
+"imports.import" = "Import GPX file";
 "imports.export" = "GPX export";
 "imports.load" = "Load route";
 "imports.empty" = "No imported routes yet.";
@@ -228,7 +228,7 @@
 "imports.undo" = "Undo";
 "imports.delete" = "Delete %@";
 "imports.preview" = "Route preview";
-"imports.loadedPath" = "GPX path";
+"imports.loadedPath" = "Imported route · read-only";
 "imports.clearLoaded" = "Clear loaded GPX";
 "imports.metadata" = "%@ · %ld points";
 "imports.kind.tracks" = "Tracks";
@@ -495,7 +495,7 @@
 "status.pill.paused" = "Paused";
 "status.pill.preparing" = "Preparing";
 "status.pill.simulating" = "Simulating";
-"status.pill.standby" = "Standby";
+"status.pill.standby" = "Service ready";
 "status.pill.error" = "Needs attention";
 
 "search.recent" = "Recent places";
@@ -514,11 +514,11 @@
 
 "teleport.completed" = "Moved to %@";
 
-"onboarding.step" = "Step %d of 3";
+"onboarding.step" = "Step %d / 3";
 
 "settings.languageAndAppearance" = "Language & appearance";
 
-"route.exchange" = "Exchange start and destination";
+"route.exchange" = "Reverse order";
 
 "route.summary" = "%.1f km · %d min · %d km/h";
 
@@ -583,7 +583,7 @@
 
 "onboarding.location.continue" = "Skip and continue";
 "onboarding.location.currentStatus" = "Current permission";
-"onboarding.location.status.notDetermined" = "Not requested";
+"onboarding.location.status.notDetermined" = "Not set";
 "onboarding.location.status.denied" = "Not allowed";
 "onboarding.location.status.authorized" = "While using the app";
 "onboarding.location.deniedTitle" = "Location permission is off";
@@ -592,7 +592,7 @@
 "onboarding.vpn.step2" = "Tap Connect";
 "onboarding.vpn.step3" = "Return to GoFly to recheck automatically";
 "onboarding.vpn.unavailableTitle" = "Unable to connect to device service";
-"onboarding.vpn.complete" = "Done";
+"onboarding.vpn.complete" = "Next";
 "onboarding.vpn.help.permissionTitle" = "Local Network permission";
 "onboarding.vpn.help.reconnectTitle" = "Reconnect";
 
@@ -617,3 +617,10 @@
 "settings.permissionsFooter" = "Only \"While Using the App\" is needed; background continuation is handled by system background tasks.";
 
 "settings.deviceSection" = "Device";
+"onboarding.location.statusFormat" = "Current permission: %@";
+"onboarding.vpn.subtitle" = "GoFly talks to the device service through LocalDevVPN.";
+"route.addStop" = "Add stop";
+"route.speedShort" = "%ld km/h";
+"imports.pointsFormat" = "%@ points";
+"imports.footnote" = "Tap a route for actions: load, view all points, export, delete. Imported routes cannot be edited; change the source file and import again.";
+"settings.backToMap" = "Map";

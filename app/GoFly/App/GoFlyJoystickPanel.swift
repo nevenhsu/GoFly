@@ -6,7 +6,6 @@ struct GoFlyJoystickPanel: View {
     @ObservedObject var controller: JoystickMovementController
     var cameraHeadingDegrees: Double
     var maximumHeight: CGFloat
-    var onSetOrigin: () -> Void
     var onRandomDestination: () -> Void = { }
     var onSettings: () -> Void = { }
     @State private var contentHeight: CGFloat = 220
@@ -38,19 +37,6 @@ struct GoFlyJoystickPanel: View {
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("joystick.settings")
                 } else {
-                    if needsOriginEntry {
-                    Button(action: onSetOrigin) {
-                        Label(goFlyString("joystick.setOrigin"), systemImage: GoFlySymbols.place)
-                            .font(.body)
-                            .padding(.horizontal, 16)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(GoFlyStyle.primary)
-                    .background(GoFlyStyle.secondarySurface, in: Capsule())
-                    .accessibilityIdentifier("joystick.setOrigin")
-                    }
                     VStack(spacing: 8) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(goFlyString("route.speed"))
@@ -107,12 +93,6 @@ struct GoFlyJoystickPanel: View {
         .accessibilityIdentifier("joystick.panel")
     }
 
-    // Dispatch temporarily invalidates location proof. Keep an existing task's pad mounted.
-    private var needsOriginEntry: Bool {
-        controller.requiresOrigin && controller.intent == nil
-            && [.neutral, .suspended, .interrupted].contains(controller.phase)
-    }
-
     private var wanderControls: some View {
         ViewThatFits(in: .horizontal) {
             wanderRow
@@ -128,8 +108,7 @@ struct GoFlyJoystickPanel: View {
         HStack(spacing: 12) {
             Image(systemName: "shuffle")
                 .font(.system(size: 16, weight: .semibold))
-                .frame(width: 36, height: 36)
-                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 10))
+                .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(goFlyString("joystick.wander"))
@@ -258,6 +237,15 @@ private struct GoFlyManualJoystickPad: View {
                     .frame(width: direction % 6 == 0 ? 2 : 1, height: direction % 6 == 0 ? 8 : 4)
                     .offset(y: -diameter / 2 + 12)
                     .rotationEffect(.degrees(Double(direction) * 15))
+            }
+            ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
+                let angle = Double(index) * 90 - cameraHeadingDegrees
+                Text(letter)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .offset(x: CGFloat(sin(angle * .pi / 180)) * (diameter / 2 - 24),
+                            y: -CGFloat(cos(angle * .pi / 180)) * (diameter / 2 - 24))
+                    .accessibilityHidden(true)
             }
             Circle()
                 .fill(isEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledSurface)

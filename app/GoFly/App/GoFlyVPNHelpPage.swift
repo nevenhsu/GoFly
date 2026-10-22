@@ -10,10 +10,15 @@ struct GoFlyVPNHelpPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(goFlyString("onboarding.vpn.help.intro"))
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(goFlyString("onboarding.vpn.help.heading"))
+                        .font(.title2.weight(.bold))
+                        .accessibilityAddTraits(.isHeader)
+                    Text(goFlyString("onboarding.vpn.help.intro"))
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 VStack(spacing: 0) {
                     helpStep(1)
@@ -94,8 +99,8 @@ struct GoFlyVPNHelpPage: View {
         .goFlyNativeBackTitle()
         .accessibilityIdentifier("vpn.help.page")
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: openLocalDevVPN) {
-                Text(goFlyString("onboarding.vpn.open"))
+            Button { dismiss() } label: {
+                Text(goFlyString("onboarding.vpn.help.returnAndCheck"))
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .accessibilityIdentifier("onboarding.vpn.help.openVPN")
@@ -110,9 +115,9 @@ struct GoFlyVPNHelpPage: View {
         HStack(alignment: .center, spacing: 12) {
             Text("\(number)")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(GoFlyStyle.primary)
+                .foregroundStyle(GoFlyStyle.surface)
                 .frame(width: 24, height: 24)
-                .background(GoFlyStyle.surface, in: Circle())
+                .background(GoFlyStyle.primary, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(goFlyString("onboarding.vpn.help.step\(number).title"))
@@ -129,12 +134,6 @@ struct GoFlyVPNHelpPage: View {
         .frame(minHeight: 62)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-    }
-
-    private func openLocalDevVPN() {
-        externalOpenFailed = false
-        externalOpenFailureKey = "onboarding.vpn.externalOpenFailed"
-        GoFlyExternalLinks.openLocalDevVPN { externalOpenFailed = !$0 }
     }
 
     private func openSystemSettings() {

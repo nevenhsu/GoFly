@@ -450,6 +450,10 @@ private final class PositionAnnotation: NSObject, MKAnnotation {
 
 
 extension GeoCoordinate {
+    /// Figma shows five decimals in visible coordinate text; `displayText` stays the stable key.
+    var shortDisplayText: String {
+        String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"), latitude, longitude)
+    }
     var clLocationCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

@@ -32,7 +32,7 @@ struct GoFlyPlaceDetailsView: View {
         VStack(alignment: .leading, spacing: 6) {
             GoFlyFavoriteFailureNotice()
             HStack(alignment: .top) {
-                Text(place.title).font(.title2.weight(.semibold))
+                Text(place.title).font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("placeDetails.title")
                 Button(action: onDismiss) { Image(systemName: GoFlySymbols.close) }
@@ -40,9 +40,11 @@ struct GoFlyPlaceDetailsView: View {
                     .accessibilityLabel(goFlyString("common.dismiss"))
                     .accessibilityIdentifier("placeDetails.dismiss")
             }
-            Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
-                .accessibilityIdentifier("placeDetails.address")
+            if place.address != nil || place.title != place.coordinate.displayText {
+                Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
+                    .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
+                    .accessibilityIdentifier("placeDetails.address")
+            }
             Text(coordinateLine)
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(GoFlyStyle.secondary)
@@ -60,7 +62,7 @@ struct GoFlyPlaceDetailsView: View {
     }
 
     private var coordinateLine: String {
-        guard let distance = distanceMeters else { return place.coordinate.displayText }
+        guard let distance = distanceMeters else { return place.coordinate.shortDisplayText }
         let formatted: String
         if distance < 1_000 {
             formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceMeters"), Int(distance.rounded()))
@@ -68,7 +70,7 @@ struct GoFlyPlaceDetailsView: View {
             formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceKilometers"),
                                              String(format: "%.1f", arguments: [distance / 1_000]))
         }
-        return "\(place.coordinate.displayText) · \(formatted)"
+        return "\(place.coordinate.shortDisplayText) · \(formatted)"
     }
 
     private var distanceMeters: Double? {

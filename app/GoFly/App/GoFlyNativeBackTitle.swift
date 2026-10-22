@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 extension View {
-    func goFlyNativeBackTitle() -> some View {
-        background(GoFlyNativeBackTitle(title: goFlyString("common.back")).frame(width: 0, height: 0))
+    func goFlyNativeBackTitle(_ key: String = "common.back") -> some View {
+        background(GoFlyNativeBackTitle(title: goFlyString(key)).frame(width: 0, height: 0))
     }
 }
 
