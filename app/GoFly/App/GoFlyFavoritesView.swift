@@ -11,7 +11,6 @@ struct GoFlyFavoritesView: View {
     @State private var query = ""
     @State private var selecting = false
     @State private var selected: Set<FavoritePlaceKey> = []
-    @State private var pending: [FavoritePlaceKey: Task<Void, Never>] = [:]
     @State private var snackbar: GoFlySnackbarMessage?
 
     private var visible: [FavoritePlace] {
@@ -169,27 +168,23 @@ struct GoFlyFavoritesView: View {
 
     private func row(_ favorite: FavoritePlace) -> some View {
         HStack(spacing: 4) {
-            Button {
-                if selecting { toggleSelection(favorite.key) }
-                else { togglePending(favorite) }
-            } label: {
-                Group {
-                    if selecting {
-                        GoFlyCheckboxIcon(selected: selected.contains(favorite.key), size: 22)
-                    } else {
-                        GoFlyStarIcon(size: 16, filled: pending[favorite.key] == nil)
-                            .frame(width: 36, height: 36)
-                            .background(GoFlyStyle.secondarySurface, in: Circle())
-                    }
+            if selecting {
+                Button {
+                    toggleSelection(favorite.key)
+                } label: {
+                    GoFlyCheckboxIcon(selected: selected.contains(favorite.key), size: 22)
+                        .frame(width: 44, height: 44)
                 }
-                .frame(width: 44, height: 44)
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("favorites.select"))
+                .accessibilityIdentifier("favorites.checkbox.\(favorite.place.coordinate.displayText)")
+            } else {
+                GoFlyStarIcon(size: 16, filled: true)
+                    .frame(width: 36, height: 36)
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .disabled(!favorites.canMutate)
-            .accessibilityLabel(goFlyString(selecting ? "favorites.select"
-                : (pending[favorite.key] == nil ? "favorites.remove" : "favorites.cancel")))
-            .accessibilityValue(goFlyString(pending[favorite.key] == nil ? "favorites.saved" : "favorites.pendingRemoval"))
-            .accessibilityIdentifier("favorites.star.\(favorite.place.coordinate.displayText)")
             Button {
                 if selecting { toggleSelection(favorite.key) }
                 else { onSelect(favorite.place) }
@@ -233,17 +228,6 @@ struct GoFlyFavoritesView: View {
 
     private func toggleSelection(_ key: FavoritePlaceKey) {
         if !selected.insert(key).inserted { selected.remove(key) }
-    }
-
-    private func togglePending(_ favorite: FavoritePlace) {
-        if let task = pending.removeValue(forKey: favorite.key) { task.cancel(); return }
-        pending[favorite.key] = Task { @MainActor in
-            do { try await Task.sleep(for: .milliseconds(500)) }
-            catch { return }
-            guard !Task.isCancelled else { return }
-            pending.removeValue(forKey: favorite.key)
-            delete([favorite.key])
-        }
     }
 
     private func delete(_ keys: Set<FavoritePlaceKey>) {

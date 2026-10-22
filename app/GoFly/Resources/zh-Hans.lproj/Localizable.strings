@@ -569,6 +569,7 @@
 "route.chooseDestination" = "选择终点";
 "route.chooseWaypoint" = "选择途经点 %ld";
 "sheet.currentPosition" = "当前模拟位置";
+"sheet.realPosition" = "当前位置";
 "sheet.noPosition" = "尚未设置";
 "sheet.noPositionHint" = "用搜索或点地图设置模拟位置。";
 "placeDetails.favorite" = "收藏";

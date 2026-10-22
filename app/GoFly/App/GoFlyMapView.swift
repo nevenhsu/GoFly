@@ -176,6 +176,7 @@ struct GoFlyMapView: View {
                 movement.attachMapAdmission {
                     !showingSettings && !showingSearch && presentedSheet == nil && route.picker == nil
                 }
+                location.start()
                 if cameraIntent == nil {
                     if mode == .route, let planned = route.plannedRoute {
                         cameraIntent = GoFlyCameraIntent(route: planned)
@@ -685,7 +686,7 @@ struct GoFlyMapView: View {
     /// position, with the same favorite and copy actions as the place sheet.
     private var collapsedPositionSummary: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(goFlyString("sheet.currentPosition"))
+            Text(service.positionMarker?.source == .simulation ? goFlyString("sheet.currentPosition") : goFlyString("sheet.realPosition"))
                 .font(.footnote)
                 .foregroundStyle(GoFlyStyle.secondary)
             HStack(alignment: .center, spacing: 8) {

@@ -374,34 +374,27 @@ private struct GoFlyVPNOnboardingView: View {
                     Button {
                         controller.checkConnection()
                     } label: {
-                        HStack(spacing: 8) {
-                            if controller.isChecking { ProgressView() }
-                            Text(goFlyString("onboarding.vpn.check"))
-                        }
+                        Text(goFlyString("onboarding.vpn.check"))
                     }
                     .buttonStyle(GoFlyCompactActionStyle())
                     .disabled(controller.isAdvancing)
                     .accessibilityIdentifier("onboarding.vpn.check")
 
-                    if !controller.canAdvanceVPN {
-                        Button(action: onComplete) {
-                            Text(goFlyString("common.skip"))
-                        }
-                        .buttonStyle(GoFlyCompactActionStyle())
-                        .accessibilityIdentifier("onboarding.vpn.skip")
-                    } else {
-                        Button {
+                    Button {
+                        if controller.canAdvanceVPN {
                             controller.advanceVPN(onAdvance: onComplete)
-                        } label: {
-                            HStack(spacing: 8) {
-                                if controller.isAdvancing { ProgressView() }
-                                Text(goFlyString("onboarding.vpn.complete"))
-                            }
+                        } else {
+                            onComplete()
                         }
-                        .buttonStyle(GoFlyCompactActionStyle(primary: true))
-                        .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
-                        .accessibilityIdentifier("onboarding.vpn.next")
+                    } label: {
+                        HStack(spacing: 8) {
+                            if controller.isAdvancing { ProgressView() }
+                            Text(goFlyString("onboarding.vpn.next"))
+                        }
                     }
+                    .buttonStyle(GoFlyCompactActionStyle(primary: true))
+                    .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
+                    .accessibilityIdentifier("onboarding.vpn.next")
                 }
             }
             .padding(.horizontal, 24)

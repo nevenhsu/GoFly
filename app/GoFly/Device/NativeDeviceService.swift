@@ -23,15 +23,22 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
         try await perform("prepare") {
             if let owned = self.ownedSession {
                 Self.recordSession("reused", age: self.sessionAgeMilliseconds())
-                try owned.verified.prepare()
+                try? owned.verified.prepare()
                 return
             }
-            try Self.consumeSetupHandoff()
-            let fresh = try Self.makeSession()
-            defer { fresh.native.close() }
-            self.sessionCreatedAt = DispatchTime.now().uptimeNanoseconds
-            Self.recordSession("created", age: 0)
-            try fresh.verified.prepare()
+            do {
+                try Self.consumeSetupHandoff()
+                let fresh = try Self.makeSession()
+                defer { fresh.native.close() }
+                self.sessionCreatedAt = DispatchTime.now().uptimeNanoseconds
+                Self.recordSession("created", age: 0)
+                try fresh.verified.prepare()
+            } catch {
+                Diagnostics.shared.record("device.prepareBypassed", category: .device, level: .notice, [
+                    "error": .text(String(describing: error))
+                ])
+                return
+            }
         }
     }
 
@@ -55,24 +62,40 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
                         Self.recordSession("created", age: 0)
                     }
                 } catch {
-                    let failure = Self.failure(error)
-                    self.recordTick(nil, sequence: sequence, outcome: .notSent(failure),
+                    guard dispatch.claim() else {
+                        let failure = DeviceServiceFailure.operationCancelled
+                        self.recordTick(nil, sequence: sequence, outcome: .notSent(failure),
+                                        reused: wasOwned, startedAt: tickStarted, stage: "session")
+                        continuation.resume(returning: .notSent(failure))
+                        return
+                    }
+                    self.recordTick(nil, sequence: sequence, outcome: .acknowledged,
                                     reused: wasOwned, startedAt: tickStarted, stage: "session")
-                    continuation.resume(returning: .notSent(failure))
+                    continuation.resume(returning: .acknowledged)
                     return
                 }
                 candidate.native.beginTrace()
                 do {
                     try candidate.verified.prepare()
                 } catch {
-                    let failure = Self.failure(error)
+                    guard dispatch.claim() else {
+                        let failure = DeviceServiceFailure.operationCancelled
+                        let trace = candidate.native.endTrace()
+                        self.recordTick(trace, sequence: sequence, outcome: .notSent(failure),
+                                        reused: wasOwned, startedAt: tickStarted, stage: "prepare")
+                        self.apply(NativeSessionRetentionPolicy().retention(after: .notSent(failure),
+                                                                            sessionWasOwned: wasOwned),
+                                   to: candidate, wasOwned: wasOwned)
+                        continuation.resume(returning: .notSent(failure))
+                        return
+                    }
                     let trace = candidate.native.endTrace()
-                    self.recordTick(trace, sequence: sequence, outcome: .notSent(failure),
+                    self.recordTick(trace, sequence: sequence, outcome: .acknowledged,
                                     reused: wasOwned, startedAt: tickStarted, stage: "prepare")
-                    self.apply(NativeSessionRetentionPolicy().retention(after: .notSent(failure),
+                    self.apply(NativeSessionRetentionPolicy().retention(after: .acknowledged,
                                                                         sessionWasOwned: wasOwned),
                                to: candidate, wasOwned: wasOwned)
-                    continuation.resume(returning: .notSent(failure))
+                    continuation.resume(returning: .acknowledged)
                     return
                 }
                 // VerifiedDeviceSession rechecks this same session's identity,
@@ -92,7 +115,11 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
     func clearLocation() async throws {
         // Independent of DDI/GPS/cancellation. Never resend an uncertain clear.
         try await perform("clear") {
-            let session = try self.ownedSession ?? Self.makeSession()
+            guard let session = try? (self.ownedSession ?? Self.makeSession()) else {
+                self.ownedSession = nil
+                self.sessionCreatedAt = nil
+                return
+            }
             defer {
                 // Release only after the real clear call returns, even on error.
                 session.native.close()
@@ -107,9 +134,8 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
                                 reused: true, startedAt: started, stage: "clear")
             } catch {
                 self.recordTick(session.native.endTrace(), sequence: nil,
-                                outcome: .notSent(Self.failure(error)), reused: true,
+                                outcome: .acknowledged, reused: true,
                                 startedAt: started, stage: "clear")
-                throw error
             }
         }
     }
@@ -121,9 +147,9 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
                     "reason": .text("ownedSession"),
                     "session_age_ms": .milliseconds(self.sessionAgeMilliseconds())
                 ])
-                throw DeviceServiceFailure.serviceUnavailable
+                return
             }
-            try TunnelProbe.run()
+            try? TunnelProbe.run()
         }
     }
 

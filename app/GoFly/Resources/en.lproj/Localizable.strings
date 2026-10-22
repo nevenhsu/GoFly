@@ -569,6 +569,7 @@
 "route.chooseDestination" = "Choose destination";
 "route.chooseWaypoint" = "Choose waypoint %ld";
 "sheet.currentPosition" = "Current simulated position";
+"sheet.realPosition" = "Current location";
 "sheet.noPosition" = "Not set";
 "sheet.noPositionHint" = "Use search or tap the map to set a simulated position.";
 "placeDetails.favorite" = "Favorite";

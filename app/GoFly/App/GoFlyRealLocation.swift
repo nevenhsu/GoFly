@@ -16,6 +16,25 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        if CLLocationManager.locationServicesEnabled(),
+           manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            start()
+        }
+    }
+
+    func start() {
+        guard CLLocationManager.locationServicesEnabled() else { return }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            if let loc = manager.location {
+                publish(loc)
+            }
+            manager.startUpdatingLocation()
+        case .notDetermined, .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
     }
 
     func requestRecenter() {
@@ -28,7 +47,10 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
             awaitingPermission = true
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
-            manager.requestLocation()
+            if let loc = manager.location {
+                publish(loc)
+            }
+            manager.startUpdatingLocation()
         case .denied, .restricted:
             fail("location.permissionDenied")
         @unknown default:
@@ -38,32 +60,33 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor [weak self] in
-            guard let self, self.awaitingPermission,
-                  self.manager.authorizationStatus != .notDetermined else { return }
-            self.awaitingPermission = false
-            self.requestRecenter()
+            guard let self else { return }
+            if self.awaitingPermission, self.manager.authorizationStatus != .notDetermined {
+                self.awaitingPermission = false
+                self.requestRecenter()
+            } else if self.manager.authorizationStatus == .authorizedWhenInUse || self.manager.authorizationStatus == .authorizedAlways {
+                self.start()
+            }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let observation = locations.last.flatMap { location -> RealLocationObservation? in
-            guard abs(location.timestamp.timeIntervalSinceNow) <= 15 else { return nil }
-            return RealLocationObservation(
-                latitude: location.coordinate.latitude,
-                longitude: location.coordinate.longitude,
-                horizontalAccuracy: location.horizontalAccuracy,
-                observedAt: location.timestamp,
-                isSoftwareSimulated: location.sourceInformation?.isSimulatedBySoftware == true
-            )
-        }
+        guard let location = locations.last else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard let observation else {
-                self.fail("location.noFix")
-                return
-            }
-            self.observation = observation
+            self.publish(location)
         }
+    }
+
+    private func publish(_ location: CLLocation) {
+        let observation = RealLocationObservation(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            horizontalAccuracy: location.horizontalAccuracy,
+            observedAt: location.timestamp,
+            isSoftwareSimulated: location.sourceInformation?.isSimulatedBySoftware == true
+        )
+        self.observation = observation
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {

@@ -12,21 +12,20 @@ final class GoFlyPositionArrowView: MKAnnotationView {
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 40, height: 44)
+        frame = CGRect(x: 0, y: 0, width: 34, height: 34)
         drawing.frame = bounds
         layer.addSublayer(drawing)
         for shape in [contrast, arrow] {
             shape.frame = bounds
-            shape.lineCap = .round
-            shape.lineJoin = .round
+            shape.lineCap = .butt
+            shape.lineJoin = .miter
+            shape.miterLimit = 4
             shape.contentsScale = traitCollection.displayScale
             drawing.addSublayer(shape)
         }
-        let path = Self.path(in: bounds.insetBy(dx: 5, dy: 5))
+        let path = Self.path(in: bounds)
         contrast.path = path
-        contrast.lineWidth = 5
         arrow.path = path
-        arrow.lineWidth = 2
         isAccessibilityElement = true
         accessibilityIdentifier = "map.positionMarker"
         canShowCallout = false
@@ -66,26 +65,33 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     }
 
     private func applyColors() {
+        let labelColor = UIColor.label.resolvedColor(with: traitCollection).cgColor
+        let bgColor = UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
         contrast.fillColor = UIColor.clear.cgColor
-        contrast.strokeColor = UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
-        arrow.strokeColor = UIColor.label.resolvedColor(with: traitCollection).cgColor
-        arrow.fillColor = source == .simulation
-            ? UIColor.label.resolvedColor(with: traitCollection).cgColor : UIColor.clear.cgColor
+        contrast.strokeColor = bgColor
+        if source == .simulation {
+            arrow.fillColor = labelColor
+            arrow.strokeColor = bgColor
+            arrow.lineWidth = 1.5
+            contrast.lineWidth = 3.5
+        } else {
+            arrow.fillColor = UIColor.clear.cgColor
+            arrow.strokeColor = labelColor
+            arrow.lineWidth = 2.5
+            contrast.lineWidth = 5.0
+        }
     }
 
     private static func path(in rect: CGRect) -> CGPath {
-        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + x * rect.width, y: rect.minY + y * rect.height)
-        }
+        let arrowWidth: CGFloat = 24
+        let arrowHeight: CGFloat = 27
+        let originX = rect.midX - arrowWidth / 2
+        let originY = rect.midY - arrowHeight / 2
         let path = CGMutablePath()
-        path.move(to: p(0.47, 0.05))
-        path.addQuadCurve(to: p(0.53, 0.05), control: p(0.5, 0))
-        path.addLine(to: p(0.96, 0.92))
-        path.addQuadCurve(to: p(0.92, 0.97), control: p(1, 1))
-        path.addLine(to: p(0.52, 0.76))
-        path.addQuadCurve(to: p(0.48, 0.76), control: p(0.5, 0.75))
-        path.addLine(to: p(0.08, 0.97))
-        path.addQuadCurve(to: p(0.04, 0.92), control: p(0, 1))
+        path.move(to: CGPoint(x: originX + 12, y: originY + 0))
+        path.addLine(to: CGPoint(x: originX + 24, y: originY + 27))
+        path.addLine(to: CGPoint(x: originX + 12, y: originY + 21))
+        path.addLine(to: CGPoint(x: originX + 0, y: originY + 27))
         path.closeSubpath()
         return path
     }
