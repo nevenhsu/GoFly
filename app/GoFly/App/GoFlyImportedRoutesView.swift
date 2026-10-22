@@ -20,37 +20,40 @@ struct GoFlyImportedRoutesView: View {
     @State private var loadFailureKey: String?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let failure = currentFailureKey { notice(failure, identifier: "imports.error") }
-                if fileOperationInProgress || imports.isBusy || imports.isValidatingSelection {
-                    ProgressView(goFlyString(imports.isValidatingSelection ? "imports.validating" : "imports.working"))
-                        .accessibilityIdentifier("imports.working")
-                }
-                if imports.loadState == .loading {
-                    ProgressView(goFlyString("imports.loading"))
-                } else if imports.loadState == .ready, imports.records.isEmpty {
-                    GoFlyEmptyState(symbol: GoFlySymbols.importEmpty, message: goFlyString("imports.empty"))
-                        .accessibilityIdentifier("imports.empty")
-                }
-                if !imports.records.isEmpty {
-                    VStack(spacing: 0) {
-                        ForEach(Array(imports.records.reversed().enumerated()), id: \.element.id) { index, record in
-                            recordCard(record)
-                            if index < imports.records.count - 1 { Divider().padding(.leading, 16) }
-                        }
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let failure = currentFailureKey { notice(failure, identifier: "imports.error") }
+                    if fileOperationInProgress || imports.isBusy || imports.isValidatingSelection {
+                        ProgressView(goFlyString(imports.isValidatingSelection ? "imports.validating" : "imports.working"))
+                            .accessibilityIdentifier("imports.working")
                     }
-                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
-                    Text(goFlyString("imports.footnote"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .padding(.horizontal, 16)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if imports.loadState == .loading {
+                        ProgressView(goFlyString("imports.loading"))
+                    } else if imports.loadState == .ready, imports.records.isEmpty {
+                        GoFlyEmptyState(symbol: GoFlySymbols.importEmpty, message: goFlyString("imports.empty"))
+                            .accessibilityIdentifier("imports.empty")
+                    }
+                    if !imports.records.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(Array(imports.records.reversed().enumerated()), id: \.element.id) { index, record in
+                                recordCard(record)
+                                if index < imports.records.count - 1 { Divider().padding(.leading, 16) }
+                            }
+                        }
+                        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+                        Text(goFlyString("imports.footnote"))
+                            .font(.footnote)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                            .padding(.horizontal, 16)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
         }
         .accessibilityIdentifier("imports.content")
         .safeAreaInset(edge: .bottom) {
@@ -60,22 +63,7 @@ struct GoFlyImportedRoutesView: View {
         }
         .goFlySnackbar($snackbar)
         .background(GoFlyStyle.canvas)
-        .navigationTitle(goFlyString("imports.title"))
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
-                    Label(goFlyString("route.title"), systemImage: "chevron.backward")
-                        .labelStyle(.titleAndIcon)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("imports.back")
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.goFlyGPX, .xml]) { result in
             switch result {
             case .success(let url): importURL(url)
@@ -117,6 +105,27 @@ struct GoFlyImportedRoutesView: View {
             fileTask?.cancel()
             fileTask = nil
         }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Button { dismiss() } label: {
+                Label(goFlyString("common.back"), systemImage: "chevron.backward")
+                    .labelStyle(.titleAndIcon)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("imports.back")
+            Spacer(minLength: 0)
+            Text(goFlyString("imports.title"))
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            Color.clear.frame(width: 44, height: 44)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
     }
 
     private var isBusy: Bool { fileOperationInProgress || imports.isBusy || imports.isValidatingSelection }

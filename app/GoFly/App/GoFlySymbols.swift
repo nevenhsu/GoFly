@@ -207,7 +207,35 @@ struct GoFlyRecenterIcon: View {
             let inner = Path(ellipseIn: CGRect(x: 8.708 * s, y: 8.708 * s, width: 4.583 * s, height: 4.583 * s))
             context.stroke(ticks, with: .foreground, style: stroke)
             context.stroke(outer, with: .foreground, style: stroke)
+            context.fill(inner, with: .foreground)
             context.stroke(inner, with: .foreground, style: stroke)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Speedometer gauge icon matching Figma `icon / speed` (`18×18`).
+struct GoFlySpeedIcon: View {
+    var size: CGFloat = 18
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            let s = min(canvasSize.width, canvasSize.height) / 18.0
+            let stroke = StrokeStyle(lineWidth: 1.425 * s, lineCap: .round, lineJoin: .round)
+            var needle = Path()
+            needle.move(to: CGPoint(x: 9 * s, y: 10.5 * s))
+            needle.addLine(to: CGPoint(x: 12 * s, y: 7.5 * s))
+            var arc = Path()
+            arc.addArc(
+                center: CGPoint(x: 9 * s, y: 10.5 * s),
+                radius: 7.5 * s,
+                startAngle: .degrees(150),
+                endAngle: .degrees(30),
+                clockwise: false
+            )
+            context.stroke(needle, with: .foreground, style: stroke)
+            context.stroke(arc, with: .foreground, style: stroke)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)

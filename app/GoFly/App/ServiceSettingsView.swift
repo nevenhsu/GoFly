@@ -48,7 +48,7 @@ struct ServiceSettingsView: View {
         .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("settings.title"))
         .navigationBarTitleDisplayMode(.large)
-        .goFlyNativeBackTitle("settings.backToMap")
+        .goFlyNativeBackTitle("settings.title")
         .toolbar(.visible, for: .navigationBar)
         .onAppear { systemStatus.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in

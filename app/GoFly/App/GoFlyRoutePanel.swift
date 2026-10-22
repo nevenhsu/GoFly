@@ -212,10 +212,8 @@ struct GoFlyRoutePanel: View {
             GoFlyRoundTripControl(controller: controller)
                 .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
             Button { showingDetails = true } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "speedometer")
-                        .font(.system(size: 14, weight: .regular))
-                        .accessibilityHidden(true)
+                HStack(spacing: 6) {
+                    GoFlySpeedIcon(size: 18)
                     Text(goFlyLocalizedFormat(goFlyString("route.speedShort"),
                                               controller.draft.speed.kilometersPerHour))
                         .font(.footnote.weight(.semibold))

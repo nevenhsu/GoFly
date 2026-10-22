@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 extension View {
-    func goFlyNativeBackTitle(_ key: String = "common.back") -> some View {
-        background(GoFlyNativeBackTitle(title: goFlyString(key)).frame(width: 0, height: 0))
+    func goFlyNativeBackTitle(_ key: String? = nil) -> some View {
+        background(GoFlyNativeBackTitle(title: key.map(goFlyString) ?? "").frame(width: 0, height: 0))
     }
 }
 
@@ -42,8 +42,13 @@ private struct GoFlyNativeBackTitle: UIViewControllerRepresentable {
             while let controller = ancestor {
                 if let navigation = controller.navigationController,
                    navigation.viewControllers.contains(where: { $0 === controller }) {
-                    controller.navigationItem.backButtonTitle = backTitle
-                    controller.navigationItem.backButtonDisplayMode = .default
+                    if backTitle.isEmpty {
+                        controller.navigationItem.backButtonTitle = ""
+                        controller.navigationItem.backButtonDisplayMode = .minimal
+                    } else {
+                        controller.navigationItem.backButtonTitle = backTitle
+                        controller.navigationItem.backButtonDisplayMode = .default
+                    }
                     return
                 }
                 ancestor = controller.parent
