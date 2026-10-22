@@ -624,3 +624,9 @@
 "imports.pointsFormat" = "%@ points";
 "imports.footnote" = "Tap a route for actions: load, view all points, export, delete. Imported routes cannot be edited; change the source file and import again.";
 "settings.backToMap" = "Map";
+"route.speedSetting" = "Set Speed";
+"route.speedCurrent" = "Current Speed";
+"common.doneSetting" = "Done";
+"joystick.wanderActive" = "Wandering";
+"joystick.wanderPaused" = "Wander Paused";
+"common.done" = "Done";

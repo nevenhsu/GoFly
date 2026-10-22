@@ -6,10 +6,10 @@ struct JoystickModelTests {
     @Test func validWorldInputProducesBoundedStepsAtAllSupportedSpeedExtremes() throws {
         let full = try #require(JoystickInput(bearingDegrees: -450, strength: 2))
         #expect(full.bearingDegrees == 270 && full.strength == 1)
-        let slow = try #require(full.displacement(speed: RouteSpeed(kilometersPerHour: 2)!))
+        let slow = try #require(full.displacement(speed: RouteSpeed(kilometersPerHour: 1)!))
         let normal = try #require(full.displacement(speed: .standard))
-        let fastest = try #require(full.displacement(speed: RouteSpeed(kilometersPerHour: 100)!))
-        #expect(abs(slow.distanceMeters - 0.2777777777777778) < 1e-15)
+        let fastest = try #require(full.displacement(speed: RouteSpeed(kilometersPerHour: 120)!))
+        #expect(abs(slow.distanceMeters - (1.0 / 3.6 * 0.5)) < 1e-15)
         #expect(abs(normal.distanceMeters - 2.7777777777777777) < 1e-15)
         #expect(fastest.distanceMeters == JoystickDisplacement.maximumDistanceMeters)
         #expect(JoystickDisplacement(bearingDegrees: 0, distanceMeters: JoystickDisplacement.maximumDistanceMeters.nextUp) == nil)

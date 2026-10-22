@@ -5,15 +5,30 @@ struct GoFlyExecutionHeader: View {
     let title: String
     var detail: String?
     var symbol: String?
+    var onLeadingAction: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: instructionSymbol)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.instructionForeground)
-                .frame(width: 44, height: 44)
-                .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityHidden(true)
+            if let onLeadingAction {
+                Button(action: onLeadingAction) {
+                    Image(systemName: instructionSymbol)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.instructionForeground)
+                        .frame(width: 44, height: 44)
+                        .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("joystick.randomDestination"))
+                .accessibilityIdentifier("execution.header.action")
+            } else {
+                Image(systemName: instructionSymbol)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.instructionForeground)
+                    .frame(width: 44, height: 44)
+                    .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.title3.weight(.semibold))

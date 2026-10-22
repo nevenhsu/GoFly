@@ -360,7 +360,12 @@ struct GoFlyMapView: View {
             mapCanvas(viewport: viewport)
             mapPins(viewport: viewport)
             if isExecutionMode {
-                GoFlyExecutionHeader(title: executionTitle, detail: executionDetail, symbol: executionSymbol)
+                GoFlyExecutionHeader(
+                    title: executionTitle,
+                    detail: executionDetail,
+                    symbol: executionSymbol,
+                    onLeadingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
+                )
                     .padding(.horizontal, 16).padding(.top, 8)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
             } else { topBar }

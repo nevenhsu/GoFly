@@ -623,3 +623,9 @@
 "imports.pointsFormat" = "%@ 點";
 "imports.footnote" = "點一下開啟動作選單：載入、查看全部點位、匯出、刪除。匯入路線不可編輯；需要調整請修改來源檔案後重新匯入。";
 "settings.backToMap" = "地圖";
+"route.speedSetting" = "設定移動速度";
+"route.speedCurrent" = "目前時速";
+"common.doneSetting" = "完成設定";
+"joystick.wanderActive" = "漫步中";
+"joystick.wanderPaused" = "漫步暫停";
+"common.done" = "完成";

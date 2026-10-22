@@ -9,7 +9,7 @@ struct GoFlyJoystickPanel: View {
     var onRandomDestination: () -> Void = { }
     var onSettings: () -> Void = { }
     @State private var contentHeight: CGFloat = 220
-    @State private var confirmingEnd = false
+    @State private var showingSpeedSheet = false
 
     var body: some View {
         ScrollView {
@@ -26,44 +26,14 @@ struct GoFlyJoystickPanel: View {
                         onAction: controller.canRetryWander ? { _ = controller.retryWander() } : nil,
                         onDismiss: controller.clearWanderError, identifier: "joystick.wanderError")
                 }
-                if controller.wanderEnabled {
-                    destinationRow
-                } else {
-                    wanderControls
-                }
+                wanderControls
                 Divider().padding(.top, 4)
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("joystick.settings")
                 } else {
-                    VStack(spacing: 8) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(goFlyString("route.speed"))
-                                .foregroundStyle(GoFlyStyle.secondary)
-                            Spacer(minLength: 12)
-                            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                                Text("\(controller.speed.kilometersPerHour)")
-                                    .font(.title.weight(.semibold))
-                                    .monospacedDigit()
-                                Text(goFlyString("route.speedUnit"))
-                                    .font(.footnote)
-                                    .foregroundStyle(GoFlyStyle.secondary)
-                            }
-                            .accessibilityIdentifier("joystick.speed.value")
-                        }
-                        .font(.body)
-                        Slider(value: Binding(
-                            get: { Double(controller.speed.kilometersPerHour) },
-                            set: { if let speed = RouteSpeed(kilometersPerHour: Int($0)) { _ = controller.setSpeed(speed) } }
-                        ), in: 2...100, step: 1) {
-                            Text(goFlyString("route.speed"))
-                        }
-                        .tint(GoFlyStyle.primary)
-                        .frame(minHeight: 44)
-                        .disabled(!controller.canSetSpeed)
-                        .accessibilityIdentifier("joystick.speed")
-                    }
+                    speedRow
                     GoFlyManualJoystickPad(controller: controller, cameraHeadingDegrees: cameraHeadingDegrees)
                         .frame(maxWidth: .infinity)
                 }
@@ -76,21 +46,51 @@ struct GoFlyJoystickPanel: View {
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
         .frame(height: min(contentHeight, max(76, maximumHeight)))
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if controller.wanderEnabled {
-                GoFlyExecutionControls(progress: nil, isPaused: controller.phase == .paused || controller.phase == .suspended,
-                    canPause: controller.canPause, canResume: controller.canResume,
-                    onPause: { _ = controller.pause() }, onResume: { _ = controller.resume() },
-                    onEnd: { confirmingEnd = true })
-            }
-        }
-        .confirmationDialog(goFlyString("execution.end"), isPresented: $confirmingEnd, titleVisibility: .visible) {
-            Button(goFlyString("execution.end"), role: .destructive) { _ = controller.setWanderEnabled(false) }
-            Button(goFlyString("common.cancel"), role: .cancel) { }
+        .sheet(isPresented: $showingSpeedSheet) {
+            GoFlySpeedSheet(
+                speed: controller.speed,
+                canEdit: controller.canSetSpeed,
+                onSpeedChanged: { _ = controller.setSpeed($0) },
+                onDismiss: { showingSpeedSheet = false }
+            )
         }
         .background(GoFlyStyle.cardSurface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("joystick.panel")
+    }
+
+    private var speedRow: some View {
+        HStack(alignment: .center) {
+            Text(goFlyString("route.speed"))
+                .font(.body)
+                .foregroundStyle(GoFlyStyle.primary)
+            Spacer(minLength: 8)
+            Button {
+                showingSpeedSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    GoFlySpeedIcon(size: 18)
+                    Text(goFlyLocalizedFormat(goFlyString("route.speedShort"), controller.speed.kilometersPerHour))
+                        .font(.footnote.weight(.semibold))
+                        .monospacedDigit()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 34)
+                .background(GoFlyStyle.surface, in: Capsule())
+                .overlay { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) }
+                .frame(minHeight: 44)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!controller.canSetSpeed)
+            .accessibilityLabel(goFlyString("route.speed"))
+            .accessibilityIdentifier("joystick.speed")
+        }
+        .frame(minHeight: 44)
     }
 
     private var wanderControls: some View {
@@ -106,16 +106,32 @@ struct GoFlyJoystickPanel: View {
 
     private var wanderRow: some View {
         HStack(spacing: 12) {
-            Image(systemName: "shuffle")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
+            if controller.wanderEnabled {
+                Button(action: onRandomDestination) {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.primary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!controller.canRandomizeWanderTarget)
+                .accessibilityLabel(goFlyString("joystick.randomDestination"))
+                .accessibilityIdentifier("joystick.randomDestination")
+            } else {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .frame(width: 28, height: 28)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 2) {
-                Text(goFlyString("joystick.wander"))
+                Text(controller.wanderEnabled ? goFlyString("joystick.wanderActive") : goFlyString("joystick.wander"))
                     .font(.body.weight(.semibold))
-                Text(goFlyString("joystick.wanderDetail"))
+                Text(controller.wanderEnabled ? (controller.wanderTarget?.place.title ?? "") : goFlyString("joystick.wanderDetail"))
                     .font(.footnote)
                     .foregroundStyle(GoFlyStyle.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
             Toggle("", isOn: Binding(
@@ -130,23 +146,6 @@ struct GoFlyJoystickPanel: View {
             .accessibilityIdentifier("joystick.wander")
         }
         .frame(minHeight: 44)
-    }
-
-    private var destinationRow: some View {
-        GoFlyWanderDestinationRow(title: controller.wanderTarget?.place.title ?? goFlyString("joystick.wander"),
-                                 caption: wanderDestinationLabel,
-                                 canRandomize: controller.canRandomizeWanderTarget,
-                                 onRandomDestination: onRandomDestination,
-                                 wanderEnabled: Binding(
-                                    get: { controller.wanderEnabled },
-                                    set: { _ = controller.setWanderEnabled($0) }),
-                                 canToggleWander: controller.canSetWanderEnabled)
-    }
-
-    private var wanderDestinationLabel: String {
-        let format = goFlyString("joystick.currentTarget")
-        let prefix = format.components(separatedBy: "%@").first ?? format
-        return prefix.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ":：")))
     }
 
 }

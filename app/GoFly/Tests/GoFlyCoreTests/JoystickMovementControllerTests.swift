@@ -53,7 +53,7 @@ struct JoystickMovementControllerTests {
         #expect(commands.revisions == 1)
         #expect(controller.updateGesture(id: finger, input: west))
         #expect(commands.revisions == 1)
-        #expect(controller.setSpeed(RouteSpeed(kilometersPerHour: 100)!))
+        #expect(controller.setSpeed(RouteSpeed(kilometersPerHour: 120)!))
         #expect(commands.revisions == 2)
         let actual = GeoCoordinate(latitude: 24, longitude: 120)!
         commands.finishStep(.acknowledged(actual))

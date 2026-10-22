@@ -1,7 +1,7 @@
 import Foundation
 
 public struct JoystickDisplacement: Equatable, Sendable {
-    public static let maximumDistanceMeters = 125.0 / 9.0
+    public static let maximumDistanceMeters = 50.0 / 3.0
     public let bearingDegrees: Double
     public let distanceMeters: Double
 

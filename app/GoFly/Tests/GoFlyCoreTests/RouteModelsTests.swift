@@ -74,8 +74,10 @@ struct RouteModelsTests {
         #expect(draft.start?.value == .current)
         #expect(draft.destination == nil)
         #expect(draft.speed.kilometersPerHour == 20)
-        #expect(RouteSpeed(kilometersPerHour: 1) == nil)
-        #expect(RouteSpeed(kilometersPerHour: 101) == nil)
+        #expect(RouteSpeed(kilometersPerHour: 0) == nil)
+        #expect(RouteSpeed(kilometersPerHour: 1) != nil)
+        #expect(RouteSpeed(kilometersPerHour: 120) != nil)
+        #expect(RouteSpeed(kilometersPerHour: 121) == nil)
         #expect(RouteSpeed(kilometersPerHour: 36)?.metersPerSecond == 10)
     }
 

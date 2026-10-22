@@ -39,14 +39,12 @@ final class GoFlyRouteUITests: XCTestCase {
         let app = makeApp()
         app.launch()
         openRoute(app)
-        openDetails(app)
-        let roundTrip = app.scrollViews["route.details.content"].switches["route.roundTrip"]
+        let roundTrip = app.descendants(matching: .any)["route.roundTrip"]
+        XCTAssertTrue(roundTrip.waitForExistence(timeout: 5))
         XCTAssertEqual(roundTrip.value as? String, "0")
         roundTrip.tap()
         XCTAssertEqual(roundTrip.value as? String, "1")
-        app.buttons["route.details.back"].tap()
         addNode(app, coordinate: second)
-        openDetails(app)
         XCTAssertEqual(roundTrip.value as? String, "1")
     }
 
@@ -106,7 +104,7 @@ final class GoFlyRouteUITests: XCTestCase {
 
     private func openDetails(_ app: XCUIApplication) {
         app.buttons["route.details"].tap()
-        XCTAssertTrue(app.scrollViews["route.details.content"].switches["route.roundTrip"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["route.speed"].waitForExistence(timeout: 5))
     }
 
     private func waitEnabled(_ element: XCUIElement, timeout: TimeInterval = 8) {

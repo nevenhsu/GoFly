@@ -16,7 +16,7 @@ public struct RouteSpeed: Equatable, Sendable {
     public var metersPerSecond: Double { Double(kilometersPerHour) / 3.6 }
     public static let standard = RouteSpeed(kilometersPerHour: 20)!
     public init?(kilometersPerHour: Int) {
-        guard (2...100).contains(kilometersPerHour) else { return nil }
+        guard (1...120).contains(kilometersPerHour) else { return nil }
         self.kilometersPerHour = kilometersPerHour
     }
 }

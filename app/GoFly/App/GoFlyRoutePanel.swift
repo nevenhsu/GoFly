@@ -72,7 +72,12 @@ struct GoFlyRoutePanel: View {
             }
         }
         .sheet(isPresented: $showingDetails) {
-            GoFlyRouteDetailsView(controller: controller) { showingDetails = false }
+            GoFlySpeedSheet(
+                speed: controller.draft.speed,
+                canEdit: controller.canEdit,
+                onSpeedChanged: { _ = controller.setSpeed($0) },
+                onDismiss: { showingDetails = false }
+            )
         }
         .sheet(isPresented: $showingFavoriteRoutes) {
             GoFlyFavoriteRoutesView(controller: controller) { showingFavoriteRoutes = false }
@@ -390,62 +395,6 @@ struct GoFlyRoutePanel: View {
         .accessibilityIdentifier(controller.phase == .paused ? "route.resume" : "route.pause")
     }
 
-}
-
-private struct GoFlyRouteDetailsView: View {
-    @ObservedObject var controller: RouteExecutionController
-    var onDismiss: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    GoFlyRoundTripControl(controller: controller)
-                    Text(goFlyString("route.speed")).font(.headline)
-                    Text(goFlyLocalizedFormat(goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour))
-                        .font(.largeTitle.weight(.bold).monospacedDigit())
-                        .accessibilityIdentifier("route.speed.value")
-                    Slider(value: Binding(
-                        get: { Double(controller.draft.speed.kilometersPerHour) },
-                        set: { value in
-                            if let speed = RouteSpeed(kilometersPerHour: Int(value.rounded())) { _ = controller.setSpeed(speed) }
-                        }
-                    ), in: 2...100, step: 1) {
-                        Text(goFlyString("route.speed"))
-                    } minimumValueLabel: {
-                        Text("2")
-                    } maximumValueLabel: {
-                        Text("100")
-                    }
-                    .disabled(!controller.canEdit)
-                    .tint(GoFlyStyle.primary)
-                    .accessibilityValue(goFlyLocalizedFormat(
-                        goFlyString("route.speedValue"), controller.draft.speed.kilometersPerHour
-                    ))
-                    .accessibilityIdentifier("route.speed")
-                }
-                .padding(24)
-            }
-            .accessibilityIdentifier("route.details.content")
-            .background(GoFlyStyle.surface)
-            .navigationTitle(goFlyString("route.details"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(action: onDismiss) {
-                        Text(goFlyString("common.back"))
-                            .fixedSize(horizontal: true, vertical: false)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("route.details.back")
-                }
-            }
-        }
-        .presentationDetents([.large])
-        .presentationBackground(GoFlyStyle.surface)
-    }
 }
 
 private struct GoFlyRoundTripControl: View {
