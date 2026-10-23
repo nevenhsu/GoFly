@@ -113,7 +113,7 @@ struct GoFlyMapView: View {
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
     @State private var bottomContentHeight: CGFloat = 260
-    @State private var sheetDetent: GoFlySheetDetent = .half
+    @State private var sheetDetent: GoFlySheetDetent = .collapsed
     @State private var sheetHeight: CGFloat = 320
     @State private var presentedSheet: GoFlyMapSheet?
     @State private var searchFocusRequest: UUID?
@@ -133,6 +133,7 @@ struct GoFlyMapView: View {
     @State private var joystickErrorDismissed = false
     @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
+    @State private var isMapPicking = false
     @State private var settingJoystickOrigin = false
     @State private var joystickOriginIntentID: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -202,7 +203,7 @@ struct GoFlyMapView: View {
                     }
                 }
                 if scenePhase == .active { continuation.sceneDidBecomeActive() }
-                if mode == .joystick { service.warmupSession() }
+                service.warmupSession()
                 if dynamicTypeSize.isAccessibilitySize { sheetDetent = .expanded }
             }
             .onChange(of: dynamicTypeSize) { _, size in
@@ -317,10 +318,11 @@ struct GoFlyMapView: View {
             }
         }
         .fullScreenCover(isPresented: Binding(
-            get: { showingSearch || route.picker != nil },
+            get: { (showingSearch || route.picker != nil) && !isMapPicking },
             set: { shown in
                 if !shown {
                     showingSearch = false
+                    if isMapPicking { isMapPicking = false }
                 }
             }
         )) { searchScreen.interactiveDismissDisabled() }
@@ -340,7 +342,20 @@ struct GoFlyMapView: View {
                     recentPlaces: recentPlaces,
                     onSelect: { _ in _ = route.confirmPicker(id: picker.id) },
                     onUseCurrentLocation: picker.allowsCurrent
-                        ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil)
+                        ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil,
+                    onChooseOnMap: {
+                        isMapPicking = true
+                        sheetDetent = .collapsed
+                        if let candidate = picker.candidates.candidate {
+                            activeSearch.select(candidate.place)
+                        } else if let firstResult = picker.candidates.results.first {
+                            activeSearch.select(firstResult)
+                        } else if let coordinate = service.positionMarker?.coordinate {
+                            let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
+                            activeSearch.select(place)
+                        }
+                    }
+                )
             } else {
                 GoFlySearchPanel(
                     search: activeSearch,
@@ -376,7 +391,7 @@ struct GoFlyMapView: View {
     private func mapContent(in geometry: GeometryProxy) -> some View {
         let viewport = visibleViewport(in: geometry)
         ZStack(alignment: .topLeading) {
-            mapCanvas(viewport: viewport)
+            mapCanvas(viewport: viewport, size: geometry.size)
             mapPins(viewport: viewport)
             if isExecutionMode {
                 GoFlyExecutionHeader(
@@ -429,10 +444,13 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func mapCanvas(viewport: CGRect) -> some View {
-        GoFlyMapCanvas(
+    private func mapCanvas(viewport: CGRect, size: CGSize) -> some View {
+        let cameraViewport = activeCandidate == nil
+            ? viewport
+            : CGRect(origin: .zero, size: size)
+        return GoFlyMapCanvas(
             marker: service.positionMarker, candidate: activeCandidate,
-            viewport: viewport, cameraIntent: cameraIntent,
+            viewport: cameraViewport, cameraIntent: cameraIntent,
             route: mode == .route ? route.plannedRoute : nil,
             routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
@@ -449,7 +467,10 @@ struct GoFlyMapView: View {
                     sheetDetent = .half
                 }
             },
-            onProjection: { if projection != $0 { projection = $0 } }
+            onProjection: {
+                MapKitSearchRegionContext.current = $0.searchRegion
+                if projection != $0 { projection = $0 }
+            }
         )
     }
 
@@ -525,7 +546,7 @@ struct GoFlyMapView: View {
                     GoFlyBottomSheet(
                         detent: $sheetDetent,
                         availableHeight: sheetAvailableHeight(in: geometry),
-                        collapsedHeight: 116,
+                        collapsedHeight: currentCollapsedHeight,
                         maximumHeight: sheetMaxHeight(in: geometry),
                         contentHeight: bottomContentHeight,
                         onHeightChange: { sheetHeight = $0 }
@@ -548,9 +569,75 @@ struct GoFlyMapView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }
+            if mode == .route, let candidate = activeCandidate {
+                GoFlyLocationCard(
+                    place: candidate.place,
+                    primaryActionType: isMapPicking ? .confirm : .add,
+                    primaryActionTitle: isMapPicking ? goFlyString("common.confirm") : goFlyString("common.add"),
+                    onPrimaryAction: {
+                        if isMapPicking {
+                            if let picker = route.picker {
+                                _ = route.confirmPicker(id: picker.id)
+                            }
+                            isMapPicking = false
+                            activeSearch.resetSelection()
+                            sheetDetent = .expanded
+                        } else {
+                            _ = route.appendDestination(candidate.place)
+                            activeSearch.resetSelection()
+                            sheetDetent = .expanded
+                        }
+                    },
+                    onDismiss: {
+                        activeSearch.resetSelection()
+                        if isMapPicking {
+                            isMapPicking = false
+                        }
+                        sheetDetent = .expanded
+                    },
+                    onCopy: {
+                        snackbar = GoFlySnackbarMessage(text: goFlyString("placeDetails.copied"))
+                    },
+                    distanceFrom: service.positionMarker?.coordinate,
+                    identifier: isMapPicking ? "map.route.confirmCard" : "map.route.addCard"
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(10)
+            }
+            if mode == .teleport, let candidate = activeCandidate {
+                GoFlyLocationCard(
+                    place: candidate.place,
+                    primaryActionType: .teleport,
+                    primaryEnabled: service.movementConnectionAvailable,
+                    onPrimaryAction: {
+                        performGo(candidate)
+                    },
+                    onDismiss: {
+                        activeSearch.resetSelection()
+                    },
+                    onCopy: {
+                        snackbar = GoFlySnackbarMessage(text: goFlyString("placeDetails.copied"))
+                    },
+                    distanceFrom: service.positionMarker?.coordinate,
+                    identifier: "map.teleport.locationCard"
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, geometry.safeAreaInsets.bottom + 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(10)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .bottom)
+        .onChange(of: activeCandidate != nil) { _, hasCandidate in
+            if hasCandidate {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    sheetDetent = .collapsed
+                }
+            }
+        }
         .onChange(of: service.clearState) { _, state in
             guard state == .confirmed, service.coldClearPending else { return }
             Task {
@@ -594,33 +681,77 @@ struct GoFlyMapView: View {
         }
     }
 
+    private var isResumeState: Bool {
+        if continuation.noticeKey != nil && !continuationNoticeDismissed { return true }
+        if !route.canEdit, route.phase == .paused || route.phase == .interrupted { return true }
+        if mode == .joystick, joystick.wanderEnabled,
+           [.paused, .suspended, .interrupted].contains(joystick.phase) { return true }
+        if mode == .teleport, positionHold.phase == .paused { return true }
+        return false
+    }
+
+    private var currentCollapsedHeight: CGFloat {
+        if isResumeState || mode == .route { return 76 }
+        return 116
+    }
+
     private func modePanel(in geometry: GeometryProxy) -> some View {
         Group {
             if mode == .joystick, route.canEdit, route.picker == nil {
-                ZStack(alignment: .bottom) {
-                    GoFlyJoystickPanel(
-                        controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
-                        maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                        onRandomDestination: {
-                            if joystick.randomizeWanderTarget() { wanderSearch.resetSelection() }
-                        },
-                        onSettings: { showingSettings = true }
+                if isResumeState && [.paused, .suspended, .interrupted].contains(joystick.phase) {
+                    GoFlyResumePanel(
+                        title: goFlyString("joystick.wanderPaused"),
+                        ctaTitle: goFlyString("wander.resumeShort"),
+                        onResume: { _ = joystick.resume() },
+                        isEnabled: joystick.canResume,
+                        identifier: "joystick.resumePanel"
                     )
-                    // Keep an admitted finger alive through preparation; disappearance releases it.
-                    .opacity(showsOperationPanel ? 0 : 1)
-                    .accessibilityHidden(showsOperationPanel)
-                    if showsOperationPanel { operationPanel(in: geometry) }
+                } else {
+                    ZStack(alignment: .bottom) {
+                        GoFlyJoystickPanel(
+                            controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
+                            maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                            onRandomDestination: {
+                                if joystick.randomizeWanderTarget() { wanderSearch.resetSelection() }
+                            },
+                            onSettings: { showingSettings = true }
+                        )
+                        // Keep an admitted finger alive through preparation; disappearance releases it.
+                        .opacity(showsOperationPanel ? 0 : 1)
+                        .accessibilityHidden(showsOperationPanel)
+                        if showsOperationPanel { operationPanel(in: geometry) }
+                    }
                 }
             } else if showsOperationPanel {
                 operationPanel(in: geometry)
             } else if mode == .route || !route.canEdit {
-                GoFlyRoutePanel(
-                    controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                    onEditNode: { _ = route.openPicker(for: $0) },
-                    onSettings: { showingSettings = true },
-                    onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
-                    currentLocationAvailable: service.currentRouteOrigin != nil,
-                    currentRouteOrigin: { service.currentRouteOrigin }
+                if isResumeState && (route.phase == .paused || route.phase == .interrupted) {
+                    GoFlyResumePanel(
+                        title: goFlyString("background.routePaused"),
+                        ctaTitle: goFlyString("route.resumeShort"),
+                        onResume: { _ = route.resume() },
+                        isEnabled: route.canResume,
+                        identifier: "route.resumePanel"
+                    )
+                } else {
+                    GoFlyRoutePanel(
+                        controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                        onEditNode: { _ = route.openPicker(for: $0) },
+                        onSettings: { showingSettings = true },
+                        onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
+                        currentLocationAvailable: service.currentRouteOrigin != nil,
+                        currentRouteOrigin: { service.currentRouteOrigin },
+                        isNarrow: sheetDetent == .collapsed || isMapPicking || (mode == .route && activeCandidate != nil),
+                        onExpand: { sheetDetent = .expanded }
+                    )
+                }
+            } else if isResumeState && mode == .teleport && (positionHold.phase == .paused || positionHold.phase == .completed) {
+                GoFlyResumePanel(
+                    title: goFlyString(hasFreshRealGPS ? "sheet.realPosition" : "sheet.lastSimulatedPosition"),
+                    ctaTitle: goFlyString("teleport.resumeShort"),
+                    onResume: { _ = positionHold.retry() },
+                    isEnabled: positionHold.canRetry,
+                    identifier: "teleport.resumePanel"
                 )
             } else {
                 teleportContent
@@ -701,7 +832,7 @@ struct GoFlyMapView: View {
 
     private var teleportContent: some View {
         Group {
-            if sheetDetent == .collapsed, activeCandidate == nil {
+            if sheetDetent == .collapsed {
                 collapsedPositionSummary
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -738,7 +869,10 @@ struct GoFlyMapView: View {
                     GoFlyFavoriteStar(place: place, identifier: "map.position.favorite")
                         .background(GoFlyStyle.secondarySurface, in: Circle())
                         .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                    Button { UIPasteboard.general.string = coordinate.displayText } label: {
+                    Button {
+                        UIPasteboard.general.string = coordinate.displayText
+                        snackbar = GoFlySnackbarMessage(text: goFlyString("placeDetails.copied"))
+                    } label: {
                         Image(systemName: "doc.on.doc").frame(width: 44, height: 44)
                             .background(GoFlyStyle.secondarySurface, in: Circle())
                             .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
@@ -767,41 +901,27 @@ struct GoFlyMapView: View {
 
     private var expandedTeleportContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let candidate = activeCandidate {
-                GoFlyPlaceDetailsView(place: candidate.place, onDismiss: { activeSearch.resetSelection() },
-                    embedded: true, distanceFrom: service.positionMarker?.coordinate,
-                    canGo: isWanderMap ? wanderSearch.canGo && joystick.canApplyWanderTarget : search.canGo && service.canTeleport,
-                    onGo: { performGo(candidate) })
+            collapsedPositionSummary
+                .padding(.bottom, 12)
+            Divider()
+            teleportSectionHeader("favorites.title", actionTitle: "search.viewAll") {
+                presentedSheet = GoFlyMapSheet(content: .favorites)
+            }
+            if favorites.favorites.isEmpty {
+                Text(goFlyString("favorites.empty"))
+                    .font(.footnote)
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             } else {
-                collapsedPositionSummary
-                    .padding(.bottom, 12)
-                Divider()
-                teleportSectionHeader("favorites.title", actionTitle: "search.viewAll") {
-                    presentedSheet = GoFlyMapSheet(content: .favorites)
-                }
-                if favorites.favorites.isEmpty {
-                    Text(goFlyString("favorites.empty"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                } else {
-                    ForEach(favorites.favorites.prefix(2)) { favorite in
-                        teleportPlaceRow(favorite.place, title: favorite.displayTitle,
-                                         symbol: GoFlySymbols.favoriteSelected,
-                                         identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
-                    }
-                }
-                if !recentPlaces.isEmpty {
-                    teleportSectionHeader("search.recent")
-                    ForEach(recentPlaces.prefix(3)) { place in
-                        teleportPlaceRow(place, title: place.title, symbol: GoFlySymbols.recent,
-                                         identifier: "search.recent.\(place.coordinate.displayText)")
-                    }
+                ForEach(favorites.favorites.prefix(2)) { favorite in
+                    teleportPlaceRow(favorite.place, title: favorite.displayTitle,
+                                     symbol: GoFlySymbols.favoriteSelected,
+                                     identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
                 }
             }
         }
-        .padding(.horizontal, activeCandidate == nil ? 20 : 0)
-        .padding(.vertical, activeCandidate == nil ? 10 : 0)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
     }
 
     private func teleportSectionHeader(_ key: String, actionTitle: String? = nil,
@@ -1060,7 +1180,13 @@ struct GoFlyMapView: View {
 
     private var pillText: String {
         if pillTone == .danger { return goFlyString("status.pill.error") }
-        if pillTone == .warning { return goFlyString("status.pill.limited") }
+        if pillTone == .warning {
+            if recovery.noticeKey == "recovery.connectionLost" || !service.movementConnectionAvailable { return goFlyString("status.pill.connectionInterrupted") }
+            if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused {
+                return goFlyString("status.pill.paused")
+            }
+            return goFlyString("status.pill.limited")
+        }
         if recovery.noticeKey == "recovery.connectionRecovered" { return goFlyString("recovery.connectionRecovered") }
         if case .preparing = service.pointState { return goFlyString("status.pill.preparing") }
         if !route.canEdit, [.running, .pausing].contains(route.phase) {
@@ -1075,13 +1201,18 @@ struct GoFlyMapView: View {
 
     private var pillTone: GoFlyStatusTone {
         if service.error != nil || unconfirmedID != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil { return .danger }
-        if !service.nativeBusy, service.positionMarker?.source == .simulation,
-           service.positionMarker?.freshness == .waiting { return .warning }
+        if recovery.noticeKey == "recovery.connectionLost" || !service.movementConnectionAvailable { return .warning }
         if recovery.noticeKey == "recovery.connectionRecovered" { return .success }
-        if continuation.noticeKey != nil || recovery.noticeKey != nil || recovery.requiresColdConfirmation || location.noticeKey != nil || joystick.wanderError != nil { return .warning }
+        if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused { return .warning }
+        let locationWarning = location.noticeKey != nil && location.noticeKey != "location.noFix"
+        if continuation.noticeKey != nil || recovery.noticeKey != nil || recovery.requiresColdConfirmation || locationWarning || joystick.wanderError != nil { return .warning }
         if !route.canEdit, route.phase == .running || joystick.phase == .moving { return .active }
         if service.positionMarker?.source == .simulation { return .success }
         return .neutral
+    }
+
+    private var hasFreshRealGPS: Bool {
+        service.positionMarker?.source == .gps && service.positionMarker?.freshness == .fresh
     }
 
     private var displayStatusKey: String {
@@ -1161,7 +1292,7 @@ struct GoFlyMapView: View {
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {
         VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 0) {
-            if route.picker == nil { goButton(candidate) }
+            if route.picker == nil || isMapPicking { goButton(candidate) }
             pinButton(candidate)
         }
         .frame(width: max(84, goWidth))
@@ -1169,8 +1300,25 @@ struct GoFlyMapView: View {
     }
 
     private func goButton(_ candidate: TeleportCandidate) -> some View {
-        Button { performGo(candidate) } label: {
-            Text(goFlyString("map.go"))
+        Button {
+            if mode == .route {
+                if isMapPicking {
+                    if let picker = route.picker {
+                        _ = route.confirmPicker(id: picker.id)
+                    }
+                    isMapPicking = false
+                    activeSearch.resetSelection()
+                    sheetDetent = .expanded
+                } else {
+                    _ = route.appendDestination(candidate.place)
+                    activeSearch.resetSelection()
+                    sheetDetent = .expanded
+                }
+            } else {
+                performGo(candidate)
+            }
+        } label: {
+            Text(goButtonTitle)
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 14)
                 .frame(minWidth: 44, minHeight: 28)
@@ -1180,24 +1328,41 @@ struct GoFlyMapView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-            .disabled(isWanderMap ? (!wanderSearch.canGo || !joystick.canApplyWanderTarget) : (!search.canGo || !service.canTeleport))
-            .accessibilityIdentifier("map.candidate.go")
+        .disabled(isGoButtonDisabled)
+        .accessibilityIdentifier("map.candidate.go")
+    }
+
+    private var goButtonTitle: String {
+        if mode == .route {
+            return isMapPicking ? goFlyString("common.confirm") : goFlyString("common.add")
+        }
+        return goFlyString("map.go")
+    }
+
+    private var isGoButtonDisabled: Bool {
+        if mode == .route { return false }
+        return isWanderMap ? (!wanderSearch.canGo || !joystick.canApplyWanderTarget) : (!search.canGo || !service.canTeleport)
     }
 
     private func pinButton(_ candidate: TeleportCandidate) -> some View {
         Button {
-                dismissKeyboard()
+            dismissKeyboard()
+            if mode == .route {
+                activeSearch.select(candidate.place)
+                sheetDetent = .collapsed
+            } else {
                 sheetDetent = .expanded
-            } label: {
-                GoFlyPlacePinIcon(kind: .candidate)
+            }
+        } label: {
+            GoFlyPlacePinIcon(kind: .candidate)
                 .frame(width: 44, height: 44, alignment: .bottom)
                 .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(GoFlyStyle.primary)
-            .accessibilityLabel(goFlyString("search.placeDetails"))
-            .accessibilityValue(candidate.place.coordinate.displayText)
-            .accessibilityIdentifier("map.candidate.pin")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(GoFlyStyle.primary)
+        .accessibilityLabel(goFlyString("search.placeDetails"))
+        .accessibilityValue(candidate.place.coordinate.displayText)
+        .accessibilityIdentifier("map.candidate.pin")
     }
 
     private func wanderTargetPin(_ place: MapPlace) -> some View {
@@ -1375,7 +1540,7 @@ struct GoFlyMapView: View {
                 identifier: "route.error",
                 isFloating: true
             )
-        } else if let key = location.noticeKey {
+        } else if let key = location.noticeKey, key != "location.noFix" {
             GoFlyStatusBanner(
                 tone: .warning,
                 title: goFlyString(key),
@@ -1402,27 +1567,31 @@ struct GoFlyMapView: View {
                 titleIdentifier: "recovery.notice",
                 isFloating: true
             )
-        } else if let key = continuation.noticeKey, !continuationNoticeDismissed {
-            let routePaused = mode == .route && route.phase == .paused
+        } else if (continuation.noticeKey != nil && !continuationNoticeDismissed) || isResumeState {
+            let routePaused = mode == .route && (route.phase == .paused || route.phase == .interrupted)
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
-            GoFlyStatusBanner(
-                tone: .warning,
-                title: goFlyString(key == "background.durationCompleted" ? key :
-                    (routePaused ? "background.routePaused" : (holdPaused ? "background.positionPaused" : key))),
-                message: goFlyString(routePaused ? "background.routePaused.message" :
-                    (holdPaused ? "background.positionPaused.message" : "status.repairGuidance")),
-                actionTitle: goFlyString(routePaused ? "route.resume" :
-                    (holdPaused ? "background.positionRetry" : "settings.title")),
-                onAction: {
+            let wanderPaused = mode == .joystick && joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase)
+
+            let title: String = routePaused ? goFlyString("background.routePaused")
+                : (holdPaused ? goFlyString("background.positionPaused")
+                : (wanderPaused ? goFlyString("joystick.wanderPaused") : goFlyString(continuation.noticeKey ?? "background.positionPaused")))
+
+            let message: String = routePaused ? goFlyString("background.routePaused.message")
+                : (holdPaused ? goFlyString("background.positionPaused.message") : goFlyString("status.repairGuidance"))
+
+            GoFlyWarningToast(
+                title: title,
+                message: message,
+                retryTitle: goFlyString("common.retry"),
+                onRetry: {
                     if routePaused { _ = route.resume() }
                     else if holdPaused { _ = positionHold.retry() }
+                    else if wanderPaused { _ = joystick.resume() }
                     else { showingSettings = true }
                 },
                 onDismiss: { continuationNoticeDismissed = true },
-                identifier: "map.continuationNotice",
-                actionEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
-                actionIdentifier: routePaused ? "map.continuationNotice.resume" : "map.continuationNotice.action",
-                isFloating: true
+                retryEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
+                identifier: "map.continuationNotice"
             )
         }
     }

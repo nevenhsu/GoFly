@@ -76,6 +76,12 @@ public struct RouteDraft: Equatable, Sendable {
         nodes.insert(RouteNode(id: nodeID, value: value), at: nodes.count < 2 ? nodes.count : nodes.count - 1)
         return RouteDraft(nodes: nodes, speed: speed)
     }
+    public func appendingDestination(_ place: MapPlace) -> RouteDraft? {
+        guard isManual, nodes.count < Self.maximumNodeCount else { return nil }
+        var nodes = nodes
+        nodes.append(RouteNode(value: .place(place)))
+        return RouteDraft(nodes: nodes, speed: speed)
+    }
     func removing(nodeID: RouteNodeID) -> RouteDraft? {
         guard isManual, nodes.contains(where: { $0.id == nodeID }) else { return nil }
         return RouteDraft(nodes: nodes.filter { $0.id != nodeID }, speed: speed)

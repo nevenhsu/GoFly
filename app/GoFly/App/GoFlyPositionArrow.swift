@@ -100,18 +100,19 @@ final class GoFlyPositionArrowView: MKAnnotationView {
         let labelColor = (freshness == .waiting ? UIColor.secondaryLabel : UIColor.label)
             .resolvedColor(with: traitCollection).cgColor
         let bgColor = UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
+        let realGPSColor = UIColor.systemBlue.resolvedColor(with: traitCollection).cgColor
         contrast.fillColor = UIColor.clear.cgColor
         contrast.strokeColor = bgColor
-        if source == .simulation {
+        if source == .gps && freshness == .fresh {
+            arrow.fillColor = realGPSColor
+            arrow.strokeColor = bgColor
+            arrow.lineWidth = 1.5
+            contrast.lineWidth = 3.5
+        } else if source == .simulation || freshness == .waiting {
             arrow.fillColor = labelColor
             arrow.strokeColor = bgColor
             arrow.lineWidth = 1.5
             contrast.lineWidth = 3.5
-        } else {
-            arrow.fillColor = UIColor.clear.cgColor
-            arrow.strokeColor = labelColor
-            arrow.lineWidth = 2.5
-            contrast.lineWidth = 5.0
         }
     }
 

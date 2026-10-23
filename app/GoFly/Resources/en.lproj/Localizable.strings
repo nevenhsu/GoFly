@@ -503,7 +503,8 @@
 "status.pill.preparing" = "Preparing";
 "status.pill.simulating" = "Simulating";
 "status.pill.standby" = "Service ready";
-"status.pill.error" = "Needs attention";
+"placeDetails.copied" = "Coordinates copied";
+"status.pill.error" = "Connection interrupted";
 
 "search.recent" = "Recent places";
 
@@ -555,7 +556,7 @@
 
 "favorites.pendingRemoval" = "Removal pending. Tap again to cancel.";
 
-"favorites.delete" = "Delete favorite";
+"favorites.delete" = "Delete";
 
 "operation.failureGuidance" = "If this keeps failing, open Settings › VPN Tunnel for repair guidance.";
 
@@ -566,6 +567,7 @@
 "search.title" = "Search";
 
 "status.pill.limited" = "Limited";
+"status.pill.connectionInterrupted" = "Connection interrupted";
 
 "search.viewAll" = "View all";
 "search.goToCoordinate" = "Go to %@";
@@ -577,6 +579,7 @@
 "route.chooseWaypoint" = "Choose waypoint %ld";
 "sheet.currentPosition" = "Current simulated position";
 "sheet.realPosition" = "Current location";
+"sheet.lastSimulatedPosition" = "Last simulated position";
 "sheet.noPosition" = "Not set";
 "sheet.noPositionHint" = "Use search or tap the map to set a simulated position.";
 "placeDetails.favorite" = "Favorite";
@@ -652,3 +655,15 @@
 "background.positionPaused" = "Position hold paused";
 "background.positionPaused.message" = "Retry to keep this location.";
 "background.positionRetry" = "Retry";
+"common.add" = "Add";
+"common.confirm" = "Confirm";
+"common.retry" = "Retry";
+"search.chooseOnMap" = "Choose on map";
+"route.clearRoute" = "Clear Route";
+"route.resumeShort" = "Resume Route";
+"teleport.resumeShort" = "Resume Teleport";
+"wander.resumeShort" = "Resume Wander";
+"route.roundTrip.on" = "Round Trip On";
+"route.roundTrip.off" = "Round Trip Off";
+"route.direction.forward" = "Forward";
+"route.direction.reverse" = "Reverse";

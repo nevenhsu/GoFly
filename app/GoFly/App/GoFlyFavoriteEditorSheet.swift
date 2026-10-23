@@ -23,7 +23,7 @@ struct GoFlyFavoriteEditorSheet: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     if let failure = favorites.error {
                         GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
                     }
@@ -58,7 +58,7 @@ struct GoFlyFavoriteEditorSheet: View {
                         Text(place.coordinate.displayText)
                             .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
                     }
-                    .padding(16)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
                 }
@@ -80,7 +80,7 @@ struct GoFlyFavoriteEditorSheet: View {
                 .padding(.bottom, 12)
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(360), .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
         .onAppear {

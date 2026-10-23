@@ -503,7 +503,8 @@
 "status.pill.preparing" = "准备中";
 "status.pill.simulating" = "模拟中";
 "status.pill.standby" = "服务待命";
-"status.pill.error" = "需要注意";
+"placeDetails.copied" = "已复制坐标";
+"status.pill.error" = "连接中断";
 
 "search.recent" = "最近使用";
 
@@ -555,7 +556,7 @@
 
 "favorites.pendingRemoval" = "即将删除，再点一次取消。";
 
-"favorites.delete" = "删除最爱";
+"favorites.delete" = "删除";
 
 "operation.failureGuidance" = "若持续失败，请到“设置 › VPN 通道”查看修复指引。";
 
@@ -566,6 +567,7 @@
 "search.title" = "搜索";
 
 "status.pill.limited" = "受限";
+"status.pill.connectionInterrupted" = "连接中断";
 
 "search.viewAll" = "查看全部";
 "search.goToCoordinate" = "前往坐标 %@";
@@ -577,6 +579,7 @@
 "route.chooseWaypoint" = "选择途经点 %ld";
 "sheet.currentPosition" = "当前模拟位置";
 "sheet.realPosition" = "当前位置";
+"sheet.lastSimulatedPosition" = "最后模拟位置";
 "sheet.noPosition" = "尚未设置";
 "sheet.noPositionHint" = "用搜索或点地图设置模拟位置。";
 "placeDetails.favorite" = "收藏";
@@ -652,3 +655,15 @@
 "background.positionPaused" = "位置维持已暂停";
 "background.positionPaused.message" = "重试以维持此位置。";
 "background.positionRetry" = "重试";
+"common.add" = "新增";
+"common.confirm" = "确认";
+"common.retry" = "重试";
+"search.chooseOnMap" = "从地图上选择";
+"route.clearRoute" = "清空路线";
+"route.resumeShort" = "继续路线";
+"teleport.resumeShort" = "恢复瞬移";
+"wander.resumeShort" = "恢复漫步";
+"route.roundTrip.on" = "来回开启";
+"route.roundTrip.off" = "来回关闭";
+"route.direction.forward" = "顺向";
+"route.direction.reverse" = "逆向";

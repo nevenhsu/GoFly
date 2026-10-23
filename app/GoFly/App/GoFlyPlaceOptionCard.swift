@@ -16,6 +16,7 @@ struct GoFlyFavoriteStar: View {
                     GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
                     Text(labelTitle)
                         .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 40)

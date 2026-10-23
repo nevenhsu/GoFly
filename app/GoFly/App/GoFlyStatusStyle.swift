@@ -10,6 +10,8 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     case warning
     case success
 
+    static var warn: GoFlyStatusTone { .warning }
+
     var tint: Color {
         switch self {
         case .neutral: GoFlyStyle.secondary

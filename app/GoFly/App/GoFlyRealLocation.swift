@@ -95,6 +95,8 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
 
     private func fail(_ key: String) {
         observation = nil
+        // Indoor lack of GPS is normal in simulation; never surface a warning banner or block operation.
+        guard key != "location.noFix" else { return }
         guard shownNoticeCauses.insert(key).inserted else { return }
         noticeKey = key
     }

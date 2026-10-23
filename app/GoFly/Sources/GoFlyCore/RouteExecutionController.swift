@@ -150,6 +150,16 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         applyDraft(RouteDraft(speed: draft.speed))
         return true
     }
+    @discardableResult public func clearRoute() -> Bool {
+        guard canEdit else { return false }
+        applyDraft(RouteDraft(speed: draft.speed))
+        return true
+    }
+    @discardableResult public func appendDestination(_ place: MapPlace) -> Bool {
+        guard canEdit, let changed = draft.appendingDestination(place) else { return false }
+        applyDraft(changed)
+        return true
+    }
     public var canPause: Bool { phase == .running }
     public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
     public var canToggleHeading: Bool {

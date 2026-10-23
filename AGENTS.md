@@ -8,9 +8,34 @@ and implementation specification have not been selected yet.
   work, update the related development specifications, terminology, and acceptance
   criteria in the same task. Replace superseded rules and distinguish design
   updates from implemented behavior and device verification.
+- Before every GoFly UI implementation or wireframe task, consult the current
+  platform page in the GoFly UI Figma file (`RtPV8PXCQJ2WXK3jk3kPrq`): iOS uses
+  `04 · iOS Redesign（Google Maps 參考）` (`121-50359`), and Mac uses
+  `05 · Mac Redesign（新版）` (`123-61504`). The shared component library is
+  `00 · 品牌與基礎元件`; pages `01 · iOS App` and `02 · Mac App` are earlier
+  flows superseded by the redesign pages for current UI work.
+  iOS: https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359
+  Mac: https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=123-61504
+  Treat the current platform page's rendered designs as the visual authority.
+  When a rendered design conflicts with documentation, update the related spec
+  and acceptance criteria in the same task. Record missing or conflicting Figma
+  variants instead of claiming they are designed. Use platform specs for
+  behavior and accessibility; project safety and device-operation rules still
+  govern actual operations.
 - Figma work is currently limited to UI/UX wireframes. Unless the user explicitly
   requests prototypes again, do not add prototype wiring, interaction tests, or
   combinatorial state screens. Keep only the wireframes needed for discussion.
+- When preparing a GoFly Figma Bug Report fix list, use Figma Console to read the
+  comments and inspect each attached screenshot; map feedback to the screenshot
+  and compare it with the current platform redesign page. Keep comments from
+  other pages out of scope unless requested. Group duplicate reports, distinguish
+  observed device behavior from proposed fixes, and call out conflicting comments
+  or design variants. Check relevant Git history and the current working-tree
+  diff before listing work: mark committed changes as implemented only when the
+  evidence supports it, and treat uncommitted changes as in progress rather than
+  complete. Present remaining items with their evidence and acceptance criteria;
+  separate adjacent or out-of-scope reports. If asked only to list or plan fixes,
+  do not implement them.
 - Source `scripts/env.sh` for the project's JDK 21 and Ghidra paths.
 - For reverse-engineering tasks, read `tools/reverse-skill/README_AI.md`,
   `tools/reverse-skill/RULES.md`, and `tools/reverse-skill/skills/SKILL.md`.

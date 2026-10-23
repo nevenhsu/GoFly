@@ -524,19 +524,24 @@ struct GoFlyStartupView: View {
         GeometryReader { geometry in
             ZStack {
                 GoFlyStyle.surface.ignoresSafeArea()
-                Image("GoFlyLogo")
-                    .resizable()
-                    .frame(width: 96, height: 96)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                    .accessibilityLabel("GoFly")
-                if showsProgress {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .frame(width: 120)
-                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2 + 80)
-                        .accessibilityLabel(goFlyString("setup.preparing.message"))
-                        .accessibilityIdentifier("setup.preparing.progress")
+                VStack(spacing: 12) {
+                    Image("GoFlyLogo")
+                        .resizable()
+                        .frame(width: 76, height: 76)
+                    Text("GoFly")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(GoFlyStyle.primary)
+                    if showsProgress {
+                        ProgressView(value: 0.28)
+                            .tint(GoFlyStyle.primary)
+                            .frame(width: 112)
+                            .accessibilityLabel(goFlyString("setup.preparing.message"))
+                            .accessibilityIdentifier("setup.preparing.progress")
+                    }
                 }
+                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("GoFly")
             }
         }
         .ignoresSafeArea()

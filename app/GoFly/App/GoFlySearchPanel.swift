@@ -20,6 +20,7 @@ struct GoFlySearchPanel: View {
     var onSelect: (MapPlace) -> Void = { _ in }
     var onUseCurrentLocation: (() -> Void)?
     var onClearPlace: (() -> Void)?
+    var onChooseOnMap: (() -> Void)?
     @EnvironmentObject private var favorites: FavoritePlacesStore
     @FocusState private var focused: Bool
 
@@ -148,20 +149,15 @@ struct GoFlySearchPanel: View {
 
     @ViewBuilder
     private var emptyContent: some View {
+        if let onChooseOnMap {
+            actionRow(goFlyString("search.chooseOnMap"),
+                      symbol: GoFlySymbols.place, identifier: "search.chooseOnMap",
+                      action: onChooseOnMap)
+        }
         if let onUseCurrentLocation {
             actionRow(goFlyString("route.useCurrentLocation"),
                       symbol: GoFlySymbols.location, identifier: "route.picker.current",
                       action: onUseCurrentLocation)
-        }
-        if !favorites.favorites.isEmpty {
-            sectionHeader("favorites.title", actionTitle: goFlyString("search.viewAll")) {
-                focused = false
-                onFavorites()
-            }
-            ForEach(favorites.favorites.prefix(5)) { favorite in
-                row(favorite.place, title: favorite.displayTitle,
-                    symbol: GoFlySymbols.favoriteSelected, identifier: favorite.place)
-            }
         }
         if !recentPlaces.isEmpty {
             sectionHeader("search.recent")
@@ -169,7 +165,7 @@ struct GoFlySearchPanel: View {
                 row(place, symbol: GoFlySymbols.recent, identifier: place)
             }
         }
-        if favorites.favorites.isEmpty, recentPlaces.isEmpty {
+        if recentPlaces.isEmpty {
             GoFlyEmptyState(symbol: GoFlySymbols.search,
                             message: goFlyString("search.noResults"))
                 .padding(.top, 24)

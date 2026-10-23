@@ -30,6 +30,19 @@ struct GoFlyMapProjection: Equatable {
     let viewport: CGRect
     let cameraHeadingDegrees: Double
     let centerCoordinate: GeoCoordinate?
+    let searchRegionLatitudeDelta: Double
+    let searchRegionLongitudeDelta: Double
+
+    var searchRegion: MKCoordinateRegion? {
+        guard let centerCoordinate else { return nil }
+        return MKCoordinateRegion(
+            center: centerCoordinate.clLocationCoordinate,
+            span: MKCoordinateSpan(
+                latitudeDelta: searchRegionLatitudeDelta,
+                longitudeDelta: searchRegionLongitudeDelta
+            )
+        )
+    }
 
     @MainActor init(candidatePoint: CGPoint?, wanderTargetPoint: CGPoint? = nil, viewport: CGRect, map: MKMapView) {
         self.candidatePoint = candidatePoint
@@ -38,6 +51,8 @@ struct GoFlyMapProjection: Equatable {
         self.cameraHeadingDegrees = map.camera.heading
         self.centerCoordinate = GeoCoordinate(latitude: map.centerCoordinate.latitude,
                                               longitude: map.centerCoordinate.longitude)
+        self.searchRegionLatitudeDelta = map.region.span.latitudeDelta
+        self.searchRegionLongitudeDelta = map.region.span.longitudeDelta
     }
 }
 

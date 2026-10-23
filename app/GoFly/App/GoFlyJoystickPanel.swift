@@ -53,30 +53,12 @@ struct GoFlyJoystickPanel: View {
                 .font(.body)
                 .foregroundStyle(GoFlyStyle.primary)
             Spacer(minLength: 8)
-            Button {
-                showingSpeedSheet = true
-            } label: {
-                HStack(spacing: 6) {
-                    GoFlySpeedIcon(size: 18)
-                    Text(goFlyLocalizedFormat(goFlyString("route.speedShort"), controller.speed.kilometersPerHour))
-                        .font(.footnote.weight(.semibold))
-                        .monospacedDigit()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.horizontal, 12)
-                .frame(minHeight: 34)
-                .background(GoFlyStyle.surface, in: Capsule())
-                .overlay { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) }
-                .frame(minHeight: 44)
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(!controller.canSetSpeed)
-            .accessibilityLabel(goFlyString("route.speed"))
-            .accessibilityIdentifier("joystick.speed")
+            GoFlySpeedChip(
+                speed: controller.speed.kilometersPerHour,
+                action: { showingSpeedSheet = true },
+                isEnabled: controller.canSetSpeed,
+                identifier: "joystick.speed"
+            )
         }
         .frame(minHeight: 44)
     }
