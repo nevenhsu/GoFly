@@ -46,7 +46,7 @@ struct GoFlyFavoriteEditorSheet: View {
                         }
                         .padding(.leading, 16)
                         .frame(minHeight: 48)
-                        .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14))
+                        .background(labelFieldSurface, in: RoundedRectangle(cornerRadius: 14))
                         .overlay {
                             RoundedRectangle(cornerRadius: 14)
                                 .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
@@ -88,6 +88,12 @@ struct GoFlyFavoriteEditorSheet: View {
                 draft = l
             }
         }
+    }
+
+    private var labelFieldSurface: Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? .systemGray4 : .systemGray6
+        })
     }
 
     private var isFavorite: Bool {

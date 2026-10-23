@@ -1,3 +1,4 @@
+import Combine
 import GoFlyCore
 import GoFlyTransport
 import MapKit
@@ -14,9 +15,12 @@ final class GoFlyMovementModel: ObservableObject {
     let recovery: ConnectionRecoveryController
     let continuation: MovementContinuationController
     let positionHold: PositionHoldController
+    private let service: ServiceController
+    private var subscriptions: [AnyCancellable] = []
     private var mapAdmission: (@MainActor () -> Bool)?
 
     init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
+        self.service = service
         let snapshot = recoveryStore.initialSnapshot
         presentationMode = snapshot.mode
         route = RouteExecutionController(
@@ -46,6 +50,39 @@ final class GoFlyMovementModel: ObservableObject {
                     goFlyString("background.activity.routeProgress"), percent))
             }
         )
+        // Both screens observe this owner and read the same status projection.
+        subscriptions = [service.objectWillChange, recovery.objectWillChange,
+                         route.objectWillChange, joystick.objectWillChange,
+                         positionHold.objectWillChange, continuation.objectWillChange].map { publisher in
+            publisher.sink { [weak self] _ in self?.objectWillChange.send() }
+        }
+    }
+
+    var status: GoFlySessionStatus {
+        if recovery.connectionState == .unavailable || recovery.connectionState == .timedOut {
+            return .connectionLost
+        }
+        if !service.nativeBusy {
+            switch service.pointState {
+            case .notSent(_, let failure), .unconfirmed(_, let failure):
+                if service.error == failure, NativeSessionRetentionPolicy().shouldRetryBeforeDispatch(after: failure) {
+                    return .connectionLost
+                }
+            default: break
+            }
+        }
+        if case .preparing = service.pointState { return .preparing }
+        if !route.canEdit, [.running, .pausing].contains(route.phase) { return .running }
+        if joystick.phase == .moving { return .running }
+        if recovery.connectionState == .unknown || recovery.connectionState == .checking { return .standby }
+        if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused { return .paused }
+        if service.error != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil {
+            return .limited
+        }
+        if let marker = service.positionMarker, marker.source == .simulation {
+            return marker.freshness == .fresh ? .simulating : .limited
+        }
+        return .standby
     }
 
     func setPresentationMode(_ mode: SessionMapMode) {
@@ -112,6 +149,7 @@ struct GoFlyMapView: View {
     @State private var projection: GoFlyMapProjection?
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
+    @State private var teleportCardFrame = CGRect.zero
     @State private var bottomContentHeight: CGFloat = 260
     @State private var sheetDetent: GoFlySheetDetent = .collapsed
     @State private var sheetHeight: CGFloat = 320
@@ -185,6 +223,7 @@ struct GoFlyMapView: View {
             .navigationDestination(isPresented: $showingSettings) {
                 ServiceSettingsView(
                     service: service,
+                    movement: movement,
                     continuation: continuation,
                     recovery: recovery,
                     setupMetadata: setupMetadata
@@ -203,6 +242,7 @@ struct GoFlyMapView: View {
                     }
                 }
                 if scenePhase == .active { continuation.sceneDidBecomeActive() }
+                recovery.requestForegroundCheck()
                 service.warmupSession()
                 if dynamicTypeSize.isAccessibilitySize { sheetDetent = .expanded }
             }
@@ -271,6 +311,7 @@ struct GoFlyMapView: View {
                     checkpointWindowStarted = false
                     finishCheckpointWindow(id: checkpointWindowID)
                     continuation.sceneDidBecomeActive()
+                    recovery.requestForegroundCheck()
                 } else {
                     continuation.releaseForInactiveScene()
                     captureCheckpoint()
@@ -411,7 +452,7 @@ struct GoFlyMapView: View {
             mapControls(bottomInset: geometry.safeAreaInsets.bottom)
             bottomChrome(in: geometry)
         }
-        .goFlySnackbar($snackbar)
+        .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
         .onChange(of: service.error) { _, newError in
             if newError != nil { serviceNoticeDismissed = false }
         }
@@ -431,6 +472,22 @@ struct GoFlyMapView: View {
             if followsHeading, isExecutionMode, let coordinate {
                 cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: executionCameraBearing)
             }
+        }
+    }
+
+    private func snackbarBottomOffset(in geometry: GeometryProxy) -> CGFloat {
+        if mode == .teleport {
+            let top = activeCandidate != nil && teleportCardFrame.height > 0
+                ? teleportCardFrame.minY : panelFrame.minY
+            return max(0, geometry.size.height - top) + 6
+        }
+        if activeCandidate != nil || wanderCardPlace != nil {
+            let cardBottom = geometry.safeAreaInsets.bottom + 12
+            let cardTop = cardBottom + 188
+            return cardTop + 12
+        } else {
+            let panelTop = (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + max(currentCollapsedHeight, sheetHeight)
+            return panelTop + 12
         }
     }
 
@@ -464,7 +521,7 @@ struct GoFlyMapView: View {
                 } else if mode == .teleport, route.canEdit {
                     search.selectMapCoordinate(coordinate, resolver: mapPlaces)
                     cameraIntent = GoFlyCameraIntent(coordinate: coordinate, ensureVisibleOnly: true)
-                    sheetDetent = .half
+                    sheetDetent = .collapsed
                 }
             },
             onProjection: {
@@ -549,6 +606,7 @@ struct GoFlyMapView: View {
                         collapsedHeight: currentCollapsedHeight,
                         maximumHeight: sheetMaxHeight(in: geometry),
                         contentHeight: bottomContentHeight,
+                        fitsContent: mode == .teleport,
                         onHeightChange: { sheetHeight = $0 }
                     ) {
                         sheetContent(in: geometry)
@@ -610,7 +668,7 @@ struct GoFlyMapView: View {
                 GoFlyLocationCard(
                     place: candidate.place,
                     primaryActionType: .teleport,
-                    primaryEnabled: service.movementConnectionAvailable,
+                    primaryEnabled: !isGoButtonDisabled,
                     onPrimaryAction: {
                         performGo(candidate)
                     },
@@ -625,6 +683,11 @@ struct GoFlyMapView: View {
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, geometry.safeAreaInsets.bottom + 12)
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { frame in
+                    // Exclude the outer bottom padding from the card bounds.
+                    teleportCardFrame = CGRect(x: frame.minX, y: frame.minY,
+                                              width: frame.width, height: frame.height - geometry.safeAreaInsets.bottom - 12)
+                }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
             }
@@ -653,22 +716,10 @@ struct GoFlyMapView: View {
     }
 
     private func sheetContent(in geometry: GeometryProxy) -> some View {
-        Group {
-            if mode != .teleport || route.picker != nil {
-                // Mode panels own their scroll viewport and pinned controls.
-                bottomPanelContent(in: geometry)
-                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
-            } else {
-                ScrollView {
-                    bottomPanelContent(in: geometry)
-                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
-                }
-                .scrollIndicators(.hidden)
-                .frame(height: min(bottomContentHeight, max(96, sheetHeight - 12)))
-                .accessibilityIdentifier("map.panels.scroll")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .top)
+        bottomPanelContent(in: geometry)
+            .fixedSize(horizontal: false, vertical: mode == .teleport)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func sheetAvailableHeight(in geometry: GeometryProxy) -> CGFloat {
@@ -797,7 +848,11 @@ struct GoFlyMapView: View {
         recentPlaces.insert(place, at: 0)
         recentPlaces = Array(recentPlaces.prefix(8))
         cameraIntent = GoFlyCameraIntent(coordinate: place.coordinate)
-        sheetDetent = .expanded
+        if mode == .teleport {
+            sheetDetent = .collapsed
+        } else {
+            sheetDetent = .expanded
+        }
         showingSearch = false
     }
 
@@ -900,28 +955,35 @@ struct GoFlyMapView: View {
     }
 
     private var expandedTeleportContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             collapsedPositionSummary
                 .padding(.bottom, 12)
-            Divider()
+            Rectangle()
+                .fill(GoFlyStyle.subtleBorder)
+                .frame(height: 0.5)
             teleportSectionHeader("favorites.title", actionTitle: "search.viewAll") {
                 presentedSheet = GoFlyMapSheet(content: .favorites)
             }
+            .padding(.top, 12)
+            .padding(.bottom, 4)
             if favorites.favorites.isEmpty {
                 Text(goFlyString("favorites.empty"))
                     .font(.footnote)
                     .foregroundStyle(GoFlyStyle.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             } else {
-                ForEach(favorites.favorites.prefix(2)) { favorite in
-                    teleportPlaceRow(favorite.place, title: favorite.displayTitle,
-                                     symbol: GoFlySymbols.favoriteSelected,
-                                     identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
+                VStack(spacing: 0) {
+                    ForEach(favorites.favorites.prefix(2)) { favorite in
+                        teleportPlaceRow(favorite.place, title: favorite.displayTitle,
+                                         symbol: GoFlySymbols.favoriteSelected,
+                                         identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
+                    }
                 }
             }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 12)
     }
 
     private func teleportSectionHeader(_ key: String, actionTitle: String? = nil,
@@ -951,9 +1013,14 @@ struct GoFlyMapView: View {
                     .background(GoFlyStyle.secondarySurface, in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body).lineLimit(1)
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.primary)
+                        .lineLimit(1)
                     Text(place.address ?? place.coordinate.displayText)
-                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary).lineLimit(1)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: GoFlySymbols.disclosure)
@@ -962,7 +1029,12 @@ struct GoFlyMapView: View {
                     .accessibilityHidden(true)
             }
             .frame(minHeight: 64)
-            .overlay(alignment: .bottom) { Divider().padding(.leading, 48) }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(GoFlyStyle.subtleBorder)
+                    .frame(height: 0.5)
+                    .padding(.leading, 48)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1094,7 +1166,7 @@ struct GoFlyMapView: View {
             HStack {
                 GoFlyStatusPill(text: pillText, tone: pillTone, action: expandSheet,
                                 identifier: "map.statusPill")
-                    .accessibilityValue(goFlyString(displayStatusKey))
+                    .accessibilityValue(goFlyString(movement.status.textKey))
                 Spacer(minLength: 0)
             }
         }
@@ -1123,7 +1195,6 @@ struct GoFlyMapView: View {
         settingJoystickOrigin = false
         joystickOriginIntentID = nil
         activeSearch.resetSelection()
-        if sheetDetent == .collapsed { sheetDetent = .half }
     }
 
     private func mapControls(bottomInset: CGFloat) -> some View {
@@ -1175,41 +1246,16 @@ struct GoFlyMapView: View {
     }
 
     private func expandSheet() {
-        sheetDetent = sheetDetent == .expanded ? .half : .expanded
+        if mode == .teleport {
+            sheetDetent = sheetDetent == .half ? .collapsed : .half
+        } else {
+            sheetDetent = sheetDetent == .expanded ? .half : .expanded
+        }
     }
 
-    private var pillText: String {
-        if pillTone == .danger { return goFlyString("status.pill.error") }
-        if pillTone == .warning {
-            if recovery.noticeKey == "recovery.connectionLost" || !service.movementConnectionAvailable { return goFlyString("status.pill.connectionInterrupted") }
-            if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused {
-                return goFlyString("status.pill.paused")
-            }
-            return goFlyString("status.pill.limited")
-        }
-        if recovery.noticeKey == "recovery.connectionRecovered" { return goFlyString("recovery.connectionRecovered") }
-        if case .preparing = service.pointState { return goFlyString("status.pill.preparing") }
-        if !route.canEdit, [.running, .pausing].contains(route.phase) {
-            return goFlyString("status.pill.running")
-        }
-        if !route.canEdit, route.phase == .paused { return goFlyString("status.pill.paused") }
-        if [.moving].contains(joystick.phase) { return goFlyString("status.pill.running") }
-        if joystick.phase == .paused { return goFlyString("status.pill.paused") }
-        if service.positionMarker?.source == .simulation { return goFlyString("status.pill.simulating") }
-        return goFlyString("status.pill.standby")
-    }
+    private var pillText: String { goFlyString(movement.status.textKey) }
 
-    private var pillTone: GoFlyStatusTone {
-        if service.error != nil || unconfirmedID != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil { return .danger }
-        if recovery.noticeKey == "recovery.connectionLost" || !service.movementConnectionAvailable { return .warning }
-        if recovery.noticeKey == "recovery.connectionRecovered" { return .success }
-        if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused { return .warning }
-        let locationWarning = location.noticeKey != nil && location.noticeKey != "location.noFix"
-        if continuation.noticeKey != nil || recovery.noticeKey != nil || recovery.requiresColdConfirmation || locationWarning || joystick.wanderError != nil { return .warning }
-        if !route.canEdit, route.phase == .running || joystick.phase == .moving { return .active }
-        if service.positionMarker?.source == .simulation { return .success }
-        return .neutral
-    }
+    private var pillTone: GoFlyStatusTone { movement.status.tone }
 
     private var hasFreshRealGPS: Bool {
         service.positionMarker?.source == .gps && service.positionMarker?.freshness == .fresh
@@ -1238,15 +1284,25 @@ struct GoFlyMapView: View {
     }
 
     private func sheetMaxHeight(in geometry: GeometryProxy) -> CGFloat {
-        max(132, geometry.size.height - max(topFrame.maxY, 96) - 96 - 49)
+        if mode == .teleport {
+            return sheetAvailableHeight(in: geometry)
+        }
+        return max(132, geometry.size.height - max(topFrame.maxY, 96) - 96 - 49)
     }
 
     private func sheetRestingHeight(in geometry: GeometryProxy) -> CGFloat {
+        if mode == .teleport {
+            switch sheetDetent {
+            case .collapsed: return currentCollapsedHeight
+            case .half, .expanded:
+                return min(sheetAvailableHeight(in: geometry), max(currentCollapsedHeight, bottomContentHeight + 24))
+            }
+        }
         let available = sheetAvailableHeight(in: geometry)
         let expanded = max(117, min(available * 0.88, sheetMaxHeight(in: geometry)))
         let half = min(expanded, max(116, available * 0.5))
         switch sheetDetent {
-        case .collapsed: return 116
+        case .collapsed: return currentCollapsedHeight
         case .half: return half
         case .expanded: return expanded
         }
@@ -1341,7 +1397,10 @@ struct GoFlyMapView: View {
 
     private var isGoButtonDisabled: Bool {
         if mode == .route { return false }
-        return isWanderMap ? (!wanderSearch.canGo || !joystick.canApplyWanderTarget) : (!search.canGo || !service.canTeleport)
+        if isWanderMap {
+            return !wanderSearch.canGo || !joystick.canApplyWanderTarget
+        }
+        return !search.canGo || !service.canTeleport
     }
 
     private func pinButton(_ candidate: TeleportCandidate) -> some View {
@@ -1351,7 +1410,7 @@ struct GoFlyMapView: View {
                 activeSearch.select(candidate.place)
                 sheetDetent = .collapsed
             } else {
-                sheetDetent = .expanded
+                sheetDetent = .half
             }
         } label: {
             GoFlyPlacePinIcon(kind: .candidate)

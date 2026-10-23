@@ -5,6 +5,7 @@ import UIKit
 
 struct ServiceSettingsView: View {
     @ObservedObject var service: ServiceController
+    @ObservedObject var movement: GoFlyMovementModel
     @ObservedObject var continuation: MovementContinuationController
     @ObservedObject var recovery: ConnectionRecoveryController
     let setupMetadata: GoFlySetupMetadata?
@@ -73,12 +74,16 @@ struct ServiceSettingsView: View {
         .navigationBarTitleDisplayMode(.large)
         .goFlyNativeBackTitle("settings.title")
         .toolbar(.visible, for: .navigationBar)
-        .onAppear { systemStatus.refresh() }
+        .onAppear {
+            systemStatus.refresh()
+            recovery.requestForegroundCheck()
+        }
         .onChange(of: service.error) { _, newError in
             if newError != nil { serviceNoticeDismissed = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             systemStatus.refresh()
+            recovery.requestForegroundCheck()
         }
     }
 
@@ -215,9 +220,9 @@ struct ServiceSettingsView: View {
                     Text(goFlyString("service.title")).font(.headline)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                GoFlyStatusPill(text: goFlyString(servicePillKey), tone: servicePillTone,
+                GoFlyStatusPill(text: goFlyString(movement.status.textKey), tone: movement.status.tone,
                                 action: nil, identifier: "service.statusPill")
-                    .accessibilityValue(goFlyString(service.statusKey))
+                    .accessibilityValue(goFlyString(movement.status.textKey))
             }
             Button {
                 if offersStop {
@@ -268,24 +273,6 @@ struct ServiceSettingsView: View {
         }
         .padding(16)
         .goFlyCard(radius: 14)
-    }
-
-    private var servicePillKey: String {
-        if service.error != nil || service.phase == .repairRequired { return "service.statusPill.error" }
-        switch service.phase {
-        case .ready, .preparing, .stopping, .restoring, .resetting: return "service.statusPill.ready"
-        case .stopped: return "service.statusPill.stopped"
-        case .repairRequired: return "service.statusPill.error"
-        }
-    }
-
-    private var servicePillTone: GoFlyStatusTone {
-        if service.error != nil || service.phase == .repairRequired { return .danger }
-        switch service.phase {
-        case .ready, .preparing, .stopping, .restoring, .resetting: return .success
-        case .stopped: return .neutral
-        case .repairRequired: return .danger
-        }
     }
 
     private var status: some View {

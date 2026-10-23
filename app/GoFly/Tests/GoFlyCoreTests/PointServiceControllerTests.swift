@@ -141,11 +141,8 @@ struct PointServiceControllerTests {
         try #require(controller.teleport(to: candidate))
         await wait { await device.waitingForPreparation }
         #expect(controller.positionMarker == prior)
-        for attempt in 1...3 {
-            if attempt > 1 { await wait { await device.waitingForPreparation } }
-            #expect(controller.preparedOperation?.attempt.value == attempt)
-            await device.finishPreparation(failure: .pairingRequired)
-        }
+        #expect(controller.preparedOperation?.attempt.value == 1)
+        await device.finishPreparation(failure: .pairingRequired)
         await wait { !controller.nativeBusy }
         #expect(controller.positionMarker == prior)
         #expect(controller.canTeleport)

@@ -192,7 +192,7 @@ struct GoFlySearchPanel: View {
         if !places.isEmpty {
             sectionHeader("search.nearby")
             ForEach(places) { place in
-                row(place, symbol: GoFlySymbols.place, identifier: place)
+                placeRow(place, identifier: place)
             }
         }
         if places.isEmpty, matchingFavorites.isEmpty, search.queryKind != .coordinate,
@@ -268,6 +268,46 @@ struct GoFlySearchPanel: View {
         .padding(.top, 4)
         Divider().padding(.leading, 68)
         }
+    }
+
+    private func placeRow(_ place: MapPlace, identifier: MapPlace) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    select(place)
+                } label: {
+                    HStack(spacing: 12) {
+                        pinIconTile
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(place.title)
+                                .font(.body)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(place.address ?? place.coordinate.displayText)
+                                .font(.footnote)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 64)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("search.result.\(identifier.coordinate.displayText)")
+            }
+            .padding(.horizontal, 20)
+            Divider().padding(.leading, 68)
+        }
+    }
+
+    private var pinIconTile: some View {
+        GoFlyTabIcon(mode: .teleport, selected: false, size: 18)
+            .foregroundStyle(GoFlyStyle.primary)
+            .frame(width: 36, height: 36)
+            .background(GoFlyStyle.secondarySurface, in: Circle())
+            .accessibilityHidden(true)
     }
 
     private func row(_ place: MapPlace, title: String? = nil, symbol: String,

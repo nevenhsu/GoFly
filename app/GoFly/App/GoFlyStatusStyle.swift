@@ -47,3 +47,30 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     var surface: Color { tint.opacity(0.12) }
     var border: Color { tint.opacity(0.35) }
 }
+
+/// One display state for the map and Settings service pill.
+enum GoFlySessionStatus: Equatable {
+    case standby, preparing, running, simulating, paused, limited, connectionLost
+
+    var textKey: String {
+        switch self {
+        case .standby: "status.pill.standby"
+        case .preparing: "status.pill.preparing"
+        case .running: "status.pill.running"
+        case .simulating: "status.pill.simulating"
+        case .paused: "status.pill.paused"
+        case .limited: "status.pill.limited"
+        case .connectionLost: "status.pill.error"
+        }
+    }
+
+    var tone: GoFlyStatusTone {
+        switch self {
+        case .standby, .preparing: .neutral
+        case .running: .active
+        case .simulating: .success
+        case .paused, .limited: .warning
+        case .connectionLost: .danger
+        }
+    }
+}

@@ -18,7 +18,7 @@ struct GoFlySnackbar: View {
         HStack(spacing: 10) {
             Image(systemName: GoFlySymbols.successFilled)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.snackbarForeground)
+                .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
                 .accessibilityHidden(true)
             Text(message.text)
                 .font(.footnote)
@@ -55,6 +55,7 @@ struct GoFlySnackbar: View {
 
 private struct GoFlySnackbarModifier: ViewModifier {
     @Binding var message: GoFlySnackbarMessage?
+    let bottomPadding: CGFloat
     let duration: Duration
 
     func body(content: Content) -> some View {
@@ -63,7 +64,7 @@ private struct GoFlySnackbarModifier: ViewModifier {
                 if let message {
                     GoFlySnackbar(message: message) { self.message = nil }
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                        .padding(.bottom, bottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .task(id: message.id) {
                             try? await Task.sleep(for: duration)
@@ -78,7 +79,8 @@ private struct GoFlySnackbarModifier: ViewModifier {
 
 extension View {
     func goFlySnackbar(_ message: Binding<GoFlySnackbarMessage?>,
+                       bottomPadding: CGFloat = 12,
                        duration: Duration = .seconds(2)) -> some View {
-        modifier(GoFlySnackbarModifier(message: message, duration: duration))
+        modifier(GoFlySnackbarModifier(message: message, bottomPadding: bottomPadding, duration: duration))
     }
 }

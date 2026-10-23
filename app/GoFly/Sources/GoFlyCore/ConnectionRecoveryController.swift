@@ -22,6 +22,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     private var generation: UInt64 = 0
     private var checkTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
+    private var foregroundCheckPending = false
     private var lastProbeFinishedAt: Duration?
     private var lastObservedPhase: ServicePhase
     private var recoveredNotice = false
@@ -168,6 +169,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         retirePendingReset()
         sceneActive = false
+        foregroundCheckPending = false
         generation &+= 1
         checkTask?.cancel()
         monitorTask?.cancel()
@@ -182,6 +184,15 @@ public final class ConnectionRecoveryController: ObservableObject {
         }
         route.releaseForInactiveScene(continuingLease: continuingLease)
         joystick.releaseForInactiveScene(continuingLease: continuingLease)
+    }
+
+    /// Retain foreground freshness requests until native work and cancelled
+    /// probes have drained. An active probe already satisfies the request.
+    public func requestForegroundCheck() {
+        guard sceneActive else { return }
+        if checkTask != nil && isChecking { return }
+        foregroundCheckPending = true
+        evaluateServiceState()
     }
 
     /// A manual check joins an in-flight check; it never starts a second probe.
@@ -261,6 +272,13 @@ public final class ConnectionRecoveryController: ObservableObject {
         }
         lastObservedPhase = phase
         guard sceneActive else { return }
+        if foregroundCheckPending, isManualProbeEligible {
+            // A cancelled old probe still owns checkTask until it returns.
+            // Keep the request latched and consume it only when we can start.
+            guard checkTask == nil else { return }
+            beginProbe(manual: true)
+            return
+        }
         guard isAutomaticProbeEligible else {
             monitorTask?.cancel()
             monitorTask = nil
@@ -301,6 +319,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     private func beginProbe(manual: Bool = false, showCheckingNotice: Bool = false) {
         let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
         guard sceneActive, eligible, checkTask == nil else { return }
+        foregroundCheckPending = false
         monitorTask?.cancel()
         monitorTask = nil
         generation &+= 1
@@ -472,6 +491,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     /// invalidates an in-flight probe generation before a late positive can
     /// reopen movement admission.
     private func invalidateProbeForSafety() {
+        foregroundCheckPending = false
         retirePendingReset()
         generation &+= 1
         checkTask?.cancel()

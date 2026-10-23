@@ -66,7 +66,43 @@
 
 ## 四、修正執行與實作進度
 
-更新狀態：**程式實作已完成，iOS Simulator 建置成功，Core / Transport 236 項單元測試全數通過；待實機驗收。**
+更新狀態：**第二輪 7 項實機回報問題已全數完成修正，iOS Simulator 與實機建置成功，236 項測試全數通過；已正式覆蓋安裝至 iPhone，等待使用者實機驗收。**
+
+### 裝置交付紀錄
+
+- **最新安裝時間**：2026-10-23 19:47 (UTC+8)
+- **交付交易**：`setupID: 5a919f9d-1875-4646-90ee-140c712465d9`
+- **裝置與模式**：USB iPhone（`00008130-0010248c04a1401c`），模式 `--mode renew`（覆蓋更新，保留偏好、最愛與路線紀錄），沿用簽署 Team `48XD59469V`。
+- **正式結果**：
+  - `stage: complete`, `outcome: confirmed`, `complete: true`
+  - `installationConfirmed: true`
+  - `pairingImported: true`
+  - `supportObserved: true`
+  - 簽名到期日：`2027-10-17T09:06:10Z`
+
+### 實機第二輪回報 7 項修正明細
+
+1. **Bug 1: 啟動畫面與 Loading UI（R01 對齊）**
+   - 匯入正版向量高解析度 PNG 圖標資產（112×112 squircle、24.5 pt 圓角）至 `GoFlyLogo.imageset`。
+   - `LaunchScreen.storyboard` 與 `GoFlySetupBootstrap.swift`（`GoFlyStartupView`）排版與像素位置一對一對齊（Center-Y: `height / 2 - 48`，標題 28 pt Semibold `y = logo.bottom + 16`，進度條 `y = title.bottom + 36`），冷啟動過渡零閃爍。
+2. **Bug 2: 連續點擊地圖放 Pin 維持最小收合高度**
+   - 修正 `GoFlyMapView.swift` 中 `onMapTap`（瞬移模式）：移除硬編碼的 `sheetDetent = .half`，改為維持 `.collapsed` 預設最小高度。
+   - 點擊地圖放候選 Pin 或選點開出 Location Card 時，底層 panel 始終保持收合高度，不突發半開。
+3. **Bug 3: 底部 panel 拉動順暢，移除內部滑動**
+   - 在 `GoFlyMapView.swift`（`sheetContent`）中移除 `.teleport` 模式下的 `ScrollView` 包裹，徹底杜絕內部滾動截斷手勢。
+   - 修正 `GoFlyBottomSheet.swift`：取消 `settledHeight` 受 `contentHeight` 截斷的邏輯，避免面板高度被反鎖；加大 Grabber 拖曳感應區域（24 pt 高度全寬觸控），拉動調整高低不再失效。
+4. **Bug 4: 左上角狀態 Pill 與設定頁連線狀態同步連動**
+   - 在 `GoFlyMapView.swift` 的 `onAppear` 與 `scenePhase == .active` 時調用 `recovery.checkConnection()`，啟動與切回前台時自動發起連線檢查。
+   - `ServiceSettingsView.swift` 進入時同步檢查通道狀態，地圖 status pill 與設定頁狀態保持同一資料源。
+   - 修正 `Localizable.strings` 中的 `status.pill.error` 為「需要注意」，斷線警示僅在 `recovery.connectionLost` 時顯示「連線中斷」；檢查中顯示「準備中」，避免一開 App 就誤報連線中斷。
+5. **Bug 5: Copy 複製反饋 Toast 對齊 Figma B6 規格且浮於卡片上方**
+   - 在 `GoFlySnackbar.swift` 中將成功勾選圖標調整為 Figma 規範的綠色（`#34C759`，`checkmark.circle.fill`），搭配黑底圓角 pill 與 2 秒自動消失機制。
+   - 在 `GoFlyMapView.swift` 中新增動態底部間距計算 `snackbarBottomOffset(in: geometry)`：當 Location Card 出現時，Snackbar 自動浮於 Location Card 上方 12 pt，不再被卡片遮蔽。
+6. **Bug 6: 搜尋列按 ✕ 清除時維持 panel 最小高度**
+   - 修正 `GoFlyMapView.swift` 中的 `clearSearchBar()`：移除原本的 `if sheetDetent == .collapsed { sheetDetent = .half }`，按 ✕ 清空搜尋輸入時 bottom panel 維持原 `.collapsed` 最小高度。
+7. **Bug 7: 搜尋選單地點項目左側 Icon 對齊 B4 規格**
+   - 修正 `GoFlySearchPanel.swift` 中的附近地點項目：改採 `pinIconTile`（使用 `GoFlyTabIcon(mode: .teleport, size: 18)`，即 teardrop 圓孔大頭針外框），置於 36×36 pt 圓形淺灰底磚（`#F2F2F7`）中，完全符合 Figma B4 規範。
+   - 座標導向維持黑色圓框導航箭頭（`iconTile(GoFlySymbols.heading, filled: true)`），最近搜尋維持時鐘箭頭。
 
 | 編號 | 實作檔案與改動摘要 | 驗收條件 |
 | :--- | :--- | :--- |

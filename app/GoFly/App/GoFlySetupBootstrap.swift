@@ -522,26 +522,30 @@ struct GoFlyStartupView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let midX = geometry.size.width / 2
+            let midY = geometry.size.height / 2
             ZStack {
-                GoFlyStyle.surface.ignoresSafeArea()
-                VStack(spacing: 12) {
-                    Image("GoFlyLogo")
-                        .resizable()
-                        .frame(width: 76, height: 76)
-                    Text("GoFly")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .foregroundStyle(GoFlyStyle.primary)
-                    if showsProgress {
-                        ProgressView(value: 0.28)
-                            .tint(GoFlyStyle.primary)
-                            .frame(width: 112)
-                            .accessibilityLabel(goFlyString("setup.preparing.message"))
-                            .accessibilityIdentifier("setup.preparing.progress")
-                    }
+                Color.white.ignoresSafeArea()
+                Image("GoFlyLogo")
+                    .resizable()
+                    .frame(width: 112, height: 112)
+                    .clipShape(RoundedRectangle(cornerRadius: 24.5, style: .continuous))
+                    .position(x: midX, y: midY - 48)
+
+                Text("GoFly")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .frame(width: 120, height: 34)
+                    .position(x: midX, y: midY + 41)
+
+                if showsProgress {
+                    ProgressView(value: 0.28)
+                        .tint(.black)
+                        .frame(width: 101)
+                        .position(x: midX, y: midY + 96)
+                        .accessibilityLabel(goFlyString("setup.preparing.message"))
+                        .accessibilityIdentifier("setup.preparing.progress")
                 }
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("GoFly")
             }
         }
         .ignoresSafeArea()

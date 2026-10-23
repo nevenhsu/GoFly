@@ -22,7 +22,7 @@ public enum LocationCardPrimaryAction: Equatable, Sendable {
 /// Floating location details card (D1b, D2a, E5)
 ///
 /// Features:
-/// - Height 180 pt, corner radius 16 pt, double-layer soft shadow.
+/// - Minimum height 188 pt, corner radius 16 pt, double-layer soft shadow.
 /// - Sits above narrowest bottom panel at y = 573, 16 pt above TabBar.
 /// - Primary CTA button: solid black capsule with text "新增" (D1b), "確認" (D2a), or "Go".
 /// - Secondary buttons: Favorite star button and Copy coordinates button.
@@ -48,20 +48,19 @@ struct GoFlyLocationCard: View {
                 .padding(.trailing, 32)
                 .accessibilityIdentifier("\(identifier).title")
 
-            if let address = place.address, !address.isEmpty {
-                Text(address)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("\(identifier).address")
-            }
+            Text(place.address ?? "")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(GoFlyStyle.secondary)
+                .lineLimit(2, reservesSpace: true)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("\(identifier).address")
 
             Text(coordinateLine)
                 .font(.system(size: 12, weight: .regular).monospacedDigit())
                 .foregroundStyle(GoFlyStyle.secondary)
                 .accessibilityIdentifier("\(identifier).coordinates")
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 12)
 
             // Bottom action row matching B5 (Go 77pt, Favorite 86pt, Copy 86pt, height 40pt)
             HStack(spacing: 8) {
@@ -114,11 +113,10 @@ struct GoFlyLocationCard: View {
                 .accessibilityLabel(goFlyString("placeDetails.copy"))
                 .accessibilityIdentifier("\(identifier).copy")
             }
-            .padding(.bottom, 4)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 14)
+        .padding(.top, 24)
+        .padding(.bottom, 18)
         .frame(height: 188)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

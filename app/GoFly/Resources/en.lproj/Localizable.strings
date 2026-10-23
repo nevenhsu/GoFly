@@ -504,7 +504,7 @@
 "status.pill.simulating" = "Simulating";
 "status.pill.standby" = "Service ready";
 "placeDetails.copied" = "Coordinates copied";
-"status.pill.error" = "Connection interrupted";
+"status.pill.error" = "Connection lost";
 
 "search.recent" = "Recent places";
 

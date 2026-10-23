@@ -39,6 +39,46 @@ struct ConnectionRecoveryControllerTests {
         #expect(service.canTeleport)
     }
 
+    @Test func foregroundRequestWaitsForCancelledStoppedProbeToDrain() async {
+        let service = ServiceController(service: RecoveryControllerDevice())
+        let probe = RecoveryControllerProbe(hold: true)
+        let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
+                                            search: RecoveryControllerSearch())
+        let recovery = ConnectionRecoveryController(service: service, route: route,
+            joystick: JoystickMovementController(commands: service), probe: probe)
+        recovery.sceneDidBecomeActive()
+        recovery.requestForegroundCheck()
+        await wait { await probe.count == 1 && recovery.isChecking }
+        #expect(recovery.noticeKey == nil)
+        recovery.releaseForInactiveScene()
+        recovery.sceneDidBecomeActive()
+        recovery.requestForegroundCheck()
+        #expect(await probe.count == 1)
+        await probe.release()
+        await wait { await probe.count == 2 && recovery.isChecking }
+        await probe.release()
+        await wait { recovery.connectionState == .reachable && !recovery.isChecking }
+        recovery.releaseForInactiveScene()
+    }
+
+    @Test func foregroundRequestWaitsForNativeBusyToFinish() async {
+        let device = RecoveryControllerDevice(holdClear: true)
+        let service = ServiceController(service: device)
+        let probe = RecoveryControllerProbe()
+        let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
+                                            search: RecoveryControllerSearch())
+        let recovery = ConnectionRecoveryController(service: service, route: route,
+            joystick: JoystickMovementController(commands: service), probe: probe)
+        recovery.sceneDidBecomeActive()
+        #expect(service.restoreGPS())
+        await wait { await device.clearStarted }
+        recovery.requestForegroundCheck()
+        #expect(await probe.count == 0)
+        await device.releaseClear()
+        await wait { await probe.count == 1 && recovery.connectionState == .reachable }
+        recovery.releaseForInactiveScene()
+    }
+
     @Test func coldClearFailureStaysSilentAndDoesNotBlockStart() async throws {
         let device = RecoveryControllerDevice(failClear: true)
         let service = ServiceController(service: device)

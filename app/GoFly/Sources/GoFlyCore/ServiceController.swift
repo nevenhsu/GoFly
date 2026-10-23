@@ -638,7 +638,13 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             case .point(.notSent): retryable = true
             default: retryable = false
             }
-            if retryable, self.revision == token, self.preparationIsCurrent(context),
+            // Point delivery already owns one session rebuild/retry inside
+            // the device adapter. Do not multiply it with preparation rounds.
+            let adapterOwnsPointRetry: Bool
+            if case .point = context.source { adapterOwnsPointRetry = true }
+            else { adapterOwnsPointRetry = false }
+            if retryable, !adapterOwnsPointRetry,
+               self.revision == token, self.preparationIsCurrent(context),
                let next = attempt.next {
                 // Requeue behind already waiting healthy old ticks, never hold the pump for a whole round.
                 self.enqueuePreparationAttempt(context, attempt: next, token: token, point: point)
