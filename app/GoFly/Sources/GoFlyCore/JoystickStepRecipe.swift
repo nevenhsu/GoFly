@@ -17,6 +17,8 @@ public struct JoystickTargetStep: Equatable, Sendable {
 public enum JoystickStepRecipe: Equatable, Sendable {
     case manual(JoystickDisplacement)
     case target(JoystickTargetStep)
+    /// May only refresh the exact coordinate of an explicitly admitted hold.
+    case fixedPosition(GeoCoordinate)
 }
 
 public struct JoystickStepReceipt: Equatable, Sendable {

@@ -2,6 +2,7 @@ import GoFlyCore
 import SwiftUI
 
 struct GoFlyRoutePanel: View {
+    @EnvironmentObject private var favoriteRoutes: FavoriteRoutesStore
     @ObservedObject var controller: RouteExecutionController
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
@@ -21,43 +22,21 @@ struct GoFlyRoutePanel: View {
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if controller.phase == .editing {
-                        editingContent { id, anchor in
-                            withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
-                        }
-                    } else {
-                        executionContent
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        Group {
+            if controller.phase == .editing {
+                editingView
+            } else {
+                executionPanel
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                fixedControls.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 4)
-                    .background(GoFlyStyle.cardSurface)
-            }
-            .frame(height: min(contentHeight + 76, max(100, maximumHeight)))
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("route.panel.content")
         }
         .accessibilityHidden(showingDetails || showingImports || showingAllPoints || showingFavoriteRoutes || showingSaveFavorite)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
         .sheet(isPresented: $showingImports) {
-            NavigationStack {
-                GoFlyImportedRoutesView(controller: controller, onLoaded: { showingImports = false }, onFocusPoint: { coordinate in
-                    showingImports = false
-                    onFocusPoint(coordinate)
-                })
-            }
+            GoFlyImportedRoutesView(controller: controller, onLoaded: { showingImports = false }, onFocusPoint: { coordinate in
+                showingImports = false
+                onFocusPoint(coordinate)
+            })
         }
         .sheet(isPresented: $showingAllPoints) {
             if let source = controller.draft.gpxSource {
@@ -104,13 +83,223 @@ struct GoFlyRoutePanel: View {
         }
     }
 
+    private var editingView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    editingContent { id, anchor in
+                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                startControl.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
+                    .background(GoFlyStyle.cardSurface)
+            }
+            .frame(height: min(contentHeight + 76, max(100, maximumHeight)))
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("route.panel.content")
+        }
+    }
+
+    private var isRouteUsable: Bool {
+        controller.canStart &&
+        controller.error == nil &&
+        controller.plannedRoute != nil &&
+        (currentLocationAvailable != false || !controller.draft.nodes.contains(where: { $0.value == .current }))
+    }
+
+    private var startControl: some View {
+        HStack(spacing: 12) {
+            favoriteStarButton
+            Button { _ = controller.start() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: GoFlySymbols.play)
+                    Text(goFlyString("route.startShort"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(GoFlyActionStyle(primary: true))
+            .disabled(!isRouteUsable)
+            .accessibilityIdentifier("route.start")
+        }
+    }
+
+    private var favoriteStarButton: some View {
+        Button {
+            if let matching = matchingFavoriteRecord {
+                Task {
+                    await favoriteRoutes.delete(matching.id)
+                    controller.setLoadedFavoriteRecordID(nil)
+                }
+            } else {
+                showingSaveFavorite = true
+            }
+        } label: {
+            GoFlyStarIcon(size: 20, filled: isFavorite)
+                .foregroundStyle(GoFlyStyle.primary)
+                .frame(width: 50, height: 50)
+                .background(GoFlyStyle.secondarySurface, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+                }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .accessibilityLabel(goFlyString(isFavorite ? "favoriteRoutes.remove" : "favoriteRoutes.add"))
+        .accessibilityIdentifier("route.favorite.toggle")
+    }
+
+    private var matchingFavoriteRecord: FavoriteRouteRecord? {
+        if let id = controller.loadedFavoriteRecordID,
+           let record = favoriteRoutes.records.first(where: { $0.id == id }) {
+            return record
+        }
+        if let gpx = controller.draft.gpxSource {
+            return favoriteRoutes.records.first { record in
+                record.sourceKind == .gpx &&
+                record.displayFilename == gpx.displayFilename &&
+                record.count == gpx.document.pointCount
+            }
+        } else if controller.draft.nodes.count >= 2 {
+            let places = controller.draft.nodes.compactMap { node -> MapPlace? in
+                if case .place(let p) = node.value { return p } else { return nil }
+            }
+            if places.count == controller.draft.nodes.count,
+               let first = places.first, let last = places.last {
+                return favoriteRoutes.records.first { record in
+                    record.sourceKind == .manual &&
+                    record.count == places.count &&
+                    record.start == first.coordinate &&
+                    record.end == last.coordinate
+                }
+            }
+        }
+        return nil
+    }
+
+    private var isFavorite: Bool {
+        matchingFavoriteRecord != nil
+    }
+
+    private var executionPanel: some View {
+        VStack(spacing: 14) {
+            if [.planning, .preparing, .pausing, .cancelling].contains(controller.phase) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(goFlyString("route.phase.\(controller.phase.rawValue)"))
+                        .font(.subheadline)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else if controller.phase == .interrupted || controller.phase == .unknown {
+                HStack(spacing: 12) {
+                    settingsButton
+                    cancelButton
+                }
+            } else {
+                VStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"))
+                            .font(.subheadline)
+                            .foregroundStyle(GoFlyStyle.secondary)
+                        Spacer(minLength: 8)
+                        Text(controller.progress?.fraction ?? 0, format: .percent.precision(.fractionLength(0)))
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .accessibilityIdentifier("route.position.value")
+                    }
+                    ProgressView(value: min(max(controller.progress?.fraction ?? 0, 0), 1), total: 1)
+                        .tint(GoFlyStyle.primary)
+                        .accessibilityLabel(goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"))
+                        .accessibilityIdentifier("route.progress")
+
+                    if controller.roundTripEnabled {
+                        HStack {
+                            Text(goFlyString("route.axis.origin"))
+                                .font(.caption2)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                            Spacer()
+                            Text(goFlyString("route.axis.destination"))
+                                .font(.caption2)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                        }
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    HStack(spacing: 6) {
+                        GoFlyRoundTripIcon(enabled: controller.roundTripEnabled, size: 15)
+                            .foregroundStyle(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.secondary)
+                        Text(goFlyString("route.roundTripShort"))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.secondary)
+                    }
+
+                    Button {
+                        _ = controller.toggleHeading()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.left.arrow.right")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text(goFlyString("route.direction.\(controller.heading.rawValue)"))
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(controller.roundTripEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.cardSurface, in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75)
+                        }
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(controller.roundTripEnabled && controller.canToggleHeading ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                    .disabled(!controller.roundTripEnabled || !controller.canToggleHeading)
+                    .accessibilityHint(goFlyString("route.direction.toggleHint"))
+                    .accessibilityIdentifier("route.direction")
+
+                    Spacer(minLength: 8)
+
+                    Toggle("", isOn: Binding(
+                        get: { controller.roundTripEnabled },
+                        set: { _ = controller.setRoundTripEnabled($0) }
+                    ))
+                    .labelsHidden()
+                    .tint(GoFlyStyle.primary)
+                    .disabled(!controller.canSetRoundTrip)
+                    .accessibilityIdentifier("route.roundTrip")
+                }
+                .padding(.bottom, 8)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        cancelButton
+                        playbackButton
+                    }
+                    VStack(spacing: 12) {
+                        cancelButton
+                        playbackButton
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .background(GoFlyStyle.cardSurface)
+        .accessibilityIdentifier("route.panel.content")
+    }
+
     private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let error = controller.error {
-                failure(error)
-            } else if controller.draft.nodes.contains(where: { $0.value == .current }), currentLocationAvailable == false {
-                failure(.currentLocationUnavailable)
-            }
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
@@ -126,10 +315,10 @@ struct GoFlyRoutePanel: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(controller.draft.gpxSource == nil ? "route.heading" : "route.importedSummary")
                 Spacer(minLength: 8)
-                headerButton(identifier: "route.favorite.add",
-                             label: goFlyString("favoriteRoutes.add"), enabled: controller.canEdit) {
-                    showingSaveFavorite = true
-                } icon: { GoFlyStarIcon(size: 18) }
+                headerButton(identifier: "route.favoriteRoutes",
+                             label: goFlyString("favoriteRoutes.title"), enabled: controller.canEdit) {
+                    showingFavoriteRoutes = true
+                } icon: { GoFlyStarIcon(size: 18, filled: false) }
                 if controller.draft.gpxSource == nil {
                     headerButton(identifier: "route.importedRoutes",
                                  label: goFlyString("imports.title"), enabled: controller.canEdit) {
@@ -148,6 +337,7 @@ struct GoFlyRoutePanel: View {
                     onEdit: onEditNode,
                     onDelete: { _ = controller.removeNode(id: $0) },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
+                    onAddDestination: { _ = controller.openNewPicker() },
                     onScroll: scrollTo
                 )
                 HStack(spacing: 16) {
@@ -163,17 +353,15 @@ struct GoFlyRoutePanel: View {
                     .accessibilityIdentifier("route.addNode")
                     .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
                     Spacer(minLength: 0)
-                    if controller.draft.nodes.count >= 2 {
-                        Button(action: exchangeEndpoints) {
-                            Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(minHeight: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!controller.canEdit)
-                        .accessibilityIdentifier("route.exchange")
+                    Button(action: { _ = controller.reverseNodes() }) {
+                        Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .disabled(!controller.canEdit || controller.draft.nodes.count < 2)
+                    .accessibilityIdentifier("route.exchange")
                 }
             }
 
@@ -260,101 +448,6 @@ struct GoFlyRoutePanel: View {
         .accessibilityIdentifier(identifier)
     }
 
-    @ViewBuilder private var executionContent: some View {
-        if let error = controller.error { failure(error) }
-        if [.planning, .preparing, .pausing, .cancelling].contains(controller.phase) {
-            ProgressView(goFlyString("route.phase.\(controller.phase.rawValue)"))
-                .font(.headline)
-        } else if controller.phase != .running && controller.phase != .paused {
-            Text(goFlyString("route.phase.\(controller.phase.rawValue)"))
-                .font(.headline)
-        }
-        if let progress = controller.progress {
-            VStack(alignment: .leading, spacing: 8) {
-                if controller.usesPositionAxis {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(goFlyString("route.position"))
-                            .font(.subheadline)
-                            .foregroundStyle(GoFlyStyle.secondary)
-                        Spacer(minLength: 8)
-                        Text(progress.fraction, format: .percent.precision(.fractionLength(0)))
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .accessibilityIdentifier("route.position.value")
-                    }
-                    .accessibilityIdentifier("route.position.endpoints")
-                }
-                ProgressView(value: progress.fraction, total: 1)
-                    .tint(GoFlyStyle.primary)
-                    .accessibilityLabel(goFlyString(controller.usesPositionAxis ? "route.position" : "route.progress"))
-                    .accessibilityIdentifier("route.progress")
-            }
-        }
-    }
-
-    @ViewBuilder private var fixedControls: some View {
-        if controller.canEdit {
-            Button { _ = controller.start() } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: GoFlySymbols.play)
-                    Text(goFlyString("route.startShort"))
-                }
-            }
-                .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(!controller.canStart)
-                .accessibilityIdentifier("route.start")
-        } else {
-        switch controller.phase {
-        case .running, .paused:
-            HStack(alignment: .center, spacing: 12) {
-                roundTripControl
-                if controller.roundTripEnabled {
-                    Button { _ = controller.toggleHeading() } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: controller.heading == .forward ? "arrow.right" : "arrow.left")
-                                .goFlyControlSymbol(size: 22, weight: .regular)
-                            Text(goFlyString("route.direction.\(controller.heading.rawValue)"))
-                                .font(.body)
-                        }
-                        .frame(minWidth: 126, minHeight: 44)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(controller.canToggleHeading ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-                    .disabled(!controller.canToggleHeading)
-                    .accessibilityHint(goFlyString("route.direction.toggleHint"))
-                    .accessibilityIdentifier("route.direction")
-                }
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    cancelButton
-                    playbackButton
-                }
-                VStack(spacing: 12) {
-                    cancelButton
-                    playbackButton
-                }
-            }
-        case .planning, .pausing:
-            cancelButton
-        case .interrupted:
-            settingsButton
-            cancelButton
-        case .unknown:
-            Text(goFlyString("route.unknown.message"))
-                .font(.footnote)
-                .foregroundStyle(GoFlyStyle.secondary)
-            settingsButton
-        case .preparing, .cancelling, .editing:
-            EmptyView()
-        }
-        }
-    }
-
-    private var roundTripControl: some View {
-        GoFlyRoundTripControl(controller: controller)
-    }
-
     private var cancelButton: some View {
         Button { confirmingCancellation = true } label: {
             Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
@@ -371,19 +464,6 @@ struct GoFlyRoutePanel: View {
             .accessibilityIdentifier("route.settings")
     }
 
-    private func failure(_ error: RouteExecutionFailure) -> some View {
-        GoFlyStatusBanner(tone: .warning, title: goFlyString("route.error.shortTitle"),
-                          message: goFlyString(error.localizationKey),
-                          actionTitle: goFlyString("operation.retry"),
-                          onAction: { _ = controller.start() }, identifier: "route.error")
-    }
-
-    private func exchangeEndpoints() {
-        let nodes = controller.draft.nodes
-        guard controller.canEdit, nodes.count >= 2, let first = nodes.first, let last = nodes.last else { return }
-        guard controller.moveNode(id: last.id, toIndex: 0) else { return }
-        _ = controller.moveNode(id: first.id, toIndex: nodes.count - 1)
-    }
 
     private var playbackButton: some View {
         Button(goFlyString(controller.phase == .paused ? "route.resume" : "route.pause")) {
@@ -401,26 +481,24 @@ private struct GoFlyRoundTripControl: View {
     @ObservedObject var controller: RouteExecutionController
 
     var body: some View {
-        Toggle(isOn: Binding(
-            get: { controller.roundTripEnabled },
-            set: { _ = controller.setRoundTripEnabled($0) }
-        )) {
-            Label(goFlyString("route.roundTripShort"), systemImage: "arrow.left.arrow.right")
-                .font(.body)
-                .frame(minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
+        Button {
+            _ = controller.setRoundTripEnabled(!controller.roundTripEnabled)
+        } label: {
+            HStack(spacing: 6) {
+                GoFlyRoundTripIcon(enabled: controller.roundTripEnabled, size: 14)
+                Text(goFlyString("route.roundTripShort"))
+                    .font(.footnote.weight(.semibold))
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
+            .overlay { if !controller.roundTripEnabled { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) } }
+            .contentShape(Capsule())
+            .foregroundStyle(!controller.canSetRoundTrip ? GoFlyStyle.disabledForeground
+                             : (controller.roundTripEnabled ? GoFlyStyle.surface : GoFlyStyle.primary))
         }
-        .toggleStyle(.button)
         .buttonStyle(.plain)
-        .labelStyle(.titleAndIcon)
-        .font(.footnote.weight(.semibold))
-        .padding(.horizontal, 12)
-        .frame(minHeight: 34)
-        .background(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
-        .overlay { if !controller.roundTripEnabled { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) } }
-        .contentShape(Capsule())
-        .foregroundStyle(!controller.canSetRoundTrip ? GoFlyStyle.disabledForeground
-                         : (controller.roundTripEnabled ? GoFlyStyle.surface : GoFlyStyle.primary))
+        .frame(minHeight: 44)
         .disabled(!controller.canSetRoundTrip)
         .accessibilityValue(controller.roundTripEnabled ? "1" : "0")
         .accessibilityHint(goFlyString("route.roundTripHint"))

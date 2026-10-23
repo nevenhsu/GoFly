@@ -18,9 +18,12 @@ struct GoFlyStatusBanner: View {
     var actionIdentifier: String? = nil
     var titleIdentifier: String? = nil
     var messageIdentifier: String? = nil
+    var isFloating = true
+    @State private var isDismissedLocally = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        if !isDismissedLocally {
+            HStack(alignment: .top, spacing: 8) {
             Image(systemName: tone.symbol)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(tone.tint)
@@ -64,8 +67,14 @@ struct GoFlyStatusBanner: View {
                     ?? identifier.map { "\($0).action" } ?? "statusBanner.action")
             }
 
-            if let onDismiss {
-                Button(action: onDismiss) {
+            if onDismiss != nil || isFloating {
+                Button(action: {
+                    if let onDismiss {
+                        onDismiss()
+                    } else {
+                        isDismissedLocally = true
+                    }
+                }) {
                     Image(systemName: GoFlySymbols.close)
                         .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
                         .foregroundStyle(GoFlyStyle.secondary)
@@ -79,8 +88,16 @@ struct GoFlyStatusBanner: View {
             }
         }
         .padding(12)
-        .background(tone.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(isFloating ? GoFlyStyle.cardSurface : tone.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            if isFloating {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+            }
+        }
+        .shadow(color: .black.opacity(isFloating ? 0.12 : 0), radius: 10, x: 0, y: 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier ?? "statusBanner")
+        }
     }
 }

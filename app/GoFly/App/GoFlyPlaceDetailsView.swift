@@ -31,15 +31,24 @@ struct GoFlyPlaceDetailsView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             GoFlyFavoriteFailureNotice()
-            HStack(alignment: .top) {
-                Text(place.title).font(.title3.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("placeDetails.title")
-                Button(action: onDismiss) { Image(systemName: GoFlySymbols.close) }
-                    .buttonStyle(GoFlyIconStyle())
-                    .accessibilityLabel(goFlyString("common.dismiss"))
-                    .accessibilityIdentifier("placeDetails.dismiss")
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: GoFlySymbols.close)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("common.dismiss"))
+                .accessibilityIdentifier("placeDetails.dismiss")
             }
+            Text(place.title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(GoFlyStyle.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("placeDetails.title")
             if place.address != nil || place.title != place.coordinate.displayText {
                 Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
                     .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
@@ -54,10 +63,10 @@ struct GoFlyPlaceDetailsView: View {
                 actions.padding(.horizontal, 20).padding(.vertical, 2)
             }
             .padding(.horizontal, -20)
-            .padding(.top, 10)
+            .padding(.top, 20)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 6)
+        .padding(.top, 10)
         .padding(.bottom, 18)
     }
 
@@ -84,10 +93,18 @@ struct GoFlyPlaceDetailsView: View {
     private var actions: some View {
         HStack(spacing: 8) {
             if let onGo {
-                Button(action: onGo) { Text(goFlyString("map.go")) }
-                    .buttonStyle(GoFlyActionStyle(primary: true, small: true))
-                    .frame(minWidth: 64).disabled(!canGo)
-                    .accessibilityIdentifier("placeDetails.go")
+                Button(action: onGo) {
+                    Text(goFlyString("map.go"))
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 16)
+                        .frame(height: 40)
+                        .background(canGo ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
+                        .foregroundStyle(canGo ? GoFlyStyle.surface : GoFlyStyle.disabledForeground)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canGo)
+                .accessibilityIdentifier("placeDetails.go")
             }
             GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite",
                               labelTitle: goFlyString("placeDetails.favorite"))
@@ -98,8 +115,8 @@ struct GoFlyPlaceDetailsView: View {
                 } label: {
                     Label(goFlyString("placeDetails.setEnd"), systemImage: GoFlySymbols.flag)
                         .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 44)
+                        .padding(.horizontal, 14)
+                        .frame(height: 40)
                         .background(GoFlyStyle.secondarySurface, in: Capsule())
                         .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                         .contentShape(Capsule())
@@ -112,8 +129,8 @@ struct GoFlyPlaceDetailsView: View {
             } label: {
                 Label(goFlyString("placeDetails.copy"), systemImage: "doc.on.doc")
                     .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
+                    .padding(.horizontal, 14)
+                    .frame(height: 40)
                     .background(GoFlyStyle.secondarySurface, in: Capsule())
                     .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                     .contentShape(Capsule())

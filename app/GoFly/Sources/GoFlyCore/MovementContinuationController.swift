@@ -14,11 +14,13 @@ public final class MovementContinuationController: ObservableObject {
         var lastSequence: UInt64?
         var count: Int64 = 0
         var distance: Double = 0
+        var duration: Duration = .zero
+        var lastAcknowledgedAt: Duration?
 
         func matches(_ id: UUID, _ lease: MovementTaskLease) -> Bool {
             demand.movementID == id && demand.lease == lease
         }
-        mutating func acknowledge(_ ack: MovementAcknowledgement) -> Bool {
+        mutating func acknowledge(_ ack: MovementAcknowledgement, at now: Duration) -> Bool {
             guard matches(ack.movementID, ack.lease) else { return true }
             if let lastSequence, ack.sequence <= lastSequence { return true }
             guard count < Int64.max else { return false }
@@ -28,11 +30,29 @@ public final class MovementContinuationController: ObservableObject {
                 next = abs(position - origin)
             } else { next = distance + ack.acknowledgedDistanceMeters }
             guard next.isFinite, next >= 0 else { return false }
+            if case .finiteDuration(let seconds) = demand.goal {
+                let goal = Duration.seconds(seconds)
+                if ack.source == .fixedPosition {
+                    guard ack.cumulativeAcknowledgedDurationSeconds.isFinite,
+                          ack.cumulativeAcknowledgedDurationSeconds >= 0,
+                          ack.cumulativeAcknowledgedDurationSeconds <= seconds else { return false }
+                    let nextDuration = Duration.seconds(ack.cumulativeAcknowledgedDurationSeconds)
+                    guard nextDuration >= duration else { return false }
+                    duration = nextDuration
+                } else if let lastAcknowledgedAt, now >= lastAcknowledgedAt {
+                    let interval = now - lastAcknowledgedAt
+                    // A gap without ACKs is not evidence of active execution.
+                    if interval <= .seconds(15) { duration = min(goal, duration + interval) }
+                }
+                lastAcknowledgedAt = now
+            }
             count += 1; distance = next; lastSequence = ack.sequence
             return true
         }
         var progress: ContinuedProcessingProgress? {
-            ContinuedProcessingProgress(acknowledgedWrites: count, cumulativeAcknowledgedDistanceMeters: distance)
+            ContinuedProcessingProgress(acknowledgedWrites: count, cumulativeAcknowledgedDistanceMeters: distance,
+                cumulativeAcknowledgedDurationSeconds: Double(duration.components.seconds)
+                    + Double(duration.components.attoseconds) / 1e18)
         }
     }
     private struct Candidate {
@@ -44,11 +64,16 @@ public final class MovementContinuationController: ObservableObject {
     private let route: RouteExecutionController
     private let joystick: JoystickMovementController
     private let recovery: ConnectionRecoveryController
+    private let positionHold: PositionHoldController?
+    private let clock: any RouteClock
     private let presentation: @MainActor @Sendable (ContinuedProcessingKind, ContinuedProcessingProgress) -> (title: String, subtitle: String)
     private var runtime: ContinuedProcessingController!
     private var subscriptions: [AnyCancellable] = []
     private var sceneActive = false
     private var pending: Epoch?
+    // The user's duration limit remains in force even if the framework never
+    // launches or rejects its background request.
+    private var durationEpoch: Epoch?
     private var candidate: Candidate?
     // Retain the physical submission until even an uncooperative callee returns.
     private var submitTask: Task<Void, Never>?
@@ -59,15 +84,19 @@ public final class MovementContinuationController: ObservableObject {
 
     public init(service: ServiceController, route: RouteExecutionController,
                 joystick: JoystickMovementController, recovery: ConnectionRecoveryController,
+                positionHold: PositionHoldController? = nil,
+                clock: any RouteClock = ContinuousRouteClock(),
                 driver: any ContinuedProcessingDriving,
                 presentation: @escaping @MainActor @Sendable (ContinuedProcessingKind, ContinuedProcessingProgress) -> (title: String, subtitle: String)) {
         self.service = service; self.route = route; self.joystick = joystick
         self.recovery = recovery; self.presentation = presentation
+        self.positionHold = positionHold; self.clock = clock
         runtime = ContinuedProcessingController(driver: driver,
             onRuntimeAvailable: { [weak self] in self?.launched($0) },
             onRuntimeUnavailable: { [weak self] in self?.lostRuntime($0, $1) })
         service.setMovementSceneActive(false)
         recovery.releaseForInactiveScene()
+        positionHold?.releaseForInactiveScene()
         installSubscriptions()
         // Configuration readiness, never SDK submission. Report this failure
         // once; routine UI relays must not resurrect a user-cleared notice.
@@ -86,6 +115,7 @@ public final class MovementContinuationController: ObservableObject {
         }
         sceneActive = true
         service.setMovementSceneActive(true)
+        positionHold?.sceneDidBecomeActive()
         recovery.sceneDidBecomeActive()
         synchronize()
     }
@@ -106,6 +136,7 @@ public final class MovementContinuationController: ObservableObject {
             pauseForRuntimeLoss(current, notice: "background.unavailable")
         }
         recovery.releaseForInactiveScene(continuingLease: lease)
+        positionHold?.releaseForInactiveScene(continuingLease: lease)
         if lease == nil { retireCurrent(reason: .ownerPausedOrEnded) }
         if lease == nil, hadDemand { noticeKey = "background.unavailable" }
         synchronize()
@@ -117,7 +148,10 @@ public final class MovementContinuationController: ObservableObject {
             route.continuationControlEvents.sink { [weak self] in self?.control($0) },
             joystick.continuationControlEvents.sink { [weak self] in self?.control($0) },
             route.movementAcknowledgements.sink { [weak self] in self?.acknowledged($0) },
-            service.movementAcknowledgements.sink { [weak self] in self?.acknowledged($0) },
+            service.movementAcknowledgements.sink { [weak self] ack in
+                guard let self, self.positionHold?.intent?.id != ack.movementID else { return }
+                self.acknowledged(ack)
+            },
             service.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
             route.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
             joystick.objectWillChange.sink { [weak self] _ in self?.observeDomainMutation() },
@@ -127,12 +161,18 @@ public final class MovementContinuationController: ObservableObject {
                 self?.movementBoundary(lease)
             }
         ]
+        if let positionHold {
+            subscriptions.append(positionHold.continuationControlEvents.sink { [weak self] in self?.control($0) })
+            subscriptions.append(positionHold.movementAcknowledgements.sink { [weak self] in self?.acknowledged($0) })
+            subscriptions.append(positionHold.objectWillChange.sink { [weak self] _ in self?.queueCleanup() })
+        }
     }
     private func control(_ event: MovementContinuationControlEvent) {
         switch event {
         case .requested(let demand): requested(demand)
         case .withdrawn(let identity, let reason):
             if pending?.matches(identity.movementID, identity.lease) == true { pending = nil }
+            if durationEpoch?.matches(identity.movementID, identity.lease) == true { durationEpoch = nil }
             if let current = candidate, current.epoch.matches(identity.movementID, identity.lease) {
                 let retirement: MovementContinuationRetirement
                 if case .automaticDisabled(manualInputContinues: true) = reason {
@@ -142,7 +182,10 @@ public final class MovementContinuationController: ObservableObject {
             }
             if !handlingRuntimeLoss {
                 switch reason {
-                case .userPaused, .userCancelled, .automaticDisabled: noticeKey = nil
+                case .userPaused:
+                    noticeKey = positionHold?.intent?.id == identity.movementID && positionHold?.phase == .paused
+                        ? "background.positionPaused" : nil
+                case .userCancelled, .automaticDisabled: noticeKey = nil
                 case .ended: break
                 }
             }
@@ -151,6 +194,7 @@ public final class MovementContinuationController: ObservableObject {
     }
     private func requested(_ demand: MovementContinuationDemand) {
         guard sceneActive else { return }
+        noticeKey = nil
         if let current = candidate, current.epoch.matches(demand.movementID, demand.lease) {
             let stillBound = service.movementContinuationIsBound(
                 requestID: current.request.requestID, lease: current.request.lease)
@@ -178,33 +222,51 @@ public final class MovementContinuationController: ObservableObject {
             "movement": .text(demand.movementID.uuidString)
         ])
         pending = Epoch(demand: demand, origin: route.progress?.committedDistanceMeters ?? 0, lastSequence: last)
+        if case .finiteDuration = demand.goal { durationEpoch = pending }
         if demand.goal == nil { pending = nil; synchronize(); return }
         drainPending()
     }
     private func acknowledged(_ ack: MovementAcknowledgement) {
-        guard service.movementAuthority.snapshot.lease == ack.lease else { return }
+        guard service.movementAuthority.snapshot.lease == ack.lease, sceneActive || hasRuntime else { return }
         if let last = lastAcknowledgement, last.movementID == ack.movementID,
            last.lease == ack.lease, ack.sequence <= last.sequence { return }
         guard ack.acknowledgedDistanceMeters.isFinite, ack.acknowledgedDistanceMeters >= 0 else {
             rejectInvalidProgress(); return
         }
         lastAcknowledgement = ack
+        var completedDuration: MovementContinuationDemand?
+        if var epoch = durationEpoch, epoch.matches(ack.movementID, ack.lease) {
+            guard epoch.acknowledge(ack, at: clock.now) else { rejectInvalidProgress(); return }
+            durationEpoch = epoch
+            if case .finiteDuration(let goal) = epoch.demand.goal, epoch.duration == .seconds(goal) {
+                completedDuration = epoch.demand
+            }
+        }
         if let current = candidate, !current.epoch.matches(ack.movementID, ack.lease) {
             retireCurrent(reason: .ownerPausedOrEnded)
         }
         if var epoch = pending, epoch.matches(ack.movementID, ack.lease) {
-            guard epoch.acknowledge(ack) else { rejectInvalidProgress(); return }
+            guard epoch.acknowledge(ack, at: clock.now) else { rejectInvalidProgress(); return }
             pending = epoch
         }
         if var current = candidate, current.epoch.matches(ack.movementID, ack.lease),
            current.boundGrant?.isValid != false {
-            guard current.epoch.acknowledge(ack) else { rejectInvalidProgress(); return }
+            guard current.epoch.acknowledge(ack, at: clock.now) else { rejectInvalidProgress(); return }
             candidate = current
             forwardProgress()
             if ack.finiteArrival, current.request.kind == .finiteRoute,
                case .finiteDistance(let goal) = current.request.goal,
                current.epoch.distance == goal,
                runtime.finishFiniteArrival(requestID: current.request.requestID) { candidate = nil }
+            else if completedDuration != nil {
+                _ = runtime.finishFiniteTask(requestID: current.request.requestID)
+                candidate = nil
+            }
+        }
+        if let completedDuration {
+            durationEpoch = nil
+            pending = nil
+            finishDurationOwner(completedDuration)
         }
         drainPending(); synchronize()
     }
@@ -278,12 +340,29 @@ public final class MovementContinuationController: ObservableObject {
             "state": .text(String(describing: runtime.state))
         ])
         noticeKey = notice; handlingRuntimeLoss = true
+        service.markSimulationPositionUnverified()
         if route.intent?.id == current.request.movementID, route.intent?.lease == current.request.lease {
             route.continuationDidBecomeUnavailable()
         } else if joystick.intent?.id == current.request.movementID, joystick.intent?.lease == current.request.lease {
             joystick.continuationDidBecomeUnavailable()
+        } else if positionHold?.intent?.id == current.request.movementID,
+                  positionHold?.intent?.lease == current.request.lease {
+            positionHold?.continuationDidBecomeUnavailable()
         }
         handlingRuntimeLoss = false; noticeKey = notice
+    }
+    private func finishDurationOwner(_ demand: MovementContinuationDemand) {
+        handlingRuntimeLoss = true
+        service.markSimulationPositionUnverified()
+        if route.intent?.id == demand.movementID, route.intent?.lease == demand.lease {
+            route.continuationDidBecomeUnavailable()
+        } else if joystick.intent?.id == demand.movementID, joystick.intent?.lease == demand.lease {
+            joystick.continuationDidBecomeUnavailable()
+        }
+        // The fixed-position controller ends its own stream after publishing
+        // this final ACK; do not turn its normal completion into an expiry.
+        handlingRuntimeLoss = false
+        noticeKey = "background.durationCompleted"
     }
     private func retireCurrent(reason: MovementContinuationRetirement) {
         guard let current = candidate else { return }
@@ -297,6 +376,7 @@ public final class MovementContinuationController: ObservableObject {
     }
     private func movementBoundary(_ lease: MovementTaskLease?) {
         if lease == nil { pending = nil; noticeKey = nil }
+        if let epoch = durationEpoch, lease != epoch.demand.lease { durationEpoch = nil }
         if let current = candidate, lease != current.request.lease { retireCurrent(reason: .ownerPausedOrEnded) }
         synchronize()
     }
@@ -313,13 +393,17 @@ public final class MovementContinuationController: ObservableObject {
             // async return; the installed healthy owner is already real.
             return [.preparing, .moving].contains(joystick.phase) && joystick.wanderEnabled &&
                 joystick.intent?.id == demand.movementID && joystick.intent?.lease == demand.lease
+        case .fixedPosition:
+            return positionHold?.phase == .running && positionHold?.intent?.id == demand.movementID &&
+                positionHold?.intent?.lease == demand.lease
         }
     }
     private func forwardProgress() {
         guard let current = candidate, let progress = current.epoch.progress else { return }
         diagnose("background.progress", category: .background, [
             "writes": .count(Int(progress.acknowledgedWrites)),
-            "distance_m": .number(progress.cumulativeAcknowledgedDistanceMeters, digits: 1)
+            "distance_m": .number(progress.cumulativeAcknowledgedDistanceMeters, digits: 1),
+            "duration_s": .number(progress.cumulativeAcknowledgedDurationSeconds, digits: 1)
         ])
         let text = presentation(current.request.kind, progress)
         _ = runtime.update(requestID: current.request.requestID, progress: progress,
@@ -340,7 +424,8 @@ public final class MovementContinuationController: ObservableObject {
             }
             if let epoch = self.pending {
                 let id = epoch.demand.movementID
-                if self.route.intent?.id != id && self.joystick.intent?.id != id { self.pending = nil }
+                if self.route.intent?.id != id && self.joystick.intent?.id != id &&
+                    self.positionHold?.intent?.id != id { self.pending = nil }
             }
             // The one coalesced relay also publishes a suspended submission's
             // state and buffers real ACK progress before its launch/return.

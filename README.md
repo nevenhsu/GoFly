@@ -65,6 +65,8 @@ Research is the project's primary purpose, not a restriction to noncommercial us
 
 ## AI-assisted installation
 
+For an existing iPhone test installation, use the [copy-ready update prompt (Traditional Chinese)](docs/AI-INSTALL.md#ios-device-test-prompt) to preserve app data and include verified pairing.
+
 Give an AI assistant the [installation runbook](docs/AI-INSTALL.md#english), then use this prompt:
 
 ```text

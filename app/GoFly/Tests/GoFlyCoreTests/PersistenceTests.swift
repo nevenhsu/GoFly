@@ -147,6 +147,32 @@ import Testing
         #expect(await store.delete(record.id))
         #expect(try await disk.read().records.isEmpty)
     }
+    @Test func favoriteRoutesBatchDeleteAndUndo() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: root))
+        await store.load()
+        let a = GeoCoordinate(latitude: 25, longitude: 121)!
+        let b = GeoCoordinate(latitude: 25.01, longitude: 121.01)!
+        let c = GeoCoordinate(latitude: 25.02, longitude: 121.02)!
+        let candidate1 = FavoriteRouteSaveCandidate(source: .manual([
+            MapPlace(id: .coordinate(a), title: "Point A", coordinate: a),
+            MapPlace(id: .coordinate(b), title: "Point B", coordinate: b)
+        ]), omittedUnavailableCurrent: false)
+        let candidate2 = FavoriteRouteSaveCandidate(source: .manual([
+            MapPlace(id: .coordinate(b), title: "Point B", coordinate: b),
+            MapPlace(id: .coordinate(c), title: "Point C", coordinate: c)
+        ]), omittedUnavailableCurrent: false)
+        let res1 = try #require(await store.save(candidate1, label: "Route 1"))
+        let res2 = try #require(await store.save(candidate2, label: "Route 2"))
+        #expect(store.records.count == 2)
+        let ids = Set([res1.record.id, res2.record.id])
+        #expect(await store.delete(ids))
+        #expect(store.records.isEmpty)
+        #expect(store.canUndo)
+        #expect(await store.undoDelete())
+        #expect(store.records.count == 2)
+        #expect(!store.canUndo)
+    }
     private func importedArtifact() throws -> ImportedRouteArtifact {
         let a = GeoCoordinate(latitude: 25, longitude: 121)!
         let b = GeoCoordinate(latitude: 25.001, longitude: 121.001)!

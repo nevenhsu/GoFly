@@ -3,9 +3,9 @@ import Testing
 @testable import GoFlyCore
 
 enum RedTests {
-    /// Intentional reproductions of the movement-stop defects (H1 and H2 in
-    /// `.scratch/prompts/02-debug-movement-stops.md`). They fail on purpose until
-    /// stage C fixes the defect, so they are skipped by default and enabled with
+    /// Intentional reproduction of movement-stop defect H1 in
+    /// `.scratch/prompts/02-debug-movement-stops.md`. It fails on purpose until
+    /// stage C fixes it, so it is skipped by default and enabled with
     /// `GOFLY_RED_TESTS=1`.
     static var enabled: Bool { ProcessInfo.processInfo.environment["GOFLY_RED_TESTS"] == "1" }
 }
@@ -36,14 +36,31 @@ struct MovementStopRedTests {
                 "each tick re-queries the cryptex/DDI support state")
     }
 
-    /// H2 (foreground): a tick whose prepare/set failed keeps the same owned
-    /// native session, so Retry and later ticks hit the dead handles again.
-    /// Nothing but Stop (which clears) closes the session.
-    @Test(.enabled(if: RedTests.enabled))
-    func failedPointWriteDoesNotReuseTheSuspectSession() {
+    /// A known transport failure invalidates a reused native session. This is
+    /// exercised for both Start preparation (before any write) and a point
+    /// that was definitely not dispatched.
+    @Test
+    func knownTransportFailureRebuildsTheSuspectSession() {
         let policy = NativeSessionRetentionPolicy()
         #expect(policy.retention(after: .notSent(.serviceUnavailable), sessionWasOwned: true) == .rebuild)
         #expect(policy.retention(after: .notSent(.operationTimedOut), sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(after: .notSent(.tunnelUnavailable), sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(after: .unconfirmed(.serviceUnavailable), sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(afterPreparationFailure: .serviceUnavailable, sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(afterPreparationFailure: .operationTimedOut, sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(afterPreparationFailure: .tunnelUnavailable, sessionWasOwned: true) == .rebuild)
+        #expect(policy.retention(after: .notSent(.operationCancelled), sessionWasOwned: true) == .reuse)
+        #expect(policy.retention(afterPreparationFailure: .devicePreparationRequired, sessionWasOwned: true) == .reuse)
+        #expect(policy.shouldRetryBeforeDispatch(after: .serviceUnavailable))
+        #expect(policy.shouldRetryBeforeDispatch(after: .tunnelUnavailable))
+        #expect(!policy.shouldRetryBeforeDispatch(after: .operationCancelled))
+        #expect(!policy.shouldRetryBeforeDispatch(after: .devicePreparationRequired))
+        #expect(!policy.sessionHasExpired(lastActivityNanoseconds: 100, nowNanoseconds: 199,
+                                          maximumIdleNanoseconds: 100))
+        #expect(policy.sessionHasExpired(lastActivityNanoseconds: 100, nowNanoseconds: 200,
+                                         maximumIdleNanoseconds: 100))
+        #expect(!policy.sessionHasExpired(lastActivityNanoseconds: nil, nowNanoseconds: 200,
+                                          maximumIdleNanoseconds: 100))
     }
 }
 

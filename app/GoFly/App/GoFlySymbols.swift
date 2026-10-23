@@ -6,7 +6,7 @@ import SwiftUI
 enum GoFlySymbols {
     static let recenter = "scope"
     static let location = "location"
-    static let place = "mappin.and.ellipse"
+    static let place = "mappin"
     static let sample = "circle.fill"
     static let coordinates = "scope"
     static let map = "map"
@@ -242,6 +242,35 @@ struct GoFlySpeedIcon: View {
     }
 }
 
+/// Round trip repeat icon with optional diagonal slash when disabled, matching Figma `04 · iOS Redesign`.
+struct GoFlyRoundTripIcon: View {
+    var enabled: Bool = true
+    var size: CGFloat = 16
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "repeat")
+                .font(.system(size: size, weight: .semibold))
+            if !enabled {
+                Canvas { context, canvasSize in
+                    let s = min(canvasSize.width, canvasSize.height)
+                    var slash = Path()
+                    slash.move(to: CGPoint(x: s * 0.15, y: s * 0.15))
+                    slash.addLine(to: CGPoint(x: s * 0.85, y: s * 0.85))
+                    context.stroke(
+                        slash,
+                        with: .foreground,
+                        style: StrokeStyle(lineWidth: max(1.5, s * 0.11), lineCap: .round)
+                    )
+                }
+                .frame(width: size, height: size)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
 /// 5-point star icon matching Figma `icon / star`.
 struct GoFlyStarIcon: View {
     var size: CGFloat = 18
@@ -391,7 +420,7 @@ struct GoFlyCheckboxIcon: View {
 }
 
 enum GoFlySettingsIconKind {
-    case location, vpn, background, language, appearance, device
+    case location, vpn, wifi, background, language, appearance, device
 }
 
 /// 32×32 rounded-square badge with 16×16 white outline icon matching Figma `F1 · 設定首頁`.
@@ -403,11 +432,18 @@ struct GoFlySettingsBadgeIcon: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(GoFlyStyle.primary)
                 .frame(width: 32, height: 32)
-            Canvas { context, canvasSize in
+            if kind == .wifi {
+                Image(systemName: "wifi")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.surface)
+            } else {
+                Canvas { context, canvasSize in
                 let s = min(canvasSize.width, canvasSize.height) / 16.0
                 let stroke = StrokeStyle(lineWidth: 1.47 * s, lineCap: .round, lineJoin: .round)
                 let color = GraphicsContext.Shading.color(GoFlyStyle.surface)
                 switch kind {
+                case .wifi:
+                    break
                 case .location:
                     var p = Path()
                     p.move(to: CGPoint(x: 2.0 * s, y: 7.333 * s))
@@ -483,6 +519,7 @@ struct GoFlySettingsBadgeIcon: View {
                 }
             }
             .frame(width: 16, height: 16)
+            }
         }
         .accessibilityHidden(true)
     }

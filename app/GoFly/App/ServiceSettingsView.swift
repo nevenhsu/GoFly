@@ -10,23 +10,46 @@ struct ServiceSettingsView: View {
     let setupMetadata: GoFlySetupMetadata?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var systemStatus = GoFlySystemStatus()
+    @ObservedObject private var network = GoFlyNetworkMonitor.shared
+    @State private var serviceNoticeDismissed = false
 
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if network.shouldShowWiFiError {
+                        GoFlyStatusBanner(
+                            tone: .danger,
+                            title: goFlyString("wifi.error.title"),
+                            message: goFlyString("wifi.error.message"),
+                            actionTitle: goFlyString("wifi.error.action"),
+                            onAction: { network.openWiFiSettings() },
+                            onDismiss: { network.dismissNotice() },
+                            identifier: "settings.wifiError",
+                            isFloating: true
+                        )
+                    }
+                    if let error = service.error, service.preparedOperation == nil, !serviceNoticeDismissed {
+                        GoFlyStatusBanner(
+                            tone: .danger,
+                            title: goFlyString(error.rawValue),
+                            message: goFlyString("settings.vpn.failureGuide"),
+                            onDismiss: { serviceNoticeDismissed = true },
+                            identifier: "service.error",
+                            isFloating: true
+                        )
+                    }
+                    if let key = continuation.noticeKey {
+                        GoFlyStatusBanner(
+                            tone: .warning,
+                            title: goFlyString(key),
+                            message: goFlyString("background.systemDecidesRuntime"),
+                            identifier: "background.notice.compact",
+                            isFloating: true
+                        )
+                    }
                     serviceCard
                     settingsGroups
-                    if let key = continuation.noticeKey {
-                        GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
-                                          message: goFlyString("background.systemDecidesRuntime"),
-                                          identifier: "background.notice.compact")
-                    }
-                    if let error = service.error, service.preparedOperation == nil {
-                        GoFlyStatusBanner(tone: .danger, title: goFlyString(error.rawValue),
-                                          message: goFlyString("settings.vpn.failureGuide"),
-                                          identifier: "service.error")
-                    }
                 }
                 .padding(16)
             }
@@ -51,6 +74,9 @@ struct ServiceSettingsView: View {
         .goFlyNativeBackTitle("settings.title")
         .toolbar(.visible, for: .navigationBar)
         .onAppear { systemStatus.refresh() }
+        .onChange(of: service.error) { _, newError in
+            if newError != nil { serviceNoticeDismissed = false }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             systemStatus.refresh()
         }
@@ -65,25 +91,22 @@ struct ServiceSettingsView: View {
                 settingsLink(title: "settings.vpn", value: goFlyString(recovery.connectionState.settingsStatusKey),
                              destination: { GoFlyVPNSettingsPage(recovery: recovery) })
                 settingsDivider
+                Button(action: network.openWiFiSettings) {
+                    settingsRow(titleKey: "settings.wifi",
+                                value: goFlyString(network.isWiFiConnected ? "settings.wifi.connected" : "settings.wifi.notConnected"))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.wifi")
+                settingsDivider
                 settingsLink(title: "settings.background", value: backgroundSummary,
                              destination: { GoFlyBackgroundSettingsPage(continuation: continuation) })
             }
             settingsSection("settings.preferences") {
-                NavigationLink {
-                    GoFlyPreferencesSettingsPage()
-                } label: {
-                    settingsRow(titleKey: "settings.language", value: GoFlyPreferences.shared.language.title)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.languageAndAppearance")
+                settingsLink(title: "settings.language", value: GoFlyPreferences.shared.language.title,
+                             destination: { GoFlyLanguageSettingsPage() })
                 settingsDivider
-                NavigationLink {
-                    GoFlyPreferencesSettingsPage()
-                } label: {
-                    settingsRow(titleKey: "settings.appearance", value: GoFlyPreferences.shared.appearance.title)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.appearanceEntry")
+                settingsLink(title: "settings.appearance", value: GoFlyPreferences.shared.appearance.title,
+                             destination: { GoFlyAppearanceSettingsPage() })
             }
             settingsSection("settings.deviceSection") {
                 settingsLink(title: "settings.device", value: nil,
@@ -146,7 +169,8 @@ struct ServiceSettingsView: View {
                     .multilineTextAlignment(.leading)
             } value: {
                 if let value {
-                    if titleKey == "settings.location" && systemStatus.locationAuthorization == .denied {
+                    if (titleKey == "settings.location" && systemStatus.locationAuthorization == .denied) ||
+                       (titleKey == "settings.wifi" && !network.isWiFiConnected) {
                         Label(value, systemImage: GoFlySymbols.warning)
                             .font(.subheadline)
                             .foregroundStyle(GoFlyStyle.warningForeground)
@@ -177,6 +201,7 @@ struct ServiceSettingsView: View {
         case "settings.location": .location
         case "settings.background": .background
         case "settings.vpn": .vpn
+        case "settings.wifi": .wifi
         case "settings.language": .language
         case "settings.appearance": .appearance
         default: .device

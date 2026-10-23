@@ -39,10 +39,12 @@ public struct VerifiedDeviceSession {
         try session.clearLocation()
     }
 
-    public func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) -> PointDeliveryOutcome {
+    public func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate,
+                          recovering: Bool = false) -> PointDeliveryOutcome {
         do { try verifyIdentity() }
         catch { return .notSent(error as? DeviceServiceFailure ?? .serviceUnavailable) }
-        guard dispatch.claim() else { return .notSent(.operationCancelled) }
+        let claimed = recovering ? dispatch.claimRecovery() : dispatch.claim()
+        guard claimed else { return .notSent(.operationCancelled) }
         do {
             try session.setLocation(coordinate)
             return .acknowledged

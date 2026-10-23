@@ -45,9 +45,10 @@ struct GoFlyFavoritesView: View {
         .background(GoFlyStyle.surface)
         .goFlySnackbar($snackbar)
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
         .sheet(item: $editing) { favorite in
-            GoFlyFavoriteLabelEditor(favorite: favorite, onReturn: { editing = nil }) {
+            GoFlyFavoriteEditorSheet(place: favorite.place, initialLabel: favorite.label, onDismiss: { editing = nil }) {
                 delete([favorite.key])
                 if !favorites.isFavorite(favorite.place) { editing = nil }
             }
@@ -108,9 +109,9 @@ struct GoFlyFavoritesView: View {
                 .accessibilityIdentifier("favorites.select")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 10)
+        .frame(minHeight: 44)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
     }
 
     @ViewBuilder private var failureNotice: some View {
@@ -237,103 +238,5 @@ struct GoFlyFavoritesView: View {
         snackbar = GoFlySnackbarMessage(
             text: goFlyLocalizedFormat(goFlyString("favorites.deletedCount"), count),
             actionTitle: goFlyString("common.undo"), action: { _ = favorites.undoDelete() })
-    }
-}
-
-private struct GoFlyFavoriteLabelEditor: View {
-    @EnvironmentObject private var favorites: FavoritePlacesStore
-    let favorite: FavoritePlace
-    var onReturn: () -> Void
-    var onDelete: () -> Void
-    @State private var draft: String
-    @FocusState private var focused: Bool
-
-    init(favorite: FavoritePlace, onReturn: @escaping () -> Void, onDelete: @escaping () -> Void) {
-        self.favorite = favorite
-        self.onReturn = onReturn
-        self.onDelete = onDelete
-        _draft = State(initialValue: favorite.label ?? "")
-    }
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button(goFlyString("favorites.cancel")) { favorites.clearError(); onReturn() }
-                    .accessibilityIdentifier("favorites.editor.cancel")
-                Spacer()
-                Text(goFlyString("favorites.editLabel")).font(.headline)
-                Spacer()
-                Button(goFlyString("favorites.save")) {
-                    if favorites.saveLabel(for: favorite.key, draft: draft) { onReturn() }
-                }
-                .fontWeight(.semibold)
-                .disabled(!favorites.canMutate || !favorites.isFavorite(favorite.place))
-                .accessibilityIdentifier("favorites.editor.save")
-            }
-            .buttonStyle(.plain)
-            .frame(minHeight: 44)
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let failure = favorites.error {
-                        GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(goFlyString("favorites.label"))
-                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
-                        HStack {
-                            TextField(goFlyString("favorites.label"), text: $draft)
-                                .focused($focused).submitLabel(.done)
-                                .onSubmit { focused = false }
-                                .accessibilityIdentifier("favorites.editor.label")
-                            if !draft.isEmpty {
-                                Button { draft = "" } label: {
-                                    Image(systemName: "xmark").frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(GoFlyStyle.secondary)
-                                .accessibilityLabel(goFlyString("search.clear"))
-                            }
-                        }
-                        .padding(.leading, 16)
-                        .frame(minHeight: 48)
-                        .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder, lineWidth: focused ? 1.5 : 0.75) }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(favorite.place.address ?? favorite.place.title).font(.subheadline)
-                        Text(favorite.place.coordinate.displayText)
-                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(20)
-            }
-            .accessibilityIdentifier("favorites.editor.form")
-            .safeAreaInset(edge: .bottom) {
-                Button(role: .destructive, action: onDelete) {
-                    HStack(spacing: 8) {
-                        GoFlyTrashIcon(size: 17)
-                        Text(goFlyString("favorites.delete"))
-                    }
-                    .foregroundStyle(GoFlyStyle.dangerForeground)
-                }
-                .buttonStyle(GoFlyActionStyle())
-                .foregroundStyle(GoFlyStyle.dangerForeground)
-                .disabled(!favorites.canMutate)
-                .accessibilityIdentifier("favorites.editor.delete")
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .background(GoFlyStyle.cardSurface)
-            }
-        }
-        .background(GoFlyStyle.cardSurface)
-        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(338), .large])
-        .presentationDragIndicator(.visible)
     }
 }

@@ -27,7 +27,6 @@ struct GoFlySearchPanel: View {
         VStack(spacing: 0) {
             header
             if let roleTitle { roleChip(roleTitle) }
-            if search.queryKind == .empty { coordinateHint }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if let error = search.inputError {
@@ -37,9 +36,15 @@ struct GoFlySearchPanel: View {
                             .padding(.top, 12)
                     }
                     if search.isSearching {
-                        ProgressView(goFlyString("search.searching"))
-                            .padding(16)
-                            .accessibilityIdentifier("search.searching")
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text(goFlyString("search.searching"))
+                                .font(.subheadline)
+                                .foregroundStyle(GoFlyStyle.secondary)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .accessibilityIdentifier("search.searching")
                     }
                     content
                 }
@@ -111,39 +116,23 @@ struct GoFlySearchPanel: View {
     }
 
     private func roleChip(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: GoFlySymbols.flag)
-                .goFlyControlSymbol(size: 12, maximum: 14, weight: .semibold)
-            Text(title)
-                .font(.footnote)
+        HStack {
+            HStack(spacing: 6) {
+                Image(systemName: GoFlySymbols.flag)
+                    .goFlyControlSymbol(size: 12, maximum: 14, weight: .semibold)
+                Text(title)
+                    .font(.footnote)
+            }
+            .foregroundStyle(GoFlyStyle.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(GoFlyStyle.secondarySurface, in: Capsule())
+            Spacer()
         }
-        .foregroundStyle(GoFlyStyle.primary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .background(GoFlyStyle.secondarySurface, in: Capsule())
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("search.role")
-    }
-
-    private var coordinateHint: some View {
-        HStack(spacing: 8) {
-            Image(systemName: GoFlySymbols.coordinates)
-                .goFlyControlSymbol(size: 14, maximum: 16, weight: .medium)
-                .accessibilityHidden(true)
-            Text(goFlyString("search.coordinateHint"))
-                .font(.footnote)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .foregroundStyle(GoFlyStyle.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 20)
-        .padding(.bottom, 4)
-        .accessibilityIdentifier("search.coordinateHint")
     }
 
     // MARK: - Content
@@ -164,11 +153,6 @@ struct GoFlySearchPanel: View {
                       symbol: GoFlySymbols.location, identifier: "route.picker.current",
                       action: onUseCurrentLocation)
         }
-        if let onClearPlace {
-            actionRow(goFlyString("route.clearPlace"),
-                      symbol: GoFlySymbols.delete, identifier: "route.picker.clearPlace",
-                      action: onClearPlace)
-        }
         if !favorites.favorites.isEmpty {
             sectionHeader("favorites.title", actionTitle: goFlyString("search.viewAll")) {
                 focused = false
@@ -187,7 +171,7 @@ struct GoFlySearchPanel: View {
         }
         if favorites.favorites.isEmpty, recentPlaces.isEmpty {
             GoFlyEmptyState(symbol: GoFlySymbols.search,
-                            message: goFlyString("search.coordinateHint"))
+                            message: goFlyString("search.noResults"))
                 .padding(.top, 24)
                 .accessibilityIdentifier("search.emptyResults")
         }

@@ -4,6 +4,51 @@ import Testing
 
 @Suite @MainActor
 struct ServiceRouteCommandsTests {
+    @Test func grantedBackgroundRouteKeepsFreshArrowUntilRuntimeLossAndNewAcknowledgement() async throws {
+        let device = RouteControlledDevice()
+        let service = ServiceController(service: device)
+        let intent = try routeIntent()
+        let begin = Task { await service.beginRoute(intent, expectedAdmissionRevision: service.routeAdmissionRevision) }
+        await wait { await device.waiting }
+        await device.finish(.acknowledged)
+        #expect(await begin.value == .acknowledged)
+        let grant = ContinuedProcessingGrant(requestID: UUID(), movementID: intent.id, lease: intent.lease)
+        try #require(service.bindMovementContinuation(grant))
+        service.setMovementSceneActive(false)
+        #expect(service.positionMarker?.freshness == .fresh)
+
+        let tick = Task {
+            await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1,
+                expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0,
+                coordinate: intent.route.end)
+        }
+        await wait { await device.waiting }
+        await device.finish(.acknowledged)
+        #expect(await tick.value == .acknowledged)
+        #expect(service.positionMarker?.freshness == .fresh)
+
+        grant.revoke()
+        let denied = await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 2,
+            expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0,
+            coordinate: intent.route.end)
+        #expect(denied == .cancelled)
+        #expect(service.positionMarker?.coordinate == intent.route.end)
+        #expect(service.positionMarker?.freshness == .waiting)
+        service.setMovementSceneActive(true)
+        #expect(service.positionMarker?.freshness == .waiting)
+        try #require(service.resumeRoute(executionID: intent.id, lease: intent.lease))
+        #expect(service.positionMarker?.freshness == .waiting)
+        let resumed = Task {
+            await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 2,
+                expectedControlRevision: service.routeControlRevision(executionID: intent.id, lease: intent.lease) ?? 0,
+                coordinate: intent.route.end)
+        }
+        await wait { await device.waiting }
+        await device.finish(.acknowledged)
+        #expect(await resumed.value == .acknowledged)
+        #expect(service.positionMarker?.freshness == .fresh)
+    }
+
     @Test(arguments: [false, true], [false, true])
     func cancelledWritesSettleSafelyOnlyForAnUnclaimedFailureOrAValidatedAcknowledgement(firstPoint: Bool, claimedACK: Bool) async throws {
         let device = RouteControlledDevice()

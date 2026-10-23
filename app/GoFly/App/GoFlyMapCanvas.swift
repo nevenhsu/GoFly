@@ -1,5 +1,6 @@
 import GoFlyCore
 import MapKit
+import QuartzCore
 import SwiftUI
 
 struct GoFlyCameraIntent: Equatable {
@@ -105,6 +106,11 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         var parent: GoFlyMapCanvas
         var compass: MKCompassButton?
         private var positionAnnotation: PositionAnnotation?
+        private var coordinateDisplayLink: CADisplayLink?
+        private var coordinateAnimationStart: GeoCoordinate?
+        private var coordinateAnimationTarget: GeoCoordinate?
+        private var coordinateAnimationStartedAt: CFTimeInterval = 0
+        private var lastMarker: PositionMarker?
         private var appliedIntent: UUID?
         private var appliedViewport = CGRect.zero
         private var appliedBounds = CGRect.zero
@@ -165,18 +171,79 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func updateMarker(on map: MKMapView) {
             guard let marker = parent.marker else {
+                stopCoordinateAnimation()
                 if let positionAnnotation { map.removeAnnotation(positionAnnotation) }
                 positionAnnotation = nil
+                lastMarker = nil
                 return
             }
             if let annotation = positionAnnotation {
-                annotation.coordinate = marker.coordinate.clLocationCoordinate
+                let shouldAnimate = lastMarker?.source == .simulation && lastMarker?.freshness == .fresh
+                    && marker.source == .simulation && marker.freshness == .fresh
+                lastMarker = marker
+                if shouldAnimate {
+                    animateCoordinate(marker.coordinate, on: annotation)
+                } else {
+                    stopCoordinateAnimation()
+                    annotation.coordinate = marker.coordinate.clLocationCoordinate
+                }
             } else {
+                lastMarker = marker
                 let annotation = PositionAnnotation(marker.coordinate.clLocationCoordinate)
                 positionAnnotation = annotation
                 map.addAnnotation(annotation)
             }
             updateMarkerAppearance(on: map)
+        }
+
+        private func animateCoordinate(_ target: GeoCoordinate, on annotation: PositionAnnotation) {
+            let current = GeoCoordinate(latitude: annotation.coordinate.latitude,
+                                        longitude: annotation.coordinate.longitude)
+            guard let current else { return }
+            if let animationTarget = coordinateAnimationTarget, animationTarget == target { return }
+            stopCoordinateAnimation()
+            let distance = CLLocation(latitude: current.latitude, longitude: current.longitude)
+                .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
+            guard distance > 0.15, distance <= 30 else {
+                annotation.coordinate = target.clLocationCoordinate
+                return
+            }
+            coordinateAnimationStart = current
+            coordinateAnimationTarget = target
+            coordinateAnimationStartedAt = CACurrentMediaTime()
+            let displayLink = CADisplayLink(target: self, selector: #selector(advanceCoordinateAnimation(_:)))
+            coordinateDisplayLink = displayLink
+            displayLink.add(to: .main, forMode: .common)
+        }
+
+        @objc private func advanceCoordinateAnimation(_ displayLink: CADisplayLink) {
+            guard let annotation = positionAnnotation,
+                  let start = coordinateAnimationStart,
+                  let target = coordinateAnimationTarget else {
+                stopCoordinateAnimation()
+                return
+            }
+            let elapsed = CACurrentMediaTime() - coordinateAnimationStartedAt
+            let progress = min(1, max(0, elapsed / 0.45))
+            let eased = progress * progress * (3 - 2 * progress)
+            let latitude = start.latitude + (target.latitude - start.latitude) * eased
+            var longitudeDelta = target.longitude - start.longitude
+            if longitudeDelta > 180 { longitudeDelta -= 360 }
+            if longitudeDelta < -180 { longitudeDelta += 360 }
+            var longitude = start.longitude + longitudeDelta * eased
+            if longitude > 180 { longitude -= 360 }
+            if longitude < -180 { longitude += 360 }
+            annotation.coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            guard progress >= 1 else { return }
+            annotation.coordinate = target.clLocationCoordinate
+            stopCoordinateAnimation()
+        }
+
+        private func stopCoordinateAnimation() {
+            coordinateDisplayLink?.invalidate()
+            coordinateDisplayLink = nil
+            coordinateAnimationStart = nil
+            coordinateAnimationTarget = nil
         }
 
         private func updateMarkerAppearance(on map: MKMapView) {

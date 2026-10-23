@@ -63,6 +63,9 @@ struct GoFlyImportedRoutesView: View {
         }
         .goFlySnackbar($snackbar)
         .background(GoFlyStyle.canvas)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(GoFlyStyle.canvas)
         .toolbar(.hidden, for: .navigationBar)
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.goFlyGPX, .xml]) { result in
             switch result {
@@ -121,11 +124,15 @@ struct GoFlyImportedRoutesView: View {
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            Color.clear.frame(width: 44, height: 44)
+            Label(goFlyString("common.back"), systemImage: "chevron.backward")
+                .labelStyle(.titleAndIcon)
+                .frame(minHeight: 44)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
+        .frame(minHeight: 44)
         .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
+        .padding(.top, 12)
     }
 
     private var isBusy: Bool { fileOperationInProgress || imports.isBusy || imports.isValidatingSelection }

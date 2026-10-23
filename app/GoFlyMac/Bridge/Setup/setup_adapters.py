@@ -2312,6 +2312,8 @@ class PinnedPymobiledeviceAdapter:
             async def stop_checked() -> None:
                 async with self._process_control(device_id, serial) as control:
                     current = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
+                    if current == 0:
+                        return
                     if current != expected:
                         raise SetupBridgeError("handoff-unknown")
                     await control.kill(expected)

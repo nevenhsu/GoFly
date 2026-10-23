@@ -14,18 +14,6 @@ struct GoFlyJoystickPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let error = controller.error {
-                    GoFlyStatusBanner(tone: .danger, title: goFlyString(error.localizationKey),
-                        message: goFlyString("status.repairGuidance"),
-                        actionTitle: goFlyString("operation.settings"), onAction: onSettings,
-                        identifier: "joystick.error")
-                } else if let error = controller.wanderError {
-                    GoFlyStatusBanner(tone: .warning, title: goFlyString(error.localizationKey),
-                        message: goFlyString("status.repairGuidance"),
-                        actionTitle: controller.canRetryWander ? goFlyString("operation.retry") : nil,
-                        onAction: controller.canRetryWander ? { _ = controller.retryWander() } : nil,
-                        onDismiss: controller.clearWanderError, identifier: "joystick.wanderError")
-                }
                 wanderControls
                 Divider().padding(.top, 4)
                 if controller.requiresStop {
@@ -94,14 +82,9 @@ struct GoFlyJoystickPanel: View {
     }
 
     private var wanderControls: some View {
-        ViewThatFits(in: .horizontal) {
-            wanderRow
-            ScrollView(.horizontal) {
-                wanderRow.fixedSize(horizontal: true, vertical: false)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("joystick.wanderControls")
+        wanderRow
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("joystick.wanderControls")
     }
 
     private var wanderRow: some View {
@@ -128,10 +111,12 @@ struct GoFlyJoystickPanel: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(controller.wanderEnabled ? goFlyString("joystick.wanderActive") : goFlyString("joystick.wander"))
                     .font(.body.weight(.semibold))
+                    .lineLimit(1)
                 Text(controller.wanderEnabled ? (controller.wanderTarget?.place.title ?? "") : goFlyString("joystick.wanderDetail"))
                     .font(.footnote)
                     .foregroundStyle(GoFlyStyle.secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
             Spacer(minLength: 8)
             Toggle("", isOn: Binding(
@@ -139,6 +124,7 @@ struct GoFlyJoystickPanel: View {
                 set: { _ = controller.setWanderEnabled($0) }
             ))
             .labelsHidden()
+            .fixedSize()
             .tint(GoFlyStyle.success)
             .disabled(!controller.canSetWanderEnabled)
             .accessibilityLabel(goFlyString("joystick.wander"))

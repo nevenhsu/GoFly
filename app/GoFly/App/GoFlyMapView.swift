@@ -13,6 +13,7 @@ final class GoFlyMovementModel: ObservableObject {
     let joystick: JoystickMovementController
     let recovery: ConnectionRecoveryController
     let continuation: MovementContinuationController
+    let positionHold: PositionHoldController
     private var mapAdmission: (@MainActor () -> Bool)?
 
     init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
@@ -24,17 +25,25 @@ final class GoFlyMovementModel: ObservableObject {
         )
         _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
         joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
+        positionHold = PositionHoldController(service: service)
         recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
             probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
         )
+        let routeForPresentation = route
         continuation = MovementContinuationController(
-            service: service, route: route, joystick: joystick, recovery: recovery,
+            service: service, route: route, joystick: joystick, recovery: recovery, positionHold: positionHold,
             driver: GoFlyContinuedProcessingDriver.shared,
             presentation: { kind, progress in
-                (title: goFlyString("background.activity.\(kind.rawValue)"),
+                if kind != .finiteRoute {
+                    let percent = min(100, max(0, Int(progress.cumulativeAcknowledgedDurationSeconds / 43_200 * 100)))
+                    return (title: goFlyString("background.activity.\(kind.rawValue)"),
+                            subtitle: goFlyLocalizedFormat(goFlyString("background.activity.durationProgress"), percent))
+                }
+                let percent = min(100, max(0, Int((routeForPresentation.progress?.fraction ?? 0) * 100)))
+                return (title: goFlyString("background.activity.\(kind.rawValue)"),
                  subtitle: goFlyLocalizedFormat(
-                    goFlyString("background.activity.progress"), progress.acknowledgedWrites))
+                    goFlyString("background.activity.routeProgress"), percent))
             }
         )
     }
@@ -83,6 +92,8 @@ struct GoFlyMapView: View {
     @ObservedObject private var joystick: JoystickMovementController
     @ObservedObject private var recovery: ConnectionRecoveryController
     @ObservedObject private var continuation: MovementContinuationController
+    @ObservedObject private var positionHold: PositionHoldController
+    @ObservedObject private var network = GoFlyNetworkMonitor.shared
     private var mode: GoFlyMapMode {
         get { movement.presentationMode }
         nonmutating set { movement.setPresentationMode(newValue) }
@@ -116,6 +127,11 @@ struct GoFlyMapView: View {
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
     @State private var serviceNoticeDismissed = false
+    @State private var selectedWanderPlace: MapPlace? = nil
+    @State private var recoveryNoticeDismissed = false
+    @State private var continuationNoticeDismissed = false
+    @State private var joystickErrorDismissed = false
+    @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
     @State private var settingJoystickOrigin = false
     @State private var joystickOriginIntentID: UUID?
@@ -137,6 +153,7 @@ struct GoFlyMapView: View {
         _joystick = ObservedObject(wrappedValue: movement.joystick)
         _recovery = ObservedObject(wrappedValue: movement.recovery)
         _continuation = ObservedObject(wrappedValue: movement.continuation)
+        _positionHold = ObservedObject(wrappedValue: movement.positionHold)
         _lastCapturedSnapshot = State(initialValue: snapshot)
     }
 
@@ -185,6 +202,7 @@ struct GoFlyMapView: View {
                     }
                 }
                 if scenePhase == .active { continuation.sceneDidBecomeActive() }
+                if mode == .joystick { service.warmupSession() }
                 if dynamicTypeSize.isAccessibilitySize { sheetDetent = .expanded }
             }
             .onChange(of: dynamicTypeSize) { _, size in
@@ -229,6 +247,9 @@ struct GoFlyMapView: View {
                 if mode == .route, let planned { cameraIntent = GoFlyCameraIntent(route: planned) }
             }
             .onChange(of: mode) { _, mode in
+                if mode == .joystick {
+                    service.warmupSession()
+                }
                 dismissKeyboard()
                 if mode == .route, let planned = route.plannedRoute {
                     cameraIntent = GoFlyCameraIntent(route: planned)
@@ -313,16 +334,13 @@ struct GoFlyMapView: View {
                     search: picker.candidates,
                     focusRequest: searchFocusRequest,
                     placeholderOverride: routePickerPlaceholder(picker.role),
-                    roleTitle: goFlyLocalizedFormat(goFlyString("search.choosing"),
-                                                    goFlyRouteEditTitle(picker.role)),
+                    roleTitle: routePickerPlaceholder(picker.role),
                     onBack: { route.cancelPicker(id: picker.id) },
                     onFavorites: { searchFavorites = true },
                     recentPlaces: recentPlaces,
                     onSelect: { _ in _ = route.confirmPicker(id: picker.id) },
                     onUseCurrentLocation: picker.allowsCurrent
-                        ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil,
-                    onClearPlace: picker.isNew
-                        ? nil : { _ = route.clearPickerPlace(id: picker.id); _ = route.confirmPicker(id: picker.id) })
+                        ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil)
             } else {
                 GoFlySearchPanel(
                     search: activeSearch,
@@ -370,10 +388,30 @@ struct GoFlyMapView: View {
                     .padding(.horizontal, 16).padding(.top, 8)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
             } else { topBar }
+            floatingSystemToast
+                .padding(.horizontal, 16)
+                .padding(.top, (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
+                .frame(maxWidth: .infinity)
+                .zIndex(50)
             mapControls(bottomInset: geometry.safeAreaInsets.bottom)
             bottomChrome(in: geometry)
         }
         .goFlySnackbar($snackbar)
+        .onChange(of: service.error) { _, newError in
+            if newError != nil { serviceNoticeDismissed = false }
+        }
+        .onChange(of: joystick.error) { _, newError in
+            if newError != nil { joystickErrorDismissed = false }
+        }
+        .onChange(of: route.error) { _, newError in
+            if newError != nil { routeErrorDismissed = false }
+        }
+        .onChange(of: recovery.noticeKey) { _, newKey in
+            if newKey != nil { recoveryNoticeDismissed = false }
+        }
+        .onChange(of: continuation.noticeKey) { _, newKey in
+            if newKey != nil { continuationNoticeDismissed = false }
+        }
         .onChange(of: service.positionMarker?.coordinate) { _, coordinate in
             if followsHeading, isExecutionMode, let coordinate {
                 cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: executionCameraBearing)
@@ -398,7 +436,7 @@ struct GoFlyMapView: View {
             route: mode == .route ? route.plannedRoute : nil,
             routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
-            markerBearingDegrees: joystickMarkerBearing,
+            markerBearingDegrees: activeMarkerBearing,
             adjustsFocusForViewportChanges: false,
             onMapTap: { coordinate in
                 if let picker = route.picker {
@@ -472,34 +510,43 @@ struct GoFlyMapView: View {
     }
 
     private func bottomChrome(in geometry: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            if isExecutionMode {
-                bottomPanelContent(in: geometry)
-                    .padding(.bottom, geometry.safeAreaInsets.bottom)
-                    .background(GoFlyStyle.cardSurface)
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
-                        panelFrame = $0; sheetHeight = $0.height
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if isExecutionMode {
+                    bottomPanelContent(in: geometry)
+                        .padding(.bottom, geometry.safeAreaInsets.bottom)
+                        .background(GoFlyStyle.cardSurface)
+                        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
+                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+                            panelFrame = $0; sheetHeight = $0.height
+                        }
+                } else {
+                    GoFlyBottomSheet(
+                        detent: $sheetDetent,
+                        availableHeight: sheetAvailableHeight(in: geometry),
+                        collapsedHeight: 116,
+                        maximumHeight: sheetMaxHeight(in: geometry),
+                        contentHeight: bottomContentHeight,
+                        onHeightChange: { sheetHeight = $0 }
+                    ) {
+                        sheetContent(in: geometry)
                     }
-            } else {
-            GoFlyBottomSheet(
-                detent: $sheetDetent,
-                availableHeight: sheetAvailableHeight(in: geometry),
-                collapsedHeight: 116,
-                maximumHeight: sheetMaxHeight(in: geometry),
-                contentHeight: bottomContentHeight,
-                onHeightChange: { sheetHeight = $0 }
-            ) {
-                sheetContent(in: geometry)
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+                }
+                if showsBottomBar {
+                    GoFlyBottomBar(selection: Binding(get: { mode }, set: { selectMode($0) }),
+                                     bottomInset: geometry.safeAreaInsets.bottom)
+                        .disabled(!canSwitchMode)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomBarHeight = $0 }
+                }
             }
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
-            }
-            if showsBottomBar {
-                GoFlyBottomBar(selection: Binding(get: { mode }, set: { selectMode($0) }),
-                                 bottomInset: geometry.safeAreaInsets.bottom)
-                    .disabled(!canSwitchMode)
-                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomBarHeight = $0 }
+            if isWanderMap, let place = wanderCardPlace {
+                wanderLocationCard(for: place)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(10)
             }
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
@@ -543,24 +590,6 @@ struct GoFlyMapView: View {
 
     private func bottomPanelContent(in geometry: GeometryProxy) -> some View {
         VStack(spacing: 8) {
-            if route.picker == nil, !showsOperationPanel {
-                let notice = GoFlyRecoveryView(
-                    recovery: recovery, store: recoveryStore, service: service,
-                    maximumHeight: .greatestFiniteMagnitude,
-                    onSettings: { showingSettings = true }
-                )
-                if notice.hasContent { notice }
-                if recovery.noticeKey == nil, !recovery.requiresColdConfirmation,
-                   continuation.noticeKey != nil {
-                    GoFlyContinuationNotice(continuation: continuation) { showingSettings = true }
-                }
-            }
-            if isWanderMap, let candidate = activeCandidate {
-                GoFlyPlaceDetailsView(place: candidate.place, onDismiss: { wanderSearch.resetSelection() },
-                    embedded: true, distanceFrom: service.positionMarker?.coordinate,
-                    canGo: wanderSearch.canGo && joystick.canApplyWanderTarget,
-                    onGo: { performGo(candidate) })
-            }
             modePanel(in: geometry)
         }
     }
@@ -738,15 +767,6 @@ struct GoFlyMapView: View {
 
     private var expandedTeleportContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let error = service.error, !serviceNoticeDismissed {
-                GoFlyStatusBanner(tone: .danger, title: goFlyString(error.rawValue),
-                    message: goFlyString("status.repairGuidance"),
-                    onDismiss: { serviceNoticeDismissed = true }, identifier: "map.serviceError")
-            }
-            if let key = location.noticeKey {
-                GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
-                    onDismiss: { location.dismissNotice() }, identifier: "map.locationNotice")
-            }
             if let candidate = activeCandidate {
                 GoFlyPlaceDetailsView(place: candidate.place, onDismiss: { activeSearch.resetSelection() },
                     embedded: true, distanceFrom: service.positionMarker?.coordinate,
@@ -849,18 +869,30 @@ struct GoFlyMapView: View {
         settingJoystickOrigin = false
         joystickOriginIntentID = nil
         mode = value
+        if value == .joystick {
+            service.warmupSession()
+        }
         if value != .teleport { sheetDetent = .expanded }
     }
 
-    /// Camera-only tangent from acknowledged route progress. The route arrow
-    /// bearing issue (#15) remains on its separate functional-fix track.
-    private var executionCameraBearing: Double? {
-        if joystick.wanderEnabled { return joystickMarkerBearing }
+    private var activeMarkerBearing: Double? {
+        if isWanderMap { return joystickMarkerBearing }
+        if mode == .route || !route.canEdit {
+            return routeMarkerBearing
+        }
+        if mode == .joystick {
+            return joystickMarkerBearing
+        }
+        return nil
+    }
+
+    private var routeMarkerBearing: Double? {
         guard !route.canEdit, let planned = route.plannedRoute, let progress = route.progress else { return nil }
         let distance = progress.committedDistanceMeters
         let forward = route.heading == .forward
-        let lower = max(0, distance - 1)
-        let upper = min(planned.totalDistanceMeters, distance + 1)
+        let deltaDistance: Double = 3.0
+        let lower = max(0, distance - deltaDistance)
+        let upper = min(planned.totalDistanceMeters, distance + deltaDistance)
         guard let a = planned.coordinate(at: forward ? lower : upper),
               let b = planned.coordinate(at: forward ? upper : lower), a != b else { return nil }
         let latitudeA = a.latitude * .pi / 180
@@ -869,6 +901,11 @@ struct GoFlyMapView: View {
         let y = sin(delta) * cos(latitudeB)
         let x = cos(latitudeA) * sin(latitudeB) - sin(latitudeA) * cos(latitudeB) * cos(delta)
         return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    }
+
+    private var executionCameraBearing: Double? {
+        if joystick.wanderEnabled { return joystickMarkerBearing }
+        return routeMarkerBearing
     }
 
     private var joystickMarkerBearing: Double? {
@@ -1024,7 +1061,7 @@ struct GoFlyMapView: View {
     private var pillText: String {
         if pillTone == .danger { return goFlyString("status.pill.error") }
         if pillTone == .warning { return goFlyString("status.pill.limited") }
-        if pillTone == .success { return goFlyString("recovery.connectionRecovered") }
+        if recovery.noticeKey == "recovery.connectionRecovered" { return goFlyString("recovery.connectionRecovered") }
         if case .preparing = service.pointState { return goFlyString("status.pill.preparing") }
         if !route.canEdit, [.running, .pausing].contains(route.phase) {
             return goFlyString("status.pill.running")
@@ -1038,10 +1075,12 @@ struct GoFlyMapView: View {
 
     private var pillTone: GoFlyStatusTone {
         if service.error != nil || unconfirmedID != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil { return .danger }
+        if !service.nativeBusy, service.positionMarker?.source == .simulation,
+           service.positionMarker?.freshness == .waiting { return .warning }
         if recovery.noticeKey == "recovery.connectionRecovered" { return .success }
         if continuation.noticeKey != nil || recovery.noticeKey != nil || recovery.requiresColdConfirmation || location.noticeKey != nil || joystick.wanderError != nil { return .warning }
         if !route.canEdit, route.phase == .running || joystick.phase == .moving { return .active }
-        if service.positionMarker?.source == .simulation { return .active }
+        if service.positionMarker?.source == .simulation { return .success }
         return .neutral
     }
 
@@ -1107,7 +1146,7 @@ struct GoFlyMapView: View {
     }
 
     private var showsOperationPanel: Bool {
-        service.preparedOperation != nil || (unconfirmedID != nil && returnedFromUnconfirmed != unconfirmedID)
+        false
     }
 
     private var panelPresentsFailure: Bool {
@@ -1164,7 +1203,7 @@ struct GoFlyMapView: View {
     private func wanderTargetPin(_ place: MapPlace) -> some View {
         Button {
             dismissKeyboard()
-            presentedSheet = GoFlyMapSheet(content: .details(place))
+            selectedWanderPlace = place
         } label: {
             GoFlyPlacePinIcon(kind: .destination)
                 .frame(width: 44, height: 44, alignment: .bottom)
@@ -1216,6 +1255,175 @@ struct GoFlyMapView: View {
         } else {
             pendingGPSRecenter = true
             location.requestRecenter()
+        }
+    }
+
+    private var wanderCardPlace: MapPlace? {
+        selectedWanderPlace ?? (isWanderMap ? activeCandidate?.place : nil)
+    }
+
+    private func wanderLocationCard(for place: MapPlace) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GoFlyPlaceDetailsView(
+                place: place,
+                onDismiss: {
+                    selectedWanderPlace = nil
+                    if isWanderMap {
+                        wanderSearch.resetSelection()
+                    }
+                },
+                embedded: true,
+                distanceFrom: service.positionMarker?.coordinate,
+                canGo: activeCandidate != nil ? (wanderSearch.canGo && joystick.canApplyWanderTarget) : joystick.canApplyWanderTarget,
+                onGo: {
+                    if let candidate = activeCandidate {
+                        performGo(candidate)
+                    } else if let wanderTarget = joystick.wanderTarget, wanderTarget.place == place {
+                        _ = joystick.applyWanderTarget(place)
+                    }
+                    selectedWanderPlace = nil
+                }
+            )
+        }
+        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 16, x: 0, y: 5)
+        .accessibilityIdentifier("map.wander.locationCard")
+    }
+
+    @ViewBuilder
+    private var floatingSystemToast: some View {
+        if network.shouldShowWiFiError {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString("wifi.error.title"),
+                message: goFlyString("wifi.error.message"),
+                actionTitle: goFlyString("wifi.error.action"),
+                onAction: { network.openWiFiSettings() },
+                onDismiss: { network.dismissNotice() },
+                identifier: "map.wifiError",
+                isFloating: true
+            )
+        } else if let error = service.error, !serviceNoticeDismissed {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(error.rawValue),
+                message: goFlyString("status.repairGuidance"),
+                onDismiss: { serviceNoticeDismissed = true },
+                identifier: "map.serviceError",
+                isFloating: true
+            )
+        } else if let failure = unconfirmedFailure, returnedFromUnconfirmed != unconfirmedID {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(failure.rawValue),
+                message: goFlyString("teleport.positionUnconfirmed") + " " + goFlyString("operation.failureGuidance"),
+                actionTitle: goFlyString("operation.settings"),
+                onAction: { showingSettings = true },
+                onDismiss: { returnedFromUnconfirmed = unconfirmedID },
+                identifier: "map.unconfirmedFailure",
+                isFloating: true
+            )
+        } else if case .failed(let failure)? = service.preparedOperation?.state {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(failure.rawValue),
+                message: goFlyString("operation.failureGuidance"),
+                actionTitle: goFlyString("operation.retry"),
+                onAction: {
+                    if let id = service.preparedOperation?.id { _ = service.retryPreparedOperation(id: id) }
+                },
+                onDismiss: {
+                    if let id = service.preparedOperation?.id { _ = service.cancelPreparation(id: id) }
+                },
+                identifier: "map.operationFailure",
+                isFloating: true
+            )
+        } else if let error = joystick.error, mode == .joystick, !joystickErrorDismissed {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(error.localizationKey),
+                message: goFlyString("status.repairGuidance"),
+                actionTitle: goFlyString("operation.settings"),
+                onAction: { showingSettings = true },
+                onDismiss: { joystickErrorDismissed = true },
+                identifier: "joystick.error",
+                isFloating: true
+            )
+        } else if let error = joystick.wanderError, mode == .joystick {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString(error.localizationKey),
+                message: goFlyString("status.repairGuidance"),
+                actionTitle: joystick.canRetryWander ? goFlyString("operation.retry") : nil,
+                onAction: joystick.canRetryWander ? { _ = joystick.retryWander() } : nil,
+                onDismiss: { joystick.clearWanderError() },
+                identifier: "joystick.wanderError",
+                isFloating: true
+            )
+        } else if let error = route.error, mode == .route, !routeErrorDismissed {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString("route.error.shortTitle"),
+                message: goFlyString(error.localizationKey),
+                actionTitle: goFlyString("operation.retry"),
+                onAction: { _ = route.start() },
+                onDismiss: { routeErrorDismissed = true },
+                identifier: "route.error",
+                isFloating: true
+            )
+        } else if let key = location.noticeKey {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString(key),
+                onDismiss: { location.dismissNotice() },
+                identifier: "map.locationNotice",
+                isFloating: true
+            )
+        } else if let key = recovery.noticeKey, !recoveryNoticeDismissed {
+            let cold = recovery.requiresColdConfirmation
+            let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .warning
+            GoFlyStatusBanner(
+                tone: tone,
+                title: goFlyString(key),
+                message: goFlyString("recovery.connectionGuidance"),
+                actionTitle: goFlyString(cold ? "service.restoreGPS" : "onboarding.vpn.check"),
+                onAction: {
+                    if cold { _ = service.restoreGPS() }
+                    else { recovery.checkConnection() }
+                },
+                onDismiss: { recoveryNoticeDismissed = true },
+                identifier: "recovery.connectionBanner",
+                actionEnabled: cold ? service.canRestoreGPS : recovery.canCheck,
+                actionIdentifier: cold ? "recovery.restoreGPS" : "recovery.checkConnection",
+                titleIdentifier: "recovery.notice",
+                isFloating: true
+            )
+        } else if let key = continuation.noticeKey, !continuationNoticeDismissed {
+            let routePaused = mode == .route && route.phase == .paused
+            let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString(key == "background.durationCompleted" ? key :
+                    (routePaused ? "background.routePaused" : (holdPaused ? "background.positionPaused" : key))),
+                message: goFlyString(routePaused ? "background.routePaused.message" :
+                    (holdPaused ? "background.positionPaused.message" : "status.repairGuidance")),
+                actionTitle: goFlyString(routePaused ? "route.resume" :
+                    (holdPaused ? "background.positionRetry" : "settings.title")),
+                onAction: {
+                    if routePaused { _ = route.resume() }
+                    else if holdPaused { _ = positionHold.retry() }
+                    else { showingSettings = true }
+                },
+                onDismiss: { continuationNoticeDismissed = true },
+                identifier: "map.continuationNotice",
+                actionEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
+                actionIdentifier: routePaused ? "map.continuationNotice.resume" : "map.continuationNotice.action",
+                isFloating: true
+            )
         }
     }
 

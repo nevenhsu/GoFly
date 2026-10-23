@@ -146,10 +146,15 @@ public final class ContinuedProcessingController: ObservableObject {
 
     @discardableResult
     public func finishFiniteArrival(requestID: UUID) -> Bool {
+        guard currentRequest?.requestID == requestID,
+              currentRequest?.kind == .finiteRoute else { return false }
+        return finishFiniteTask(requestID: requestID)
+    }
+
+    @discardableResult
+    public func finishFiniteTask(requestID: UUID) -> Bool {
         guard let request = currentRequest, request.requestID == requestID,
-              request.kind == .finiteRoute,
-              case .finiteDistance(let goal) = request.goal,
-              progress.cumulativeAcknowledgedDistanceMeters == goal,
+              finiteGoalReached(request),
               state == .submitting || state == .accepted || state == .running else { return false }
 
         let oldGeneration = retireGeneration()
@@ -355,11 +360,30 @@ public final class ContinuedProcessingController: ObservableObject {
     private func isProgressAllowed(_ candidate: ContinuedProcessingProgress,
                                    for request: ContinuedProcessingRequest) -> Bool {
         guard candidate.acknowledgedWrites >= progress.acknowledgedWrites,
-              candidate.cumulativeAcknowledgedDistanceMeters >= progress.cumulativeAcknowledgedDistanceMeters else { return false }
+              candidate.cumulativeAcknowledgedDistanceMeters >= progress.cumulativeAcknowledgedDistanceMeters,
+              candidate.cumulativeAcknowledgedDurationSeconds >= progress.cumulativeAcknowledgedDurationSeconds else { return false }
         if case .finiteDistance(let goal) = request.goal {
             return candidate.cumulativeAcknowledgedDistanceMeters <= goal
         }
+        if case .finiteDuration(let goal) = request.goal {
+            return candidate.cumulativeAcknowledgedDurationSeconds <= goal
+        }
         return true
+    }
+
+    private func finiteGoalReached(_ request: ContinuedProcessingRequest) -> Bool {
+        switch (request.kind, request.goal) {
+        case (.finiteRoute, .finiteDistance(let goal)):
+            return progress.cumulativeAcknowledgedDistanceMeters == goal
+        case (.fixedPosition, .finiteDuration(let goal)):
+            return progress.cumulativeAcknowledgedDurationSeconds == goal
+        case (.roundTrip, .finiteDuration(let goal)):
+            return progress.cumulativeAcknowledgedDurationSeconds == goal
+        case (.wander, .finiteDuration(let goal)):
+            return progress.cumulativeAcknowledgedDurationSeconds == goal
+        default:
+            return false
+        }
     }
 
     private func publishRuntimeLoss(requestID: UUID, generation eventGeneration: UInt64,
@@ -389,6 +413,7 @@ public final class ContinuedProcessingController: ObservableObject {
 private func goalLabel(_ goal: ContinuedProcessingGoal) -> String {
     switch goal {
     case .finiteDistance(let meters): "finite:\(DiagnosticsField.fixed(meters, 0))m"
+    case .finiteDuration(let seconds): "finite:\(DiagnosticsField.fixed(seconds, 0))s"
     case .experimentalIndeterminate: "indeterminate"
     }
 }

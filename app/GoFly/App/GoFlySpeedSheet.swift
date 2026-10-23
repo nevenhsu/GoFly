@@ -9,8 +9,18 @@ struct GoFlySpeedSheet: View {
 
     private let presets: [Int] = [5, 20, 60, 120]
 
+    private func presetIcon(for preset: Int) -> String {
+        switch preset {
+        case 5: return "🚶"
+        case 20: return "🚲"
+        case 60: return "🚗"
+        case 120: return "🏎️"
+        default: return ""
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             // Header
             HStack {
                 Text(goFlyString("route.speedSetting"))
@@ -29,27 +39,29 @@ struct GoFlySpeedSheet: View {
                 .accessibilityIdentifier("route.speed.done")
             }
 
-            // Current Speed Readout
-            VStack(spacing: 4) {
+            Divider()
+
+            // Current Speed Readout in a single row
+            HStack(alignment: .firstTextBaseline) {
                 Text(goFlyString("route.speedCurrent"))
-                    .font(.footnote)
+                    .font(.body)
                     .foregroundStyle(GoFlyStyle.secondary)
+                Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(speed.kilometersPerHour)")
                         .font(.system(size: 36, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(GoFlyStyle.primary)
                     Text(goFlyString("route.speedUnit"))
-                        .font(.headline.weight(.medium))
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(GoFlyStyle.secondary)
                 }
                 .accessibilityIdentifier("route.speed.value")
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
 
-            // Preset Chips
-            HStack(spacing: 10) {
+            // Preset Chips with icons
+            HStack(spacing: 8) {
                 ForEach(presets, id: \.self) { preset in
                     let isSelected = speed.kilometersPerHour == preset
                     Button {
@@ -57,20 +69,23 @@ struct GoFlySpeedSheet: View {
                             onSpeedChanged(newSpeed)
                         }
                     } label: {
-                        Text("\(preset) \(goFlyString("route.speedUnit"))")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 38)
-                            .background(isSelected ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
-                            .overlay {
-                                if !isSelected {
-                                    Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 1)
-                                }
+                        HStack(spacing: 4) {
+                            Text(presetIcon(for: preset))
+                            Text("\(preset)")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .background(isSelected ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
+                        .overlay {
+                            if !isSelected {
+                                Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 1)
                             }
-                            .foregroundStyle(isSelected ? GoFlyStyle.surface : GoFlyStyle.primary)
-                            .contentShape(Capsule())
+                        }
+                        .foregroundStyle(isSelected ? GoFlyStyle.surface : GoFlyStyle.primary)
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canEdit)
@@ -78,8 +93,8 @@ struct GoFlySpeedSheet: View {
                 }
             }
 
-            // Slider
-            VStack(spacing: 8) {
+            // Slider with min/max labels below
+            VStack(spacing: 6) {
                 Slider(
                     value: Binding(
                         get: { Double(speed.kilometersPerHour) },
@@ -89,22 +104,21 @@ struct GoFlySpeedSheet: View {
                             }
                         }
                     ),
-                    in: 1...120,
-                    step: 1
-                ) {
-                    Text(goFlyString("route.speedSetting"))
-                } minimumValueLabel: {
-                    Text("1")
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                } maximumValueLabel: {
-                    Text("120")
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                }
+                    in: 1...120
+                )
                 .tint(GoFlyStyle.primary)
                 .disabled(!canEdit)
                 .accessibilityIdentifier("route.speed")
+
+                HStack {
+                    Text("1 \(goFlyString("route.speedUnit"))")
+                        .font(.caption)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                    Spacer()
+                    Text("120 \(goFlyString("route.speedUnit"))")
+                        .font(.caption)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                }
             }
             .padding(.top, 4)
 

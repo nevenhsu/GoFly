@@ -24,6 +24,31 @@ First installation adds `--mode install`; default `--mode renew` requires an ins
 
 AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；未知结果保留原事务，不卸载、不清数据、不盲目重试。只有完整安装、配对、设备准备回报全部通过才算完成。
 
+## iOS device-test prompt
+
+### 可直接貼給 AI 的 iPhone 覆蓋安裝 prompt
+
+以下 prompt 供使用者貼上交付任務；僅閱讀本文件不代表要求執行安裝。這裡的「重裝」指保留資料的覆蓋更新，已有 App 使用 `renew`。
+
+```text
+請在目前這個 GoFly 專案工作目錄中，使用已驗證的共用安裝流程，將最新 GoFly 覆蓋安裝到我的 iPhone，並完成配對交接。
+
+這次已授權建置、簽署、覆蓋安裝、配對交付及必要裝置準備。請直接執行，不要只提供步驟。
+
+要求：
+- 先讀 AGENTS.md 與 docs/AI-INSTALL.md。
+- 使用 scripts/install-ios-test.sh；已有 App 使用 --mode renew。
+- 不卸載 App、不清除偏好設定、最愛或路線。
+- 核對目前連接的實體 iPhone；若只有一台，直接使用。沿用既有簽署 Team，不任意更換。
+- 先執行 --action preflight，再執行 --action apply。
+- 不得以單獨 Xcode 或 devicectl 安裝取代共用流程。
+- 必須確認 complete=true，且 installationConfirmed、pairingImported、supportObserved 全部為 true，才算完成。
+- 中斷時保留原 setupID，先查 status，確認可續才 resume，不盲目重送。
+- 比對更新前後既有偏好與資料，確認保留。
+- 配對資料、憑證與原始日誌只保留在私密／忽略目錄，不貼聊天、不提交。
+- 完成後回報手機上的版本/build、配對與裝置準備結果，以及資料保留核對結果。安裝成功與外部地圖定位成功分開說明。
+```
+
 ## English
 
 ### Establish the task

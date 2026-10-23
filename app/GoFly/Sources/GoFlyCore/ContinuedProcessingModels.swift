@@ -2,12 +2,14 @@ import Foundation
 
 public enum ContinuedProcessingKind: String, CaseIterable, Equatable, Sendable {
     case finiteRoute
+    case fixedPosition
     case roundTrip
     case wander
 }
 
 public enum ContinuedProcessingGoal: Equatable, Sendable {
     case finiteDistance(meters: Double)
+    case finiteDuration(seconds: Double)
     case experimentalIndeterminate
 }
 
@@ -47,9 +49,18 @@ public struct ContinuedProcessingRequest: Equatable, Sendable {
             return meters.isFinite && meters > 0
         case (.finiteRoute, .experimentalIndeterminate):
             return false
+        case (.fixedPosition, .finiteDuration(let seconds)):
+            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+        case (.roundTrip, .finiteDuration(let seconds)):
+            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+        case (.wander, .finiteDuration(let seconds)):
+            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+        case (.fixedPosition, .finiteDistance), (.fixedPosition, .experimentalIndeterminate):
+            return false
         case (.roundTrip, .experimentalIndeterminate), (.wander, .experimentalIndeterminate):
             return true
-        case (.roundTrip, .finiteDistance), (.wander, .finiteDistance):
+        case (.roundTrip, .finiteDistance), (.wander, .finiteDistance),
+             (.finiteRoute, .finiteDuration):
             return false
         }
     }
@@ -58,17 +69,62 @@ public struct ContinuedProcessingRequest: Equatable, Sendable {
 public struct ContinuedProcessingProgress: Equatable, Sendable {
     public let acknowledgedWrites: Int64
     public let cumulativeAcknowledgedDistanceMeters: Double
+    public let cumulativeAcknowledgedDurationSeconds: Double
 
-    public init?(acknowledgedWrites: Int64, cumulativeAcknowledgedDistanceMeters: Double) {
+    public init?(acknowledgedWrites: Int64, cumulativeAcknowledgedDistanceMeters: Double,
+                cumulativeAcknowledgedDurationSeconds: Double = 0) {
         guard acknowledgedWrites >= 0,
               cumulativeAcknowledgedDistanceMeters.isFinite,
-              cumulativeAcknowledgedDistanceMeters >= 0 else { return nil }
+              cumulativeAcknowledgedDistanceMeters >= 0,
+              cumulativeAcknowledgedDurationSeconds.isFinite,
+              cumulativeAcknowledgedDurationSeconds >= 0 else { return nil }
         self.acknowledgedWrites = acknowledgedWrites
         self.cumulativeAcknowledgedDistanceMeters = cumulativeAcknowledgedDistanceMeters
+        self.cumulativeAcknowledgedDurationSeconds = cumulativeAcknowledgedDurationSeconds
     }
 
     public static let zero = ContinuedProcessingProgress(acknowledgedWrites: 0,
-                                                          cumulativeAcknowledgedDistanceMeters: 0)!
+                                                          cumulativeAcknowledgedDistanceMeters: 0,
+                                                          cumulativeAcknowledgedDurationSeconds: 0)!
+}
+
+/// Unit counts sent to the system continued-processing progress object.
+///
+/// Finite duration and distance goals use the same bounded percentage scale
+/// understood by the system continued-processing progress object.
+public struct ContinuedProcessingProgressUnits: Equatable, Sendable {
+    public let totalUnitCount: Int64
+    public let completedUnitCount: Int64
+
+    public init(totalUnitCount: Int64, completedUnitCount: Int64) {
+        self.totalUnitCount = totalUnitCount
+        self.completedUnitCount = completedUnitCount
+    }
+
+    public static func forRequest(_ request: ContinuedProcessingRequest,
+                                  progress: ContinuedProcessingProgress) -> Self {
+        switch request.goal {
+        case .finiteDistance(let goal) where goal.isFinite && goal > 0:
+            let ratio = min(max(progress.cumulativeAcknowledgedDistanceMeters / goal, 0), 1)
+            let completed = safeInt64Floor(ratio * 1_000_000, cap: 999_999)
+            return Self(totalUnitCount: 1_000_000, completedUnitCount: completed)
+        case .finiteDuration(let goal) where goal.isFinite && goal > 0:
+            let ratio = min(max(progress.cumulativeAcknowledgedDurationSeconds / goal, 0), 1)
+            let completed = safeInt64Floor(ratio * 1_000_000, cap: 999_999)
+            return Self(totalUnitCount: 1_000_000, completedUnitCount: completed)
+        case .experimentalIndeterminate:
+            return Self(totalUnitCount: -1, completedUnitCount: progress.acknowledgedWrites)
+        default:
+            return Self(totalUnitCount: -1, completedUnitCount: progress.acknowledgedWrites)
+        }
+    }
+
+    private static func safeInt64Floor(_ value: Double, cap: Int64) -> Int64 {
+        guard value.isFinite, value >= 0 else { return value.sign == .minus ? 0 : cap }
+        let conversionLimit = Double(Int64.max) - 1_000_000
+        guard value < conversionLimit else { return cap }
+        return min(Int64(floor(value)), cap)
+    }
 }
 
 public enum ContinuedProcessingFailure: Error, Equatable, Sendable {
@@ -143,6 +199,7 @@ public struct ContinuedProcessingReceipt: Equatable, Sendable {
     public let event: ContinuedProcessingReceiptEvent
     public let acknowledgedWrites: Int64
     public let cumulativeAcknowledgedDistanceMeters: Double
+    public let cumulativeAcknowledgedDurationSeconds: Double
     public let candidateVersion: Int
 
     init(timestamp: Date, requestID: UUID, kind: ContinuedProcessingKind,
@@ -154,6 +211,7 @@ public struct ContinuedProcessingReceipt: Equatable, Sendable {
         self.event = event
         self.acknowledgedWrites = progress.acknowledgedWrites
         self.cumulativeAcknowledgedDistanceMeters = progress.cumulativeAcknowledgedDistanceMeters
+        self.cumulativeAcknowledgedDurationSeconds = progress.cumulativeAcknowledgedDurationSeconds
         self.candidateVersion = candidateVersion
     }
 }

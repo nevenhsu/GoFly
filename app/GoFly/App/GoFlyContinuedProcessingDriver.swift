@@ -41,7 +41,9 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
 
         let taskRequest = BGContinuedProcessingTaskRequest(
             identifier: Self.identifier, title: request.title, subtitle: request.subtitle)
-        taskRequest.strategy = .fail
+        // Queue behind other continued-processing work instead of rejecting
+        // the user's movement when iOS has no immediate task slot.
+        taskRequest.strategy = .queue
         taskRequest.requiredResources = []
         do {
             if #available(iOS 27.0, *) { try await scheduler.submitTaskRequest(taskRequest) }
@@ -60,6 +62,7 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
         Diagnostics.shared.record("background.submitted", category: .background, level: .notice, [
             "request": .text(request.requestID.uuidString),
             "kind": .text(request.kind.rawValue),
+            "strategy": .text("queue"),
             "ios27": .flag(ProcessInfo.processInfo.isOperatingSystemAtLeast(
                 OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)))
         ])
@@ -67,29 +70,22 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
     }
 
     public func update(requestID: UUID, progress: ContinuedProcessingProgress, title: String, subtitle: String) {
-        guard currentRequest?.requestID == requestID, let currentTask,
+        guard let request = currentRequest, request.requestID == requestID, let currentTask,
               valid(title, 128), valid(subtitle, 512) else { return }
-        let units: (total: Int64, completed: Int64)
-        switch currentRequest?.goal {
-        case .finiteDistance(let goal) where goal > 0:
-            let ratio = min(max(progress.cumulativeAcknowledgedDistanceMeters / goal, 0), 1)
-            units = (1_000_000, min(Int64(ratio * 1_000_000), 999_999))
-        default:
-            units = (-1, progress.acknowledgedWrites)
-        }
-        currentTask.progress.totalUnitCount = units.total
-        currentTask.progress.completedUnitCount = units.completed
+        let units = ContinuedProcessingProgressUnits.forRequest(request, progress: progress)
+        currentTask.progress.totalUnitCount = units.totalUnitCount
+        currentTask.progress.completedUnitCount = units.completedUnitCount
         currentTask.updateTitle(title, subtitle: subtitle)
         Diagnostics.shared.record("background.progressUnits", category: .background, [
-            "total": .count(Int(units.total)),
-            "completed": .count(Int(units.completed)),
+            "total": .count(Int(units.totalUnitCount)),
+            "completed": .count(Int(units.completedUnitCount)),
             "writes": .count(Int(progress.acknowledgedWrites))
         ])
     }
 
     public func finish(requestID: UUID, success: Bool) -> ContinuedProcessingCompletionOutcome? {
-        guard currentRequest?.requestID == requestID, currentRequest?.kind == .finiteRoute,
-              case .finiteDistance = currentRequest?.goal else { return nil }
+        guard let request = currentRequest, request.requestID == requestID,
+              Self.isFiniteGoal(request) else { return nil }
         let claim = completion?.claim(success ? .success : .failed)
         complete(success: claim?.outcome == .success)
         clearCurrent()
@@ -164,5 +160,17 @@ public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
     private func valid(_ value: String, _ maximum: Int) -> Bool {
         !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             value.utf8.count <= maximum && !value.unicodeScalars.contains { $0.value == 0 }
+    }
+
+    private static func isFiniteGoal(_ request: ContinuedProcessingRequest) -> Bool {
+        switch (request.kind, request.goal) {
+        case (.finiteRoute, .finiteDistance),
+             (.fixedPosition, .finiteDuration),
+             (.roundTrip, .finiteDuration),
+             (.wander, .finiteDuration):
+            return true
+        default:
+            return false
+        }
     }
 }

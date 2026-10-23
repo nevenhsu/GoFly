@@ -421,6 +421,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                     switch recipe {
                     case .manual: arrived = JoystickGeodesy.distanceMeters(from: receipt.actualCoordinate, to: target.coordinate) <= 1
                     case .target: arrived = receipt.targetID == target.id && receipt.arrived
+                    case .fixedPosition: arrived = false
                     }
                     if arrived { advanceTarget(from: receipt.actualCoordinate) }
                 }
@@ -470,7 +471,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
         continuationControlSubject.send(.requested(MovementContinuationDemand(
             movementID: intent.id, lease: intent.lease, kind: .wander,
-            goal: .experimentalIndeterminate)))
+            goal: .finiteDuration(seconds: 43_200))))
     }
 
     private func withdrawContinuation(_ reason: MovementContinuationWithdrawalReason) {

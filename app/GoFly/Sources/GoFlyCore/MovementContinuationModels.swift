@@ -4,6 +4,7 @@ import Foundation
 public enum MovementAcknowledgementSource: Equatable, Sendable {
     case route
     case joystick
+    case fixedPosition
 }
 
 /// An acknowledgement emitted only after a native command has crossed its
@@ -14,20 +15,40 @@ public struct MovementAcknowledgement: Equatable, Sendable {
     public let sequence: UInt64
     public let source: MovementAcknowledgementSource
     public let acknowledgedDistanceMeters: Double
+    public let cumulativeAcknowledgedDurationSeconds: Double
     public let routePositionMeters: Double?
     public let finiteArrival: Bool
 
     init(movementID: UUID, lease: MovementTaskLease, sequence: UInt64,
          source: MovementAcknowledgementSource, acknowledgedDistanceMeters: Double,
-         routePositionMeters: Double? = nil, finiteArrival: Bool = false) {
+         routePositionMeters: Double? = nil, finiteArrival: Bool = false,
+         cumulativeAcknowledgedDurationSeconds: Double = 0) {
         self.movementID = movementID
         self.lease = lease
         self.sequence = sequence
         self.source = source
         self.acknowledgedDistanceMeters = acknowledgedDistanceMeters
+        self.cumulativeAcknowledgedDurationSeconds = cumulativeAcknowledgedDurationSeconds
         self.routePositionMeters = routePositionMeters
         self.finiteArrival = finiteArrival
     }
+}
+
+public struct TeleportAcknowledgement: Equatable, Sendable {
+    public let intent: PointMoveIntent
+    public let lease: MovementTaskLease
+    public let displayEpoch: UUID
+    public let admissionRevision: UInt64
+
+    init(intent: PointMoveIntent, lease: MovementTaskLease, displayEpoch: UUID,
+         admissionRevision: UInt64) {
+        self.intent = intent
+        self.lease = lease
+        self.displayEpoch = displayEpoch
+        self.admissionRevision = admissionRevision
+    }
+
+    public var coordinate: GeoCoordinate { intent.candidate.place.coordinate }
 }
 
 public struct MovementContinuationDemand: Equatable, Sendable {

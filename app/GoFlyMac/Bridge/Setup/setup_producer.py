@@ -819,7 +819,8 @@ class SetupProducer:
         ):
             raise SetupBridgeError("handoff-unknown")
         pairing = journal.get("pairing", {})
-        if result.pairing_sha256 and result.pairing_sha256 != pairing.get("sha256"):
+        delivery = journal.get("delivery", {}).get("state", "notStarted") if isinstance(journal.get("delivery"), Mapping) else "notStarted"
+        if delivery == "delivered" and result.pairing_sha256 and result.pairing_sha256 != pairing.get("sha256"):
             raise SetupBridgeError("handoff-unknown")
         support = journal.get("support", {})
         if result.support_method and result.support_method != support.get("method"):
@@ -1432,10 +1433,17 @@ class SetupProducer:
 
     def _resume_artifact(self, journal: dict[str, Any], request: SetupRequest) -> dict[str, Any]:
         intent = journal.get("intent", {})
-        team_id = intent.get("teamID")
+        team_id = (request.options.team_id if request.options and request.options.team_id else None) or intent.get("teamID")
         if not isinstance(team_id, str):
             raise SetupBridgeError("transaction-unknown")
-        options = SetupOptions(team_id, intent.get("allowProvisioningUpdates") is True)
+        intent["teamID"] = team_id
+        allow_provisioning = (
+            (request.options.allow_provisioning_updates if request.options else False)
+            or (intent.get("allowProvisioningUpdates") is True)
+        )
+        if request.options and request.options.allow_provisioning_updates:
+            intent["allowProvisioningUpdates"] = True
+        options = SetupOptions(team_id, allow_provisioning)
         rebound = SetupRequest(request.request_id, "apply", request.setup_id, request.device_id, request.mode, options)
         try:
             observed = self._observe_device(request.device_id)

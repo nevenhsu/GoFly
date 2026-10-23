@@ -90,6 +90,34 @@ public final class FavoritePlacesStore: ObservableObject {
         return true
     }
 
+    @discardableResult public func save(place: MapPlace, label: String?) -> Bool {
+        guard canMutate else { return false }
+        do {
+            guard let key = FavoritePlaceKey(place: place) else { throw FavoritePlacesFailure.invalidPlace }
+            try FavoritePlacesArchive.validate(place)
+            let trimmed = (label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard FavoritePlacesArchive.validText(trimmed, maximum: FavoritePlacesLimits.labelCharacters) else {
+                error = .invalidLabel
+                return false
+            }
+            let normalized = FavoritePlacesArchive.normalizedLabel(trimmed)
+            var proposed = favorites
+            if let index = proposed.firstIndex(where: { $0.key == key }) {
+                proposed[index] = FavoritePlace(key: key, place: place, label: normalized)
+            } else {
+                proposed.append(FavoritePlace(key: key, place: place, label: normalized))
+            }
+            guard persist(proposed) else { return false }
+            rememberedLabels[key] = normalized
+            return true
+        } catch { self.error = error as? FavoritePlacesFailure ?? .writeFailed; return false }
+    }
+
+    @discardableResult public func delete(place: MapPlace) -> Bool {
+        guard let key = FavoritePlaceKey(place: place) else { return false }
+        return delete([key])
+    }
+
     private func persist(_ proposed: [FavoritePlace]) -> Bool {
         do {
             let data = try FavoritePlacesArchive.encode(proposed)

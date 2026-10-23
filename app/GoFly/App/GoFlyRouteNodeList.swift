@@ -26,6 +26,7 @@ struct GoFlyRouteNodeList: View {
     var onEdit: (RouteNodeID) -> Void
     var onDelete: (RouteNodeID) -> Void
     var onMove: (RouteNodeID, Int) -> Void
+    var onAddDestination: () -> Void = { }
     var onScroll: (RouteNodeID, UnitPoint) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @GestureState private var gestureIsActive = false
@@ -62,8 +63,13 @@ struct GoFlyRouteNodeList: View {
                         .accessibilityHidden(draggingID == id)
                     .id(id)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { rowFrames[id] = $0 }
-                    if index < visibleOrder.count - 1 { Divider().padding(.horizontal, 12) }
+                    if index < visibleOrder.count - 1 || (draft.isManual && draft.nodes.count == 1) {
+                        Divider().padding(.horizontal, 12)
+                    }
                 }
+            }
+            if draft.isManual && draft.nodes.count == 1 {
+                placeholderDestinationRow
             }
         }
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -125,20 +131,63 @@ struct GoFlyRouteNodeList: View {
             .accessibilityLabel(goFlyRouteEditTitle(role))
             .accessibilityValue(title(node.value))
             .accessibilityIdentifier(editIdentifier(role))
-            Button { if isEditable { onDelete(node.id) } } label: {
-                GoFlyTrashIcon(size: 18)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+            if case .waypoint = role {
+                Button { if isEditable { onDelete(node.id) } } label: {
+                    GoFlyTrashIcon(size: 18)
+                        .foregroundStyle(GoFlyStyle.danger)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!isEditable || draggingID != nil)
+                .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
+                .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
+            } else {
+                Spacer()
+                    .frame(width: 16)
             }
-            .buttonStyle(.plain)
-            .disabled(!isEditable || draggingID != nil)
-            .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
-            .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
         }
         .frame(minHeight: 60)
         .foregroundStyle(isEditable ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.row.\(node.id.rawValue.uuidString)")
+    }
+
+    private var placeholderDestinationRow: some View {
+        HStack(spacing: 0) {
+            Image(systemName: GoFlySymbols.reorder)
+                .goFlyControlSymbol(size: 18, weight: .semibold)
+                .frame(width: 44, height: 44)
+                .foregroundStyle(GoFlyStyle.border)
+                .accessibilityHidden(true)
+            Button {
+                if isEditable { onAddDestination() }
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(goFlyRouteRoleTitle(.destination))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    Text(goFlyString("route.chooseDestination"))
+                        .font(.body)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEditable)
+            .accessibilityLabel(goFlyRouteEditTitle(.destination))
+            .accessibilityValue(goFlyString("route.chooseDestination"))
+            .accessibilityIdentifier("route.node.destination")
+            Spacer()
+                .frame(width: 16)
+        }
+        .frame(minHeight: 60)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("route.row.destination.placeholder")
     }
 
     private func dragGesture(for id: RouteNodeID) -> some Gesture {

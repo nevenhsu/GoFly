@@ -48,7 +48,8 @@ def main(argv=None) -> int:
         config.validate_read_only_paths()
         device_id = normalized_device(args.device)
         setup_id = str(uuid.UUID(args.setup_id)) if args.setup_id else str(uuid.uuid4())
-        options = SetupOptions(args.team, args.allow_provisioning_updates) if args.action in {"preflight", "apply"} else None
+        team_val = args.team or ""
+        options = SetupOptions(team_val, args.allow_provisioning_updates) if (args.action in {"preflight", "apply"} or (args.action == "resume" and (args.allow_provisioning_updates or bool(args.team)))) else None
         request = SetupRequest(str(uuid.uuid4()), args.action, setup_id, device_id, args.mode, options)
         device = PinnedPymobiledeviceAdapter(state_root=config.state_root)
         producer = SetupProducer(config, device=device, process=PinnedXcodeProcessAdapter(config),

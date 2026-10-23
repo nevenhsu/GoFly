@@ -22,7 +22,7 @@
 
 重新簽名／更新現在也走完整的配對核對、交付與必要裝置準備，手機精確回報後才完成；保留同一 App 的偏好、最愛及路線，不卸載。配對綁定選定 USB iPhone，身分不符或結果不明即停止。這條實作流程目前限 USB；VPN 及外部地圖定位分開驗收。
 
-AI 實機測試一律使用 `bash scripts/install-ios-test.sh --device <UDID> --team <TEAM> --action preflight`，取得安裝授權後改 `--action apply`。已有 App 預設 renew；首次加 `--mode install`。未知寫入沿用輸出的 setupID 查詢／明確續行，不單獨用 devicectl 補裝。完整範例見 [AI 安裝說明](../../docs/AI-INSTALL.md)。
+AI 實機測試一律使用 `bash scripts/install-ios-test.sh --device <UDID> --team <TEAM> --action preflight`，取得安裝授權後改 `--action apply`。已有 App 預設 renew；首次加 `--mode install`。未知寫入沿用輸出的 setupID 查詢／明確續行，不單獨用 devicectl 補裝。完整範例見 [AI 安裝說明](../../docs/AI-INSTALL.md)，可直接貼上的任務文字見 [iPhone 覆蓋安裝 prompt](../../docs/AI-INSTALL.md#ios-device-test-prompt)。
 
 ## 開啟
 

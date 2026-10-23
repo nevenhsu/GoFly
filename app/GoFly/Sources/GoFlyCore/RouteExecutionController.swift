@@ -33,6 +33,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     @Published public private(set) var suspensionReason: RouteSuspensionReason?
     @Published public private(set) var roundTripEnabled = false
     @Published public private(set) var usesPositionAxis = false
+    @Published public private(set) var loadedFavoriteRecordID: UUID?
     @Published public private(set) var heading: RouteHeading = .forward
     private let planner: any RoutePlanning
     private let commands: any RouteCommanding
@@ -47,6 +48,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private var revision: UInt64 = 0
     private var task: Task<Void, Never>?
     private var transition: Task<Void, Never>?
+    private var previewTask: Task<Void, Never>?
     private var subscription: AnyCancellable?
     private var pickerCandidateSubscription: AnyCancellable?
     private var accumulatedElapsed: Duration = .zero
@@ -74,11 +76,13 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             // A persisted GPX draft is display data. Build only its existing
             // exact preview; do not plan roads or touch the command seam.
             self.plannedRoute = try? PlannedRoute(imported: source.document)
+        } else if draft.isManual {
+            schedulePreviewPlanning(for: draft)
         }
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
     public var canEdit: Bool { phase == .editing }
-    public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
+    public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && error == nil && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canClearImportedRoute: Bool { canEdit && draft.gpxSource != nil }
     private func beginPhysicalOperation() -> UUID {
@@ -123,6 +127,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         }
         applyDraft(changed)
         plannedRoute = preview
+        loadedFavoriteRecordID = snapshot.record.id
         return true
     }
     @discardableResult public func loadImportedRoute(_ snapshot: ImportedRouteSnapshot,
@@ -226,6 +231,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         applyDraft(changed)
         return true
     }
+    @discardableResult public func reverseNodes() -> Bool {
+        guard canEdit, let changed = draft.reversing() else { return false }
+        applyDraft(changed)
+        return true
+    }
     @discardableResult public func confirmPicker(id: UUID, useCurrentLocation: Bool = false) -> Bool {
         guard canEdit, draft.isManual, let session = picker, session.id == id else { return false }
         guard session.isNew || draft.nodes.contains(where: { $0.id == session.nodeID }) else { return false }
@@ -263,8 +273,14 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         let first = isNew ? draft.nodes.isEmpty : draft.start?.id == id
         return first && !draft.nodes.contains { $0.id != id && $0.value == .current }
     }
+    public func setLoadedFavoriteRecordID(_ id: UUID?) {
+        loadedFavoriteRecordID = id
+    }
     private func applyDraft(_ changed: RouteDraft) {
         invalidateFavoriteLoadAdmission()
+        previewTask?.cancel()
+        previewTask = nil
+        loadedFavoriteRecordID = nil
         draft = changed; plannedRoute = nil; completion = nil; error = nil
         guard draft.isManual else { picker = nil; return }
         if var session = picker {
@@ -273,6 +289,47 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             else { picker = nil; return }
             session.allowsCurrent = allowsCurrent(at: session.nodeID, isNew: session.isNew)
             picker = session
+        }
+        schedulePreviewPlanning(for: changed)
+    }
+
+    private func schedulePreviewPlanning(for snapshot: RouteDraft) {
+        guard canEdit, snapshot.isManual else { return }
+        guard snapshot.nodes.count >= 2, snapshot.start != nil, snapshot.destination != nil else { return }
+        let resolved: RouteDraft
+        do {
+            resolved = try resolvedDraft(snapshot)
+        } catch {
+            if let failure = error as? RouteExecutionFailure {
+                self.error = failure
+            }
+            return
+        }
+        let coordinates = resolved.nodes.compactMap { node -> GeoCoordinate? in
+            if case .place(let place) = node.value { return place.coordinate }
+            return nil
+        }
+        guard coordinates.count >= 2 else { return }
+        let token = revision
+        let planner = self.planner
+        previewTask = Task { @MainActor [weak self] in
+            do {
+                var legs: [PlannedRoute] = []
+                for index in 1..<coordinates.count {
+                    let from = coordinates[index - 1], to = coordinates[index]
+                    let points = try await planner.plan(from: from, to: to)
+                    try Task.checkCancellation()
+                    guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
+                    legs.append(try PlannedRoute(points: points, from: from, to: to))
+                }
+                guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
+                self.plannedRoute = try PlannedRoute(legs: legs)
+                self.error = nil
+            } catch {
+                guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
+                self.plannedRoute = nil
+                self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .planningFailed)
+            }
         }
     }
     @discardableResult public func setSpeed(_ speed: RouteSpeed) -> Bool {
@@ -297,6 +354,9 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         revision &+= 1
         let token = revision
         let admission = commands.routeAdmissionRevision
+        let existingPreview = plannedRoute
+        previewTask?.cancel()
+        previewTask = nil
         phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil
         if snapshot.isManual { plannedRoute = nil }
         accumulatedElapsed = .zero; activeStartedAt = nil
@@ -308,6 +368,9 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             do {
                 let route: PlannedRoute
                 if let imported = snapshot.gpxSource { route = try PlannedRoute(imported: imported.document) }
+                else if let existingPreview, existingPreview.start == coordinates.first, existingPreview.end == coordinates.last {
+                    route = existingPreview
+                }
                 else {
                     var legs: [PlannedRoute] = []
                     for index in 1..<coordinates.count {
@@ -596,7 +659,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             : max(0, current)
         let kind: ContinuedProcessingKind = roundTripEnabled ? .roundTrip : .finiteRoute
         let goal: ContinuedProcessingGoal? = roundTripEnabled
-            ? .experimentalIndeterminate
+            ? .finiteDuration(seconds: 43_200)
             : (remaining > 0 && remaining.isFinite ? .finiteDistance(meters: remaining) : nil)
         continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
         continuationControlSubject.send(.requested(MovementContinuationDemand(

@@ -33,6 +33,9 @@ public final class MovementTaskAuthority: @unchecked Sendable {
     private var coldRecoveryHeld = false
     private var foreground = true
     private var grantBinding: GrantBinding?
+    // Unknown health is only admissible for the first point gate installed
+    // for a lease. Later unknown states must be revalidated by the owner.
+    private var initialPointGateInstalled = false
     public init() {}
     public var snapshot: MovementAuthoritySnapshot { lock.withLock { stored } }
 
@@ -75,6 +78,7 @@ public final class MovementTaskAuthority: @unchecked Sendable {
                   stored.lease == nil || stored.health == .confirmedHealthy else { return false }
             if stored.lease == lease, let binding = grantBinding, !binding.grant.isValid { return false }
             if stored.lease != lease { grantBinding = nil }
+            initialPointGateInstalled = true
             stored = MovementAuthoritySnapshot(lease: lease, runState: .running, health: .unknown, revision: stored.revision &+ 1)
             return true
         }
@@ -93,9 +97,39 @@ public final class MovementTaskAuthority: @unchecked Sendable {
             return true
         }
     }
+
+    /// Recovery admission is checked under the same authority lock as the
+    /// original dispatch. It accepts the initial gate's unknown health while
+    /// its first point is still settling; subsequent unknown states require a
+    /// fresh owner proof and are rejected.
+    public func permitsRecovery(for lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard !connectionBlocked, !coldRecoveryHeld,
+                  stored.lease == lease, stored.runState == .running else { return false }
+            switch stored.health {
+            case .confirmedHealthy:
+                break
+            case .unknown:
+                guard initialPointGateInstalled else { return false }
+            case .interrupted:
+                return false
+            case .none:
+                return false
+            }
+            if let binding = grantBinding {
+                return binding.grant.lease == lease && binding.grant.isValid
+            }
+            return foreground
+        }
+    }
+
     @discardableResult public func updateHealth(_ health: MovementTaskHealth, for lease: MovementTaskLease) -> Bool {
         lock.withLock {
             guard stored.lease == lease else { return false }
+            // Any explicit health publication closes the initial unknown
+            // window, including an idempotent `.unknown` publication from a
+            // stop or expiry path.
+            initialPointGateInstalled = false
             guard stored.health != health else { return true }
             stored = MovementAuthoritySnapshot(lease: lease, runState: stored.runState, health: health, revision: stored.revision &+ 1)
             return true
@@ -113,6 +147,7 @@ public final class MovementTaskAuthority: @unchecked Sendable {
         lock.withLock {
             guard stored.lease == lease else { return false }
             grantBinding = nil
+            initialPointGateInstalled = false
             stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)
             return true
         }
@@ -120,6 +155,7 @@ public final class MovementTaskAuthority: @unchecked Sendable {
     public func revokeAll() {
         lock.withLock {
             grantBinding = nil
+            initialPointGateInstalled = false
             stored = MovementAuthoritySnapshot(lease: nil, runState: nil, health: nil, revision: stored.revision &+ 1)
         }
     }

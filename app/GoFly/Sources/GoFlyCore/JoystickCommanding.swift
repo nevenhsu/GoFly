@@ -4,8 +4,10 @@ import Foundation
 public struct JoystickMovementIntent: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let lease: MovementTaskLease
-    public init(id: UUID = UUID(), lease: MovementTaskLease = MovementTaskLease()) {
-        self.id = id; self.lease = lease
+    public let fixedPosition: GeoCoordinate?
+    public init(id: UUID = UUID(), lease: MovementTaskLease = MovementTaskLease(),
+                fixedPosition: GeoCoordinate? = nil) {
+        self.id = id; self.lease = lease; self.fixedPosition = fixedPosition
     }
 }
 

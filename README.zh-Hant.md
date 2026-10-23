@@ -65,6 +65,8 @@ GoFly 設計涵蓋地點選取、路線／GPX、搖桿移動、裝置服務準�
 
 ## 交給 AI 協助安裝
 
+已有 GoFly、要在實機測試時保留資料覆蓋更新，可直接使用 [iPhone 覆蓋安裝 prompt](docs/AI-INSTALL.md#ios-device-test-prompt)；共用流程會一併完成配對交接。
+
 先提供 [AI 安裝操作說明](docs/AI-INSTALL.md#繁體中文)，再貼上：
 
 ```text

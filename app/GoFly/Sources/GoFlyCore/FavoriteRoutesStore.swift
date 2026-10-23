@@ -13,7 +13,7 @@ public final class FavoriteRoutesStore: ObservableObject {
     @Published public private(set) var canUndo = false
     @Published public private(set) var unavailable: [UUID: FavoriteRoutesFailure] = [:]
     private let persistence: any FavoriteRoutesPersistence
-    private var undo: (record: FavoriteRouteRecord, payload: Data, index: Int)?
+    private var undo: [(record: FavoriteRouteRecord, payload: Data, index: Int)] = []
     private var selectionRevision: UInt64 = 0
     /// Retained until each entered persistence or detached parse call returns.
     private var physicalOperations: Set<UUID> = []
@@ -25,8 +25,6 @@ public final class FavoriteRoutesStore: ObservableObject {
         let id = UUID(); physicalOperations.insert(id); return id
     }
     private func finishPhysicalOperation(_ id: UUID) { physicalOperations.remove(id) }
-
-    @discardableResult
 
     public func clearError() { guard transferAdmissionAllowed else { return }; error = nil }
     public func load() async {
@@ -102,24 +100,35 @@ public final class FavoriteRoutesStore: ObservableObject {
         } catch is CancellationError { return false }
         catch { recordFailure(error); return false }
     }
-    @discardableResult public func delete(_ id: UUID) async -> Bool {
-        guard canMutate, !Task.isCancelled else { return false }
+    @discardableResult public func delete(_ ids: Set<UUID>) async -> Bool {
+        guard canMutate, !Task.isCancelled, !ids.isEmpty else { return false }
         isBusy = true
         let operation = beginPhysicalOperation()
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
-            guard let index = records.firstIndex(where: { $0.id == id }) else { throw FavoriteRoutesFailure.notFound }
-            let record = records[index]
-            let payload = try? await persistence.payload(id)
-            let receipt = try await persistence.delete(id)
-            undo = payload.map { (record, $0, index) }
+            var itemsToDelete: [(record: FavoriteRouteRecord, payload: Data, index: Int)] = []
+            for (index, record) in records.enumerated() where ids.contains(record.id) {
+                if let payload = try? await persistence.payload(record.id) {
+                    itemsToDelete.append((record, payload, index))
+                }
+            }
+            guard !itemsToDelete.isEmpty else { throw FavoriteRoutesFailure.notFound }
+            var lastReceipt: FavoriteRoutesReceipt?
+            for item in itemsToDelete {
+                lastReceipt = try await persistence.delete(item.record.id)
+            }
+            guard let receipt = lastReceipt else { throw FavoriteRoutesFailure.notFound }
+            undo = itemsToDelete
             publish(receipt)
-            if selectedID == id { await select(nil) }
+            if let selectedID, ids.contains(selectedID) { await select(nil) }
             error = nil
             return true
         } catch is CancellationError { return false }
         catch { recordFailure(error); return false }
+    }
+    @discardableResult public func delete(_ id: UUID) async -> Bool {
+        await delete(Set([id]))
     }
     @discardableResult public func undoDelete() async -> Bool {
         guard canMutate, !Task.isCancelled else { return false }
@@ -128,9 +137,13 @@ public final class FavoriteRoutesStore: ObservableObject {
         defer { finishPhysicalOperation(operation) }
         defer { isBusy = false }
         do {
-            guard let undo else { throw FavoriteRoutesFailure.nothingToUndo }
-            let receipt = try await persistence.restore(undo.record, payload: undo.payload, at: undo.index)
-            self.undo = nil
+            guard !undo.isEmpty else { throw FavoriteRoutesFailure.nothingToUndo }
+            var lastReceipt: FavoriteRoutesReceipt?
+            for item in undo {
+                lastReceipt = try await persistence.restore(item.record, payload: item.payload, at: item.index)
+            }
+            guard let receipt = lastReceipt else { throw FavoriteRoutesFailure.nothingToUndo }
+            self.undo = []
             publish(receipt); error = nil; return true
         }
         catch is CancellationError { return false }
@@ -139,7 +152,7 @@ public final class FavoriteRoutesStore: ObservableObject {
     private func publish(_ receipt: FavoriteRoutesReceipt) {
         records = receipt.records
         unavailable = receipt.unavailable
-        canUndo = undo != nil
+        canUndo = !undo.isEmpty
     }
     private func recordFailure(_ error: any Error, display: Bool = true, validatingPayload: Bool = false) {
         let failure = FavoriteRoutesFailure.mapped(error)

@@ -4,6 +4,83 @@ import Testing
 
 @Suite @MainActor
 struct PointServiceControllerTests {
+    @Test(arguments: [false, true])
+    func lostSimulationEvidenceStaysWaitingAfterForegroundOrTunnelRecovery(connectionLoss: Bool) async throws {
+        let device = ControlledPointDevice()
+        let controller = ServiceController(service: device)
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        let candidate = TeleportCandidate(place: MapPlace(id: .coordinate(coordinate), title: "Target", coordinate: coordinate))
+        try #require(controller.teleport(to: candidate))
+        await wait { await device.waitingForPreparation }
+        await device.finishPreparation()
+        await wait { await device.waitingForReply }
+        await device.finishReply(.acknowledged)
+        await wait { !controller.nativeBusy }
+        #expect(controller.positionMarker?.freshness == .fresh)
+
+        if connectionLoss { controller.setMovementConnectionAvailable(false) }
+        else { controller.setMovementSceneActive(false) }
+        #expect(controller.positionMarker?.coordinate == coordinate)
+        #expect(controller.positionMarker?.freshness == .waiting)
+        if connectionLoss { controller.setMovementConnectionAvailable(true) }
+        else { controller.setMovementSceneActive(true) }
+        #expect(controller.positionMarker?.freshness == .waiting,
+                "Foreground and TCP reachability cannot verify the location session")
+        controller.warmupSession()
+        await wait { !controller.nativeBusy }
+        #expect(controller.positionMarker?.freshness == .waiting)
+        #expect(await device.sent == [coordinate])
+
+        try #require(controller.teleport(to: candidate))
+        await wait { await device.waitingForPreparation }
+        await device.finishPreparation()
+        await wait { await device.waitingForReply }
+        await device.finishReply(.acknowledged)
+        await wait { !controller.nativeBusy }
+        #expect(controller.positionMarker?.freshness == .fresh)
+        #expect(await device.sent == [coordinate, coordinate])
+    }
+
+    @Test func pointAcknowledgedAfterBackgroundingDoesNotRestoreAVerifiedArrow() async throws {
+        let device = ControlledPointDevice()
+        let controller = ServiceController(service: device)
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        let candidate = TeleportCandidate(place: MapPlace(id: .coordinate(coordinate), title: "Target", coordinate: coordinate))
+        try #require(controller.teleport(to: candidate))
+        await wait { await device.waitingForPreparation }
+        await device.finishPreparation()
+        await wait { await device.waitingForReply }
+        controller.setMovementSceneActive(false)
+        await device.finishReply(.acknowledged)
+        await wait { !controller.nativeBusy }
+        controller.setMovementSceneActive(true)
+        #expect(controller.positionMarker?.coordinate == coordinate)
+        #expect(controller.positionMarker?.freshness == .waiting)
+    }
+
+    @Test(arguments: [false, true])
+    func oldInFlightAcknowledgementAfterRecoveryCannotVerifyThePosition(connectionLoss: Bool) async throws {
+        let device = ControlledPointDevice()
+        let controller = ServiceController(service: device)
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        let candidate = TeleportCandidate(place: MapPlace(id: .coordinate(coordinate), title: "Target", coordinate: coordinate))
+        try #require(controller.teleport(to: candidate))
+        await wait { await device.waitingForPreparation }
+        await device.finishPreparation()
+        await wait { await device.waitingForReply }
+        if connectionLoss {
+            controller.setMovementConnectionAvailable(false)
+            controller.setMovementConnectionAvailable(true)
+        } else {
+            controller.setMovementSceneActive(false)
+            controller.setMovementSceneActive(true)
+        }
+        await device.finishReply(.acknowledged)
+        await wait { !controller.nativeBusy }
+        #expect(controller.positionMarker?.coordinate == coordinate)
+        #expect(controller.positionMarker?.freshness == .waiting)
+    }
+
     @Test func simulationHasDisplayPriorityAndStopRetainsOnlyAWaitingArrowUntilFreshGPS() async throws {
         let device = ControlledPointDevice()
         let now = Date()

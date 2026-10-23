@@ -10,6 +10,8 @@ public final class PointDispatchGate: @unchecked Sendable {
     private let replacing: MovementAuthoritySnapshot?
     public enum State: Sendable { case available, dispatched, invalidated }
     private var storedState: State = .available
+    private var recoveryRevoked = false
+    private var recoveryAttemptClaimed = false
     public var state: State { lock.withLock { storedState } }
 
     public init(onDispatch: @escaping @Sendable () -> Void = {}) {
@@ -29,6 +31,17 @@ public final class PointDispatchGate: @unchecked Sendable {
     }
 
     public var hasDispatched: Bool { lock.withLock { storedState == .dispatched } }
+    /// A cheap admission hint for the native adapter. `claimRecovery()` still
+    /// repeats every check while this gate lock is held.
+    public var canAttemptRecovery: Bool {
+        lock.withLock {
+            guard storedState == .dispatched, !recoveryRevoked,
+                  !recoveryAttemptClaimed, let authority, let lease else { return false }
+            return authority.permitsRecovery(for: lease)
+        }
+    }
+    public var recoveryAvailable: Bool { canAttemptRecovery }
+
     public func claim() -> Bool {
         let claimed = lock.withLock {
             guard storedState == .available else { return false }
@@ -36,6 +49,7 @@ public final class PointDispatchGate: @unchecked Sendable {
                 let permitted = replacing.map { authority.install(lease, replacing: $0) } ?? authority.permitsDispatch(for: lease)
                 guard permitted else {
                     storedState = .invalidated
+                    recoveryRevoked = true
                     return false
                 }
             }
@@ -45,16 +59,32 @@ public final class PointDispatchGate: @unchecked Sendable {
         if claimed { onDispatch() }
         return claimed
     }
+
+    /// Claims the single write-repair opportunity for the exact point that
+    /// already crossed this gate. The original dispatched state and its
+    /// `hasDispatched` truth are intentionally unchanged.
+    public func claimRecovery() -> Bool {
+        lock.withLock {
+            guard storedState == .dispatched, !recoveryRevoked,
+                  !recoveryAttemptClaimed, let authority, let lease,
+                  authority.permitsRecovery(for: lease) else { return false }
+            recoveryAttemptClaimed = true
+            return true
+        }
+    }
+
     @discardableResult public func invalidateIfAvailable() -> Bool {
         lock.withLock {
             guard storedState == .available else { return false }
             storedState = .invalidated
+            recoveryRevoked = true
             return true
         }
     }
     public func invalidate() {
         lock.withLock {
             if storedState == .available { storedState = .invalidated }
+            recoveryRevoked = true
         }
     }
 }

@@ -169,16 +169,17 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         wait(app.switches["joystick.wander"])
         snapshot(app, "step-5-joystick-origin-\(sample)")
         app.buttons["map.settings"].tap()
-        wait(app.buttons["settings.languageAndAppearance"])
+        wait(app.buttons["settings.language"])
         snapshot(app, "step-8-settings-\(sample)")
         let pageRootIdentifiers: [String: String] = [
             "location": "settings.location.page",
             "vpn": "settings.vpn.page",
             "background": "settings.background.page",
-            "languageAndAppearance": "settings.preferences.page",
+            "language": "settings.language.page",
+            "appearance": "settings.appearance.page",
             "device": "settings.device.page"
         ]
-        for page in ["location", "vpn", "background", "languageAndAppearance", "device"] {
+        for page in ["location", "vpn", "background", "language", "appearance", "device"] {
             let link = app.buttons["settings.\(page)"]
             for _ in 0..<6 where !link.isHittable { app.swipeUp() }
             wait(link)

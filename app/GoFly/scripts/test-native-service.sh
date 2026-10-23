@@ -9,13 +9,15 @@ export CLANG_MODULE_CACHE_PATH="$out/module-cache"
 core_args=(--package-path "$root/app/GoFly" --scratch-path "$root/work/gofly-ios/core-build" --cache-path "$root/work/gofly-ios/cache" --config-path "$root/work/gofly-ios/config" --security-path "$root/work/gofly-ios/security")
 swift build --disable-sandbox "${core_args[@]}" > "$out/build.log" 2>&1
 products="$(swift build "${core_args[@]}" --show-bin-path)"
-printf '%s\n' 'public func idevice_set_global_timeout(_ timeout: UInt32) {}' > "$out/idevice.swift"
+printf '%s\n' 'public func idevice_set_global_timeout(_ timeout: UInt64) {}' > "$out/idevice.swift"
 xcrun swiftc -swift-version 6 -emit-module -emit-object -parse-as-library -module-name idevice "$out/idevice.swift" -emit-module-path "$out/idevice.swiftmodule" -o "$out/idevice.o"
 xcrun swiftc -swift-version 6 -parse-as-library -I "$out" -I "$products" \
   "$root/app/GoFly/Device/NativeDeviceService.swift" \
   "$root/app/GoFly/scripts/NativeServiceBoundaryTests.swift" \
   "$out/idevice.o" -L "$products" -lGoFlyCore \
   -o "$out/native-service-tests"
-for scenario in missing-pairing preparation-failure clear-failure reset-failure success; do
+for scenario in missing-pairing preparation-failure clear-failure reset-failure success \
+  fresh-recovery one-extra second-prepare-failure known-nontransient \
+  explicit-gate-invalidated authority-gates fresh-identity-mismatch deadline-exhaustion; do
   "$out/native-service-tests" "$scenario"
 done

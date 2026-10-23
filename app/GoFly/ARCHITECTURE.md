@@ -15,14 +15,34 @@
    上一筆原生呼叫實際返回後才執行下一筆。
 2. `PointDispatchGate` 是最後派送門檻；native adapter 真正送點前同步 `claim()`。已 dispatched 的呼叫
    不能被取消或 Stop 假裝撤回。
+   Teleport、路線與搖桿／漫步共用同一個 native session owner；準備成功後保留可重用 session，閒置 30 秒
+   後在下次操作前重建。服務／通道錯誤在派送前會回收舊 session 並安全重試一次；2026-10-23 使用者另授權
+   session 中斷時自動恢復同一模擬座標：已派送的暫時性服務／通道／adapter timeout 錯誤，只能在同 lease、
+   執行中、未停止且仍具前景或有效背景授權時，重建 session 並重新確認同一絕對座標一次。原始不確定結果
+   只有真實恢復 ACK 才可解除；失敗、身分／配對錯誤及外層 watchdog 到期仍走原本未知／Stop 流程。
 3. 位置只在核對過的 ACK 後更新；`unconfirmed` 保留候選並鎖住 Go，直到明確 Stop 完成。
+   箭頭另有僅供顯示的驗證狀態：失去通道、背景 runtime 或無有效 runtime 離開前景時保留最後座標、轉為灰色等待。
+   前景恢復、TCP 探測成功與 prepare 不會恢復箭頭，新的定位 ACK 才可恢復；有效背景 runtime 中的 ACK 同樣有效。
+   此狀態不修改 movement lease／health 或既有 ACK 座標，也不提供原生 session 持續健康的保證。
 4. Stop 先撤銷舊結果發布權，再排入唯一一筆 clear；clear 必須等已 claim 呼叫返回。
 5. watchdog 逾時只回報未知；`repairRequired` 時只允許冪等 Stop。
-6. 路線／搖桿／漫步共用一個 writer 與 500ms ACK cadence；遲到 ACK 不得復活舊 lease。
+6. 路線／搖桿／漫步共用一個 writer 與 500ms ACK cadence；瞬移後的固定位置維持每 5 秒送同一座標。
+   `PositionHoldController` 只接受新瞬移的真實 ACK，並在 async 開始前核對原點位、lease 與顯示／admission epoch。
+   固定位置 intent 與 recipe 互相限制，不能用方向移動或朝目標靠近；新的使用者操作會先撤回舊維持任務。
+   所有原生命令仍共用同一 FIFO，遲到 ACK 不得復活舊 lease。
 7. `MovementTaskAuthority` 以 lease／snapshot 同步比較健康與執行狀態；背景 dispatch 需有效 grant。
-8. 背景由 `GoFlyContinuedProcessingDriver` 管理：有執行中的路線／漫步時 submit 一個
-   `com.neven.gofly.movement` 任務；有終點路線回報 ACK 距離比例，其餘不確定進度；自然完成呼叫
-   `setTaskCompleted(success: true)`，expiry 只暫停並回到前景提示。
+8. 背景由 `GoFlyContinuedProcessingDriver` 管理：Info.plist 宣告 `processing` 背景模式；瞬移維持、路線及漫步共用一個
+   `com.neven.gofly.movement` 任務；採 `.queue` 等待系統可用的繼續執行名額。單程路線回報 ACK 距離比例，目的地終點 ACK
+   呼叫 `finishFiniteArrival` 正常完成；瞬移維持、來回路線及漫步使用 `finiteDuration(43_200)` 的 12 小時百分比，
+   進度只累計相鄰有效 ACK 間的單調時間（第一筆為零，超過 15 秒的缺口不計入）。固定位置 ACK 由其 controller
+   提供時間，來回／漫步由 facade 的同 identity／sequence epoch 計時，避免重複計入。達到目標後先完成有效的系統
+   任務，再停止維持或暫停移動，不自動接續另一個 12 小時；即使背景 request 未啟動或遭拒，前景 writer 也須到期停止。
+   expiry 會暫停移動並在
+   回到前景時提示。路線暫停時，Toast 的「繼續」呼叫同一路線的 `resume()`，只在 `route.canResume` 時啟用。切到其他 App
+   時，已取得的 continued-processing grant 會保留執行；系統仍可依執行條件（包括資源限制或進度不足）中止。
+   `background.taskExpired` 與 `background.progressUnits` 診斷事件可用來核對到期時間與最後回報進度；
+   截圖無法單獨判定系統中止原因。
+   12 小時是工作上限，並非 iOS 保證的執行時間；不以假進度、重新送背景 request 或冷啟動自動恢復延長系統授權。
 9. 冷啟動只還原草稿／顯示位置；上次有 active 或不確定狀態時啟動自動送一次 clear。失敗保持 stopped、
    不設錯誤、不彈窗，只保留 `coldClearPending` 與地圖提示；Start 不受影響。ACK 後清空 session
    的 active／uncertainty 並 flush 成功才解除提示。

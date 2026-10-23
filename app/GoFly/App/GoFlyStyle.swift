@@ -146,7 +146,7 @@ struct GoFlyActionStyle: ButtonStyle {
             .background(background, in: Capsule())
             .brightness(isEnabled && configuration.isPressed ? (primary || destructive ? 0.12 : -0.04) : 0)
             .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
-            .frame(minHeight: 44)
+            .frame(minHeight: small ? GoFlyStyle.smallButtonHeight : 44)
             .contentShape(Capsule())
     }
 

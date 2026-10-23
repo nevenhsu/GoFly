@@ -7,17 +7,18 @@ struct GoFlyFavoriteStar: View {
     var identifier: String
     /// The place sheet shows the Figma labeled pill; lists and pins keep the icon.
     var labelTitle: String? = nil
+    @State private var showingEditor = false
 
     var body: some View {
-        Button { _ = favorites.toggle(place) } label: {
+        Button { showingEditor = true } label: {
             if let labelTitle {
                 HStack(spacing: 6) {
                     GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
                     Text(labelTitle)
                         .font(.subheadline.weight(.medium))
                 }
-                .padding(.horizontal, 12)
-                .frame(minHeight: 44)
+                .padding(.horizontal, 14)
+                .frame(height: 40)
                 .background(GoFlyStyle.secondarySurface, in: Capsule())
                 .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                 .contentShape(Capsule())
@@ -35,6 +36,9 @@ struct GoFlyFavoriteStar: View {
         .accessibilityValue(goFlyString(favorites.canMutate
             ? (favorites.isFavorite(place) ? "favorites.saved" : "favorites.notSaved") : "favorites.unavailable"))
         .accessibilityIdentifier(identifier)
+        .sheet(isPresented: $showingEditor) {
+            GoFlyFavoriteEditorSheet(place: place, initialLabel: favorites.favorite(for: place)?.label, onDismiss: { showingEditor = false })
+        }
     }
 
     private var symbol: String {

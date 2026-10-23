@@ -87,6 +87,10 @@ public struct RouteDraft: Equatable, Sendable {
         nodes.insert(node, at: toIndex)
         return RouteDraft(nodes: nodes, speed: speed)
     }
+    public func reversing() -> RouteDraft? {
+        guard isManual, nodes.count >= 2 else { return nil }
+        return RouteDraft(nodes: nodes.reversed(), speed: speed)
+    }
     func resolvingCurrent(to coordinate: GeoCoordinate?) -> RouteDraft? {
         guard isManual else { return self }
         var resolved: [RouteNode] = []

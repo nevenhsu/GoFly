@@ -579,6 +579,62 @@ struct GoFlyContinuationStatus: View {
     }
 }
 
+struct GoFlyLanguageSettingsPage: View {
+    @Bindable private var preferences = GoFlyPreferences.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Picker(goFlyString("settings.language"), selection: Binding(
+                    get: { preferences.language },
+                    set: { preferences.setLanguage($0) }
+                )) {
+                    ForEach(GoFlyLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.language")
+            } header: {
+                Text(goFlyString("settings.language"))
+            }
+        }
+        .pickerStyle(.menu)
+        .navigationTitle(goFlyString("settings.language"))
+        .navigationBarTitleDisplayMode(.inline)
+        .goFlyNativeBackTitle()
+        .accessibilityIdentifier("settings.language.page")
+    }
+}
+
+struct GoFlyAppearanceSettingsPage: View {
+    @Bindable private var preferences = GoFlyPreferences.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Picker(goFlyString("settings.appearance"), selection: Binding(
+                    get: { preferences.appearance },
+                    set: { preferences.setAppearance($0) }
+                )) {
+                    ForEach(GoFlyAppearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("settings.appearance")
+            } header: {
+                Text(goFlyString("settings.appearance"))
+            }
+        }
+        .pickerStyle(.menu)
+        .navigationTitle(goFlyString("settings.appearance"))
+        .navigationBarTitleDisplayMode(.inline)
+        .goFlyNativeBackTitle()
+        .accessibilityIdentifier("settings.appearance.page")
+    }
+}
+
 struct GoFlyPreferencesSettingsPage: View {
     @Bindable private var preferences = GoFlyPreferences.shared
 

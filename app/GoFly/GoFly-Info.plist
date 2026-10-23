@@ -11,6 +11,14 @@
     </dict>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array><string>com.neven.gofly.movement</string></array>
+    <key>UIBackgroundModes</key>
+    <array><string>processing</string></array>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>App-prefs</string>
+        <string>App-Prefs</string>
+        <string>prefs</string>
+    </array>
     <key>UTImportedTypeDeclarations</key>
     <array>
         <dict>

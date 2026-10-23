@@ -9,6 +9,8 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     private let arrow = CAShapeLayer()
     private let drawing = CALayer()
     private var source = PositionSource.gps
+    private var freshness = PositionFreshness.waiting
+    private var targetRotation: CGFloat?
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -55,17 +57,48 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     func applyAppearance(source: PositionSource, freshness: PositionFreshness,
                          bearingDegrees: Double?, cameraHeadingDegrees: Double) {
         self.source = source
+        self.freshness = freshness
         alpha = freshness == .waiting ? 0.5 : 1
-        let radians = bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0
+        let radians = CGFloat(bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0)
+        rotate(to: radians)
+        applyColors()
+    }
+
+    private func rotate(to radians: CGFloat) {
+        guard let previousTarget = targetRotation else {
+            targetRotation = radians
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            drawing.transform = CATransform3DMakeRotation(radians, 0, 0, 1)
+            CATransaction.commit()
+            return
+        }
+
+        let presentationRotation = (drawing.presentation()?.value(forKeyPath: "transform.rotation.z") as? NSNumber)
+            .map { CGFloat(truncating: $0) } ?? previousTarget
+        var delta = radians - presentationRotation
+        delta.formTruncatingRemainder(dividingBy: 2 * .pi)
+        if delta > .pi { delta -= 2 * .pi }
+        if delta < -.pi { delta += 2 * .pi }
+        guard abs(delta) > 0.005 else { return }
+
+        targetRotation = radians
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        drawing.setAffineTransform(CGAffineTransform(rotationAngle: CGFloat(radians)))
+        drawing.transform = CATransform3DMakeRotation(radians, 0, 0, 1)
+        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+        animation.fromValue = presentationRotation
+        animation.toValue = presentationRotation + delta
+        animation.duration = 0.24
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        drawing.add(animation, forKey: "arrow.rotation")
         applyColors()
         CATransaction.commit()
     }
 
     private func applyColors() {
-        let labelColor = UIColor.label.resolvedColor(with: traitCollection).cgColor
+        let labelColor = (freshness == .waiting ? UIColor.secondaryLabel : UIColor.label)
+            .resolvedColor(with: traitCollection).cgColor
         let bgColor = UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
         contrast.fillColor = UIColor.clear.cgColor
         contrast.strokeColor = bgColor

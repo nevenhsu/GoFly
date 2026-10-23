@@ -5,7 +5,12 @@ final class GoFlySettingsUITests: XCTestCase {
     func testLanguagePickerCommitsTraditionalChinese() {
         let app = launch(languageSeed: "en", appearanceSeed: "light")
         openSettings(app)
+        let link = app.buttons["settings.language"]
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        for _ in 0..<8 where !link.isHittable { app.swipeUp() }
+        link.tap()
         let language = languageRow(app)
+        XCTAssertTrue(language.waitForExistence(timeout: 5))
         XCTAssertTrue(pickerValue(language)?.contains("English") == true)
         language.tap()
         tapMenuOption("繁體中文", app)
@@ -15,7 +20,12 @@ final class GoFlySettingsUITests: XCTestCase {
     func testAppearancePickerCommitsDark() {
         let app = launch(appearanceSeed: "system")
         openSettings(app)
+        let link = app.buttons["settings.appearance"]
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        for _ in 0..<8 where !link.isHittable { app.swipeUp() }
+        link.tap()
         let appearance = appearanceRow(app)
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
         scrollIntoView(appearance, app)
         appearance.tap()
         tapMenuOption("Dark", app)
@@ -40,11 +50,6 @@ final class GoFlySettingsUITests: XCTestCase {
     private func openSettings(_ app: XCUIApplication) {
         XCTAssertTrue(app.buttons["map.settings"].waitForExistence(timeout: 10))
         app.buttons["map.settings"].tap()
-        let preferences = app.buttons["settings.languageAndAppearance"]
-        XCTAssertTrue(preferences.waitForExistence(timeout: 5))
-        for _ in 0..<8 where !preferences.isHittable { app.swipeUp() }
-        preferences.tap()
-        XCTAssertTrue(languageRow(app).waitForExistence(timeout: 5))
     }
 
     private func scrollIntoView(_ element: XCUIElement, _ app: XCUIApplication) {
