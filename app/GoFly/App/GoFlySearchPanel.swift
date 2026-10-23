@@ -17,6 +17,7 @@ struct GoFlySearchPanel: View {
     var onBack: (() -> Void)?
     var onFavorites: () -> Void = {}
     var recentPlaces: [MapPlace] = []
+    var onClearRecentPlaces: (() -> Void)?
     var onSelect: (MapPlace) -> Void = { _ in }
     var onUseCurrentLocation: (() -> Void)?
     var onClearPlace: (() -> Void)?
@@ -160,7 +161,10 @@ struct GoFlySearchPanel: View {
                       action: onUseCurrentLocation)
         }
         if !recentPlaces.isEmpty {
-            sectionHeader("search.recent")
+            sectionHeader("search.recent",
+                          actionTitle: goFlyString("search.clearHistory"),
+                          actionIdentifier: "search.clearHistory",
+                          action: onClearRecentPlaces)
             ForEach(recentPlaces) { place in
                 row(place, symbol: GoFlySymbols.recent, identifier: place)
             }
@@ -218,6 +222,7 @@ struct GoFlySearchPanel: View {
     // MARK: - Rows
 
     private func sectionHeader(_ key: String, actionTitle: String? = nil,
+                               actionIdentifier: String? = nil,
                                action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
@@ -225,11 +230,15 @@ struct GoFlySearchPanel: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("favorites.open")
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(actionIdentifier ?? (key == "favorites.title" ? "favorites.open" : "search.sectionAction.\(key)"))
             }
         }
         .padding(.horizontal, 20)

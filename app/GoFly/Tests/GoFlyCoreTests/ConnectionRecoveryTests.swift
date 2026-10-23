@@ -5,6 +5,24 @@ import GoFlyCore
 
 @Suite @MainActor
 struct ConnectionRecoveryControllerTests {
+    @Test func restoredPositionAndAutomaticStartupWorkAreNotExplicitSessionActivity() async throws {
+        let service = ServiceController(service: RecoveryControllerDevice())
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        #expect(!service.hasAdmittedExplicitOperation)
+        #expect(service.restoreColdRecovery(position: SessionDisplayPosition(
+            coordinate: coordinate, source: .simulation)))
+        service.markColdClearPending()
+        #expect(service.beginColdClear())
+        await wait { service.clearState == .confirmed && !service.nativeBusy }
+        service.finishColdClear()
+        service.warmupSession()
+        #expect(!service.hasAdmittedExplicitOperation)
+        #expect(service.positionMarker?.freshness == .waiting)
+        #expect(service.start())
+        #expect(service.hasAdmittedExplicitOperation)
+        await wait { service.phase == .ready && !service.nativeBusy }
+    }
+
     @Test func coldSummaryIsDisplayOnlyAndProbeStartsOnlyForAnActiveScene() async throws {
         let device = RecoveryControllerDevice()
         let service = ServiceController(service: device)

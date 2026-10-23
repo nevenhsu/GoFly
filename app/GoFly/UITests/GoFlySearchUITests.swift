@@ -63,6 +63,33 @@ final class GoFlySearchUITests: XCTestCase {
         XCTAssertEqual(pin.value as? String, coordinate)
     }
 
+    func testClearRecentSearches() throws {
+        try simulatorOnly()
+        let app = makeApp()
+        app.launch()
+        app.buttons["map.searchBar"].tap()
+        let query = app.textFields["search.query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 10))
+        query.tap()
+        query.typeText("25.0478, 121.5170")
+        dismissKeyboard(app)
+        let result = app.buttons["search.result.\(coordinate)"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        result.tap()
+
+        // Re-open search: clear history button and recent result should exist
+        app.buttons["map.searchBar"].tap()
+        let clearButton = app.buttons["search.clearHistory"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 5))
+        let recentResult = app.buttons["search.result.\(coordinate)"]
+        XCTAssertTrue(recentResult.waitForExistence(timeout: 5))
+
+        // Tap clear history
+        clearButton.tap()
+        XCTAssertFalse(clearButton.exists)
+        XCTAssertFalse(recentResult.exists)
+    }
+
     private func simulatorOnly() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Simulator UI covers the candidate flow; physical checks are deferred.")

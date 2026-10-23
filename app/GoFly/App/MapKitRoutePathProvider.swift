@@ -4,15 +4,25 @@ import MapKit
 
 /// Directions planning never opens a device session or moves the phone.
 @MainActor
-final class MapKitWalkingRoutePlanner: RoutePlanning {
-    func plan(from start: GeoCoordinate, to end: GeoCoordinate) async throws -> [GeoCoordinate] {
+final class MapKitRoutePathProvider: RoutePathProviding {
+    func path(from start: GeoCoordinate, to end: GeoCoordinate,
+              transport: RouteTransport) async throws -> [GeoCoordinate] {
         try Task.checkCancellation()
         let request = MKDirections.Request()
         request.source = MKMapItem(location: CLLocation(latitude: start.latitude, longitude: start.longitude), address: nil)
         request.destination = MKMapItem(location: CLLocation(latitude: end.latitude, longitude: end.longitude), address: nil)
-        request.transportType = .walking
+        switch transport {
+        case .automobile:
+            request.transportType = .automobile
+        case .walking:
+            request.transportType = .walking
+        case .transit:
+            // Apple's SDK supports transit only for ETA, not route geometry. Keep the
+            // requested final attempt; an unsupported response remains a planning failure.
+            request.transportType = .transit
+        }
         request.requestsAlternateRoutes = false
-        let operation = WalkingDirectionsOperation(request: request)
+        let operation = MapKitDirectionsOperation(request: request)
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             let response = try await operation.calculate()
@@ -33,7 +43,7 @@ final class MapKitWalkingRoutePlanner: RoutePlanning {
 }
 
 @MainActor
-private final class WalkingDirectionsOperation {
+private final class MapKitDirectionsOperation {
     private let directions: MKDirections
     init(request: MKDirections.Request) { directions = MKDirections(request: request) }
     func calculate() async throws -> MKDirections.Response { try await directions.calculate() }

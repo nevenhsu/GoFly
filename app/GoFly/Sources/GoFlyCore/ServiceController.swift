@@ -143,6 +143,9 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private var simulationDisplayEpoch = UUID()
     private var didRestoreColdRecovery = false
     private var didPerformActualOperation = false
+    /// Session activity begins with an admitted explicit operation. Restoring
+    /// display history, automatic cold clear and warmup do not start a task.
+    public var hasAdmittedExplicitOperation: Bool { didPerformActualOperation }
     private var currentPoint: PointContext?
     private var currentPreparation: PreparationContext?
     private var adapterQueue: [AdapterCommand] = []

@@ -89,6 +89,9 @@ struct PositionHoldControllerTests {
 
         clock.advance(by: .seconds(5))
         await wait { (await device.sent.count) == 3 }
+        #expect(service.realLocation == nil)
+        #expect(service.positionMarker?.freshness == .waiting,
+                "A pending fixed-position refresh is not proof that the running hold stopped")
         clock.advance(by: .seconds(30))
         #expect(controller.elapsedSeconds == 0)
         #expect(controller.completedCycles == 0)

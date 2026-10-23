@@ -49,6 +49,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private var task: Task<Void, Never>?
     private var transition: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
+    private var previewInputs: [GeoCoordinate]?
     private var subscription: AnyCancellable?
     private var pickerCandidateSubscription: AnyCancellable?
     private var accumulatedElapsed: Duration = .zero
@@ -288,8 +289,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     private func applyDraft(_ changed: RouteDraft) {
         invalidateFavoriteLoadAdmission()
-        previewTask?.cancel()
-        previewTask = nil
+        resetPreview()
         loadedFavoriteRecordID = nil
         draft = changed; plannedRoute = nil; completion = nil; error = nil
         guard draft.isManual else { picker = nil; return }
@@ -301,6 +301,23 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             picker = session
         }
         schedulePreviewPlanning(for: changed)
+    }
+
+    /// Reacquires geometry only; never prepares a device or starts movement.
+    @discardableResult public func retryPlanning() -> Bool {
+        guard canEdit, draft.isManual else { return false }
+        resetPreview()
+        schedulePreviewPlanning(for: draft)
+        return true
+    }
+
+    private func resetPreview() {
+        revision &+= 1
+        previewTask?.cancel()
+        previewTask = nil
+        previewInputs = nil
+        plannedRoute = nil
+        error = nil
     }
 
     private func schedulePreviewPlanning(for snapshot: RouteDraft) {
@@ -326,19 +343,20 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             do {
                 var legs: [PlannedRoute] = []
                 for index in 1..<coordinates.count {
-                    let from = coordinates[index - 1], to = coordinates[index]
+                    let from = legs.last?.end ?? coordinates[0], to = coordinates[index]
                     let points = try await planner.plan(from: from, to: to)
                     try Task.checkCancellation()
                     guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
-                    legs.append(try PlannedRoute(points: points, from: from, to: to))
+                    legs.append(try PlannedRoute(points: points))
                 }
                 guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
                 self.plannedRoute = try PlannedRoute(legs: legs)
+                self.previewInputs = coordinates
                 self.error = nil
             } catch {
                 guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
                 self.plannedRoute = nil
-                self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .planningFailed)
+                self.error = .planningFailed
             }
         }
     }
@@ -365,6 +383,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         let token = revision
         let admission = commands.routeAdmissionRevision
         let existingPreview = plannedRoute
+        let existingPreviewInputs = previewInputs
         previewTask?.cancel()
         previewTask = nil
         phase = .planning; picker = nil; error = nil; completion = nil; progress = nil; intent = nil
@@ -378,17 +397,17 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             do {
                 let route: PlannedRoute
                 if let imported = snapshot.gpxSource { route = try PlannedRoute(imported: imported.document) }
-                else if let existingPreview, existingPreview.start == coordinates.first, existingPreview.end == coordinates.last {
+                else if let existingPreview, existingPreviewInputs == coordinates {
                     route = existingPreview
                 }
                 else {
                     var legs: [PlannedRoute] = []
                     for index in 1..<coordinates.count {
-                        let from = coordinates[index - 1], to = coordinates[index]
+                        let from = legs.last?.end ?? coordinates[0], to = coordinates[index]
                         let points = try await planner.plan(from: from, to: to)
                         guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
                         guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
-                        legs.append(try PlannedRoute(points: points, from: from, to: to))
+                        legs.append(try PlannedRoute(points: points))
                     }
                     route = try PlannedRoute(legs: legs)
                 }
@@ -698,7 +717,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
 
     private func receive(_ event: RouteCommandEvent) {
         switch event {
-        case .availabilityChanged: objectWillChange.send()
+        case .availabilityChanged:
+            if canEdit, error == .currentLocationUnavailable, commands.currentRouteOrigin != nil {
+                _ = retryPlanning()
+            }
+            objectWillChange.send()
         case .ended(let id):
             guard intent?.id == id, phase != .cancelling else { return }
             withdrawContinuation(.ended)

@@ -101,3 +101,9 @@
 ## VPN 通道需要 Wi‑Fi
 
 GoFly 的端點 `10.7.0.1:49152` 是 iOS 的 remotepairingd，LocalDevVPN 只把封包繞回手機本機。2026-10-19 實機觀察：iPhone 只用行動網路時，該服務沒有在聽（連線被拒絕，path 經 utun 已滿足）；連上 Wi‑Fi 後服務出現在 49152，檢查才可能成功。因此引導、設定與錯誤文案都要求先連 Wi‑Fi。飛航模式加 Wi‑Fi 但未加入網路、個人熱點，以及使用中途 Wi‑Fi 中斷的行為尚未驗證。
+
+## 路徑取得（2026-10-23）
+
+`FallbackRoutePlanner` 透過 `RoutePathProviding` 依汽車、行人、公共交通順序取得有效道路頂點；`MapKitRoutePathProvider` 僅負責 MapKit request 與取消，不觸碰裝置。公共交通在 Apple SDK 僅支援 ETA；保留第三順位嘗試，失敗如實回報。此 seam 可供漫步後續共用，目前只接入手動路線。
+
+`PlannedRoute` 以回傳的道路端點執行，不把 POI 座標插入幾何，也不設定 POI-road 距離門檻；保留有限、非零、點數及路段連續性檢查。多段路線從前段實際終點繼續規劃，不能用直線或跳點接不連續路段。編輯草稿仍保留選取地點，預覽另外記住解析後的輸入座標供 Start 重用。編輯與 Retry 透過同一個預覽 Task／revision 取消舊請求並拒絕過期結果；Retry 只取得路徑，不進入裝置準備或移動流程。

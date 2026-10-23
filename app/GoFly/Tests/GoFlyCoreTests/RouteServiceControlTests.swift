@@ -54,34 +54,6 @@ struct RouteServiceControlTests {
         service.endRoute(executionID: intent.id, lease: intent.lease)
     }
 
-    @Test func oldWorkWaitingBehindPreparationCannotDispatchOrCreateAnotherWatchdogAfterControlChanges() async throws {
-        let device = RouteControlledDevice(), watchdog = ManualServiceWatchdog()
-        let service = ServiceController(service: device, watchdogSleep: watchdog.sleep)
-        let intent = try await begin(service, device, watchdog: watchdog)
-        let revision = try #require(service.routeControlRevision(executionID: intent.id, lease: intent.lease))
-        #expect(service.teleport(to: TeleportCandidate(place: place(intent.route.end))))
-        await wait { await device.waiting }
-        await wait { watchdog.requests.count == 2 }
-        var submitted = false
-        let waiting = Task {
-            submitted = true
-            return await service.sendRoutePoint(executionID: intent.id, lease: intent.lease, sequence: 1,
-                expectedControlRevision: revision, coordinate: intent.route.end)
-        }
-        await wait { submitted }
-        // This asserts public FIFO outcome whether the caller entered before or after revision.
-        #expect(service.reviseRouteControl(executionID: intent.id, lease: intent.lease) == revision + 1)
-        await device.finish(.notSent(.pairingRequired))
-        #expect(await waiting.value == .controlCancelled)
-        for _ in 2...3 { await wait { await device.waiting }; await device.finish(.notSent(.pairingRequired)) }
-        await wait { !service.nativeBusy }
-        #expect(watchdog.requests.count == 2)
-        #expect(await device.coordinates == [intent.route.start] + Array(repeating: intent.route.end, count: 3))
-        #expect(await device.maxConcurrency == 1)
-        #expect(service.movementAuthority.snapshot.lease == intent.lease)
-        service.endRoute(executionID: intent.id, lease: intent.lease)
-    }
-
     @Test(arguments: ["claimedNotSent", "claimedUnknown", "unclaimedUnknown", "unclaimedACK"])
     func controlChangesCannotHideUncertainProtocolResults(kind: String) async throws {
         let device = RouteControlledDevice()

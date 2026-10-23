@@ -172,7 +172,7 @@
 "route.error.missingStart" = "请选择起点。";
 "route.error.missingDestination" = "请选择终点。";
 "route.error.currentLocationUnavailable" = "当前位置尚无法确认。请在地图或搜索中，为使用当前位置的节点选择地点。";
-"route.error.planningFailed" = "无法规划步行路线。请确认地点或连接后重试。";
+"route.error.planningFailed" = "无法取得路径。请确认地点或网络连接后重试。";
 "route.error.invalidPath" = "规划的路线无效。请重新选择地点后重试。";
 "route.phase.editing" = "编辑路线";
 "route.phase.planning" = "正在规划路线…";
@@ -506,7 +506,8 @@
 "placeDetails.copied" = "已复制坐标";
 "status.pill.error" = "连接中断";
 
-"search.recent" = "最近使用";
+"search.recent" = "最近搜索";
+"search.clearHistory" = "清空记录";
 
 "search.coordinateHint" = "输入地点或纬度、经度。";
 
@@ -616,7 +617,7 @@
 "route.duration" = "约 %d 分";
 "route.noRouteYet" = "选择两个地点后显示距离";
 "route.speedUnit" = "km/h";
-"route.error.shortTitle" = "无法规划路线";
+"route.error.shortTitle" = "无法取得路径";
 "joystick.wanderDetail" = "自动前往随机目的地";
 "joystick.currentDestinationLabel" = "当前目的地";
 "joystick.endWander" = "结束漫步";

@@ -172,7 +172,7 @@
 "route.error.missingStart" = "Choose an origin.";
 "route.error.missingDestination" = "Choose a destination.";
 "route.error.currentLocationUnavailable" = "Current location is unavailable. Choose a place on the map or in search for the node using current location.";
-"route.error.planningFailed" = "A walking route could not be planned. Check the places or connection and try again.";
+"route.error.planningFailed" = "No route could be obtained. Check the places or network connection and retry.";
 "route.error.invalidPath" = "The planned route is invalid. Choose different places and try again.";
 "route.phase.editing" = "Edit route";
 "route.phase.planning" = "Planning route…";
@@ -506,7 +506,8 @@
 "placeDetails.copied" = "Coordinates copied";
 "status.pill.error" = "Connection lost";
 
-"search.recent" = "Recent places";
+"search.recent" = "Recent searches";
+"search.clearHistory" = "Clear history";
 
 "search.coordinateHint" = "Enter a place or latitude, longitude.";
 
@@ -616,7 +617,7 @@
 "route.duration" = "%d min";
 "route.noRouteYet" = "Choose two places to see the distance";
 "route.speedUnit" = "km/h";
-"route.error.shortTitle" = "Unable to plan route";
+"route.error.shortTitle" = "Unable to get route";
 "joystick.wanderDetail" = "Walks to a random destination automatically";
 "joystick.currentDestinationLabel" = "Current destination";
 "joystick.endWander" = "End wander";

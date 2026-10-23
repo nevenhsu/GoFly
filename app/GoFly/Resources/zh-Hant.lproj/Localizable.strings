@@ -186,7 +186,7 @@
 "route.error.missingStart" = "請選擇起點。";
 "route.error.missingDestination" = "請選擇終點。";
 "route.error.currentLocationUnavailable" = "目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。";
-"route.error.planningFailed" = "請確認起終點或網路連線後重試。";
+"route.error.planningFailed" = "無法取得路徑。請確認地點或網路連線後重試。";
 "route.error.invalidPath" = "規劃的路線無效。請重新選擇地點後再試。";
 "route.phase.editing" = "編輯路線";
 "route.phase.planning" = "正在規劃路線⋯";
@@ -521,7 +521,8 @@
 "placeDetails.copied" = "已複製座標";
 "status.pill.error" = "連線中斷";
 
-"search.recent" = "最近使用";
+"search.recent" = "最近搜尋";
+"search.clearHistory" = "清空記錄";
 
 "search.coordinateHint" = "輸入地點或緯度、經度。";
 
@@ -616,7 +617,7 @@
 "route.duration" = "約 %d 分";
 "route.noRouteYet" = "選擇兩個地點後顯示距離";
 "route.speedUnit" = "km/h";
-"route.error.shortTitle" = "無法規劃路線";
+"route.error.shortTitle" = "無法取得路徑";
 "joystick.wanderDetail" = "自動前往隨機目的地";
 "joystick.currentDestinationLabel" = "目前目的地";
 "joystick.endWander" = "結束漫步";

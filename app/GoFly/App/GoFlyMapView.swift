@@ -79,8 +79,13 @@ final class GoFlyMovementModel: ObservableObject {
         if service.error != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil {
             return .limited
         }
+        // A fixed-position refresh temporarily invalidates the marker proof
+        // while awaiting its ACK; the active hold remains a running task.
+        if positionHold.phase == .running { return .running }
+        // A restored coordinate is history, not an impaired live session.
+        if !service.hasAdmittedExplicitOperation { return .standby }
         if let marker = service.positionMarker, marker.source == .simulation {
-            return marker.freshness == .fresh ? .simulating : .limited
+            return marker.freshness == .fresh ? .running : .limited
         }
         return .standby
     }
@@ -115,7 +120,9 @@ final class GoFlyMovementModel: ObservableObject {
 
     private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft { saved }
 
-    private static func routePlanner() -> any RoutePlanning { MapKitWalkingRoutePlanner() }
+    private static func routePlanner() -> any RoutePlanning {
+        FallbackRoutePlanner(provider: MapKitRoutePathProvider())
+    }
 
 }
 
@@ -381,7 +388,11 @@ struct GoFlyMapView: View {
                     onBack: { route.cancelPicker(id: picker.id) },
                     onFavorites: { searchFavorites = true },
                     recentPlaces: recentPlaces,
-                    onSelect: { _ in _ = route.confirmPicker(id: picker.id) },
+                    onClearRecentPlaces: clearRecentPlaces,
+                    onSelect: { place in
+                        recordRecentPlace(place)
+                        _ = route.confirmPicker(id: picker.id)
+                    },
                     onUseCurrentLocation: picker.allowsCurrent
                         ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil,
                     onChooseOnMap: {
@@ -404,6 +415,7 @@ struct GoFlyMapView: View {
                     onBack: { showingSearch = false },
                     onFavorites: { searchFavorites = true },
                     recentPlaces: recentPlaces,
+                    onClearRecentPlaces: clearRecentPlaces,
                     onSelect: selectSearchPlace)
             }
         }
@@ -491,14 +503,9 @@ struct GoFlyMapView: View {
         }
     }
 
-    /// Intermediate stops of a manually planned route, numbered on the map.
+    /// Mark the actual road entrances; selected POIs remain in the editing fields.
     private var manualRouteWaypoints: [GeoCoordinate] {
-        let nodes = route.draft.nodes
-        guard nodes.count > 2 else { return [] }
-        return nodes.dropFirst().dropLast().compactMap {
-            if case .place(let place) = $0.value { return place.coordinate }
-            return nil
-        }
+        route.plannedRoute?.waypoints ?? []
     }
 
     private func mapCanvas(viewport: CGRect, size: CGSize) -> some View {
@@ -844,9 +851,7 @@ struct GoFlyMapView: View {
 
     private func selectSearchPlace(_ place: MapPlace) {
         activeSearch.select(place)
-        recentPlaces.removeAll { $0.coordinate == place.coordinate }
-        recentPlaces.insert(place, at: 0)
-        recentPlaces = Array(recentPlaces.prefix(8))
+        recordRecentPlace(place)
         cameraIntent = GoFlyCameraIntent(coordinate: place.coordinate)
         if mode == .teleport {
             sheetDetent = .collapsed
@@ -854,6 +859,18 @@ struct GoFlyMapView: View {
             sheetDetent = .expanded
         }
         showingSearch = false
+    }
+
+    private func recordRecentPlace(_ place: MapPlace) {
+        recentPlaces.removeAll { $0.coordinate == place.coordinate }
+        recentPlaces.insert(place, at: 0)
+        recentPlaces = Array(recentPlaces.prefix(8))
+    }
+
+    private func clearRecentPlaces() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            recentPlaces.removeAll()
+        }
     }
 
     private func performGo(_ candidate: TeleportCandidate) {
@@ -1594,7 +1611,7 @@ struct GoFlyMapView: View {
                 title: goFlyString("route.error.shortTitle"),
                 message: goFlyString(error.localizationKey),
                 actionTitle: goFlyString("operation.retry"),
-                onAction: { _ = route.start() },
+                onAction: { _ = route.retryPlanning() },
                 onDismiss: { routeErrorDismissed = true },
                 identifier: "route.error",
                 isFloating: true

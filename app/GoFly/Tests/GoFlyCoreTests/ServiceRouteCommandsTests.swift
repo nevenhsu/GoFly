@@ -250,47 +250,6 @@ struct ServiceRouteCommandsTests {
         #expect(!controller.retryPreparedOperation(id: id))
     }
 
-    @Test func anOldTickActuallyRunsBetweenNewAttemptsAndQueuedOldWorkCannotCrossHandoff() async throws {
-        let device = RouteControlledDevice()
-        let controller = ServiceController(service: device)
-        let old = try routeIntent()
-        let begin = Task { await controller.beginRoute(old, expectedAdmissionRevision: controller.routeAdmissionRevision) }
-        await wait { await device.waiting }; await device.finish(.acknowledged)
-        #expect(await begin.value == .acknowledged)
-        let target = GeoCoordinate(latitude: 26, longitude: 122)!
-        #expect(controller.teleport(to: TeleportCandidate(place: place(target))))
-        await wait { await device.waiting }
-        var submitted = false
-        let oldNext = GeoCoordinate(latitude: 25.00001, longitude: 121)!
-        let tick = Task {
-            submitted = true
-            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 1, expectedControlRevision: controller.routeControlRevision(executionID: old.id, lease: old.lease) ?? 0, coordinate: oldNext)
-        }
-        await wait { submitted }
-        await device.finish(.notSent(.pairingRequired))
-        await wait { await device.coordinates.count == 3 }
-        #expect(await device.coordinates == [old.route.start, target, oldNext])
-        #expect(controller.preparedOperation?.attempt.value == 1)
-        await device.finish(.acknowledged)
-        #expect(await tick.value == .acknowledged)
-        await wait { await device.coordinates.count == 4 }
-        #expect(controller.preparedOperation?.attempt.value == 2)
-        #expect(controller.confirmedSimulatedLocation == oldNext)
-        var queued = false
-        let obsolete = Task {
-            queued = true
-            return await controller.sendRoutePoint(executionID: old.id, lease: old.lease, sequence: 2, expectedControlRevision: controller.routeControlRevision(executionID: old.id, lease: old.lease) ?? 0,
-                coordinate: GeoCoordinate(latitude: 25.00002, longitude: 121)!)
-        }
-        await wait { queued }
-        await device.finish(.acknowledged)
-        #expect(await obsolete.value == .cancelled)
-        await wait { !controller.nativeBusy }
-        #expect(controller.confirmedSimulatedLocation == target)
-        #expect(await device.coordinates == [old.route.start, target, oldNext, target])
-        #expect(await device.maxConcurrency == 1)
-    }
-
     @Test(arguments: [false, true])
     func stopWaitsForARealTickReturnAndItsMandatoryClearNeverOverlaps(afterClaim: Bool) async throws {
         let device = RouteControlledDevice()

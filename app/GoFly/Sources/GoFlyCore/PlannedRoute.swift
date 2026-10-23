@@ -12,6 +12,7 @@ public enum ImportedRouteExecutionFailure: String, Error, Equatable, Sendable {
 
 public struct PlannedRoute: Equatable, Sendable {
     public let points: [GeoCoordinate]
+    public private(set) var waypoints: [GeoCoordinate] = []
     public let cumulativeDistancesMeters: [Double]
     public var totalDistanceMeters: Double { cumulativeDistancesMeters.last! }
     public var start: GeoCoordinate { points[0] }
@@ -35,35 +36,31 @@ public struct PlannedRoute: Equatable, Sendable {
     }
 
     public init(legs: [PlannedRoute]) throws {
-        guard let first = legs.first, let last = legs.last else { throw RouteExecutionFailure.invalidPath }
+        guard let first = legs.first else { throw RouteExecutionFailure.invalidPath }
         var joined = first.points
         for leg in legs.dropFirst() {
             guard joined.last == leg.start else { throw RouteExecutionFailure.invalidPath }
             joined.append(contentsOf: leg.points.dropFirst())
             guard joined.count <= 10_000 else { throw RouteExecutionFailure.invalidPath }
         }
-        try self.init(points: joined, from: first.start, to: last.end)
+        try self.init(points: joined)
+        waypoints = legs.dropLast().map(\.end)
     }
 
-    public init(points: [GeoCoordinate], from: GeoCoordinate, to: GeoCoordinate) throws {
+    /// Requested places may be inside a building; only returned road vertices are executable.
+    public init(points: [GeoCoordinate]) throws {
         guard (2...10_000).contains(points.count) else { throw RouteExecutionFailure.invalidPath }
-        var normalized = Self.deduplicated(points)
-        // Anchoring a degenerate planner result must not manufacture a straight-line fallback.
-        guard normalized.count >= 2, Self.distances(normalized).last! > 0 else { throw RouteExecutionFailure.invalidPath }
-        let startSnap = Self.distance(from: normalized[0], to: from)
-        let endSnap = Self.distance(from: normalized[normalized.count - 1], to: to)
-        guard startSnap.isFinite, endSnap.isFinite, startSnap <= 50, endSnap <= 50 else {
-            throw RouteExecutionFailure.invalidPath
-        }
-        // Preserve every road vertex; only short road-snap links may join the exact requested endpoints.
-        if normalized[0] != from { normalized.insert(from, at: 0) }
-        if normalized.last != to { normalized.append(to) }
-        normalized = Self.deduplicated(normalized)
-        guard (2...10_000).contains(normalized.count) else { throw RouteExecutionFailure.invalidPath }
+        let normalized = Self.deduplicated(points)
+        guard normalized.count >= 2 else { throw RouteExecutionFailure.invalidPath }
         let distances = Self.distances(normalized)
         guard let total = distances.last, total.isFinite, total > 0 else { throw RouteExecutionFailure.invalidPath }
         self.points = normalized
         cumulativeDistancesMeters = distances
+    }
+
+    /// Compatibility for callers supplying selected places. They never alter road geometry.
+    public init(points: [GeoCoordinate], from _: GeoCoordinate, to _: GeoCoordinate) throws {
+        try self.init(points: points)
     }
     public func coordinate(at distanceMeters: Double) -> GeoCoordinate? {
         guard distanceMeters.isFinite else { return nil }
