@@ -31,6 +31,16 @@ struct MovementSpeedSynchronizerTests {
         #expect(fixture.saved == [5])
     }
 
+    @Test func alternatingChangesSettleWithoutBouncingBack() async throws {
+        let fixture = Fixture(initial: .standard)
+        #expect(fixture.route.setSpeed(RouteSpeed(kilometersPerHour: 100)!))
+        #expect(fixture.joystick.setSpeed(RouteSpeed(kilometersPerHour: 5)!))
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(fixture.route.draft.speed.kilometersPerHour == 5)
+        #expect(fixture.joystick.speed.kilometersPerHour == 5)
+        #expect(fixture.saved == [100, 5], "each user change is saved once, nothing oscillates")
+    }
+
     private func settle(_ condition: @MainActor () -> Bool) async {
         for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(condition())

@@ -20,23 +20,32 @@ public final class MovementSpeedSynchronizer {
         self.speed = initial
         self.onChange = onChange
         apply()
+        // A speed change is adopted synchronously so the canonical `speed` is never
+        // stale, and it is mirrored only to the *other* controller (the source is
+        // already updating itself). Phase changes only catch up a controller that
+        // was busy; they re-read the canonical speed, so no change can bounce back.
         subscriptions = [
             route.$draft.map(\.speed).removeDuplicates().dropFirst().sink { [weak self] value in
-                Task { @MainActor in self?.adopt(value) }
+                self?.adopt(value, from: .route)
             },
             joystick.$speed.removeDuplicates().dropFirst().sink { [weak self] value in
-                Task { @MainActor in self?.adopt(value) }
+                self?.adopt(value, from: .joystick)
             },
-            route.$phase.removeDuplicates().sink { [weak self] _ in Task { @MainActor in self?.apply() } },
-            joystick.$phase.removeDuplicates().sink { [weak self] _ in Task { @MainActor in self?.apply() } }
+            route.$phase.removeDuplicates().dropFirst().sink { [weak self] _ in Task { @MainActor in self?.apply() } },
+            joystick.$phase.removeDuplicates().dropFirst().sink { [weak self] _ in Task { @MainActor in self?.apply() } }
         ]
     }
 
-    private func adopt(_ value: RouteSpeed) {
+    private enum Source { case route, joystick }
+
+    private func adopt(_ value: RouteSpeed, from source: Source) {
         guard value != speed else { return }
         speed = value
         onChange(value)
-        apply()
+        switch source {
+        case .route: _ = joystick.setSpeed(value)
+        case .joystick: _ = route.setSpeed(value)
+        }
     }
 
     private func apply() {
