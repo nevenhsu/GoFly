@@ -8,6 +8,8 @@ public final class PointDispatchGate: @unchecked Sendable {
     private let authority: MovementTaskAuthority?
     private let lease: MovementTaskLease?
     private let replacing: MovementAuthoritySnapshot?
+    private let connectionRepair: Bool
+    private let repairPausedTask: Bool
     public enum State: Sendable { case available, dispatched, invalidated }
     private var storedState: State = .available
     private var recoveryRevoked = false
@@ -19,6 +21,8 @@ public final class PointDispatchGate: @unchecked Sendable {
         authority = nil
         lease = nil
         replacing = nil
+        connectionRepair = false
+        repairPausedTask = false
     }
 
     public init(authority: MovementTaskAuthority, lease: MovementTaskLease,
@@ -27,7 +31,18 @@ public final class PointDispatchGate: @unchecked Sendable {
         self.authority = authority
         self.lease = lease
         self.replacing = replacing
+        self.connectionRepair = false
+        repairPausedTask = false
         self.onDispatch = onDispatch
+    }
+
+    init(repairingConnection authority: MovementTaskAuthority, lease: MovementTaskLease, allowingPaused: Bool) {
+        self.authority = authority
+        self.lease = lease
+        replacing = nil
+        connectionRepair = true
+        repairPausedTask = allowingPaused
+        onDispatch = {}
     }
 
     public var hasDispatched: Bool { lock.withLock { storedState == .dispatched } }
@@ -46,7 +61,8 @@ public final class PointDispatchGate: @unchecked Sendable {
         let claimed = lock.withLock {
             guard storedState == .available else { return false }
             if let authority, let lease {
-                let permitted = replacing.map { authority.install(lease, replacing: $0) } ?? authority.permitsDispatch(for: lease)
+                let permitted = connectionRepair ? authority.permitsConnectionRepair(for: lease, allowingPaused: repairPausedTask)
+                    : (replacing.map { authority.install(lease, replacing: $0) } ?? authority.permitsDispatch(for: lease))
                 guard permitted else {
                     storedState = .invalidated
                     recoveryRevoked = true

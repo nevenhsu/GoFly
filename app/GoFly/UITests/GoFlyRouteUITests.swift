@@ -20,6 +20,21 @@ final class GoFlyRouteUITests: XCTestCase {
         XCTAssertEqual(app.alerts.count, 0)
     }
 
+    func testDestinationPickerShowsRoleChipAndFavoritesButton() throws {
+        try simulatorOnly()
+        let app = makeApp()
+        app.launch()
+        openRoute(app)
+        app.buttons["route.node.destination"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["search.role"].waitForExistence(timeout: 5))
+        let favButton = app.buttons["search.favorites"]
+        XCTAssertTrue(favButton.waitForExistence(timeout: 5))
+        favButton.tap()
+        XCTAssertTrue(app.buttons["favorites.dismiss"].waitForExistence(timeout: 5))
+        app.buttons["favorites.dismiss"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["search.role"].waitForExistence(timeout: 5))
+    }
+
     func testWaypointIsInsertedBeforeTheDestination() throws {
         try simulatorOnly()
         let app = makeApp()

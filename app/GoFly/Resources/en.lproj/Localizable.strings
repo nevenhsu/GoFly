@@ -483,9 +483,6 @@
 "gallery.warningTitle" = "Location is limited";
 "gallery.warningMessage" = "GoFly only asks for location while the app is open.";
 "gallery.successTitle" = "Moved to this place";
-"gallery.pillActive" = "Simulating";
-"gallery.pillDanger" = "Error";
-"gallery.pillNeutral" = "Standby";
 "gallery.showSnackbar" = "Show snackbar";
 "gallery.snackbarText" = "Deleted 1 item";
 "gallery.executionTitle" = "Heading to 台北 101";
@@ -498,13 +495,7 @@
 
 "map.searchHint" = "Search places, addresses or coordinates.";
 "map.north" = "Reset map to north";
-"status.pill.running" = "Running";
-"status.pill.paused" = "Paused";
-"status.pill.preparing" = "Preparing";
-"status.pill.simulating" = "Simulating";
-"status.pill.standby" = "Service ready";
 "placeDetails.copied" = "Coordinates copied";
-"status.pill.error" = "Connection lost";
 
 "search.recent" = "Recent searches";
 "search.clearHistory" = "Clear history";
@@ -567,8 +558,6 @@
 
 "search.title" = "Search";
 
-"status.pill.limited" = "Limited";
-"status.pill.connectionInterrupted" = "Connection interrupted";
 
 "search.viewAll" = "View all";
 "search.goToCoordinate" = "Go to %@";
@@ -668,3 +657,9 @@
 "route.roundTrip.off" = "Round Trip Off";
 "route.direction.forward" = "Forward";
 "route.direction.reverse" = "Reverse";
+
+"status.pill.started" = "Standby";
+"status.pill.simulating" = "Running";
+"status.pill.paused" = "Paused";
+"status.pill.stopped" = "Stopped";
+"status.pill.error" = "Error";

@@ -52,6 +52,7 @@ public enum JoystickCommandEvent: Sendable {
 
 @MainActor
 public protocol JoystickCommanding: AnyObject {
+    func cancelConnectionRecovery()
     var canBeginJoystick: Bool { get }
     var currentJoystickOrigin: GeoCoordinate? { get }
     var movementAdmissionRevision: UInt64 { get }
@@ -67,4 +68,8 @@ public protocol JoystickCommanding: AnyObject {
     func resumeJoystick(executionID: UUID, lease: MovementTaskLease) -> Bool
     func resumeJoystickStream(executionID: UUID, lease: MovementTaskLease) -> Bool
     func waitForJoystickIdle(executionID: UUID, lease: MovementTaskLease) async -> JoystickIdleSettlement
+}
+
+public extension JoystickCommanding {
+    func cancelConnectionRecovery() {}
 }

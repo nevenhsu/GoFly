@@ -219,6 +219,16 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
         }
     }
 
+    func rebuildClientConnection() async throws {
+        try await perform("connection.rebuild") {
+            self.ownedSession?.native.close()
+            self.ownedSession = nil
+            self.sessionCreatedAt = nil
+            self.sessionLastActivityAt = nil
+            try TunnelProbe.run()
+        }
+    }
+
     func resetClientConnection() async throws {
         try await perform("reset") {
             guard self.ownedSession == nil else {

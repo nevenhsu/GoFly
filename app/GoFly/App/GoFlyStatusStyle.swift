@@ -1,4 +1,5 @@
 import SwiftUI
+import GoFlyCore
 
 /// Shared severity vocabulary for the status pill, banners and snackbar.
 /// Color is never the only signal: every tone also carries a symbol and a
@@ -49,28 +50,15 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
 }
 
 /// One display state for the map and Settings service pill.
-enum GoFlySessionStatus: Equatable {
-    case standby, preparing, running, simulating, paused, limited, connectionLost
+typealias GoFlySessionStatus = SessionDisplayStatus
 
-    var textKey: String {
-        switch self {
-        case .standby: "status.pill.standby"
-        case .preparing: "status.pill.preparing"
-        case .running: "status.pill.running"
-        case .simulating: "status.pill.simulating"
-        case .paused: "status.pill.paused"
-        case .limited: "status.pill.limited"
-        case .connectionLost: "status.pill.error"
-        }
-    }
-
+extension SessionDisplayStatus {
     var tone: GoFlyStatusTone {
         switch self {
-        case .standby, .preparing: .neutral
-        case .running: .active
+        case .started, .stopped: .neutral
         case .simulating: .success
-        case .paused, .limited: .warning
-        case .connectionLost: .danger
+        case .paused: .warning
+        case .error: .danger
         }
     }
 }

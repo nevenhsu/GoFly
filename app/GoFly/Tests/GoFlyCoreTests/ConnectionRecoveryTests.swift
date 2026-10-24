@@ -445,7 +445,7 @@ struct ConnectionRecoveryControllerTests {
         await wait { await probe.count == 1 && recovery.connectionState == .timedOut && !recovery.isChecking }
         #expect(service.restoreGPS())
         await wait { await device.clearStarted && service.nativeBusy }
-        clock.advance(by: .seconds(2))
+        clock.advance(by: .seconds(5))
         await Task.yield()
         #expect(await probe.count == 1)
 

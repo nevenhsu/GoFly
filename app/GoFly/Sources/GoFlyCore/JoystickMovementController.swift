@@ -8,6 +8,7 @@ public enum JoystickMovementPhase: String, Equatable, Sendable {
 @MainActor
 public final class JoystickMovementController: ObservableObject {
     @Published public private(set) var phase: JoystickMovementPhase = .neutral
+    @Published public private(set) var isRecoveringConnection = false
     @Published public private(set) var speed: RouteSpeed
     @Published public private(set) var input: JoystickInput?
     @Published public private(set) var activeGestureID: UUID?
@@ -44,7 +45,7 @@ public final class JoystickMovementController: ObservableObject {
     }
     public var requiresOrigin: Bool { commands.currentJoystickOrigin == nil }
     public var requiresStop: Bool { phase == .unknown }
-    public var canPause: Bool { phase == .moving && hasAcknowledgedLease }
+    public var canPause: Bool { isRecoveringConnection || (phase == .moving && hasAcknowledgedLease) }
     public var canResume: Bool {
         sceneActive && connectionAvailable && !recoveryProbePending && commands.canBeginJoystick &&
         (phase == .paused || (wanderEnabled && phase == .suspended && suspensionReason == .sceneInactive))
@@ -264,6 +265,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
 
     @discardableResult public func endGesture(id: UUID) -> Bool {
+        if isRecoveringConnection, activeGestureID == id {
+            input = nil; activeGestureID = nil
+            if !wanderEnabled { _ = pause() }
+            return true
+        }
         guard activeGestureID == id, let intent, phase == .preparing || phase == .moving else { return false }
         if wanderEnabled {
             _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease)
@@ -273,7 +279,39 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         return true
     }
 
+    func suspendForConnectionRecovery() -> Bool {
+        if isRecoveringConnection { return true }
+        guard phase == .moving, hasAcknowledgedLease else { return false }
+        isRecoveringConnection = true
+        generation &+= 1
+        task?.cancel()
+        phase = .paused
+        return true
+    }
+
+    func finishConnectionRecovery(succeeded: Bool) {
+        guard isRecoveringConnection, let intent else { return }
+        isRecoveringConnection = false
+        guard succeeded else {
+            phase = .interrupted; error = .device(.serviceUnavailable)
+            withdrawContinuation(.ended)
+            return
+        }
+        error = nil
+        if !wanderEnabled, activeGestureID == nil { phase = .neutral; return }
+        phase = .moving
+        let token = generation
+        task = Task { [weak self] in await self?.run(intent, token: token) }
+    }
+
     @discardableResult public func pause() -> Bool {
+        if isRecoveringConnection {
+            isRecoveringConnection = false
+            commands.cancelConnectionRecovery()
+            withdrawContinuation(.userPaused)
+            input = nil; activeGestureID = nil; phase = .paused
+            return true
+        }
         guard canPause, let intent,
               commands.releaseJoystick(executionID: intent.id, lease: intent.lease, disposition: .pause) else { return false }
         withdrawContinuation(.userPaused)
@@ -304,6 +342,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         return true
     }
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
+        if isRecoveringConnection, continuingLease != intent?.lease { _ = pause() }
         sceneActive = false
         if let intent, continuingLease == intent.lease, wanderEnabled, hasAcknowledgedLease, phase == .moving {
             input = nil
@@ -328,6 +367,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
 
     public func continuationDidBecomeUnavailable() {
+        if isRecoveringConnection { _ = pause() }
                 releaseForUnavailable(reason: .backgroundUnavailable)
     }
 
@@ -495,6 +535,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             clearWanderState(); error = nil; resumedNeutralIntent = nil
             returnToNeutral()
         case .ended(let id):
+            if intent?.id == id { isRecoveringConnection = false }
             if resumedNeutralIntent?.id == id { resumedNeutralIntent = nil }
             guard intent?.id == id else { return }
             withdrawContinuation(.ended)

@@ -60,10 +60,10 @@ struct WanderControllerIntegrationTests {
         } else {
             #expect(service.teleport(to: TeleportCandidate(place: place(GeoCoordinate(latitude: 26, longitude: 122)!))))
             if boundary == "failedPrepare" {
-                for _ in 0..<3 {
-                    await wait { await device.waiting }
-                    await device.finish(.notSent(.pairingRequired))
-                }
+                // Point repair is owned by the adapter; the facade does not
+                // multiply a failed Go into three preparation rounds.
+                await wait { await device.waiting }
+                await device.finish(.notSent(.pairingRequired))
                 await wait { service.preparedOperation?.state == .failed(.pairingRequired) }
                 #expect(controller.wanderEnabled && controller.phase == .suspended)
                 #expect(service.cancelPreparation(id: try #require(service.preparedOperation?.id)))
@@ -90,7 +90,7 @@ struct WanderControllerIntegrationTests {
             #expect(controller.setWanderEnabled(false))
         }
         clock.advance(by: .seconds(30))
-        #expect(await device.coordinates.count == (boundary == "stop" ? 0 : (boundary == "failedPrepare" ? 3 : 1)))
+        #expect(await device.coordinates.count == (boundary == "stop" ? 0 : 1))
         if boundary == "claimUnknown" { #expect(service.stop()); await wait { !service.nativeBusy } }
     }
 

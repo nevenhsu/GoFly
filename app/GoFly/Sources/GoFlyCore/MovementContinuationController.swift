@@ -145,6 +145,12 @@ public final class MovementContinuationController: ObservableObject {
 
     private func installSubscriptions() {
         subscriptions = [
+            service.$isRecoveringConnection.sink { [weak self] recovering in
+                guard recovering, let self else { return }
+                self.durationEpoch?.lastAcknowledgedAt = nil
+                self.candidate?.epoch.lastAcknowledgedAt = nil
+                self.pending?.lastAcknowledgedAt = nil
+            },
             route.continuationControlEvents.sink { [weak self] in self?.control($0) },
             joystick.continuationControlEvents.sink { [weak self] in self?.control($0) },
             route.movementAcknowledgements.sink { [weak self] in self?.acknowledged($0) },
@@ -382,6 +388,10 @@ public final class MovementContinuationController: ObservableObject {
     }
     private func ownerReady(_ demand: MovementContinuationDemand) -> Bool {
         let owner = service.movementAuthority.snapshot
+        if owner.lease == demand.lease, owner.runState == .running,
+           service.isRecoveringConnection || route.isRecoveringConnection || joystick.isRecoveringConnection || positionHold?.isRecoveringConnection == true {
+            return true
+        }
         guard owner.lease == demand.lease, owner.health == .confirmedHealthy,
               owner.runState == .running, service.movementConnectionAvailable,
               !service.coldClearPending else { return false }

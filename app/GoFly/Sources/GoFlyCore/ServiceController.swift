@@ -5,6 +5,12 @@ import Foundation
 public final class ServiceController: ObservableObject, RouteCommanding, JoystickCommanding {
     @Published public private(set) var phase: ServicePhase = .stopped
     @Published public private(set) var nativeBusy = false
+    @Published public private(set) var hasSimulated = false
+    @Published public private(set) var isRecoveringConnection = false
+    public var connectionRecoveryRequested: (@MainActor (MovementConnectionRecovery) -> Bool)?
+    private var connectionRecovery: MovementConnectionRecovery?
+    private var failedConnectionRecovery: MovementConnectionRecovery?
+    private var connectionRecoveryGate: PointDispatchGate?
     @Published public private(set) var error: DeviceServiceFailure?
     @Published public private(set) var clearState: ClearState = .unknown
     @Published public private(set) var clearConfirmedAt: Date?
@@ -183,12 +189,12 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             return "gps.observed"
         }
     }
-    public var canStart: Bool { !nativeBusy && movementAdmissionAllowed && phase == .stopped }
+    public var canStart: Bool { !nativeBusy && movementAdmissionAllowed && (phase == .stopped || (phase == .ready && hasSimulated && movementAuthority.snapshot.lease == nil)) }
     public var canStop: Bool {
-        !clearScheduled && (phase == .ready || phase == .preparing || phase == .repairRequired)
+        !clearScheduled && (phase == .ready || phase == .preparing || phase == .repairRequired || isRecoveringConnection)
     }
-    public var canRestoreGPS: Bool { !nativeBusy && phase == .stopped }
-    public var canResetTunnel: Bool { canRestoreGPS }
+    public var canRestoreGPS: Bool { !nativeBusy && (phase == .stopped || (phase == .ready && movementAuthority.snapshot.lease == nil)) }
+    public var canResetTunnel: Bool { !nativeBusy && phase == .stopped }
     public var canTeleport: Bool {
         !nativeBusy && movementAdmissionAllowed && !pointUnconfirmed && !routeUnconfirmed && !joystickUnconfirmed && (phase == .stopped || phase == .ready)
     }
@@ -420,6 +426,17 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         }
     }
 
+    public var displayPositionMarker: PositionMarker? {
+        guard let marker = positionMarker else { return nil }
+        if marker.source == .simulation, marker.freshness == .waiting,
+           simulationDisplayVerified, movementConnectionAvailable, phase == .ready,
+           error == nil, movementAuthority.snapshot.runState == .running,
+           movementAuthority.snapshot.health == .confirmedHealthy {
+            return PositionMarker(coordinate: marker.coordinate, source: .simulation, freshness: .fresh)
+        }
+        return marker
+    }
+
     public var positionMarker: PositionMarker? {
         guard let position = lastDisplayedPosition else { return nil }
         let fresh: Bool
@@ -499,6 +516,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
 
     @discardableResult public func start() -> Bool {
         guard canStart else { return false }
+        if phase == .ready { hasSimulated = false; return true }
         admitExplicitOperation()
         beginPreparation(.start)
         return true
@@ -673,6 +691,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// before dispatch but cannot cancel an FFI call that already owns handles.
     @discardableResult public func stop() -> Bool {
         guard canStop else { return false }
+        cancelConnectionRecovery()
         if let id = activeResetID, case .running = tunnelResetState {
             tunnelResetState = .failed(id: id, failure: .operationCancelled)
         }
@@ -739,6 +758,143 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                            preparation: nil, resetID: id)
         }
         return true
+    }
+
+    /// Ends simulation while retaining the prepared connection. GPS restore
+    /// remains an explicit separate operation.
+    @discardableResult public func stopSimulation() -> Bool {
+        guard canStop else { return false }
+        cancelConnectionRecovery()
+        revision &+= 1
+        watchdog?.cancel()
+        routeStopGeneration &+= 1
+        for owner in Array(routeOwners.values) { endRoute(executionID: owner.intent.id, lease: owner.intent.lease) }
+        for owner in Array(joystickOwners.values) { cancelJoystickOwner(owner) }
+        movementAuthority.revokeAll()
+        joystickSubject.send(.movementBoundary(nil))
+        currentPoint?.dispatch.invalidate()
+        currentPoint = nil
+        currentPreparation?.dispatch.invalidate()
+        currentPreparation = nil
+        preparedOperation = nil
+        pointState = .idle
+        markSimulationPositionUnverified()
+        hasSimulated = true
+        phase = .ready
+        error = nil
+        return true
+    }
+
+    @discardableResult
+    public func requestConnectionRecovery(failure: DeviceServiceFailure, explicitlyRequested: Bool = false) -> Bool {
+        guard [.tunnelUnavailable, .serviceUnavailable, .operationTimedOut].contains(failure) else { return false }
+        if connectionRecovery != nil { return true }
+        let snapshot = movementAuthority.snapshot
+        guard let lease = snapshot.lease,
+              (snapshot.runState == .running || (explicitlyRequested && snapshot.runState == .paused)),
+              let position = lastDisplayedPosition, position.source == .simulation else { return false }
+        let executionID = routeOwners.values.first { $0.intent.lease == lease && !$0.ended }?.intent.id
+            ?? joystickOwners.values.first { $0.intent.lease == lease && !$0.ended }?.intent.id
+        guard let executionID else { return false }
+        let recovery = MovementConnectionRecovery(id: UUID(), executionID: executionID,
+            lease: lease, coordinate: position.coordinate, failure: failure, resumesTask: snapshot.runState == .running)
+        connectionRecovery = recovery
+        guard connectionRecoveryRequested?(recovery) == true else {
+            connectionRecovery = nil
+            return false
+        }
+        isRecoveringConnection = true
+        error = failure
+        setMovementConnectionAvailable(false)
+        return true
+    }
+
+    public func cancelConnectionRecovery() {
+        guard let recovery = connectionRecovery ?? failedConnectionRecovery else { return }
+        failedConnectionRecovery = nil
+        connectionRecoveryGate?.invalidate()
+        connectionRecoveryGate = nil
+        connectionRecovery = nil
+        isRecoveringConnection = false
+        movementAuthority.updateRunState(.paused, for: recovery.lease)
+        if let owner = joystickOwners[recovery.executionID] {
+            owner.paused = true; owner.neutral = false; owner.disposition = nil
+        }
+    }
+
+    /// Runs behind existing native work; never clears GPS or replaces the
+    /// logical movement owner. Only the repair ACK reopens ordinary dispatch.
+    public func repairConnection(_ recovery: MovementConnectionRecovery) async -> Bool {
+        guard connectionRecovery == recovery else { return false }
+        let gate = PointDispatchGate(repairingConnection: movementAuthority, lease: recovery.lease, allowingPaused: !recovery.resumesTask)
+        connectionRecoveryGate = gate
+        let token = beginLifecycle(.resetting, point: nil, preparation: nil)
+        return await withCheckedContinuation { continuation in
+            enqueueAdapter({ [weak self] device in
+                guard let self, self.connectionRecovery == recovery else { return .failure(.operationCancelled) }
+                do {
+                    try await device.rebuildClientConnection()
+                    try await device.prepare()
+                    guard self.connectionRecovery == recovery else { return .success }
+                    return .point(await device.movePoint(to: recovery.coordinate, dispatch: gate))
+                } catch {
+                    return .failure(error as? DeviceServiceFailure ?? .serviceUnavailable)
+                }
+            }) { [weak self] result in
+                guard let self else { continuation.resume(returning: false); return }
+                self.outstandingWork -= 1
+                self.nativeBusy = self.outstandingWork > 0 || self.hasPendingRouteRepair
+                guard self.connectionRecovery == recovery, self.revision == token else {
+                    if self.connectionRecovery == recovery {
+                        // A real lifecycle timeout may finish before native
+                        // work drains. Once it has returned, Retry can start
+                        // a fresh attempt rather than reusing the expired one.
+                        gate.invalidate()
+                        self.connectionRecovery = nil
+                        self.connectionRecoveryGate = nil
+                        self.isRecoveringConnection = false
+                        self.failedConnectionRecovery = recovery
+                    }
+                    if self.phase == .resetting { self.phase = .ready }
+                    if case .success = result, self.phase == .ready {
+                        self.setMovementConnectionAvailable(true)
+                        self.error = nil
+                    }
+                    continuation.resume(returning: false)
+                    return
+                }
+                self.watchdog?.cancel()
+                self.connectionRecovery = nil
+                self.connectionRecoveryGate = nil
+                self.isRecoveringConnection = false
+                if case .point(.acknowledged) = result, gate.hasDispatched {
+                    self.failedConnectionRecovery = nil
+                    self.routeUnconfirmed = false
+                    self.joystickUnconfirmed = false
+                    if let owner = self.routeOwners[recovery.executionID] {
+                        owner.unknown = false; owner.unknownFailure = nil; owner.interrupted = false
+                    }
+                    if let owner = self.joystickOwners[recovery.executionID] {
+                        owner.unknownFailure = nil
+                    }
+                    self.movementAuthority.updateHealth(.confirmedHealthy, for: recovery.lease)
+                    self.setMovementConnectionAvailable(true)
+                    self.publishSimulation(recovery.coordinate, displayEpoch: self.simulationDisplayEpoch)
+                    self.phase = .ready; self.error = nil
+                    continuation.resume(returning: true)
+                } else {
+                    self.failedConnectionRecovery = recovery
+                    self.phase = .repairRequired
+                    switch result {
+                    case .failure(let failure), .point(.notSent(let failure)), .point(.unconfirmed(let failure)):
+                        self.error = failure
+                    default: self.error = .serviceUnavailable
+                    }
+                    self.markSimulationPositionUnverified()
+                    continuation.resume(returning: false)
+                }
+            }
+        }
     }
 
     /// GPS remains independent evidence; active simulation takes display priority.
@@ -1220,6 +1376,7 @@ extension ServiceController {
         }
     }
     private func publishSimulation(_ coordinate: GeoCoordinate, displayEpoch: UUID) {
+        hasSimulated = true
         confirmedSimulatedLocation = coordinate
         lastDisplayedPosition = DisplayedPosition(coordinate: coordinate, source: .simulation)
         simulationDisplayVerified = displayEpoch == simulationDisplayEpoch && movementConnectionAvailable &&
@@ -1273,6 +1430,7 @@ extension ServiceController {
         }
     }
     private func markRouteInterrupted(_ owner: RouteOwner, failure: DeviceServiceFailure) {
+        if requestConnectionRecovery(failure: failure) { return }
         guard !owner.ended, movementAuthority.snapshot.lease == owner.intent.lease,
               movementAuthority.snapshot.runState == .running else { return }
         diagnose("route.interrupted", level: .notice, [
@@ -1287,6 +1445,7 @@ extension ServiceController {
         routeSubject.send(.interrupted(owner.intent.id, failure))
     }
     private func markRouteUnknown(_ owner: RouteOwner, failure: DeviceServiceFailure) {
+        if requestConnectionRecovery(failure: failure) { return }
         guard !owner.ended else { return }
         diagnose("route.unknown", level: .notice, [
             "failure": .text(failure.rawValue),
@@ -1622,6 +1781,9 @@ extension ServiceController {
         }
     }
     private func failJoystickBeforeClaim(_ owner: JoystickOwner, failure: JoystickFailure) -> JoystickRecipeStepOutcome {
+        if case .device(let deviceFailure) = failure, requestConnectionRecovery(failure: deviceFailure) {
+            return .notSent(failure)
+        }
         owner.ended = true
         markSimulationPositionUnverified()
         movementAuthority.revoke(owner.intent.lease)
@@ -1629,6 +1791,7 @@ extension ServiceController {
         return .notSent(failure)
     }
     private func unknownJoystick(_ owner: JoystickOwner, failure: DeviceServiceFailure) -> JoystickRecipeStepOutcome {
+        if requestConnectionRecovery(failure: failure) { return .unconfirmed(failure) }
         guard owner.stopGeneration == routeStopGeneration else { return .cancelled }
         diagnose("joystick.unknown", level: .notice, [
             "failure": .text(failure.rawValue),

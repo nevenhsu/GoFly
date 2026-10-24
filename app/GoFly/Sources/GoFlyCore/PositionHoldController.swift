@@ -16,6 +16,7 @@ public enum PositionHoldPhase: String, Equatable, Sendable {
 @MainActor
 public final class PositionHoldController: ObservableObject {
     @Published public private(set) var phase: PositionHoldPhase = .idle
+    @Published public private(set) var isRecoveringConnection = false
     @Published public private(set) var intent: JoystickMovementIntent?
     @Published public private(set) var elapsedSeconds: Double = 0
     @Published public private(set) var completedCycles: Int64 = 0
@@ -86,7 +87,8 @@ public final class PositionHoldController: ObservableObject {
         foreground = false
         guard phase == .running, let operation = intent,
               continuingLease == operation.lease,
-              service.movementAuthority.permitsDispatch(for: operation.lease) else {
+              (service.movementAuthority.permitsDispatch(for: operation.lease)
+                || (isRecoveringConnection && service.movementAuthority.permitsConnectionRepair(for: operation.lease))) else {
             if phase == .running || phase == .preparing { pause(reason: .userPaused) }
             return
         }
@@ -119,6 +121,26 @@ public final class PositionHoldController: ObservableObject {
             return false
         }
         return true
+    }
+
+    func suspendForConnectionRecovery() -> Bool {
+        if isRecoveringConnection { return true }
+        guard phase == .running else { return false }
+        isRecoveringConnection = true
+        invalidateWork()
+        lastAcknowledgementAt = nil
+        return true
+    }
+
+    func finishConnectionRecovery(succeeded: Bool) {
+        guard isRecoveringConnection, let operation = intent else { return }
+        isRecoveringConnection = false
+        guard succeeded else { pause(reason: .userPaused); return }
+        // The repair is a fresh timing baseline, not acknowledged execution
+        // time during the connection outage.
+        lastAcknowledgementAt = clock.now
+        let token = generation
+        work = Task { [weak self] in await self?.run(operation: operation, token: token) }
     }
 
     private func receive(_ acknowledgement: TeleportAcknowledgement) {
@@ -300,6 +322,7 @@ public final class PositionHoldController: ObservableObject {
                 ["failure": .text(failure.localizationKey)])
             pause(reason: .userPaused)
         case .availabilityChanged:
+            guard !isRecoveringConnection else { return }
             guard phase == .running || phase == .preparing else { return }
             if !service.movementConnectionAvailable { pause(reason: .userPaused) }
         }
@@ -307,6 +330,7 @@ public final class PositionHoldController: ObservableObject {
 
     private func pause(reason: MovementContinuationWithdrawalReason) {
         guard phase == .running || phase == .preparing, let operation = intent else { return }
+        if isRecoveringConnection { service.cancelConnectionRecovery(); isRecoveringConnection = false }
         invalidateWork()
         phase = .paused
         if service.movementAuthority.snapshot.lease == operation.lease {
@@ -327,6 +351,7 @@ public final class PositionHoldController: ObservableObject {
     }
 
     private func finishEnded(operation: JoystickMovementIntent) {
+        isRecoveringConnection = false
         guard intent?.id == operation.id else { return }
         invalidateWork()
         phase = .idle

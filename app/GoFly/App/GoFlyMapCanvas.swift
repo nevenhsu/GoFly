@@ -59,6 +59,7 @@ struct GoFlyMapProjection: Equatable {
 struct GoFlyMapCanvas: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.locale) private var locale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var marker: PositionMarker?
     var candidate: TeleportCandidate?
@@ -69,6 +70,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var routeWaypoints: [GeoCoordinate]? = nil
     var wanderTarget: MapPlace? = nil
     var markerBearingDegrees: Double? = nil
+    var markerRoute: PlannedRoute? = nil
+    var markerRouteDistance: Double? = nil
     var adjustsFocusForViewportChanges = true
     var onMapTap: (GeoCoordinate) -> Void
     var onProjection: (GoFlyMapProjection) -> Void
@@ -122,6 +125,10 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         var compass: MKCompassButton?
         private var positionAnnotation: PositionAnnotation?
         private var coordinateDisplayLink: CADisplayLink?
+        private var displayedRouteDistance: Double?
+        private var coordinateAnimationRoute: PlannedRoute?
+        private var coordinateAnimationRouteStart: Double?
+        private var coordinateAnimationRouteEnd: Double?
         private var coordinateAnimationStart: GeoCoordinate?
         private var coordinateAnimationTarget: GeoCoordinate?
         private var coordinateAnimationStartedAt: CFTimeInterval = 0
@@ -136,6 +143,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var routePoints: [GeoCoordinate] = []
         private var routeOverlay: MKPolyline?
         private var routeRenderer: MKPolylineRenderer?
+        private var appliedRouteColor: CGColor?
         private var routeWaypointsApplied: [GeoCoordinate]?
         private var routeNodeAnnotations: [RouteNodeAnnotation] = []
         private var annotationLocaleIdentifier = ""
@@ -156,8 +164,12 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func refreshAppearance(on map: MKMapView) {
             updateMarkerAppearance(on: map)
-            routeRenderer?.strokeColor = .label
-            routeRenderer?.setNeedsDisplay()
+            let color = UIColor.label.resolvedColor(with: map.traitCollection).cgColor
+            if appliedRouteColor != color {
+                appliedRouteColor = color
+                routeRenderer?.strokeColor = UIColor(cgColor: color)
+                routeRenderer?.setNeedsDisplay()
+            }
         }
 
         func applyAnnotationLocale(_ locale: Locale, on map: MKMapView) {
@@ -193,7 +205,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 return
             }
             if let annotation = positionAnnotation {
-                let shouldAnimate = lastMarker?.source == .simulation && lastMarker?.freshness == .fresh
+                let shouldAnimate = !parent.reduceMotion && lastMarker?.source == .simulation && lastMarker?.freshness == .fresh
                     && marker.source == .simulation && marker.freshness == .fresh
                 lastMarker = marker
                 if shouldAnimate {
@@ -201,11 +213,13 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 } else {
                     stopCoordinateAnimation()
                     annotation.coordinate = marker.coordinate.clLocationCoordinate
+                    displayedRouteDistance = parent.markerRouteDistance
                 }
             } else {
                 lastMarker = marker
                 let annotation = PositionAnnotation(marker.coordinate.clLocationCoordinate)
                 positionAnnotation = annotation
+                displayedRouteDistance = parent.markerRouteDistance
                 map.addAnnotation(annotation)
             }
             updateMarkerAppearance(on: map)
@@ -221,9 +235,16 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
             guard distance > 0.15, distance <= 30 else {
                 annotation.coordinate = target.clLocationCoordinate
+                displayedRouteDistance = parent.markerRouteDistance
                 return
             }
             coordinateAnimationStart = current
+            if let route = parent.markerRoute, let from = displayedRouteDistance,
+               let to = parent.markerRouteDistance {
+                coordinateAnimationRoute = route
+                coordinateAnimationRouteStart = from
+                coordinateAnimationRouteEnd = to
+            }
             coordinateAnimationTarget = target
             coordinateAnimationStartedAt = CACurrentMediaTime()
             let displayLink = CADisplayLink(target: self, selector: #selector(advanceCoordinateAnimation(_:)))
@@ -248,7 +269,14 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             var longitude = start.longitude + longitudeDelta * eased
             if longitude > 180 { longitude -= 360 }
             if longitude < -180 { longitude += 360 }
-            annotation.coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            if let route = coordinateAnimationRoute, let from = coordinateAnimationRouteStart,
+               let to = coordinateAnimationRouteEnd {
+                let distance = from + (to - from) * eased
+                displayedRouteDistance = distance
+                annotation.coordinate = (route.coordinate(at: distance) ?? target).clLocationCoordinate
+            } else {
+                annotation.coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            }
             guard progress >= 1 else { return }
             annotation.coordinate = target.clLocationCoordinate
             stopCoordinateAnimation()
@@ -259,6 +287,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             coordinateDisplayLink = nil
             coordinateAnimationStart = nil
             coordinateAnimationTarget = nil
+            coordinateAnimationRoute = nil
+            coordinateAnimationRouteStart = nil
+            coordinateAnimationRouteEnd = nil
         }
 
         private func updateMarkerAppearance(on map: MKMapView) {
@@ -277,6 +308,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             if let routeOverlay { map.removeOverlay(routeOverlay) }
             routeOverlay = nil
             routeRenderer = nil
+            appliedRouteColor = nil
             guard points.count > 1 else { return }
             let coordinates = points.map(\.clLocationCoordinate)
             let overlay = MKPolyline(coordinates: coordinates, count: coordinates.count)

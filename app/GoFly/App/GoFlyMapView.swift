@@ -7,8 +7,20 @@ import UIKit
 
 /// One App-owned assembly, created before SwiftUI attaches its observers.
 /// View reconstruction reuses these exact domain owners and cannot fence live work.
+struct GoFlyMovementPresentation: Equatable {
+    var status: GoFlySessionStatus = .started
+    var marker: PositionMarker?
+    var errorKeys: [String] = []
+    var route: PlannedRoute?
+    var routeDistance: Double?
+}
+
 @MainActor
 final class GoFlyMovementModel: ObservableObject {
+    @Published private(set) var presentation = GoFlyMovementPresentation()
+    private var presentationUpdateQueued = false
+    private let network = GoFlyNetworkMonitor.shared
+    private var dataErrorKeys: @MainActor () -> [String] = { [] }
     @Published private(set) var presentationMode: SessionMapMode
     let route: RouteExecutionController
     let joystick: JoystickMovementController
@@ -32,7 +44,7 @@ final class GoFlyMovementModel: ObservableObject {
         positionHold = PositionHoldController(service: service)
         recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
-            probe: NetworkTunnelProbe(), retainedColdSnapshot: snapshot
+            probe: NetworkTunnelProbe(), positionHold: positionHold, retainedColdSnapshot: snapshot
         )
         let routeForPresentation = route
         continuation = MovementContinuationController(
@@ -53,41 +65,56 @@ final class GoFlyMovementModel: ObservableObject {
         // Both screens observe this owner and read the same status projection.
         subscriptions = [service.objectWillChange, recovery.objectWillChange,
                          route.objectWillChange, joystick.objectWillChange,
-                         positionHold.objectWillChange, continuation.objectWillChange].map { publisher in
-            publisher.sink { [weak self] _ in self?.objectWillChange.send() }
+                         positionHold.objectWillChange, continuation.objectWillChange,
+                         network.objectWillChange, recoveryStore.objectWillChange].map { publisher in
+            publisher.sink { [weak self] _ in self?.queuePresentationUpdate() }
         }
     }
 
-    var status: GoFlySessionStatus {
-        if recovery.connectionState == .unavailable || recovery.connectionState == .timedOut {
-            return .connectionLost
+    var status: GoFlySessionStatus { presentation.status }
+
+    private func queuePresentationUpdate() {
+        guard !presentationUpdateQueued else { return }
+        presentationUpdateQueued = true
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.presentationUpdateQueued = false
+            let running = self.route.phase == .running || self.joystick.phase == .moving || self.positionHold.phase == .running
+            let paused = self.route.phase == .paused || self.joystick.phase == .paused || self.positionHold.phase == .paused
+                || self.route.phase == .interrupted || self.joystick.phase == .interrupted
+                || self.route.phase == .unknown || self.joystick.phase == .unknown || self.positionHold.phase == .unknown
+            let errors = SessionStatusErrors(connection: self.recovery.connectionState,
+                service: self.service.error, route: self.route.error, joystick: self.joystick.error,
+                wander: self.joystick.wanderError, wifiAvailable: self.network.isWiFiConnected,
+                dataErrors: self.dataErrorKeys())
+            let hasError = !errors.isEmpty || self.recovery.automaticRepairInProgress || !self.service.movementConnectionAvailable
+            let next = GoFlyMovementPresentation(
+                status: GoFlySessionStatus(hasError: hasError, running: running, paused: paused,
+                    hasSimulated: self.service.hasSimulated),
+                marker: self.service.displayPositionMarker, errorKeys: errors.keys,
+                route: self.route.intent?.route,
+                routeDistance: self.route.progress?.committedDistanceMeters)
+            if self.presentation != next { self.presentation = next }
         }
-        if !service.nativeBusy {
-            switch service.pointState {
-            case .notSent(_, let failure), .unconfirmed(_, let failure):
-                if service.error == failure, NativeSessionRetentionPolicy().shouldRetryBeforeDispatch(after: failure) {
-                    return .connectionLost
-                }
-            default: break
-            }
+    }
+
+    func observeDataErrors(recoveryStore: SessionRecoveryStore, favorites: FavoritePlacesStore,
+                           importedRoutes: ImportedRoutesStore, favoriteRoutes: FavoriteRoutesStore) {
+        dataErrorKeys = {
+            var keys = [recoveryStore.error?.localizationKey, favorites.error?.rawValue,
+                        importedRoutes.error?.localizationKey, favoriteRoutes.error?.localizationKey].compactMap { $0 }
+            if case .blocked(let failure) = recoveryStore.loadState { keys.append(failure.localizationKey) }
+            if case .blocked(let failure) = favorites.loadState { keys.append(failure.rawValue) }
+            if case .blocked(let failure) = importedRoutes.loadState { keys.append(failure.localizationKey) }
+            if case .blocked(let failure) = favoriteRoutes.loadState { keys.append(failure.localizationKey) }
+            return keys
         }
-        if case .preparing = service.pointState { return .preparing }
-        if !route.canEdit, [.running, .pausing].contains(route.phase) { return .running }
-        if joystick.phase == .moving { return .running }
-        if recovery.connectionState == .unknown || recovery.connectionState == .checking { return .standby }
-        if positionHold.phase == .paused || route.phase == .paused || joystick.phase == .paused { return .paused }
-        if service.error != nil || service.phase == .repairRequired || route.error != nil || joystick.error != nil {
-            return .limited
+        subscriptions += [favorites.objectWillChange, importedRoutes.objectWillChange,
+                          favoriteRoutes.objectWillChange].map { publisher in
+            publisher.sink { [weak self] _ in self?.queuePresentationUpdate() }
         }
-        // A fixed-position refresh temporarily invalidates the marker proof
-        // while awaiting its ACK; the active hold remains a running task.
-        if positionHold.phase == .running { return .running }
-        // A restored coordinate is history, not an impaired live session.
-        if !service.hasAdmittedExplicitOperation { return .standby }
-        if let marker = service.positionMarker, marker.source == .simulation {
-            return marker.freshness == .fresh ? .running : .limited
-        }
-        return .standby
+        queuePresentationUpdate()
     }
 
     func setPresentationMode(_ mode: SessionMapMode) {
@@ -451,7 +478,7 @@ struct GoFlyMapView: View {
                     title: executionTitle,
                     detail: executionDetail,
                     symbol: executionSymbol,
-                    onLeadingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
+                    onTrailingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
                 )
                     .padding(.horizontal, 16).padding(.top, 8)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
@@ -513,12 +540,14 @@ struct GoFlyMapView: View {
             ? viewport
             : CGRect(origin: .zero, size: size)
         return GoFlyMapCanvas(
-            marker: service.positionMarker, candidate: activeCandidate,
+            marker: movement.presentation.marker, candidate: activeCandidate,
             viewport: cameraViewport, cameraIntent: cameraIntent,
             route: mode == .route ? route.plannedRoute : nil,
             routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
             markerBearingDegrees: activeMarkerBearing,
+            markerRoute: movement.presentation.route,
+            markerRouteDistance: movement.presentation.routeDistance,
             adjustsFocusForViewportChanges: false,
             onMapTap: { coordinate in
                 if let picker = route.picker {
@@ -827,7 +856,7 @@ struct GoFlyMapView: View {
 
     private var executionSymbol: String {
         if joystick.wanderEnabled {
-            return [.paused, .suspended, .interrupted].contains(joystick.phase) ? GoFlySymbols.pause : "shuffle"
+            return [.paused, .suspended, .interrupted].contains(joystick.phase) ? GoFlySymbols.pause : GoFlySymbols.heading
         }
         return [.paused, .interrupted].contains(route.phase) ? GoFlySymbols.pause : GoFlySymbols.heading
     }
@@ -1631,7 +1660,7 @@ struct GoFlyMapView: View {
                 tone: tone,
                 title: goFlyString(key),
                 message: goFlyString("recovery.connectionGuidance"),
-                actionTitle: goFlyString(cold ? "service.restoreGPS" : "onboarding.vpn.check"),
+                actionTitle: goFlyString(cold ? "service.restoreGPS" : recovery.canRetryAutomaticRepair ? "common.retry" : "onboarding.vpn.check"),
                 onAction: {
                     if cold { _ = service.restoreGPS() }
                     else { recovery.checkConnection() }

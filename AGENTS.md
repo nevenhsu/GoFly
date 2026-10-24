@@ -1,5 +1,16 @@
 # Project instructions
 
+## UI 設計稿準據規範（永久最高優先・禁止反覆詢問或要求使用者提醒）
+
+- **iOS UI 主要設計稿唯一準據**：Figma 頁面 `04 · iOS Redesign（Google Maps 參考）`（node-id: `121-50359`）。
+  連結：https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359
+  - **核心準則**：所有 iOS App 介面實作、UI 修復、畫面佈局、元件、顏色、間距、圖示與視覺呈現，**一律且唯一以「04 · iOS Redesign（Google Maps 參考）」的渲染畫面為視覺最高權威（Visual Authority）**。
+  - **禁止事項**：舊頁面 `01 · iOS App`（`13-2098`）與過往舊線框已全面廢棄，嚴禁引用或作參考。任何情況下都不要要求使用者重複提醒「iOS UI 要看 04 頁面」。
+  - **衝突裁決**：當任何舊文件或規格文字與「04 · iOS Redesign」的渲染畫面有差異或衝突時，無條件以 04 頁面渲染畫面為準，並在當前任務中同步修正規格。
+- **Mac UI 主要設計稿**：Figma 頁面 `05 · Mac Redesign（新版）`（node-id: `123-61504`）。
+  連結：https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=123-61504
+- **共用基礎元件庫**：`00 · 品牌與基礎元件`。
+
 This workspace contains the local REA research environment. The research target
 and implementation specification have not been selected yet.
 
@@ -8,14 +19,7 @@ and implementation specification have not been selected yet.
   work, update the related development specifications, terminology, and acceptance
   criteria in the same task. Replace superseded rules and distinguish design
   updates from implemented behavior and device verification.
-- Before every GoFly UI implementation or wireframe task, consult the current
-  platform page in the GoFly UI Figma file (`RtPV8PXCQJ2WXK3jk3kPrq`): iOS uses
-  `04 · iOS Redesign（Google Maps 參考）` (`121-50359`), and Mac uses
-  `05 · Mac Redesign（新版）` (`123-61504`). The shared component library is
-  `00 · 品牌與基礎元件`; pages `01 · iOS App` and `02 · Mac App` are earlier
-  flows superseded by the redesign pages for current UI work.
-  iOS: https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359
-  Mac: https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=123-61504
+- Before every GoFly UI implementation or wireframe task, consult the platform redesign page in the GoFly UI Figma file (`RtPV8PXCQJ2WXK3jk3kPrq`): iOS uses `04 · iOS Redesign（Google Maps 參考）` (`121-50359`), Mac uses `05 · Mac Redesign（新版）` (`123-61504`). Shared components live in `00 · 品牌與基礎元件`; pages `01 · iOS App` and `02 · Mac App` are superseded.
   Treat the current platform page's rendered designs as the visual authority.
   When a rendered design conflicts with documentation, update the related spec
   and acceptance criteria in the same task. Record missing or conflicting Figma

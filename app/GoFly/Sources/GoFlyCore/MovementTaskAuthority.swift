@@ -83,6 +83,17 @@ public final class MovementTaskAuthority: @unchecked Sendable {
             return true
         }
     }
+    /// Only the service's single repair point may cross the closed connection
+    /// fence. User pause/Stop and revoked background runtime still reject it.
+    func permitsConnectionRepair(for lease: MovementTaskLease, allowingPaused: Bool = false) -> Bool {
+        lock.withLock {
+            guard !coldRecoveryHeld, stored.lease == lease,
+                  (stored.runState == .running || (allowingPaused && stored.runState == .paused)) else { return false }
+            if let binding = grantBinding, !binding.grant.isValid { return false }
+            return foreground || (grantBinding?.grant.lease == lease && grantBinding?.grant.isValid == true)
+        }
+    }
+
     public func permitsDispatch(for lease: MovementTaskLease) -> Bool {
         lock.withLock {
             guard !connectionBlocked, !coldRecoveryHeld,

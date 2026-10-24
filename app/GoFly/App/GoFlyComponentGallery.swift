@@ -59,13 +59,12 @@ struct GoFlyComponentGallery: View {
     private var pillSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("StatusPill")
-            HStack(spacing: 8) {
-                GoFlyStatusPill(text: goFlyString("gallery.pillActive"),
-                                tone: .active, action: {}, identifier: "gallery.pill.active")
-                GoFlyStatusPill(text: goFlyString("gallery.pillDanger"),
-                                tone: .danger, action: {}, identifier: "gallery.pill.danger")
-                GoFlyStatusPill(text: goFlyString("gallery.pillNeutral"),
-                                tone: .neutral, identifier: "gallery.pill.neutral")
+            let statuses: [GoFlySessionStatus] = [.started, .simulating, .paused, .stopped, .error]
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading, spacing: 8) {
+                ForEach(statuses, id: \.textKey) { status in
+                    GoFlyStatusPill(text: goFlyString(status.textKey), tone: status.tone,
+                                    identifier: "gallery.pill." + status.textKey)
+                }
             }
         }
     }

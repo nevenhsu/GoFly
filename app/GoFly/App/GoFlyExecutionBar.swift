@@ -6,6 +6,18 @@ struct GoFlyExecutionHeader: View {
     var detail: String?
     var symbol: String?
     var onLeadingAction: (() -> Void)? = nil
+    var onTrailingAction: (() -> Void)? = nil
+    var trailingSymbol: String = "shuffle"
+    var trailingAccessibilityLabel: String? = nil
+    var trailingAccessibilityIdentifier: String = "execution.header.trailingAction"
+
+    private var iconBackground: Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor.white.withAlphaComponent(0.32)
+                : UIColor.white.withAlphaComponent(0.14)
+        })
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -15,7 +27,7 @@ struct GoFlyExecutionHeader: View {
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(GoFlyStyle.instructionForeground)
                         .frame(width: 44, height: 44)
-                        .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -26,7 +38,7 @@ struct GoFlyExecutionHeader: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(GoFlyStyle.instructionForeground)
                     .frame(width: 44, height: 44)
-                    .background(GoFlyStyle.instructionForeground.opacity(0.16), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -42,6 +54,23 @@ struct GoFlyExecutionHeader: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            if let onTrailingAction {
+                Spacer(minLength: 8)
+                Button(action: onTrailingAction) {
+                    Image(systemName: trailingSymbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(GoFlyStyle.instructionForeground)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(GoFlyStyle.instructionForeground.opacity(0.45), lineWidth: 1)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(trailingAccessibilityLabel ?? goFlyString("joystick.randomDestination"))
+                .accessibilityIdentifier(trailingAccessibilityIdentifier)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -49,7 +78,7 @@ struct GoFlyExecutionHeader: View {
         .background(GoFlyStyle.instructionSurface,
                     in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 4)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("execution.header")
     }
 
@@ -57,7 +86,7 @@ struct GoFlyExecutionHeader: View {
         if let symbol { return symbol }
         // The wander status is exposed as a localized detail string. The route
         // header keeps the navigation arrow used by the execution design.
-        if detail == goFlyString("joystick.phase.moving") { return "shuffle" }
+        if detail == goFlyString("joystick.phase.moving") { return GoFlySymbols.heading }
         if detail == goFlyString("joystick.phase.suspended") || detail == goFlyString("joystick.phase.interrupted") || detail == goFlyString("joystick.phase.paused") {
             return GoFlySymbols.pause
         }

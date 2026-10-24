@@ -130,10 +130,19 @@ struct GoFlySearchPanel: View {
             .padding(.vertical, 5)
             .background(GoFlyStyle.secondarySurface, in: Capsule())
             Spacer()
+            Button(action: onFavorites) {
+                Text(goFlyString("favorites.title"))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(GoFlyStyle.secondary)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("search.favorites")
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.role")
     }
 

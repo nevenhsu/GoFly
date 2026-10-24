@@ -1,14 +1,22 @@
 # GoFly 視覺方向
 
+> [!IMPORTANT]
+> **主要設計稿唯一準據（Visual Authority）**
+> - **iOS UI 主要設計稿唯一準據**：Figma 頁面 **`04 · iOS Redesign（Google Maps 參考）`**（node-id: `121-50359`）。
+>   連結：https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359
+>   所有畫面流程、內容層級、控制位置、圖示、色彩語意與排版渲染，**一律以 04 頁面的渲染畫面為最高視覺權威**。舊版 `01 · iOS App`（`13-2098`）及早期 Uber 概念已全面廢棄，不得再作為設計依據。
+> - **Mac UI 主要設計稿**：Figma 頁面 `05 · Mac Redesign（新版）`（node-id: `123-61504`）。
+> - **共用基礎元件庫**：`00 · 品牌與基礎元件`。
+
 2026-10-18 Mac 適配：使用者要求 Mac App 同樣精修，直接實作於 `app/GoFlyMac`。系統中文字體、深淺色語意配色、SF Symbols、側邊欄與表單規格見 [Mac UI 設計與驗收規格](docs/MAC-UI-DESIGN.md)。這是 App 視覺實作，不代表 Figma 或實機驗收已同步。
 
-確認日期：2026-10-17。正式 App 視覺採用使用者指定的 [Uber design.md](https://getdesign.md/uber/design-md)；[完整來源](https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/uber/DESIGN.md) 為該站對 Uber 網站的獨立分析。以下是 GoFly 的原生 iOS 適配決策，不是照搬網站版面。
+歷史脈絡（2026-10-17）：正式 App 早期曾參考 [Uber design.md](https://getdesign.md/uber/design-md)，現已全面由 Figma `04 · iOS Redesign（Google Maps 參考）` 改版稿取代。
 
 ## 需求來源與優先序
 
 - 使用者最新確認的操作規則與產品規格決定行為。
-- [Figma iOS wireframe](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly?node-id=13-2098) 決定流程、內容層級與控制位置；線框灰階不視為正式視覺稿。
-- Uber 參考決定視覺語彙；原生 iOS 的安全區、字級縮放、系統控制與無障礙決定平台適配。
+- **iOS UI 視覺權威**：以 [Figma 04 · iOS Redesign（Google Maps 參考）](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359) 為準，決定流程、內容層級、控制位置與渲染樣式。舊版 `01 · iOS App`（`13-2098`）已廢棄。
+- 原生 iOS 的安全區、字級縮放、系統控制與無障礙決定平台適配。
 - `app/LocalGo` 是既有 prototype；正式 App 位於 `app/GoFly`。prototype 的樣式或測試不代表正式 App 已完成；正式 App 的實作與驗證依各次交付證據記錄。
 
 ## 參考的核心語彙

@@ -36,8 +36,8 @@ struct RouteRecoveryPreviewTests {
         let controller = RouteExecutionController(draft: draft, planner: PreviewPlanner(), commands: service,
                                                    search: PreviewSearch())
 
-        // Allow preview Task to run
-        try await Task.sleep(for: .milliseconds(50))
+        let deadline = ContinuousClock.now + .seconds(2)
+        while controller.plannedRoute == nil && ContinuousClock.now < deadline { await Task.yield() }
 
         #expect(controller.plannedRoute != nil)
         #expect(controller.error == nil)
@@ -59,8 +59,8 @@ struct RouteRecoveryPreviewTests {
         let controller = RouteExecutionController(draft: draft, planner: FailingPlanner(), commands: service,
                                                    search: PreviewSearch())
 
-        // Allow preview Task to run
-        try await Task.sleep(for: .milliseconds(50))
+        let deadline = ContinuousClock.now + .seconds(2)
+        while controller.error == nil && ContinuousClock.now < deadline { await Task.yield() }
 
         #expect(controller.plannedRoute == nil)
         #expect(controller.error == RouteExecutionFailure.planningFailed)

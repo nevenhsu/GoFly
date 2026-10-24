@@ -498,9 +498,6 @@
 "gallery.warningTitle" = "定位權限受限";
 "gallery.warningMessage" = "GoFly 只在 App 開啟時要求定位。";
 "gallery.successTitle" = "已移至此地點";
-"gallery.pillActive" = "模擬中";
-"gallery.pillDanger" = "錯誤";
-"gallery.pillNeutral" = "待命";
 "gallery.showSnackbar" = "顯示 snackbar";
 "gallery.snackbarText" = "已刪除 1 項";
 "gallery.executionTitle" = "前往 台北 101";
@@ -513,13 +510,7 @@
 
 "map.searchHint" = "搜尋地點、地址或經緯度。";
 "map.north" = "地圖轉回正北";
-"status.pill.running" = "執行中";
-"status.pill.paused" = "已暫停";
-"status.pill.preparing" = "準備中";
-"status.pill.simulating" = "模擬中";
-"status.pill.standby" = "服務待命";
 "placeDetails.copied" = "已複製座標";
-"status.pill.error" = "連線中斷";
 
 "search.recent" = "最近搜尋";
 "search.clearHistory" = "清空記錄";
@@ -582,8 +573,6 @@
 
 "search.title" = "搜尋";
 
-"status.pill.limited" = "受限";
-"status.pill.connectionInterrupted" = "連線中斷";
 
 "search.viewAll" = "查看全部";
 "search.goToCoordinate" = "前往座標 %@";
@@ -667,3 +656,9 @@
 "route.roundTrip.off" = "來回關閉";
 "route.direction.forward" = "順向";
 "route.direction.reverse" = "逆向";
+
+"status.pill.started" = "啟動";
+"status.pill.simulating" = "模擬中";
+"status.pill.paused" = "暫停";
+"status.pill.stopped" = "停止";
+"status.pill.error" = "錯誤";

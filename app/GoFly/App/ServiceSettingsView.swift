@@ -226,7 +226,7 @@ struct ServiceSettingsView: View {
             }
             Button {
                 if offersStop {
-                    _ = service.stop()
+                    _ = service.stopSimulation()
                 } else {
                     _ = service.start()
                 }
@@ -306,7 +306,7 @@ struct ServiceSettingsView: View {
     }
 
     private var offersStop: Bool {
-        service.phase == .ready || service.phase == .preparing
-            || service.phase == .repairRequired || service.phase == .stopping
+        movement.status == .simulating || movement.status == .paused
+            || service.phase == .preparing || service.phase == .repairRequired || service.isRecoveringConnection
     }
 }

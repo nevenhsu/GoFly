@@ -23,6 +23,7 @@ public enum RouteCommandEvent: Sendable {
 
 @MainActor
 public protocol RouteCommanding: AnyObject {
+    func cancelConnectionRecovery()
     var canBeginRoute: Bool { get }
     var routeEvents: AnyPublisher<RouteCommandEvent, Never> { get }
     var currentRouteOrigin: GeoCoordinate? { get }
@@ -35,4 +36,8 @@ public protocol RouteCommanding: AnyObject {
     func resumeRoute(executionID: UUID, lease: MovementTaskLease) -> Bool
     func endRoute(executionID: UUID, lease: MovementTaskLease)
     func waitForRouteIdle(executionID: UUID, lease: MovementTaskLease) async -> RouteIdleSettlement
+}
+
+public extension RouteCommanding {
+    func cancelConnectionRecovery() {}
 }

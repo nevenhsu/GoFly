@@ -25,6 +25,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         }
     }
     @Published public private(set) var phase: RouteExecutionPhase = .editing
+    @Published public private(set) var isRecoveringConnection = false
     @Published public private(set) var intent: RouteExecutionIntent?
     @Published public private(set) var plannedRoute: PlannedRoute?
     @Published public private(set) var progress: RouteProgress?
@@ -161,7 +162,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         applyDraft(changed)
         return true
     }
-    public var canPause: Bool { phase == .running }
+    public var canPause: Bool { phase == .running || isRecoveringConnection }
     public var canSetRoundTrip: Bool { [.editing, .running, .paused].contains(phase) }
     public var canToggleHeading: Bool {
         guard roundTripEnabled, phase == .running || phase == .paused, let intent, let progress else { return false }
@@ -462,7 +463,38 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         guard zip(coordinates, coordinates.dropFirst()).allSatisfy({ $0.0 != $0.1 }) else { throw RouteExecutionFailure.invalidPath }
         return resolved
     }
+    func suspendForConnectionRecovery() -> Bool {
+        if isRecoveringConnection { return true }
+        guard phase == .running else { return false }
+        isRecoveringConnection = true
+        revision &+= 1
+        task?.cancel()
+        freezeElapsed()
+        phase = .paused
+        return true
+    }
+
+    func finishConnectionRecovery(succeeded: Bool) {
+        guard isRecoveringConnection, let intent else { return }
+        isRecoveringConnection = false
+        if !succeeded {
+            phase = .interrupted; error = .device(.serviceUnavailable)
+            withdrawContinuation(.ended)
+            return
+        }
+        phase = .running; error = nil; activeStartedAt = clock.now
+        let token = revision
+        task = Task { [weak self] in await self?.run(intent, token: token) }
+    }
+
     @discardableResult public func pause() -> Bool {
+        if isRecoveringConnection {
+            isRecoveringConnection = false
+            commands.cancelConnectionRecovery()
+            withdrawContinuation(.userPaused)
+            phase = .paused
+            return true
+        }
         let reason = pendingSuspensionReason
         if reason == nil { suspensionReason = nil }
         guard canPause, let intent else { return false }
@@ -503,6 +535,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     @discardableResult public func cancel() -> Bool {
         guard canCancel else { return false }
+        if isRecoveringConnection { _ = pause() }
         if phase == .planning {
             revision &+= 1; task?.cancel(); returnToEditing()
             suspensionReason = pendingSuspensionReason
@@ -540,6 +573,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
+        if isRecoveringConnection, continuingLease != intent?.lease { _ = pause() }
         sceneActive = false
         if let intent, phase == .running, continuingLease == intent.lease {
             objectWillChange.send()
@@ -564,6 +598,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
 
     public func continuationDidBecomeUnavailable() {
+        if isRecoveringConnection { _ = pause() }
                 releaseForUnavailable(reason: .backgroundUnavailable)
     }
 
@@ -724,6 +759,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             objectWillChange.send()
         case .ended(let id):
             guard intent?.id == id, phase != .cancelling else { return }
+            isRecoveringConnection = false
             withdrawContinuation(.ended)
             revision &+= 1; task?.cancel(); transition?.cancel(); returnToEditing(); error = nil
             nextSequence.removeValue(forKey: id)

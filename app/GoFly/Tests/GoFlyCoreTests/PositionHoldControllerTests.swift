@@ -92,6 +92,8 @@ struct PositionHoldControllerTests {
         #expect(service.realLocation == nil)
         #expect(service.positionMarker?.freshness == .waiting,
                 "A pending fixed-position refresh is not proof that the running hold stopped")
+        #expect(service.displayPositionMarker?.freshness == .fresh,
+                "Routine pending refresh keeps the last ACK visually stable without changing operation proof")
         clock.advance(by: .seconds(30))
         #expect(controller.elapsedSeconds == 0)
         #expect(controller.completedCycles == 0)

@@ -39,7 +39,7 @@ final class GoFlyJoystickUITests: XCTestCase {
         XCTAssertTrue(pin.waitForExistence(timeout: 5))
         XCTAssertEqual(pin.value as? String, "25.047800, 121.517000")
         XCTAssertTrue(app.buttons["map.candidate.go"].isEnabled)
-        XCTAssertTrue((app.descendants(matching: .any)["map.statusPill"].value as? String ?? "").contains("Stopped"))
+        XCTAssertTrue((app.descendants(matching: .any)["map.statusPill"].value as? String ?? "").contains("Error"))
     }
 
     func testWanderStaysDisabledUntilAHealthyOriginExists() throws {

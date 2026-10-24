@@ -5,7 +5,14 @@ public protocol DeviceService: Sendable {
     func prepare() async throws
     func clearLocation() async throws
     func resetClientConnection() async throws
+    func rebuildClientConnection() async throws
     func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome
+}
+
+public extension DeviceService {
+    /// Adapters that retain native handles override this to discard the old
+    /// transport without clearing the simulated location.
+    func rebuildClientConnection() async throws { try await resetClientConnection() }
 }
 
 public enum DeviceServiceFailure: String, Error, Sendable, Equatable {

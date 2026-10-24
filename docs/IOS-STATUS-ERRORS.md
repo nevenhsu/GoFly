@@ -1,0 +1,141 @@
+# GoFly iOS 共用 Status Pill 錯誤清單
+
+2026-10-24。以正式錯誤來源與繁體中文資源核對，共 77 個不重複項目。這是可由來源回報的目錄，不代表每項都正在發生，也不代表新增對應故障測試。
+
+五態只有：啟動／Standby（灰）、模擬中／Running（綠）、暫停／Paused（黃）、停止／Stopped（灰）、錯誤／Error（紅）。任何下列共用狀態錯誤存在時優先顯示 Error，具體原因保留各自文案；不再有 limited。
+
+| 類別 | 項目數 | 觸發來源 |
+| --- | --- | --- |
+| 連線與裝置服務 | 10 | Wi-Fi 不可用、探測 unavailable/timedOut、ServiceController.error；route/joystick 包裝同一裝置錯誤不重複計數 |
+| 路線規劃與匯入執行 | 7 | RouteExecutionController.error，含匯入路線執行失敗 |
+| 搖桿與漫步 | 2 | JoystickMovementController.error 或 wanderError |
+| 最愛地點 | 9 | FavoritePlacesStore.error／blocked |
+| 匯入路線清單 | 13 | ImportedRoutesStore.error／blocked |
+| 最愛路線清單 | 15 | FavoriteRoutesStore.error／blocked |
+| GPX 內容（透過路線清單錯誤呈現） | 13 | 清單操作回報的 GPXFailure |
+| Session 復原資料 | 8 | SessionRecoveryStore.error／blocked |
+
+## 連線與裝置服務
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `wifi.error.title` | 需要連接 Wi-Fi |
+| `error.pairingRequired` | 缺少配對資料。請將這部 iPhone 連接 Mac App，完成裝置準備。 |
+| `error.identityMismatch` | 配對資料屬於其他裝置。請將這部 iPhone 連接 Mac App 修復。 |
+| `error.developerModeRequired` | 請在這部 iPhone 開啟開發者模式，再連接 Mac App 完成裝置準備。 |
+| `error.devicePreparationRequired` | 這部 iPhone 需要裝置準備。請連接 Mac App 完成準備。 |
+| `error.serviceUnavailable` | 無法連接裝置服務。請檢查 VPN 通道；若仍無法連接，請在 Mac App 修復這部 iPhone。 |
+| `error.tunnelUnavailable` | 無法連接 VPN 通道。請確認 iPhone 已連上 Wi‑Fi（只用行動網路無法使用），重新連接 LocalDevVPN，再於 GoFly 重置 VPN 通道。 |
+| `error.operationTimedOut` | 裝置未在時限內確認操作。請檢查連線並停止服務後重試；GPS 恢復確認狀態另列於下方。 |
+| `error.deviceRequired` | 需要已完成準備的實體 iPhone；模擬器無法啟動裝置服務或確認 GPS 恢復。 |
+| `error.storageUnavailable` | 無法讀取裝置設定資料。請檢查可用儲存空間，並在 Mac App 修復這部 iPhone。 |
+
+## 路線規劃與匯入執行
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `route.error.missingStart` | 請選擇起點。 |
+| `route.error.missingDestination` | 請選擇終點。 |
+| `route.error.currentLocationUnavailable` | 目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。 |
+| `route.error.planningFailed` | 無法取得路徑。請確認地點或網路連線後重試。 |
+| `route.error.invalidPath` | 規劃的路線無效。請重新選擇地點後再試。 |
+| `imports.execution.disconnectedSegments` | 各段端點未完全銜接。仍可預覽或匯出，但無法載入執行。 |
+| `imports.execution.zeroDistance` | 路徑沒有可行進距離。仍可預覽或匯出，但無法載入執行。 |
+
+## 搖桿與漫步
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `joystick.error.originUnavailable` | 目前沒有已確認的可用位置。請設定起點後使用搖桿。 |
+| `joystick.error.noCandidate` | 找不到新的目的地。請在地圖選點或重試。 |
+
+## 最愛地點
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `favorites.error.corruptArchive` | 最愛地點資料已損壞，無法讀取。原有資料已保留。 |
+| `favorites.error.unsupportedSchema` | 最愛地點資料版本不相容。原有資料已保留。 |
+| `favorites.error.unsafeFile` | 無法安全開啟最愛地點。原有資料已保留。 |
+| `favorites.error.unavailable` | 目前無法使用最愛地點，請嘗試重新開啟 GoFly。 |
+| `favorites.error.writeFailed` | 變更未能儲存，原有最愛維持不變，請再試一次。 |
+| `favorites.error.invalidPlace` | 無法收藏此地點，請選取有效地點後再試。 |
+| `favorites.error.invalidLabel` | 標籤請使用 120 個字以內。 |
+| `favorites.error.limitExceeded` | 最愛地點已達儲存上限，請移除一筆最愛或縮短標籤後再試。 |
+| `favorites.error.notFavorite` | 此地點已不在最愛中，請重新加入後再儲存標籤。 |
+
+## 匯入路線清單
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `imports.error.corruptArchive` | 匯入路線清單已損壞，暫時無法變更。 |
+| `imports.error.unsupportedSchema` | 尚未支援此匯入清單版本。 |
+| `imports.error.unsafeFile` | 無法安全讀取保存的路線檔案，請重新匯入來源檔案。 |
+| `imports.error.unavailable` | 暫時無法讀取匯入路線，請再試一次。 |
+| `imports.error.writeFailed` | 無法儲存變更，原清單已保留。請再試一次。 |
+| `imports.error.limitExceeded` | 匯入清單已達儲存上限，請先移除不需要的路線。 |
+| `imports.error.invalidFilename` | 檔名不受支援，請重新命名來源檔案後再試。 |
+| `imports.error.notFound` | 此匯入路線已不存在，請選擇其他路線。 |
+| `imports.error.metadataMismatch` | 保存的路線與清單資料不符，請重新匯入來源檔案。 |
+| `imports.error.hashMismatch` | 保存的路線未通過驗證，請重新匯入來源檔案。 |
+| `imports.error.noSelection` | 請先選擇已匯入路線。 |
+| `imports.error.busy` | 請等待目前檔案操作完成。 |
+| `imports.error.nothingToUndo` | 目前沒有可復原的刪除路線。 |
+
+## 最愛路線清單
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `favoriteRoutes.error.corruptArchive` | 最愛路線清單已損壞，暫時無法變更。 |
+| `favoriteRoutes.error.unsupportedSchema` | 尚未支援此最愛路線清單版本。 |
+| `favoriteRoutes.error.unsafeFile` | 無法安全讀取保存的最愛路線檔案。 |
+| `favoriteRoutes.error.unavailable` | 暫時無法讀取最愛路線，請再試一次。 |
+| `favoriteRoutes.error.writeFailed` | 無法儲存變更，原最愛路線已保留。請再試一次。 |
+| `favoriteRoutes.error.limitExceeded` | 最愛路線已達儲存上限，請先移除不需要的路線。 |
+| `favoriteRoutes.error.invalidLabel` | 標籤最多 120 字，且不能包含換行。 |
+| `favoriteRoutes.error.invalidPlace` | 路線地點資料無效，請重新選擇該地點後再儲存。 |
+| `favoriteRoutes.error.tooFewValidPlaces` | 至少需要兩個有效地點。請先在地圖或搜尋中選擇地點。 |
+| `favoriteRoutes.error.notFound` | 此最愛路線已不存在。 |
+| `favoriteRoutes.error.metadataMismatch` | 保存的最愛路線與清單資料不符。 |
+| `favoriteRoutes.error.hashMismatch` | 保存的最愛路線未通過驗證，無法載入。 |
+| `favoriteRoutes.error.noSelection` | 請先選擇最愛路線。 |
+| `favoriteRoutes.error.busy` | 請等待目前最愛路線操作完成。 |
+| `favoriteRoutes.error.nothingToUndo` | 目前沒有可復原的刪除路線。 |
+
+## GPX 內容（透過路線清單錯誤呈現）
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `gpx.error.invalidXML` | GPX 檔案的 XML 格式無效，請選擇其他檔案。 |
+| `gpx.error.unsupportedVersion` | 僅支援 GPX 1.1 格式。 |
+| `gpx.error.unsupportedNamespace` | 檔案未使用標準 GPX 1.1 格式。 |
+| `gpx.error.unsupportedEncoding` | 請將 GPX 檔案儲存為 UTF-8 或 UTF-16 後再試。 |
+| `gpx.error.unsafeXML` | 檔案含不支援的 XML 宣告，請選擇標準 GPX 1.1 檔案。 |
+| `gpx.error.invalidPoint` | 檔案含無效座標，整份檔案未匯入。 |
+| `gpx.error.invalidParent` | GPX 點位未放在支援的群組中。 |
+| `gpx.error.mixedKinds` | 請將軌跡、路線或航點分別存為獨立 GPX 檔案後匯入。 |
+| `gpx.error.emptyGroup` | GPX 檔案含空白軌跡、區段或路線。 |
+| `gpx.error.tooFewPoints` | GPX 檔案至少需要 2 個有效點。 |
+| `gpx.error.pointLimitExceeded` | GPX 檔案超過 10,000 點上限。 |
+| `gpx.error.sizeLimitExceeded` | GPX 檔案超過 2 MiB 上限。 |
+| `gpx.error.resourceLimitExceeded` | GPX 檔案超過支援的結構上限。 |
+
+## Session 復原資料
+
+| 代碼 | 繁體中文文案 |
+| --- | --- |
+| `recovery.error.unavailable` | 無法存取已存工作階段，請檢查可用儲存空間。 |
+| `recovery.error.unsafeFile` | 無法安全讀取工作階段檔案，原始資料已保留。 |
+| `recovery.error.writeFailed` | 無法儲存變更，請檢查可用空間後重試。 |
+| `recovery.error.corruptArchive` | 已存工作階段已損壞，原始資料未被取代。 |
+| `recovery.error.unsupportedSchema` | 不支援此工作階段格式，原始資料已保留。 |
+| `recovery.error.limitExceeded` | 工作階段超過支援的儲存上限，未儲存此次變更。 |
+| `recovery.error.invalidSnapshot` | 工作階段資料無效，未儲存此次變更。 |
+| `recovery.error.revisionExhausted` | 無法繼續儲存此工作階段，原始資料已保留。 |
+
+## 判斷與清除
+
+- 連線恢復、修復成功或正常操作清除實際錯誤後，再依任務狀態顯示 Standby／Running／Paused／Stopped；不是只換文字或關掉 toast。
+- 資料仍處於 blocked 時，單獨關閉錯誤提示不讓紅色錯誤態假消失。
+- `operationCancelled` 是正常取消，不列為 Error；首次未知、健康探測 pending、定位 ACK pending、使用者暫停／停止也不是錯誤。
+- 搜尋框的座標格式／範圍驗證及尚未提交的局部編輯提示維持在原欄位，未納入全域 session pill；啟動交接鎖定頁與 onboarding 也不屬於已進入正常 runtime 的 session pill。
+- 連線斷開是 Error 的其中一個原因；配對／資料／規劃錯誤不會因此被誤判為斷線或觸發 reset tunnel。只有運行中真正的可修復連線／服務故障沿既有共用修復入口處理。

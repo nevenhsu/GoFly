@@ -2,7 +2,7 @@ import Combine
 import Foundation
 
 /// Coordinates foreground reachability checks and the data-only recovery
-/// projection. It never creates a movement owner or resumes a controller.
+/// projection and serialized repair of an already-running movement owner.
 @MainActor
 public final class ConnectionRecoveryController: ObservableObject {
     @Published public private(set) var connectionState: VPNCheckState = .unknown
@@ -13,6 +13,14 @@ public final class ConnectionRecoveryController: ObservableObject {
     private let service: ServiceController
     private let route: RouteExecutionController
     private let joystick: JoystickMovementController
+    private let positionHold: PositionHoldController?
+    @Published public private(set) var automaticRepairInProgress = false
+    private var automaticRepairTask: Task<Void, Never>?
+    private var automaticRepairAttempted: MovementTaskLease?
+    private var failedAutomaticRepair: MovementConnectionRecovery?
+    public var canRetryAutomaticRepair: Bool {
+        failedAutomaticRepair.map { service.movementAuthority.snapshot.lease == $0.lease } == true
+    }
     private let probe: any TunnelProbing
     private let clock: any RouteClock
     private var retainedSnapshot: SessionRecoverySnapshot?
@@ -41,12 +49,14 @@ public final class ConnectionRecoveryController: ObservableObject {
         route: RouteExecutionController,
         joystick: JoystickMovementController,
         probe: any TunnelProbing,
+        positionHold: PositionHoldController? = nil,
         clock: any RouteClock = ContinuousRouteClock(),
         retainedColdSnapshot: SessionRecoverySnapshot? = nil
     ) {
         self.service = service
         self.route = route
         self.joystick = joystick
+        self.positionHold = positionHold
         self.probe = probe
         self.clock = clock
         self.retainedSnapshot = retainedColdSnapshot
@@ -68,6 +78,10 @@ public final class ConnectionRecoveryController: ObservableObject {
             }
         ]
 
+        service.connectionRecoveryRequested = { [weak self] recovery in
+            self?.beginAutomaticRepair(recovery) ?? false
+        }
+
         if let retainedColdSnapshot {
             _ = service.restoreColdRecovery(position: retainedColdSnapshot.position)
             if retainedColdSnapshot.activeMovement != nil || retainedColdSnapshot.uncertainty != nil {
@@ -81,6 +95,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         checkTask?.cancel()
         monitorTask?.cancel()
         resetTask?.cancel()
+        automaticRepairTask?.cancel()
     }
 
     public var requiresColdConfirmation: Bool { service.coldClearPending }
@@ -161,7 +176,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         route.sceneDidBecomeActive()
         joystick.sceneDidBecomeActive()
         // A foreground return is an explicit freshness boundary. It bypasses
-        // the ordinary two-second healthy monitor interval, while still
+        // the ordinary five-second healthy monitor interval, while still
         // requiring an actually ready service or a known connection fence.
         evaluateServiceState(immediate: true)
     }
@@ -197,6 +212,10 @@ public final class ConnectionRecoveryController: ObservableObject {
 
     /// A manual check joins an in-flight check; it never starts a second probe.
     public func checkConnection() {
+        if canRetryAutomaticRepair, let failedAutomaticRepair, canCheck {
+            automaticRepairAttempted = nil
+            if service.requestConnectionRecovery(failure: failedAutomaticRepair.failure, explicitlyRequested: true) { return }
+        }
                 monitorTask?.cancel()
         monitorTask = nil
         guard sceneActive, isManualProbeEligible else { return }
@@ -262,6 +281,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     }
 
     private func evaluateServiceState(immediate: Bool = false) {
+        guard !automaticRepairInProgress else { return }
         let phase = service.phase
         if lastObservedPhase == .ready, phase != .ready {
             generation &+= 1
@@ -293,7 +313,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         if immediate {
             delay = .zero
         } else if let lastProbeFinishedAt {
-            delay = max(.zero, .seconds(2) - (clock.now - lastProbeFinishedAt))
+            delay = max(.zero, .seconds(5) - (clock.now - lastProbeFinishedAt))
         } else {
             delay = .zero
         }
@@ -317,6 +337,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     }
 
     private func beginProbe(manual: Bool = false, showCheckingNotice: Bool = false) {
+        guard !automaticRepairInProgress else { return }
         let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
         guard sceneActive, eligible, checkTask == nil else { return }
         foregroundCheckPending = false
@@ -329,7 +350,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         recoveredNotice = false
         checkNoticeVisible = showCheckingNotice
         isChecking = true
-        connectionState = .checking
+        if connectionState == .unknown { connectionState = .checking }
         let probeStartedAt = clock.now
         diagnose("tunnel.probe.start", category: .tunnel, level: .notice, [
             "manual": .flag(manual),
@@ -375,7 +396,9 @@ public final class ConnectionRecoveryController: ObservableObject {
                     "ms": .milliseconds(elapsedMs),
                     "recovered": .flag(self.probeStartedFromFailure)
                 ])
-                self.finishConnectionRecovery(recovered: self.probeStartedFromFailure)
+                if !self.canRetryAutomaticRepair {
+                    self.finishConnectionRecovery(recovered: self.probeStartedFromFailure)
+                }
             case .failure(let failure):
                 diagnose("tunnel.probe.end", category: .tunnel, level: .error, [
                     "result": .text(failure == .timedOut ? "timedOut" : "unavailable"),
@@ -383,12 +406,68 @@ public final class ConnectionRecoveryController: ObservableObject {
                     "phase": .text(self.service.phase.rawValue)
                 ])
                 self.connectionState = failure == .timedOut ? .timedOut : .unavailable
-                self.service.setMovementConnectionAvailable(false)
-                self.route.connectionDidBecomeUnavailable()
-                self.joystick.connectionDidBecomeUnavailable()
+                if !self.service.requestConnectionRecovery(failure: failure == .timedOut ? .operationTimedOut : .tunnelUnavailable) {
+                    self.service.setMovementConnectionAvailable(false)
+                    self.route.connectionDidBecomeUnavailable()
+                    self.joystick.connectionDidBecomeUnavailable()
+                }
+
             }
             self.scheduleProbeIfDue()
         }
+    }
+
+    private func beginAutomaticRepair(_ recovery: MovementConnectionRecovery) -> Bool {
+        guard !automaticRepairInProgress else { return true }
+        guard automaticRepairAttempted != recovery.lease else { return false }
+        let suspended: Bool
+        if !recovery.resumesTask {
+            // Explicit Retry repairs the connection of a user-paused task;
+            // its scheduler stays paused until the separate Resume action.
+            suspended = service.movementAuthority.snapshot.runState == .paused
+        } else if route.intent?.id == recovery.executionID {
+            suspended = route.suspendForConnectionRecovery()
+        } else if positionHold?.intent?.id == recovery.executionID {
+            suspended = positionHold?.suspendForConnectionRecovery() == true
+        } else if joystick.intent?.id == recovery.executionID {
+            suspended = joystick.suspendForConnectionRecovery()
+        } else { return false }
+        guard suspended else { return false }
+        automaticRepairAttempted = recovery.lease
+        automaticRepairInProgress = true
+        generation &+= 1
+        checkTask?.cancel()
+        monitorTask?.cancel(); monitorTask = nil
+        isChecking = false
+        connectionState = recovery.failure == .operationTimedOut ? .timedOut : .unavailable
+        checkNoticeVisible = false
+        route.recoveryProbeDidFinish(); joystick.recoveryProbeDidFinish()
+        automaticRepairTask = Task { [weak self] in
+            guard let self else { return }
+            // The callback is synchronous, before the native failure unwinds.
+            // Queue repair after the service has closed ordinary admission.
+            await Task.yield()
+            let success = await self.service.repairConnection(recovery)
+            if success {
+                self.route.finishConnectionRecovery(succeeded: true)
+                self.joystick.finishConnectionRecovery(succeeded: true)
+                self.positionHold?.finishConnectionRecovery(succeeded: true)
+            } else if !self.service.movementConnectionAvailable {
+                // Preserve the suspended logical task for the explicit retry
+                // action. Periodic probes never reset this attempt budget.
+                self.failedAutomaticRepair = recovery
+            }
+            self.automaticRepairInProgress = false
+            self.automaticRepairTask = nil
+            self.lastProbeFinishedAt = self.clock.now
+            if success || self.service.movementConnectionAvailable {
+                self.automaticRepairAttempted = nil
+                self.failedAutomaticRepair = nil
+                self.finishConnectionRecovery(recovered: true)
+            }
+            self.evaluateServiceState()
+        }
+        return true
     }
 
     private func receiveTunnelResetState(_ state: TunnelResetState) {
@@ -454,6 +533,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     private func retirePendingReset() {
         resetConsentID = nil
         resetTask?.cancel()
+        automaticRepairTask?.cancel()
     }
 
     private func finishPhysicalResetTask(_ physicalID: UUID, consentID: UUID) {

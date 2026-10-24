@@ -56,15 +56,25 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     /// The preview exercises these same production layers without inventing a GPS fix or ACK.
     func applyAppearance(source: PositionSource, freshness: PositionFreshness,
                          bearingDegrees: Double?, cameraHeadingDegrees: Double) {
+        let changed = self.source != source || self.freshness != freshness
         self.source = source
         self.freshness = freshness
         alpha = freshness == .waiting ? 0.5 : 1
         let radians = CGFloat(bearingDegrees.map { ($0 - cameraHeadingDegrees) * .pi / 180 } ?? 0)
         rotate(to: radians)
-        applyColors()
+        if changed { applyColors() }
     }
 
     private func rotate(to radians: CGFloat) {
+        if UIAccessibility.isReduceMotionEnabled {
+            targetRotation = radians
+            drawing.removeAnimation(forKey: "arrow.rotation")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            drawing.transform = CATransform3DMakeRotation(radians, 0, 0, 1)
+            CATransaction.commit()
+            return
+        }
         guard let previousTarget = targetRotation else {
             targetRotation = radians
             CATransaction.begin()
@@ -74,6 +84,7 @@ final class GoFlyPositionArrowView: MKAnnotationView {
             return
         }
 
+        guard abs(radians - previousTarget) > 0.005 else { return }
         let presentationRotation = (drawing.presentation()?.value(forKeyPath: "transform.rotation.z") as? NSNumber)
             .map { CGFloat(truncating: $0) } ?? previousTarget
         var delta = radians - presentationRotation

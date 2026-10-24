@@ -62,7 +62,7 @@ struct GoFlyRecoveryView: View {
         let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .warning
         return GoFlyStatusBanner(tone: tone, title: goFlyString(key),
             message: goFlyString("recovery.connectionGuidance"),
-            actionTitle: goFlyString(cold ? "service.restoreGPS" : "onboarding.vpn.check"),
+            actionTitle: goFlyString(cold ? "service.restoreGPS" : recovery.canRetryAutomaticRepair ? "common.retry" : "onboarding.vpn.check"),
             onAction: {
                 if cold { _ = service.restoreGPS() }
                 else { recovery.checkConnection() }

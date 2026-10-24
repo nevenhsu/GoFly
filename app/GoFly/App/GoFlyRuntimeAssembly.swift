@@ -42,6 +42,8 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         self.onboarding = OnboardingController(
             probe: Self.onboardingProbe(), location: GoFlyLocationAuthorization()
         )
+        self.movement.observeDataErrors(recoveryStore: recovery, favorites: favorites,
+            importedRoutes: importedRoutes, favoriteRoutes: favoriteRoutes)
     }
 
     func captureCurrentRecoverySnapshotAndFlush() async -> Bool {
