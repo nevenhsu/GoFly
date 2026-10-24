@@ -196,7 +196,8 @@ struct GoFlyRoutePanel: View {
                 .padding(.bottom, 16)
             } else if controller.phase == .paused || controller.phase == .interrupted {
                 GoFlyResumePanel(
-                    title: goFlyString("background.routePaused"),
+                    title: controller.pausedPanelTitle,
+                    subtitle: controller.pausedPanelSubtitle,
                     ctaTitle: goFlyString("route.resumeShort"),
                     onResume: { _ = controller.resume() },
                     isEnabled: controller.canResume,

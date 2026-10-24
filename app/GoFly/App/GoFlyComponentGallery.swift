@@ -24,6 +24,7 @@ struct GoFlyComponentGallery: View {
                 bottomBarSection
                 executionSection
                 routeRunningSection
+                routePausedSection
                 joystickSection
                 sheetSection
             }
@@ -176,6 +177,26 @@ struct GoFlyComponentGallery: View {
             Text(endResult)
                 .font(.footnote)
                 .accessibilityIdentifier("gallery.endResult")
+        }
+    }
+
+    /// Figma D10: the interruption toast and the 76 pt resume panel.
+    private var routePausedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("RoutePaused")
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString("route.pausedToast.title"),
+                message: goFlyString("route.pausedToast.message"),
+                actionTitle: goFlyString("common.retry"),
+                onAction: {}, onDismiss: {},
+                identifier: "gallery.pausedToast")
+            GoFlyResumePanel(
+                title: goFlyLocalizedFormat(goFlyString("route.paused.progress"), 45),
+                subtitle: goFlyLocalizedFormat(goFlyString("route.paused.remaining"), 1.2, 14),
+                ctaTitle: goFlyString("route.resumeShort"),
+                onResume: {}, identifier: "gallery.resumePanel")
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 

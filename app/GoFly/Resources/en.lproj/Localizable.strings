@@ -670,3 +670,9 @@
 "gallery.fieldNormal" = "Search favorite places";
 "wander.error.planningFailed" = "Unable to plan route";
 "wander.planning" = "Planning route";
+"route.pausedToast.title" = "Route simulation paused";
+"route.pausedToast.message" = "The task was interrupted. Tap Retry to resume from where it stopped.";
+"route.paused.progress" = "Route paused · %ld%%";
+"route.paused.remaining" = "%.1f km left · about %d min";
+"route.heading.going" = "To %@";
+"route.heading.paused" = "Paused · To %@";

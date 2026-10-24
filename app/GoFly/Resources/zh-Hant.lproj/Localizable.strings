@@ -669,3 +669,9 @@
 "gallery.fieldNormal" = "搜尋最愛地點";
 "wander.error.planningFailed" = "無法規劃路線";
 "wander.planning" = "正在規劃路線";
+"route.pausedToast.title" = "路線模擬已暫停";
+"route.pausedToast.message" = "任務意外中斷，點選重試自中斷點恢復行進。";
+"route.paused.progress" = "路線已暫停 · %ld%%";
+"route.paused.remaining" = "剩餘 %.1f km · 預估 %d 分鐘";
+"route.heading.going" = "前往 %@";
+"route.heading.paused" = "已暫停 · 前往 %@";

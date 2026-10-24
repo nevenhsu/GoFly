@@ -957,7 +957,8 @@ struct GoFlyMapView: View {
             } else if mode == .route || !route.canEdit {
                 if isResumeState && (route.phase == .paused || route.phase == .interrupted) {
                     GoFlyResumePanel(
-                        title: goFlyString("background.routePaused"),
+                        title: route.pausedPanelTitle,
+                        subtitle: route.pausedPanelSubtitle,
                         ctaTitle: goFlyString("route.resumeShort"),
                         onResume: { _ = route.resume() },
                         isEnabled: route.canResume,
@@ -1000,7 +1001,10 @@ struct GoFlyMapView: View {
 
     private var executionTitle: String {
         if joystick.wanderEnabled { return joystick.wanderTarget?.place.title ?? goFlyString("joystick.wander") }
-        if case .place(let place) = route.draft.destination?.value { return place.title }
+        if case .place(let place) = route.draft.destination?.value {
+            let paused = [.paused, .interrupted].contains(route.phase)
+            return goFlyLocalizedFormat(goFlyString(paused ? "route.heading.paused" : "route.heading.going"), place.title)
+        }
         return goFlyString("mode.route")
     }
 
@@ -2185,11 +2189,11 @@ struct GoFlyMapView: View {
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
             let wanderPaused = mode == .joystick && joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase)
 
-            let title: String = routePaused ? goFlyString("background.routePaused")
+            let title: String = routePaused ? goFlyString("route.pausedToast.title")
                 : (holdPaused ? goFlyString("background.positionPaused")
                 : (wanderPaused ? goFlyString("joystick.wanderPaused") : goFlyString(continuation.noticeKey ?? "background.positionPaused")))
 
-            let message: String = routePaused ? goFlyString("background.routePaused.message")
+            let message: String = routePaused ? goFlyString("route.pausedToast.message")
                 : (holdPaused ? goFlyString("background.positionPaused.message") : goFlyString("status.repairGuidance"))
 
             GoFlyStatusBanner(

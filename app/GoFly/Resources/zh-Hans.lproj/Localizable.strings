@@ -670,3 +670,9 @@
 "gallery.fieldNormal" = "搜索最爱地点";
 "wander.error.planningFailed" = "无法规划路线";
 "wander.planning" = "正在规划路线";
+"route.pausedToast.title" = "路线模拟已暂停";
+"route.pausedToast.message" = "任务意外中断，点选重试自中断点恢复行进。";
+"route.paused.progress" = "路线已暂停 · %ld%%";
+"route.paused.remaining" = "剩余 %.1f km · 预计 %d 分钟";
+"route.heading.going" = "前往 %@";
+"route.heading.paused" = "已暂停 · 前往 %@";

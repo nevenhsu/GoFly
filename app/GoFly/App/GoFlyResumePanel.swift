@@ -8,6 +8,7 @@ import SwiftUI
 /// - Single primary "Resume" action button on the right (e.g., "恢復瞬移", "繼續路線", "恢復漫步").
 struct GoFlyResumePanel: View {
     let title: String
+    var subtitle: String? = nil
     let ctaTitle: String
     let onResume: () -> Void
     var isEnabled: Bool = true
@@ -15,12 +16,21 @@ struct GoFlyResumePanel: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.primary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("\(identifier).title")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("\(identifier).title")
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("\(identifier).subtitle")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onResume) {
                 Text(ctaTitle)
