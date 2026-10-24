@@ -166,6 +166,7 @@ struct GoFlyComponentGallery: View {
             GoFlyRouteRunningControls(
                 title: goFlyString("route.position"), fraction: 0.26,
                 isRoundTrip: false, isReversed: false, speed: 25,
+                onPlayback: { endResult = "playback" },
                 onEnd: { showingEndDialog = true })
                 .padding(.horizontal, 20)
                 .padding(.vertical, 22)

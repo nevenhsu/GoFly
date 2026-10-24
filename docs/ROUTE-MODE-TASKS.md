@@ -67,6 +67,7 @@
 - Figma D6：頂部深色指示卡（導航箭頭、「前往 …」、剩餘距離／時間／速度）、`StatusPill / 模擬中`、右側 Follow／Recenter、底部進度列（`Progress`）、純圖示控制列（來回、方向、速度 chip「⏱ 25 ›」）、「✕ 結束」（灰 capsule）＋「⏸ 暫停」（黑 capsule）。
 - Figma D6.a：35% 遮罩、居中 dialog（圓角 20），標題「結束這次路線？」，說明「確認後將停止模擬路線並保留目前位置，回到路線規劃模式。」，灰色「取消」與紅色「結束路線」並排 capsule；pill 顯示「停止」。
 - 驗收：取消後路線繼續、進度不變；結束後停止送點、保留最後模擬位置並回 D1；dialog 開啟時其他元素不可操作、VoiceOver 焦點鎖定；Dark D6.a 對齊；三語。
+- **狀態：已實作，待審查。** `GoFlyEndRouteDialog`（35% scrim 吞掉觸控、`.isModal`、取消／結束路線 capsule 48 pt）取代 `confirmationDialog`，由 `GoFlyMapView` 疊在整個畫面；`GoFlyRouteRunningControls`（標籤列 6 pt 進度 → 20 → 36 pt 控制列 → 20 → 56 pt 結束／暫停）；執行模式加 pill、面板加 grabber；dialog 開啟時 pill 顯示「停止」。`GoFlyRouteExecutionUITests` 以 gallery 量測間距與 dialog；因模擬器無法實際執行路線，pill 顯示「停止」、真實面板內的結束流程未做 UI 自動驗證。
 
 ### R6.1 移除 D1b「新增」
 - 現況：`App/GoFlyMapView.swift:680` 與 `:1415` 呼叫 `route.appendDestination`（`RouteExecutionController.swift:160`）。

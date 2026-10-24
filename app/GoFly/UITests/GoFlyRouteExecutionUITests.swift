@@ -50,7 +50,10 @@ final class GoFlyRouteExecutionUITests: GoFlyRouteModeTestCase {
             XCTAssertEqual(cancel.frame.height, 48, accuracy: 1)
             XCTAssertEqual(confirm.frame.height, 48, accuracy: 1)
             XCTAssertEqual(cancel.frame.width, confirm.frame.width, accuracy: 1)
-            XCTAssertFalse(app.buttons["route.pause"].isHittable, "controls underneath cannot be operated while the dialog is open")
+            // A touch on the controls underneath is swallowed by the scrim: the dialog stays and nothing runs.
+            app.buttons["route.pause"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            XCTAssertTrue(app.buttons["route.end.dialog.cancel"].exists, "dialog is still open")
+            XCTAssertEqual(element(app, "gallery.endResult").label, "idle", "the pause control did not fire")
             evidence(app, task: "R6", name: "d6a-dialog-\(appearance)")
 
             cancel.tap()
