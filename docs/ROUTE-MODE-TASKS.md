@@ -84,6 +84,7 @@
 - 收合：拖曳／縮放地圖不改變面板高度；放 Pin 收合為 76 pt（D3：只剩標題與兩個圓鈕）；確認或關閉 Pin 卡回 D1。
 - 最近搜尋：`App/GoFlyMapView.swift:194` `recentPlaces` 已共用；D5「清空記錄」後瞬移也清空，仍只存在記憶體、最多 8 筆。
 - D19／D20 入口、D1 無速度膠囊、D22 黑底「復原」維持正確。
+- **狀態：已實作，待審查。** `GoFlyRouteCollapseUITests`（拖曳地圖不改 panel、Pin 收合 76 pt、關閉卡片回 D1）、D22／D21 由 `GoFlyFavoriteRoutesPageUITests` 驗證；最近搜尋共用同一份記憶體清單（`recentPlaces`，最多 8 筆、清空同步）以程式檢視確認，未另寫 UI test。2026-10-25 全部 UI test 回歸：除 `GoFlyOnboardingUITests.testSkipLocationRequiresReachableVPNAndBackKeepsFlow`（在改版前的基準版即失敗，VPN 不可達時「下一步」仍可點，原因未查）外皆通過；搖桿 UI test 在 `766c748` 即失敗（模擬器無裝置，Start／Go 皆停用，且從搖桿 tab 搜尋會被切到瞬移 tab），已修正 tab 行為並把測試改成模擬器可驗證的斷言；`GoFlyRedesignScreenshots` 已移除依賴已刪控制項（`placeDetails.go`）的舊截圖流程。已知未處理：瞬移地點卡下緣比 TabBar 上緣低約 37 pt，會蓋住 TabBar 的一部分。
 
 ## 最愛清單版面與 tab 行為（2026-10-24 追加）
 
