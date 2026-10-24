@@ -525,7 +525,8 @@ struct GoFlyMapView: View {
             return cardTop + 12
         } else {
             let panelTop = (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + max(currentCollapsedHeight, sheetHeight)
-            return panelTop + 12
+            // The snackbar overlay ends at the safe-area bottom, which the bar and panel already include.
+            return panelTop - geometry.safeAreaInsets.bottom + 12
         }
     }
 
@@ -817,6 +818,12 @@ struct GoFlyMapView: View {
                     GoFlyRoutePanel(
                         controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                         onEditNode: { _ = route.selectNode(id: $0) },
+                        onNodeRemoved: {
+                            snackbar = GoFlySnackbarMessage(
+                                text: goFlyString("route.removed"),
+                                actionTitle: goFlyString("common.undo"),
+                                action: { _ = route.undoRemoval() })
+                        },
                         onSettings: { showingSettings = true },
                         onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
                         currentLocationAvailable: service.currentRouteOrigin != nil,

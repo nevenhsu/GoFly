@@ -6,6 +6,8 @@ struct GoFlyRoutePanel: View {
     @ObservedObject var controller: RouteExecutionController
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
+    /// Called after a row was cleared or deleted, so the owner can offer the D9 undo snackbar.
+    var onNodeRemoved: () -> Void = { }
     var onSettings: () -> Void = { }
     var onFocusPoint: (GeoCoordinate) -> Void = { _ in }
     var currentLocationAvailable: Bool? = nil
@@ -359,7 +361,7 @@ struct GoFlyRoutePanel: View {
                     draft: controller.draft, selectedID: controller.selectedNodeID,
                     isEditable: controller.canEdit, viewport: visibleScrollFrame,
                     onEdit: onEditNode,
-                    onDelete: { _ = controller.removeNode(id: $0) },
+                    onDelete: { if controller.removeNode(id: $0) { onNodeRemoved() } },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
                     onScroll: { id, anchor in
                         withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }

@@ -17,6 +17,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
 
     @Published public private(set) var draft: RouteDraft
     @Published private var selection: RouteNodeID?
+    private var removalUndo: (before: RouteDraft, after: RouteDraft, selection: RouteNodeID?)?
     @Published public private(set) var picker: RoutePickerSession? {
         didSet {
             pickerCandidateSubscription?.cancel()
@@ -259,7 +260,21 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         if case .waypoint? = draft.role(of: id) { changed = draft.removing(nodeID: id) }
         else { changed = draft.clearing(nodeID: id) ?? draft.removing(nodeID: id) }
         guard let changed else { return false }
+        let before = draft, previousSelection = selection
         applyDraft(changed)
+        removalUndo = (before, changed, previousSelection)
+        return true
+    }
+    /// D9: only the latest clear or delete can be undone, and only while nothing else changed the route.
+    public var canUndoRemoval: Bool {
+        guard canEdit, picker == nil, let undo = removalUndo else { return false }
+        return draft == undo.after
+    }
+    @discardableResult public func undoRemoval() -> Bool {
+        guard canUndoRemoval, let undo = removalUndo else { return false }
+        applyDraft(undo.before)
+        selection = undo.selection
+        removalUndo = nil
         return true
     }
     @discardableResult public func moveNode(id: RouteNodeID, toIndex: Int) -> Bool {

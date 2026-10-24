@@ -54,6 +54,7 @@
 - 現況：`removeNode` 無復原。
 - Figma D9：C2 `Snackbar / 可復原`「已清空路線地點」＋「復原」，位於 bottom sheet 上方約 12 pt。
 - 驗收：5 秒內復原原值與原位置；逾時消失；連續刪除只復原最近一次；三語；深色 Dark D9。
+- **狀態：已實作，待審查。** Core：`removeNode` 記錄 `(before, after, selection)`，`canUndoRemoval`／`undoRemoval()`（只復原最近一次；之後路線有任何其他變動即失效）；App：起訖清除與停靠點刪除皆顯示「已清空路線地點」＋「復原」（5 秒，於 sheet 上方 12 pt，已修正 snackbar 位置多算 safe area 的偏移）。`RouteEndpointTests`（undo 三項）、`GoFlyRouteUndoUITests`。訊息文字依 D9 渲染畫面統一為「已清空路線地點」（停靠點刪除與起訖清除相同）。
 
 ### R5 D1／D2 面板版面
 - 現況：`GoFlyRoutePanel.editingView` 將標題、清單、新增、反轉放在同一 `ScrollView`；底部星號 50 pt 有邊框。

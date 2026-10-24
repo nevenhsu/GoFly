@@ -104,6 +104,46 @@ struct RouteEndpointTests {
         #expect(route.draft.nodes[1].value == .empty, "backing out never changes the value")
     }
 
+    @Test func undoRestoresTheOriginalValueAndPosition() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let route = fixture(draft: draft)
+        let ids = draft.nodes.map(\.id)
+
+        #expect(!route.canUndoRemoval)
+        #expect(route.removeNode(id: ids[1]))
+        #expect(route.draft.nodes.count == 2 && route.canUndoRemoval)
+        #expect(route.undoRemoval())
+        #expect(route.draft.nodes.map(\.id) == ids, "the waypoint row returns in its original position")
+        #expect(route.draft.nodes.map(\.value) == draft.nodes.map(\.value))
+        #expect(!route.canUndoRemoval, "an undo is consumed")
+
+        #expect(route.removeNode(id: ids[0]))
+        #expect(route.draft.start?.value == .empty)
+        #expect(route.undoRemoval())
+        #expect(route.draft.start?.value == .place(place(1)), "a cleared start gets its value back")
+    }
+
+    @Test func onlyTheLatestRemovalCanBeUndone() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3)), .place(place(4))]))
+        let route = fixture(draft: draft)
+        let ids = draft.nodes.map(\.id)
+        #expect(route.removeNode(id: ids[1]))
+        #expect(route.removeNode(id: ids[2]))
+        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[3]])
+        #expect(route.undoRemoval())
+        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[2], ids[3]], "only the second delete comes back")
+        #expect(!route.undoRemoval(), "the earlier delete is not recoverable")
+    }
+
+    @Test func undoIsUnavailableAfterAnotherEdit() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let route = fixture(draft: draft)
+        #expect(route.removeNode(id: draft.nodes[1].id))
+        #expect(route.reverseNodes())
+        #expect(!route.canUndoRemoval)
+        #expect(!route.undoRemoval())
+    }
+
     private func settle(_ condition: @MainActor () -> Bool) async {
         for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(condition())
