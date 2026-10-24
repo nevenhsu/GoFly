@@ -169,6 +169,8 @@ struct JoystickControllerIntegrationTests {
         #expect(controller.lastAcknowledgedBearingDegrees == 90)
         #expect(service.confirmedSimulatedLocation == acknowledged)
         #expect(service.movementAuthority.snapshot.lease == nil)
+        #expect(!controller.canBeginGesture)
+        service.observeRealLocation(observation(25.00002, 121))
         #expect(controller.canBeginGesture)
         let nextFinger = UUID(), accepted = controller.beginGesture(id: nextFinger, input: input)
         #expect(accepted)

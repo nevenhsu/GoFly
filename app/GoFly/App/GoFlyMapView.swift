@@ -15,6 +15,21 @@ struct GoFlyMovementPresentation: Equatable {
     var routeDistance: Double?
 }
 
+private struct PendingWanderStart {
+    let plannerID: UUID
+    let target: WanderTarget
+    let route: PlannedRoute
+    let teleportIntentID: UUID
+    var originAcknowledged = false
+}
+
+private struct WanderPlanningCheckpoint {
+    enum Purpose { case startup, replacement, continuation }
+    let purpose: Purpose
+    let origin: GeoCoordinate?
+    let target: WanderTarget?
+}
+
 @MainActor
 final class GoFlyMovementModel: ObservableObject {
     @Published private(set) var presentation = GoFlyMovementPresentation()
@@ -212,6 +227,15 @@ struct GoFlyMapView: View {
     @State private var confirmingEndRoute = false
     @State private var settingJoystickOrigin = false
     @State private var joystickOriginIntentID: UUID?
+    @State private var wanderPlanningTask: Task<Void, Never>?
+    @State private var wanderPlanningID: UUID?
+    @State private var wanderReplanningTask: Task<Void, Never>?
+    @State private var wanderReplanningID: UUID?
+    @State private var wanderRetryDestination: MapPlace?
+    @State private var activeWanderPlanningCheckpoint: WanderPlanningCheckpoint?
+    @State private var interruptedWanderPlanningCheckpoint: WanderPlanningCheckpoint?
+    @State private var pendingWanderStart: PendingWanderStart?
+    @State private var deferredWanderStart = WanderStartRequestGate()
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
 
@@ -242,9 +266,14 @@ struct GoFlyMapView: View {
         if let picker = route.picker { return picker.candidates.candidate }
         if isWanderMap { return wanderSearch.candidate }
         // Teleport goes to the Pin; the route tab confirms it into the selected field (D4).
-        return (mode == .teleport || mode == .route) && route.canEdit ? search.candidate : nil
+        return (mode == .teleport || mode == .route || mode == .joystick) && route.canEdit ? search.candidate : nil
     }
     private var canSwitchMode: Bool { route.canEdit && route.picker == nil && !showsOperationPanel }
+    private var canRequestWanderStart: Bool {
+        joystick.canStartWanderPlanning || (settingJoystickOrigin && joystickOriginIntentID != nil
+            && mode == .joystick && !joystick.wanderEnabled && !joystick.requiresStop)
+    }
+    private var isWanderReplanning: Bool { wanderReplanningTask != nil }
 
     private var viewportGap: CGFloat { dynamicTypeSize.isAccessibilitySize ? 4 : 8 }
     private var bottomPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 12 }
@@ -273,6 +302,7 @@ struct GoFlyMapView: View {
                     !showingSettings && !showingSearch && presentedSheet == nil && route.picker == nil
                 }
                 location.start()
+                if mode == .joystick { ensureJoystickOrigin() }
                 if cameraIntent == nil {
                     if mode == .route, let planned = route.plannedRoute {
                         cameraIntent = GoFlyCameraIntent(route: planned)
@@ -288,7 +318,17 @@ struct GoFlyMapView: View {
             .onChange(of: dynamicTypeSize) { _, size in
                 if size.isAccessibilitySize { sheetDetent = .expanded }
             }
-            .onDisappear { movement.detachMapAdmission() }
+            .onDisappear {
+                movement.detachMapAdmission()
+                wanderPlanningTask?.cancel()
+                wanderReplanningTask?.cancel()
+                wanderPlanningID = nil
+                wanderReplanningID = nil
+                pendingWanderStart = nil
+                activeWanderPlanningCheckpoint = nil
+                interruptedWanderPlanningCheckpoint = nil
+                deferredWanderStart.cancel()
+            }
             .onReceive(service.$error) { error in
                 serviceNoticeDismissed = false
                 if let error {
@@ -302,12 +342,24 @@ struct GoFlyMapView: View {
                 let explicitlyRequested = pendingGPSRecenter
                 pendingGPSRecenter = false
                 service.observeRealLocation(observation)
-                guard observation != nil else { return }
+                guard observation != nil else {
+                    if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
+                        settingJoystickOrigin = false
+                    }
+                    return
+                }
                 guard let accepted = service.realLocation else {
                     location.rejectedFix()
                     return
                 }
                 location.acceptedFix()
+                if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
+                    guard let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else {
+                        settingJoystickOrigin = false
+                        return
+                    }
+                    submitJoystickOrigin(coordinate)
+                }
                 guard service.confirmedSimulatedLocation == nil,
                       mode != .joystick || explicitlyRequested,
                       mode == .teleport || route.plannedRoute == nil || explicitlyRequested,
@@ -327,8 +379,21 @@ struct GoFlyMapView: View {
                 if mode == .route, let planned { cameraIntent = GoFlyCameraIntent(route: planned) }
             }
             .onChange(of: mode) { _, mode in
+                if mode != .joystick {
+                    wanderPlanningTask?.cancel()
+                    wanderPlanningID = nil
+                    wanderReplanningTask?.cancel()
+                    wanderReplanningTask = nil
+                    wanderReplanningID = nil
+                    pendingWanderStart = nil
+                    activeWanderPlanningCheckpoint = nil
+                    interruptedWanderPlanningCheckpoint = nil
+                    deferredWanderStart.cancel()
+                }
                 if mode == .joystick {
                     service.warmupSession()
+                    ensureJoystickOrigin()
+                    if !recovery.isChecking { resumePendingWanderPlanning() }
                 }
                 dismissKeyboard()
                 if mode == .route, let planned = route.plannedRoute {
@@ -352,35 +417,93 @@ struct GoFlyMapView: View {
                     continuation.sceneDidBecomeActive()
                     recovery.requestForegroundCheck()
                 } else {
+                    cancelUncommittedWanderPlanning()
                     continuation.releaseForInactiveScene()
                     captureCheckpoint()
                     beginCheckpointFlush()
+                }
+            }
+            .onChange(of: recovery.isChecking) { _, checking in
+                if !checking && scenePhase == .active { resumePendingWanderPlanning() }
+            }
+            .onChange(of: service.movementConnectionAvailable) { _, available in
+                if available {
+                    if scenePhase == .active && !recovery.isChecking { resumePendingWanderPlanning() }
+                } else {
+                    cancelUncommittedWanderPlanning()
                 }
             }
             .onChange(of: recovery.checkpointRevision) { _, _ in captureCheckpoint() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
             }
-            .task(id: route.completion?.executionID) {
-                guard let id = route.completion?.executionID else { return }
-                snackbar = GoFlySnackbarMessage(text: goFlyString("route.completed"))
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
-                route.dismissCompletion(executionID: id)
-            }
-            .onChange(of: service.pointState) { _, state in
-                guard case .acknowledged(let intent) = state else { return }
-                snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), intent.candidate.place.title))
-                search.clearCandidate(ifMatching: intent.candidate.id)
-                if search.candidate == nil {
-                    cameraIntent = GoFlyCameraIntent(coordinate: intent.candidate.place.coordinate)
+            .onChange(of: joystick.wanderNeedsReplan) { _, needsReplan in
+                if needsReplan, joystick.phase == .moving {
+                    let destination = joystick.wanderTarget?.place
+                    wanderRetryDestination = destination
+                    replanWander(to: destination)
                 }
-                dismissKeyboard()
-                if settingJoystickOrigin, mode == .teleport, joystickOriginIntentID == intent.id {
-                    joystickOriginIntentID = nil
+            }
+            .onChange(of: joystick.wanderNeedsTarget) { _, needsTarget in
+                if needsTarget { planNextWanderSegment() }
+            }
+            .onChange(of: joystick.phase) { _, phase in
+                if joystick.wanderNeedsReplan, phase == .moving { replanWander(to: joystick.wanderTarget?.place) }
+            }
+            .task(id: route.completion?.executionID) { await dismissRouteCompletionWhenReady() }
+            .onChange(of: service.pointState) { _, state in
+                switch state {
+                case .acknowledged(let intent):
+                    let shouldStartWanderAfterOriginACK = deferredWanderStart.consumeAcknowledgement(for: intent.id)
+                    snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), intent.candidate.place.title))
+                    search.clearCandidate(ifMatching: intent.candidate.id)
                     if search.candidate == nil {
-                        settingJoystickOrigin = false
-                        mode = .joystick
+                        cameraIntent = GoFlyCameraIntent(coordinate: intent.candidate.place.coordinate)
                     }
+                    dismissKeyboard()
+                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
+                        joystickOriginIntentID = nil
+                        settingJoystickOrigin = false
+                        if mode == .teleport && search.candidate == nil { mode = .joystick }
+                    }
+                    if let pending = pendingWanderStart, pending.teleportIntentID == intent.id,
+                       pending.plannerID == wanderPlanningID {
+                        if scenePhase == .active && !recovery.isChecking {
+                            pendingWanderStart = nil
+                            _ = installAndStartWander(target: pending.target, route: pending.route,
+                                                      plannerID: pending.plannerID)
+                        } else {
+                            var acknowledged = pending
+                            acknowledged.originAcknowledged = true
+                            pendingWanderStart = acknowledged
+                        }
+                    } else if shouldStartWanderAfterOriginACK {
+                        startRoadWander()
+                    }
+                case .notSent(let intent, _):
+                    let shouldStartWanderAfterUnsentOrigin = deferredWanderStart.consumeFailure(for: intent.id)
+                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
+                        joystickOriginIntentID = nil
+                        settingJoystickOrigin = false
+                    }
+                    if pendingWanderStart?.teleportIntentID == intent.id {
+                        let plannerID = pendingWanderStart?.plannerID
+                        pendingWanderStart = nil
+                        if let plannerID { failWanderPlanning(plannerID) }
+                    } else if shouldStartWanderAfterUnsentOrigin {
+                        startRoadWander()
+                    }
+                case .unconfirmed(let intent, _):
+                    let failedDeferredOrigin = deferredWanderStart.consumeFailure(for: intent.id)
+                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
+                        joystickOriginIntentID = nil
+                        settingJoystickOrigin = false
+                    }
+                    if pendingWanderStart?.teleportIntentID == intent.id || failedDeferredOrigin {
+                        pendingWanderStart = nil
+                    }
+                default:
+                    break
                 }
             }
             .fullScreenCover(item: $presentedSheet) { sheet in
@@ -484,7 +607,7 @@ struct GoFlyMapView: View {
                         title: executionTitle,
                         detail: executionDetail,
                         symbol: executionSymbol,
-                        onTrailingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
+                        onTrailingAction: nil
                     )
                     GoFlyStatusPill(text: pillText, tone: pillTone, identifier: "map.statusPill")
                         .accessibilityValue(goFlyString(movement.status.textKey))
@@ -559,12 +682,12 @@ struct GoFlyMapView: View {
         return GoFlyMapCanvas(
             marker: movement.presentation.marker, candidate: activeCandidate,
             viewport: cameraViewport, cameraIntent: cameraIntent,
-            route: mode == .route ? route.plannedRoute : nil,
+            route: mode == .route ? route.plannedRoute : (isWanderMap ? joystick.wanderRoute : nil),
             routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
             markerBearingDegrees: activeMarkerBearing,
-            markerRoute: movement.presentation.route,
-            markerRouteDistance: movement.presentation.routeDistance,
+            markerRoute: isWanderMap ? (joystick.wanderNeedsReplan ? nil : joystick.wanderRoute) : movement.presentation.route,
+            markerRouteDistance: isWanderMap ? joystick.wanderProgressMeters : movement.presentation.routeDistance,
             adjustsFocusForViewportChanges: false,
             onMapTap: { coordinate in
                 if let picker = route.picker {
@@ -576,7 +699,7 @@ struct GoFlyMapView: View {
                     sheetDetent = .collapsed
                 } else if isWanderMap {
                     wanderSearch.selectMapCoordinate(coordinate, resolver: mapPlaces)
-                } else if mode == .teleport, route.canEdit {
+                } else if (mode == .teleport || mode == .joystick), route.canEdit {
                     search.selectMapCoordinate(coordinate, resolver: mapPlaces)
                     cameraIntent = GoFlyCameraIntent(coordinate: coordinate, ensureVisibleOnly: true)
                     sheetDetent = .collapsed
@@ -710,7 +833,7 @@ struct GoFlyMapView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
             }
-            if mode == .teleport, let candidate = activeCandidate {
+            if (mode == .teleport || (mode == .joystick && !joystick.wanderEnabled)), let candidate = activeCandidate {
                 GoFlyLocationCard(
                     place: candidate.place,
                     primaryActionType: .teleport,
@@ -725,7 +848,7 @@ struct GoFlyMapView: View {
                         snackbar = GoFlySnackbarMessage(text: goFlyString("placeDetails.copied"))
                     },
                     distanceFrom: service.positionMarker?.coordinate,
-                    identifier: "map.teleport.locationCard"
+                    identifier: mode == .joystick ? "map.joystick.locationCard" : "map.teleport.locationCard"
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, geometry.safeAreaInsets.bottom + 12)
@@ -745,6 +868,12 @@ struct GoFlyMapView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     sheetDetent = .collapsed
                 }
+            }
+        }
+        .onChange(of: wanderCardPlace != nil) { _, hasCard in
+            guard hasCard, isWanderMap else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                sheetDetent = .collapsed
             }
         }
         .onChange(of: service.clearState) { _, state in
@@ -782,7 +911,7 @@ struct GoFlyMapView: View {
     private var isResumeState: Bool {
         if continuation.noticeKey != nil && !continuationNoticeDismissed { return true }
         if !route.canEdit, route.phase == .paused || route.phase == .interrupted { return true }
-        if mode == .joystick, joystick.wanderEnabled,
+        if mode == .joystick, joystick.wanderEnabled, !joystick.wanderNeedsReplan,
            [.paused, .suspended, .interrupted].contains(joystick.phase) { return true }
         if mode == .teleport, positionHold.phase == .paused { return true }
         return false
@@ -796,7 +925,7 @@ struct GoFlyMapView: View {
     private func modePanel(in geometry: GeometryProxy) -> some View {
         Group {
             if mode == .joystick, route.canEdit, route.picker == nil {
-                if isResumeState && [.paused, .suspended, .interrupted].contains(joystick.phase) {
+                if isResumeState && !isWanderReplanning && [.paused, .suspended, .interrupted].contains(joystick.phase) {
                     GoFlyResumePanel(
                         title: goFlyString("joystick.wanderPaused"),
                         ctaTitle: goFlyString("wander.resumeShort"),
@@ -810,8 +939,11 @@ struct GoFlyMapView: View {
                             controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                             maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                             onRandomDestination: {
-                                if joystick.randomizeWanderTarget() { wanderSearch.resetSelection() }
+                                replanWander(to: nil)
                             },
+                            onStartWander: { startRoadWander() },
+                            canStartWander: canRequestWanderStart,
+                            onStopWander: { stopWander() },
                             onSettings: { showingSettings = true }
                         )
                         // Keep an admitted finger alive through preparation; disappearance releases it.
@@ -881,8 +1013,15 @@ struct GoFlyMapView: View {
 
     private var executionDetail: String {
         if joystick.wanderEnabled {
-            return goFlyString("joystick.phase.\(joystick.phase.rawValue)") + " · "
-                + goFlyLocalizedFormat(goFlyString("route.speedValue"), joystick.speed.kilometersPerHour)
+            let speed = goFlyLocalizedFormat(goFlyString("route.speedValue"), joystick.speed.kilometersPerHour)
+            if isWanderReplanning { return goFlyString("wander.planning") + " · " + speed }
+            guard let planned = joystick.wanderRoute else {
+                return goFlyString("joystick.phase.\(joystick.phase.rawValue)") + " · " + speed
+            }
+            let remaining = max(0, planned.totalDistanceMeters - joystick.wanderProgressMeters)
+            let minutes = Int(ceil(remaining / max(joystick.speed.metersPerSecond, 0.1) / 60))
+            return goFlyLocalizedFormat(goFlyString("route.distance"), remaining / 1_000) + " · "
+                + goFlyLocalizedFormat(goFlyString("route.duration"), minutes) + " · " + speed
         }
         let speed = goFlyLocalizedFormat(goFlyString("route.speedValue"), route.draft.speed.kilometersPerHour)
         guard !route.roundTripEnabled, let progress = route.progress else {
@@ -920,14 +1059,33 @@ struct GoFlyMapView: View {
         }
     }
 
+    private func dismissRouteCompletionWhenReady() async {
+        guard let id = route.completion?.executionID else { return }
+        snackbar = GoFlySnackbarMessage(text: goFlyString("route.completed"))
+        do { try await Task.sleep(for: .seconds(2)) } catch { return }
+        route.dismissCompletion(executionID: id)
+    }
+
     private func performGo(_ candidate: TeleportCandidate) {
         dismissKeyboard()
-        if isWanderMap {
-            if joystick.applyWanderTarget(candidate.place) { wanderSearch.clearCandidate(ifMatching: candidate.id) }
+        if mode == .joystick {
+            let wasEstablishingOrigin = settingJoystickOrigin && joystickOriginIntentID == nil
+            settingJoystickOrigin = false
+            if service.teleport(to: candidate), wasEstablishingOrigin,
+               case .preparing(let intent) = service.pointState {
+                joystickOriginIntentID = intent.id
+            }
         } else if service.teleport(to: candidate), settingJoystickOrigin,
                   case .preparing(let intent) = service.pointState {
             joystickOriginIntentID = intent.id
         }
+    }
+
+    private func confirmWanderDestination(_ place: MapPlace) {
+        guard isWanderMap, joystick.canApplyWanderTarget else { return }
+        dismissKeyboard()
+        wanderRetryDestination = nil
+        replanWander(to: place)
     }
 
     /// D4 "確認": the Pin or Location Card fills the selected field and returns to D1.
@@ -1118,10 +1276,355 @@ struct GoFlyMapView: View {
         settingJoystickOrigin = false
         joystickOriginIntentID = nil
         mode = value
-        if value == .joystick {
-            service.warmupSession()
-        }
         if value != .teleport { sheetDetent = .expanded }
+    }
+
+    /// Establish a joystick origin only from fresh GPS or a currently
+    /// validated simulation marker. Warmup and retained display history are
+    /// never accepted as position acknowledgement.
+    private func ensureJoystickOrigin() {
+        guard mode == .joystick, !settingJoystickOrigin else { return }
+        if let marker = service.displayPositionMarker,
+           marker.source == .simulation, marker.freshness == .fresh { return }
+        settingJoystickOrigin = true
+        if let marker = service.displayPositionMarker,
+           marker.source == .gps, marker.freshness == .fresh {
+            submitJoystickOrigin(marker.coordinate)
+        } else {
+            location.requestRecenter()
+        }
+    }
+
+    private func submitJoystickOrigin(_ coordinate: GeoCoordinate) {
+        guard mode == .joystick, settingJoystickOrigin, joystickOriginIntentID == nil else { return }
+        let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
+        guard service.teleport(to: TeleportCandidate(place: place)),
+              case .preparing(let intent) = service.pointState else {
+            settingJoystickOrigin = false
+            return
+        }
+        joystickOriginIntentID = intent.id
+    }
+
+    /// Plans a road segment before enabling the existing joystick movement
+    /// owner. A stale or failed planner result cannot start a wander task.
+    private func startRoadWander(preselectedOrigin: GeoCoordinate? = nil, preselectedTarget: WanderTarget? = nil) {
+        guard mode == .joystick, !joystick.wanderEnabled, canRequestWanderStart else { return }
+        guard pendingWanderStart == nil else { return }
+        if settingJoystickOrigin, let originIntentID = joystickOriginIntentID {
+            deferredWanderStart.waitForOriginAcknowledgement(originIntentID)
+            return
+        }
+        if settingJoystickOrigin {
+            settingJoystickOrigin = false
+            joystickOriginIntentID = nil
+        }
+        wanderPlanningTask?.cancel()
+        let planningID = UUID()
+        wanderPlanningID = planningID
+        interruptedWanderPlanningCheckpoint = nil
+        activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+            purpose: .startup, origin: preselectedOrigin, target: preselectedTarget)
+        joystick.clearWanderError()
+        let confirmedOrigin = preselectedOrigin ?? service.currentJoystickOrigin
+        let originCandidates = wanderOriginCandidates(preferred: confirmedOrigin)
+        wanderPlanningTask = Task { @MainActor in
+            defer {
+                if wanderPlanningID == planningID {
+                    wanderPlanningTask = nil
+                    if pendingWanderStart?.plannerID != planningID { wanderPlanningID = nil }
+                }
+            }
+            for originCandidate in originCandidates.prefix(3) {
+                    guard !Task.isCancelled, wanderPlanningID == planningID, mode == .joystick,
+                          !joystick.wanderEnabled else { return }
+                let origin = service.currentJoystickOrigin ?? originCandidate
+                    guard let target = preselectedTarget ?? joystick.selectWanderTarget(from: origin) else { continue }
+                    activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+                        purpose: .startup, origin: origin, target: target)
+                    do {
+                        let planned = try await route.planWanderSegment(from: origin, to: target.coordinate)
+                        guard !Task.isCancelled, wanderPlanningID == planningID, mode == .joystick,
+                              !joystick.wanderEnabled else { return }
+                        if let currentOrigin = service.currentJoystickOrigin,
+                           JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) > 1 { continue }
+                        let hasLiveSimulation = service.displayPositionMarker?.source == .simulation
+                            && service.displayPositionMarker?.freshness == .fresh
+                        if hasLiveSimulation, let liveOrigin = service.currentJoystickOrigin,
+                           JoystickGeodesy.distanceMeters(from: liveOrigin, to: planned.start) > 1 { continue }
+                        if hasLiveSimulation {
+                            installAndStartWander(target: target, route: planned, plannerID: planningID)
+                        } else {
+                            guard settingJoystickOrigin == false,
+                                  service.teleport(to: TeleportCandidate(place: MapPlace(
+                                    id: .coordinate(planned.start), title: planned.start.displayText,
+                                    coordinate: planned.start))),
+                                  case .preparing(let intent) = service.pointState else {
+                                failWanderPlanning(planningID); return
+                            }
+                            settingJoystickOrigin = true
+                            joystickOriginIntentID = intent.id
+                            pendingWanderStart = PendingWanderStart(plannerID: planningID,
+                                target: target, route: planned, teleportIntentID: intent.id)
+                            activeWanderPlanningCheckpoint = nil
+                        }
+                        return
+                    } catch is CancellationError { return }
+                    catch {
+                        if !service.movementConnectionAvailable { return }
+                        continue
+                    }
+            }
+            guard !Task.isCancelled, wanderPlanningID == planningID else { return }
+            failWanderPlanning(planningID)
+        }
+    }
+
+    private func wanderOriginCandidates(preferred: GeoCoordinate?) -> [GeoCoordinate] {
+        if let preferred { return [preferred, preferred, preferred] }
+        guard let center = projection?.centerCoordinate else { return [] }
+        let latitudeOffset = min(max(projection?.searchRegionLatitudeDelta ?? 0.02, 0.005), 0.04) / 4
+        let longitudeOffset = min(max(projection?.searchRegionLongitudeDelta ?? 0.02, 0.005), 0.04) / 4
+        return [center,
+                GeoCoordinate(latitude: center.latitude + latitudeOffset, longitude: center.longitude),
+                GeoCoordinate(latitude: center.latitude - latitudeOffset, longitude: center.longitude + longitudeOffset)].compactMap { $0 }
+    }
+
+    @discardableResult private func installAndStartWander(target: WanderTarget, route planned: PlannedRoute, plannerID: UUID) -> Bool {
+        guard wanderPlanningID == plannerID, mode == .joystick,
+              scenePhase == .active, !recovery.isChecking,
+              joystick.canSetWanderEnabled, joystick.canStartWanderPlanning,
+              joystick.installWanderRoute(target: target, route: planned),
+              joystick.setWanderEnabled(true) else {
+            if scenePhase != .active || recovery.isChecking || !service.movementConnectionAvailable { return false }
+            failWanderPlanning(plannerID)
+            return false
+        }
+        joystick.clearWanderError()
+        wanderPlanningID = nil
+        activeWanderPlanningCheckpoint = nil
+        interruptedWanderPlanningCheckpoint = nil
+        cameraIntent = GoFlyCameraIntent(route: planned)
+        return true
+    }
+
+    private func failWanderPlanning(_ plannerID: UUID) {
+        guard wanderPlanningID == plannerID else { return }
+        pendingWanderStart = nil
+        wanderPlanningID = nil
+        wanderPlanningTask = nil
+        activeWanderPlanningCheckpoint = nil
+        interruptedWanderPlanningCheckpoint = nil
+        joystick.setWanderPlanningFailed()
+    }
+
+    /// Plans from the last ACK endpoint while the existing joystick lease is
+    /// paused. A failed endpoint selection/planning gets one fresh target retry.
+    private func planNextWanderSegment(preselectedTarget: WanderTarget? = nil) {
+        guard joystick.wanderEnabled, joystick.wanderNeedsTarget,
+              wanderReplanningTask == nil else { return }
+        let planningID = UUID()
+        wanderReplanningID = planningID
+        activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+            purpose: .continuation, origin: service.currentJoystickOrigin, target: preselectedTarget)
+        wanderReplanningTask = Task { @MainActor in
+            defer {
+                if wanderReplanningID == planningID {
+                    wanderReplanningTask = nil
+                    wanderReplanningID = nil
+                }
+            }
+            while !Task.isCancelled, joystick.phase == .pausing {
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            guard !Task.isCancelled, wanderReplanningID == planningID else { return }
+            guard scenePhase == .active, mode == .joystick, joystick.phase == .suspended,
+                  joystick.suspensionReason == .targetUnavailable else {
+                failWanderReplanning(planningID)
+                return
+            }
+            guard service.movementConnectionAvailable else { return }
+            guard let origin = service.currentJoystickOrigin else { failWanderReplanning(planningID); return }
+            for attempt in 0..<2 {
+                guard !Task.isCancelled, wanderReplanningID == planningID,
+                      scenePhase == .active, mode == .joystick, joystick.wanderEnabled,
+                      let currentOrigin = service.currentJoystickOrigin,
+                      JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) <= 1,
+                      let target = (attempt == 0 ? preselectedTarget : nil)
+                        ?? joystick.selectWanderTarget(from: origin) else { continue }
+                activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+                    purpose: .continuation, origin: origin, target: target)
+                do {
+                    let planned = try await route.planWanderSegment(from: origin, to: target.coordinate)
+                    guard !Task.isCancelled, wanderReplanningID == planningID,
+                          service.movementConnectionAvailable, scenePhase == .active,
+                          mode == .joystick, joystick.wanderEnabled,
+                          let currentOrigin = service.currentJoystickOrigin,
+                          JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) <= 1,
+                          JoystickGeodesy.distanceMeters(from: currentOrigin, to: planned.start) <= 1,
+                          joystick.installNextWanderRouteAndResume(target: target, route: planned) else { continue }
+                    joystick.clearWanderError()
+                    activeWanderPlanningCheckpoint = nil
+                    interruptedWanderPlanningCheckpoint = nil
+                    cameraIntent = GoFlyCameraIntent(route: planned)
+                    return
+                } catch is CancellationError { return }
+                catch { continue }
+            }
+            guard !Task.isCancelled, wanderReplanningID == planningID else { return }
+            guard service.movementConnectionAvailable else { return }
+            failWanderReplanning(planningID)
+        }
+    }
+
+    private func failWanderReplanning(_ planningID: UUID) {
+        guard wanderReplanningID == planningID else { return }
+        wanderReplanningTask = nil
+        wanderReplanningID = nil
+        activeWanderPlanningCheckpoint = nil
+        interruptedWanderPlanningCheckpoint = nil
+        joystick.setWanderPlanningFailed()
+    }
+
+    private func cancelUncommittedWanderPlanning() {
+        if let activeWanderPlanningCheckpoint {
+            interruptedWanderPlanningCheckpoint = activeWanderPlanningCheckpoint
+        }
+        activeWanderPlanningCheckpoint = nil
+        if pendingWanderStart == nil {
+            wanderPlanningTask?.cancel()
+            wanderPlanningTask = nil
+            wanderPlanningID = nil
+        }
+        wanderReplanningTask?.cancel()
+        wanderReplanningTask = nil
+        wanderReplanningID = nil
+    }
+
+    private func resumePendingWanderPlanning() {
+        guard scenePhase == .active, mode == .joystick, !recovery.isChecking,
+              service.movementConnectionAvailable else { return }
+        if let pending = pendingWanderStart, pending.originAcknowledged,
+           pending.plannerID == wanderPlanningID,
+           joystick.canSetWanderEnabled, joystick.canStartWanderPlanning {
+            pendingWanderStart = nil
+            _ = installAndStartWander(target: pending.target, route: pending.route,
+                                      plannerID: pending.plannerID)
+            return
+        }
+        if let checkpoint = interruptedWanderPlanningCheckpoint {
+            interruptedWanderPlanningCheckpoint = nil
+            switch checkpoint.purpose {
+            case .startup:
+                startRoadWander(preselectedOrigin: checkpoint.origin, preselectedTarget: checkpoint.target)
+            case .replacement:
+                guard joystick.wanderEnabled else { return }
+                let target = checkpoint.target?.place ?? wanderRetryDestination ?? joystick.wanderTarget?.place
+                replanWander(to: target)
+            case .continuation:
+                guard joystick.wanderEnabled else { return }
+                planNextWanderSegment(preselectedTarget: checkpoint.target)
+            }
+            return
+        }
+        guard joystick.wanderEnabled else { return }
+        if joystick.wanderNeedsTarget, joystick.phase == .suspended,
+           joystick.suspensionReason == .targetUnavailable {
+            planNextWanderSegment()
+        } else if joystick.wanderNeedsReplan {
+            let destination = wanderRetryDestination ?? joystick.wanderTarget?.place
+            wanderRetryDestination = destination
+            replanWander(to: destination)
+        }
+    }
+
+    private func replanWander(to destination: MapPlace?) {
+        let isCompletedSegment = joystick.phase == .suspended && joystick.suspensionReason == .targetUnavailable
+        if isCompletedSegment, destination != nil {
+            wanderReplanningTask?.cancel()
+            wanderReplanningTask = nil
+            wanderReplanningID = nil
+        }
+        guard joystick.wanderEnabled, joystick.wanderRoute != nil, joystick.canApplyWanderTarget,
+              !joystick.requiresStop, wanderReplanningTask == nil else { return }
+        if destination == nil {
+            selectedWanderPlace = nil
+            wanderSearch.resetSelection()
+        }
+        joystick.clearWanderError()
+        let planningID = UUID()
+        wanderReplanningID = planningID
+        activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+            purpose: .replacement, origin: service.currentJoystickOrigin,
+            target: destination.map { WanderTarget(place: $0) })
+        wanderReplanningTask = Task { @MainActor in
+            defer {
+                if wanderReplanningID == planningID {
+                    wanderReplanningTask = nil
+                    wanderReplanningID = nil
+                }
+            }
+            joystick.markWanderNeedsReplan()
+            let readyToPlan: Bool
+            if isCompletedSegment {
+                readyToPlan = joystick.phase == .suspended && joystick.suspensionReason == .targetUnavailable
+            } else {
+                readyToPlan = await joystick.pauseForWanderReplan()
+            }
+            guard readyToPlan, !Task.isCancelled,
+                  wanderReplanningID == planningID, mode == .joystick,
+                  scenePhase == .active, let origin = service.currentJoystickOrigin else {
+                guard !Task.isCancelled, wanderReplanningID == planningID else { return }
+                guard service.movementConnectionAvailable else { return }
+                failWanderReplanning(planningID)
+                return
+            }
+            let target = destination.map { WanderTarget(place: $0) }
+                ?? joystick.selectWanderTarget(from: origin)
+            guard let target else {
+                if service.movementConnectionAvailable { failWanderReplanning(planningID) }
+                return
+            }
+            activeWanderPlanningCheckpoint = WanderPlanningCheckpoint(
+                purpose: .replacement, origin: origin, target: target)
+            do {
+                let planned = try await route.planWanderSegment(from: origin, to: target.coordinate)
+                guard !Task.isCancelled, wanderReplanningID == planningID,
+                      service.movementConnectionAvailable, mode == .joystick,
+                      let currentOrigin = service.currentJoystickOrigin,
+                      scenePhase == .active,
+                      JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) <= 1,
+                      JoystickGeodesy.distanceMeters(from: currentOrigin, to: planned.start) <= 1,
+                      (isCompletedSegment
+                        ? joystick.installNextWanderRouteAndResume(target: target, route: planned)
+                        : joystick.replaceWanderRouteAndResume(target: target, route: planned)) else {
+                    guard !Task.isCancelled, wanderReplanningID == planningID else { return }
+                    guard service.movementConnectionAvailable else { return }
+                    failWanderReplanning(planningID)
+                    return
+                }
+                joystick.clearWanderError()
+                activeWanderPlanningCheckpoint = nil
+                interruptedWanderPlanningCheckpoint = nil
+                wanderRetryDestination = nil
+                selectedWanderPlace = nil
+                wanderSearch.resetSelection()
+                cameraIntent = GoFlyCameraIntent(route: planned)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled, wanderReplanningID == planningID else { return }
+                guard service.movementConnectionAvailable else { return }
+                failWanderReplanning(planningID)
+            }
+        }
+    }
+
+    private func stopWander() {
+        wanderReplanningTask?.cancel()
+        wanderReplanningTask = nil
+        wanderReplanningID = nil
+        _ = joystick.setWanderEnabled(false)
     }
 
     private var activeMarkerBearing: Double? {
@@ -1406,6 +1909,8 @@ struct GoFlyMapView: View {
         Button {
             if mode == .route {
                 confirmRouteCandidate(candidate)
+            } else if isWanderMap {
+                confirmWanderDestination(candidate.place)
             } else {
                 performGo(candidate)
             }
@@ -1425,7 +1930,7 @@ struct GoFlyMapView: View {
     }
 
     private var goButtonTitle: String {
-        if mode == .route { return goFlyString("common.confirm") }
+        if mode == .route || isWanderMap { return goFlyString("common.confirm") }
         return goFlyString("map.go")
     }
 
@@ -1440,14 +1945,16 @@ struct GoFlyMapView: View {
     private func pinButton(_ candidate: TeleportCandidate) -> some View {
         Button {
             dismissKeyboard()
-            if mode == .route {
+            if isWanderMap {
+                if let place = activeCandidate?.place { confirmWanderDestination(place) }
+            } else if mode == .route {
                 activeSearch.select(candidate.place)
                 sheetDetent = .collapsed
             } else {
                 sheetDetent = .half
             }
         } label: {
-            GoFlyPlacePinIcon(kind: .candidate)
+            GoFlyPlacePinIcon(kind: isWanderMap ? .destination : .candidate)
                 .frame(width: 44, height: 44, alignment: .bottom)
                 .contentShape(Rectangle())
         }
@@ -1529,13 +2036,13 @@ struct GoFlyMapView: View {
                 embedded: true,
                 distanceFrom: service.positionMarker?.coordinate,
                 canGo: activeCandidate != nil ? (wanderSearch.canGo && joystick.canApplyWanderTarget) : joystick.canApplyWanderTarget,
+                primaryTitleKey: "common.confirm",
                 onGo: {
                     if let candidate = activeCandidate {
-                        performGo(candidate)
+                        confirmWanderDestination(candidate.place)
                     } else if let wanderTarget = joystick.wanderTarget, wanderTarget.place == place {
-                        _ = joystick.applyWanderTarget(place)
+                        confirmWanderDestination(place)
                     }
-                    selectedWanderPlace = nil
                 }
             )
         }
@@ -1559,6 +2066,21 @@ struct GoFlyMapView: View {
                 onAction: { network.recheck() },
                 onDismiss: { network.dismissNotice() },
                 identifier: "map.wifiError",
+                isFloating: true
+            )
+        } else if joystick.wanderError == .planningFailed, mode == .joystick {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString("wander.error.planningFailed"),
+                actionTitle: goFlyString("common.retry"),
+                onAction: {
+                    joystick.clearWanderError()
+                    if joystick.wanderEnabled && joystick.wanderNeedsTarget { planNextWanderSegment() }
+                    else if joystick.wanderEnabled { replanWander(to: wanderRetryDestination) }
+                    else { startRoadWander() }
+                },
+                onDismiss: { joystick.clearWanderError() },
+                identifier: "joystick.wanderPlanningError",
                 isFloating: true
             )
         } else if let error = service.error, !serviceNoticeDismissed {

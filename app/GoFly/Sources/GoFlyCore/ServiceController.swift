@@ -1503,7 +1503,15 @@ extension ServiceController {
                     ($0.intent.fixedPosition != nil && $0.unknownFailure == nil)
             }
     }
-    public var currentJoystickOrigin: GeoCoordinate? { currentRouteOrigin }
+    /// Execution admission accepts only a verified simulation coordinate or
+    /// a fresh real fix. Retained simulation history remains display-only.
+    public var currentJoystickOrigin: GeoCoordinate? {
+        if let marker = displayPositionMarker, marker.source == .simulation, marker.freshness == .fresh {
+            return marker.coordinate
+        }
+        guard let realLocation, now().timeIntervalSince(realLocation.observedAt) <= 15 else { return nil }
+        return realLocation.coordinate
+    }
     public var movementAdmissionRevision: UInt64 { routeAdmissionRevision }
     public var joystickEvents: AnyPublisher<JoystickCommandEvent, Never> { joystickSubject.eraseToAnyPublisher() }
     public var movementAcknowledgements: AnyPublisher<MovementAcknowledgement, Never> {

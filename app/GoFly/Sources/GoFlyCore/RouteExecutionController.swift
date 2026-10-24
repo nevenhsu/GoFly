@@ -69,6 +69,14 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     public var continuationControlEvents: AnyPublisher<MovementContinuationControlEvent, Never> {
         continuationControlSubject.eraseToAnyPublisher()
     }
+
+    /// Uses the same ordered road planner as route previews without opening a
+    /// second route execution owner or mutating the route draft.
+    public func planWanderSegment(from: GeoCoordinate, to: GeoCoordinate) async throws -> PlannedRoute {
+        let points = try await planner.plan(from: from, to: to)
+        try Task.checkCancellation()
+        return try PlannedRoute(points: points)
+    }
     public var movementAcknowledgements: AnyPublisher<MovementAcknowledgement, Never> {
         movementAcknowledgementSubject.eraseToAnyPublisher()
     }

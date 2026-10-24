@@ -335,6 +335,9 @@
 
 // Automatic wander
 "joystick.wander" = "Wander";
+"joystick.startWander" = "Start wandering";
+"joystick.stopWander" = "Stop wandering";
+"joystick.changePlace" = "Change place";
 "joystick.randomDestination" = "Random destination";
 "joystick.phase.suspended" = "Waiting to continue";
 "joystick.error.noCandidate" = "No new destination is available. Choose a place on the map or try again.";
@@ -665,3 +668,5 @@
 "status.pill.error" = "Error";
 "gallery.fieldFocused" = "Search places";
 "gallery.fieldNormal" = "Search favorite places";
+"wander.error.planningFailed" = "Unable to plan route";
+"wander.planning" = "Planning route";

@@ -4,6 +4,57 @@ import Testing
 
 @Suite @MainActor
 struct WanderControllerIntegrationTests {
+    @Test func planningCanStartWithoutAnOriginButMovementCannot() {
+        let controller = JoystickMovementController(commands: ServiceController(service: JoystickControlledDevice()))
+        #expect(controller.requiresOrigin)
+        #expect(controller.canStartWanderPlanning)
+        #expect(!controller.canSetWanderEnabled)
+        #expect(!controller.canBeginGesture)
+    }
+
+    @Test func manualTakeoverRequiresAReplacementRoadBeforeAutomaticMovementResumes() async throws {
+        let device = JoystickControlledDevice(), clock = RouteTestClock(), service = ServiceController(service: device)
+        service.observeRealLocation(location())
+        let origin = try #require(service.currentJoystickOrigin)
+        let firstDestination = GeoCoordinate(latitude: 25.001, longitude: 121)!
+        let firstPlace = place(firstDestination)
+        let firstRoute = try PlannedRoute(points: [origin, firstDestination])
+        let controller = JoystickMovementController(commands: service, clock: clock)
+        #expect(controller.installWanderRoute(target: WanderTarget(place: firstPlace), route: firstRoute))
+        #expect(controller.setWanderEnabled(true))
+        let owner = try #require(controller.intent)
+        await wait { clock.sleepingCount == 1 }; clock.advance(by: .milliseconds(500))
+        await wait { await device.waiting }
+        #expect(await device.claim()); await device.finish(.acknowledged)
+        await wait { clock.sleepingCount == 1 }
+
+        let gesture = UUID(), input = JoystickInput(bearingDegrees: 90, strength: 1)!
+        #expect(controller.beginGesture(id: gesture, input: input))
+        clock.advance(by: .milliseconds(500)); await wait { await device.waiting }
+        #expect(await device.claim()); await device.finish(.acknowledged)
+        await wait { clock.sleepingCount == 1 }
+        #expect(controller.endGesture(id: gesture))
+        #expect(controller.wanderNeedsReplan)
+        clock.advance(by: .milliseconds(500))
+        try await Task.sleep(for: .milliseconds(10))
+        #expect(!(await device.waiting))
+
+        #expect(await controller.pauseForWanderReplan())
+        #expect(controller.phase == .paused)
+        let newOrigin = try #require(service.currentJoystickOrigin)
+        let nextDestination = firstDestination
+        let nextPlace = firstPlace
+        let nextRoute = try PlannedRoute(points: [newOrigin, nextDestination])
+        #expect(controller.replaceWanderRouteAndResume(target: WanderTarget(place: nextPlace), route: nextRoute))
+        #expect(controller.intent == owner)
+        #expect(controller.wanderTarget?.place == nextPlace)
+        #expect(controller.wanderRoute == nextRoute)
+        #expect(controller.wanderProgressMeters == 0 && !controller.wanderNeedsReplan)
+        #expect(controller.phase == .moving)
+        #expect(controller.setWanderEnabled(false))
+        await wait { controller.phase == .neutral }
+    }
+
     @Test func realArrivalWithoutNextTargetPausesAuthorityAndGoThenRetryUsesTheSameLease() async throws {
         let device = JoystickControlledDevice(), clock = RouteTestClock(), samples = IntegrationWanderSamples([[0], []])
         let service = ServiceController(service: device)
@@ -24,13 +75,11 @@ struct WanderControllerIntegrationTests {
         #expect(service.movementAuthority.snapshot.health == .confirmedHealthy)
         #expect(service.confirmedSimulatedLocation == firstPoint)
         let nextPoint = GeoCoordinate(latitude: 25.00002, longitude: 121)!
-        #expect(controller.applyWanderTarget(place(nextPoint)))
-        #expect(controller.phase == .suspended && !controller.wanderNeedsTarget)
-        clock.advance(by: .seconds(30))
-        #expect(await device.coordinates.count == 1)
-        #expect(service.movementAuthority.snapshot.runState == .paused)
-        #expect(controller.retryWander())
+        let nextPlace = place(nextPoint)
+        let nextRoute = try PlannedRoute(points: [firstPoint, nextPoint])
+        #expect(controller.installNextWanderRouteAndResume(target: WanderTarget(place: nextPlace), route: nextRoute))
         #expect(controller.intent == operation && service.movementAuthority.snapshot.runState == .running)
+        #expect(controller.wanderRoute == nextRoute && !controller.wanderNeedsTarget)
         await wait { clock.sleepingCount == 1 }; clock.advance(by: .milliseconds(500))
         await wait { await device.waiting }
         #expect(await device.coordinates.last == nextPoint)
@@ -41,6 +90,41 @@ struct WanderControllerIntegrationTests {
         #expect(service.movementAuthority.snapshot.lease == nil)
         #expect(await device.preparations == 1)
         #expect(await device.clears == 0)
+    }
+
+    @Test func failedRouteResumeKeepsThePriorDestinationAndRoute() async throws {
+        let device = JoystickControlledDevice(), clock = RouteTestClock(), service = ServiceController(service: device)
+        service.observeRealLocation(location())
+        let origin = try #require(service.currentJoystickOrigin)
+        let oldDestination = GeoCoordinate(latitude: 25.001, longitude: 121)!
+        let oldPlace = place(oldDestination), oldRoute = try PlannedRoute(points: [origin, oldDestination])
+        let controller = JoystickMovementController(commands: service, clock: clock)
+        #expect(controller.installWanderRoute(target: WanderTarget(place: oldPlace), route: oldRoute))
+        #expect(controller.setWanderEnabled(true))
+        let operation = try #require(controller.intent)
+        await wait { clock.sleepingCount == 1 }; clock.advance(by: .milliseconds(500))
+        await wait { await device.waiting }
+        #expect(await device.claim()); await device.finish(.acknowledged)
+        await wait { clock.sleepingCount == 1 }
+        #expect(controller.pause())
+        await wait { controller.phase == .paused }
+
+        controller.recoveryProbeDidStart()
+        let replacement = GeoCoordinate(latitude: 25.002, longitude: 121)!
+        let replacementPlace = place(replacement)
+        let replacementRoute = try PlannedRoute(points: [try #require(service.currentJoystickOrigin), replacement])
+        #expect(!controller.replaceWanderRouteAndResume(target: WanderTarget(place: replacementPlace), route: replacementRoute))
+        #expect(controller.phase == .paused)
+        #expect(controller.wanderTarget?.place == oldPlace)
+        #expect(controller.wanderRoute == oldRoute)
+        #expect(controller.intent == operation)
+        controller.recoveryProbeDidFinish()
+        controller.releaseForInactiveScene()
+        #expect(!controller.replaceWanderRouteAndResume(target: WanderTarget(place: replacementPlace), route: replacementRoute))
+        #expect(controller.phase == .paused && controller.wanderTarget?.place == oldPlace && controller.wanderRoute == oldRoute)
+        controller.sceneDidBecomeActive()
+        #expect(controller.setWanderEnabled(false))
+        await wait { controller.phase == .neutral }
     }
 
     @Test(arguments: ["stop", "claimUnknown", "availableCancel", "failedPrepare"])
@@ -111,7 +195,13 @@ struct WanderControllerIntegrationTests {
         let confirmed = service.confirmedSimulatedLocation
         await device.finish(.notSent(.pairingRequired))
         await wait { controller.phase == .neutral && !service.nativeBusy }
-        #expect(controller.wanderEnabled && controller.wanderTarget == target && controller.canRetryWander)
+        #expect(controller.wanderEnabled && controller.wanderTarget == target)
+        if installed {
+            #expect(!controller.canRetryWander)
+            #expect(!controller.retryWander())
+            service.observeRealLocation(location())
+        }
+        #expect(controller.canRetryWander)
         #expect(controller.error == .device(.pairingRequired) && !controller.requiresStop)
         #expect(service.confirmedSimulatedLocation == confirmed)
         #expect(controller.retryWander())

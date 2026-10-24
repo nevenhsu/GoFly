@@ -7,6 +7,9 @@ struct GoFlyJoystickPanel: View {
     var cameraHeadingDegrees: Double
     var maximumHeight: CGFloat
     var onRandomDestination: () -> Void = { }
+    var onStartWander: () -> Void = { }
+    var canStartWander: Bool?
+    var onStopWander: () -> Void = { }
     var onSettings: () -> Void = { }
     @State private var contentHeight: CGFloat = 220
     @State private var showingSpeedSheet = false
@@ -15,15 +18,14 @@ struct GoFlyJoystickPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 wanderControls
-                Divider().padding(.top, 4)
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
                         .buttonStyle(GoFlyActionStyle())
                         .accessibilityIdentifier("joystick.settings")
                 } else {
-                    speedRow
                     GoFlyManualJoystickPad(controller: controller, cameraHeadingDegrees: cameraHeadingDegrees)
                         .frame(maxWidth: .infinity)
+                    wanderActions
                 }
             }
             .padding(.horizontal, 20)
@@ -47,11 +49,24 @@ struct GoFlyJoystickPanel: View {
         .accessibilityIdentifier("joystick.panel")
     }
 
-    private var speedRow: some View {
-        HStack(alignment: .center) {
-            Text(goFlyString("route.speed"))
-                .font(.body)
+    private var wanderControls: some View {
+        wanderRow
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("joystick.wanderControls")
+    }
+
+    private var wanderRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "shuffle")
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(GoFlyStyle.primary)
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(controller.wanderEnabled ? goFlyString("joystick.wanderActive") : goFlyString("joystick.wander"))
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
             GoFlySpeedChip(
                 speed: controller.speed.kilometersPerHour,
@@ -63,57 +78,23 @@ struct GoFlyJoystickPanel: View {
         .frame(minHeight: 44)
     }
 
-    private var wanderControls: some View {
-        wanderRow
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("joystick.wanderControls")
-    }
-
-    private var wanderRow: some View {
-        HStack(spacing: 12) {
-            if controller.wanderEnabled {
-                Button(action: onRandomDestination) {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!controller.canRandomizeWanderTarget)
-                .accessibilityLabel(goFlyString("joystick.randomDestination"))
-                .accessibilityIdentifier("joystick.randomDestination")
-            } else {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
-                    .frame(width: 28, height: 28)
-                    .accessibilityHidden(true)
+    @ViewBuilder
+    private var wanderActions: some View {
+        if controller.wanderEnabled {
+            HStack(spacing: 12) {
+                Button(action: onStopWander) { Text(goFlyString("joystick.stopWander")) }
+                    .buttonStyle(GoFlyActionStyle())
+                    .accessibilityIdentifier("joystick.stopWander")
+                Button(action: onRandomDestination) { Text(goFlyString("joystick.changePlace")) }
+                    .buttonStyle(GoFlyActionStyle(primary: true))
+                    .accessibilityIdentifier("joystick.randomDestination")
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(controller.wanderEnabled ? goFlyString("joystick.wanderActive") : goFlyString("joystick.wander"))
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
-                Text(controller.wanderEnabled ? (controller.wanderTarget?.place.title ?? "") : goFlyString("joystick.wanderDetail"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            Spacer(minLength: 8)
-            Toggle("", isOn: Binding(
-                get: { controller.wanderEnabled },
-                set: { _ = controller.setWanderEnabled($0) }
-            ))
-            .labelsHidden()
-            .fixedSize()
-            .tint(GoFlyStyle.success)
-            .disabled(!controller.canSetWanderEnabled)
-            .accessibilityLabel(goFlyString("joystick.wander"))
-            .accessibilityValue(controller.wanderEnabled ? "1" : "0")
-            .accessibilityIdentifier("joystick.wander")
+        } else {
+            Button(action: onStartWander) { Text(goFlyString("joystick.startWander")) }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .disabled(!(canStartWander ?? controller.canSetWanderEnabled))
+                .accessibilityIdentifier("joystick.wander")
         }
-        .frame(minHeight: 44)
     }
 
 }

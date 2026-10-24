@@ -349,6 +349,9 @@
 
 // Automatic wander
 "joystick.wander" = "漫步";
+"joystick.startWander" = "自動漫步";
+"joystick.stopWander" = "停止漫步";
+"joystick.changePlace" = "更換地點";
 "joystick.randomDestination" = "隨機目的地";
 "joystick.phase.suspended" = "等待繼續";
 "joystick.error.noCandidate" = "找不到新的目的地。請在地圖選點或重試。";
@@ -664,3 +667,5 @@
 "status.pill.error" = "錯誤";
 "gallery.fieldFocused" = "台北";
 "gallery.fieldNormal" = "搜尋最愛地點";
+"wander.error.planningFailed" = "無法規劃路線";
+"wander.planning" = "正在規劃路線";

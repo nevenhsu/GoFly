@@ -18,6 +18,9 @@ public final class JoystickMovementController: ObservableObject {
     @Published public private(set) var error: JoystickFailure?
     @Published public private(set) var wanderEnabled = false
     @Published public private(set) var wanderTarget: WanderTarget?
+    @Published public private(set) var wanderRoute: PlannedRoute?
+    @Published public private(set) var wanderProgressMeters: Double = 0
+    @Published public private(set) var wanderNeedsReplan = false
     @Published public private(set) var wanderNeedsTarget = false
     @Published public private(set) var wanderError: WanderSelectionFailure?
     @Published public private(set) var suspensionReason: WanderSuspensionReason?
@@ -56,6 +59,7 @@ public final class JoystickMovementController: ObservableObject {
     func recoveryProbeDidFinish() { recoveryProbePending = false; objectWillChange.send() }
     public var canSetSpeed: Bool { [.neutral, .preparing, .moving, .paused, .suspended, .interrupted].contains(phase) }
     private var wanderHistory: [GeoCoordinate] = []
+    private var wanderRouteRevision = UUID()
     private let wanderBearingSamples: @Sendable () -> [Double]
     private var nextSequence: UInt64 = 1
     private var sceneActive = true
@@ -141,6 +145,12 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         (wanderEnabled || (sceneActive && connectionAvailable && [.neutral, .preparing, .moving, .paused].contains(phase) && !requiresOrigin &&
             (phase != .neutral || commands.canBeginJoystick) && (phase != .paused || !recoveryProbePending)))
     }
+    /// Planner entry may use a bounded viewport origin even when no current
+    /// location is available; execution remains gated until origin ACK.
+    public var canStartWanderPlanning: Bool {
+        sceneActive && connectionAvailable && !recoveryProbePending && !requiresStop
+            && phase == .neutral && commands.canBeginJoystick
+    }
     @discardableResult public func setWanderEnabled(_ enabled: Bool) -> Bool {
                 guard enabled != wanderEnabled else { return true }
         if !enabled {
@@ -157,9 +167,14 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             return true
         }
         guard canSetWanderEnabled, let origin = commands.currentJoystickOrigin else { error = .originUnavailable; return false }
-        guard let selected = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+        let selected: WanderTarget
+        if wanderRoute != nil, let wanderTarget { selected = wanderTarget }
+        else {
+            guard let automatic = selectTarget(origin: origin) else { wanderError = .noCandidate; return false }
+            selected = automatic
+        }
         wanderEnabled = true
-        commitTarget(selected)
+        if wanderRoute == nil { commitTarget(selected) }
         if phase == .neutral {
             let started = startMovement()
             if started { requestContinuationIfEligible() }
@@ -184,6 +199,65 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         return true
     }
     public func clearWanderError() { wanderError = nil }
+    public func setWanderPlanningFailed() { wanderError = .planningFailed }
+    public func markWanderNeedsReplan() { if wanderEnabled, wanderRoute != nil { wanderNeedsReplan = true } }
+    public func selectWanderTarget(from origin: GeoCoordinate) -> WanderTarget? { selectTarget(origin: origin) }
+
+    /// Installs a fully validated road segment for the existing joystick
+    /// owner. The road entrance must be continuous with the current confirmed
+    /// origin; no synthetic connector is inserted.
+    @discardableResult public func installWanderRoute(target: WanderTarget, route: PlannedRoute) -> Bool {
+        guard !wanderEnabled, let origin = commands.currentJoystickOrigin,
+              JoystickGeodesy.distanceMeters(from: origin, to: route.start) <= 1 else { return false }
+        commitTarget(target)
+        wanderRouteRevision = UUID()
+        wanderRoute = route
+        wanderProgressMeters = 0
+        wanderNeedsReplan = false
+        return true
+    }
+
+    public func pauseForWanderReplan() async -> Bool {
+        guard wanderEnabled, hasAcknowledgedLease, intent != nil, !requiresStop else { return false }
+        if phase == .moving {
+            guard pause() else { return false }
+            await transition?.value
+        }
+        return phase == .paused && intent != nil && !requiresStop
+    }
+
+    @discardableResult public func replaceWanderRouteAndResume(target: WanderTarget, route: PlannedRoute) -> Bool {
+        guard sceneActive, wanderEnabled, phase == .paused, hasAcknowledgedLease, let intent,
+              let origin = commands.currentJoystickOrigin,
+              JoystickGeodesy.distanceMeters(from: origin, to: route.start) <= 1 else { return false }
+        return resumeWanderStream(intent) { [weak self] in
+            guard let self else { return }
+            self.commitTarget(target)
+            self.wanderRouteRevision = UUID()
+            self.wanderRoute = route
+            self.wanderProgressMeters = 0
+            self.wanderNeedsTarget = false
+            self.wanderNeedsReplan = false
+        }
+    }
+
+    /// Replaces a completed segment while retaining its paused movement lease.
+    /// The origin must still be the last acknowledged endpoint.
+    @discardableResult public func installNextWanderRouteAndResume(target: WanderTarget, route: PlannedRoute) -> Bool {
+        guard sceneActive, wanderEnabled, phase == .suspended, suspensionReason == .targetUnavailable,
+              hasAcknowledgedLease, let intent,
+              let origin = commands.currentJoystickOrigin,
+              JoystickGeodesy.distanceMeters(from: origin, to: route.start) <= 1 else { return false }
+        return resumeWanderStream(intent) { [weak self] in
+            guard let self else { return }
+            self.commitTarget(target)
+            self.wanderRouteRevision = UUID()
+            self.wanderRoute = route
+            self.wanderProgressMeters = 0
+            self.wanderNeedsTarget = false
+            self.wanderNeedsReplan = false
+        }
+    }
 
     public var canRetryWander: Bool {
         sceneActive && connectionAvailable && !recoveryProbePending && wanderEnabled && !requiresOrigin && (phase == .neutral || (phase == .suspended && suspensionReason == .targetUnavailable))
@@ -203,10 +277,12 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         } else { selected = nil }
         return resumeWanderStream(intent, selected: selected)
     }
-    private func resumeWanderStream(_ operation: JoystickMovementIntent, selected: WanderTarget? = nil) -> Bool {
-        guard connectionAvailable, !recoveryProbePending else { return false }
+    private func resumeWanderStream(_ operation: JoystickMovementIntent, selected: WanderTarget? = nil,
+                                    beforeStart: (@MainActor () -> Void)? = nil) -> Bool {
+        guard sceneActive, connectionAvailable, !recoveryProbePending else { return false }
         guard commands.resumeJoystickStream(executionID: operation.id, lease: operation.lease) else { error = .device(.serviceUnavailable); return false }
         if let selected { commitTarget(selected) }
+        beforeStart?()
         generation &+= 1
         let token = generation
         phase = .moving; suspensionReason = nil; input = nil; activeGestureID = nil; error = nil
@@ -245,7 +321,9 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     private func clearWanderState() {
         wanderEnabled = false; wanderTarget = nil; wanderNeedsTarget = false; wanderError = nil
-        wanderHistory = []; suspensionReason = nil
+        wanderHistory = []; suspensionReason = nil; wanderRoute = nil; wanderProgressMeters = 0
+        wanderNeedsReplan = false
+        wanderRouteRevision = UUID()
     }
 
     @discardableResult public func updateGesture(id: UUID, input: JoystickInput) -> Bool {
@@ -274,6 +352,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         if wanderEnabled {
             _ = commands.reviseJoystickInput(executionID: intent.id, lease: intent.lease)
             input = nil; activeGestureID = nil
+            if wanderRoute != nil, wanderTarget != nil { wanderNeedsReplan = true }
             if wanderNeedsTarget { suspendForUnavailableTarget() }
         } else { settle(intent, disposition: .endGesture) }
         return true
@@ -436,15 +515,27 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             do { try await clock.sleep(for: Self.cadence) } catch { return }
             guard generation == token, phase == .moving, !Task.isCancelled,
                   let revision = commands.joystickInputRevision(executionID: operation.id, lease: operation.lease) else { return }
+            if wanderNeedsReplan, input == nil { return }
             guard nextSequence < UInt64.max else {
                 continuationDidBecomeUnavailable()
                 return
             }
             let recipe: JoystickStepRecipe
+            var capturedRouteRevision: UUID? = nil
+            var routeStepDistance: Double? = nil
             if let input, let displacement = input.displacement(speed: speed) { recipe = .manual(displacement) }
+            else if wanderEnabled, !wanderNeedsTarget, let route = wanderRoute, let target = wanderTarget,
+                    let distance = nextRouteStepDistance(route: route, speed: speed),
+                    let coordinate = route.coordinate(at: distance),
+                    let step = JoystickTargetStep(targetID: target.id, coordinate: coordinate,
+                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) {
+                recipe = .target(step); capturedRouteRevision = wanderRouteRevision; routeStepDistance = distance
+            }
             else if wanderEnabled, !wanderNeedsTarget, let target = wanderTarget,
                     let step = JoystickTargetStep(targetID: target.id, coordinate: target.coordinate,
-                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) { recipe = .target(step) }
+                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) {
+                recipe = .target(step); capturedRouteRevision = nil; routeStepDistance = nil
+            }
             else { return }
             let capturedTargetID = wanderTarget?.id, capturedNeedsTarget = wanderNeedsTarget
             let outcome = await commands.sendJoystickStep(executionID: operation.id, lease: operation.lease,
@@ -456,11 +547,19 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 lastAcknowledgedCoordinate = receipt.actualCoordinate
                 if let bearing = receipt.actualBearingDegrees { lastAcknowledgedBearingDegrees = bearing }
                 hasAcknowledgedLease = true
+                if let capturedRouteRevision, capturedRouteRevision == wanderRouteRevision,
+                   let routeStepDistance, receipt.arrived {
+                    wanderProgressMeters = max(wanderProgressMeters, routeStepDistance)
+                    if let route = wanderRoute, wanderProgressMeters >= route.totalDistanceMeters - 0.5 {
+                        wanderNeedsTarget = true
+                        if input == nil { suspendForUnavailableTarget() }
+                    }
+                }
                 if wanderEnabled, !capturedNeedsTarget, let target = wanderTarget, target.id == capturedTargetID {
                     let arrived: Bool
                     switch recipe {
                     case .manual: arrived = JoystickGeodesy.distanceMeters(from: receipt.actualCoordinate, to: target.coordinate) <= 1
-                    case .target: arrived = receipt.targetID == target.id && receipt.arrived
+                    case .target: arrived = capturedRouteRevision == nil && receipt.targetID == target.id && receipt.arrived
                     case .fixedPosition: arrived = false
                     }
                     if arrived { advanceTarget(from: receipt.actualCoordinate) }
@@ -490,6 +589,12 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 markUnknown(failure); return
             }
         }
+    }
+
+    private func nextRouteStepDistance(route: PlannedRoute, speed: RouteSpeed) -> Double? {
+        guard route.totalDistanceMeters.isFinite, route.totalDistanceMeters > 0,
+              wanderProgressMeters.isFinite, wanderProgressMeters >= 0 else { return nil }
+        return min(route.totalDistanceMeters, wanderProgressMeters + speed.metersPerSecond * 0.5)
     }
 
     private func markUnknown(_ failure: DeviceServiceFailure) {

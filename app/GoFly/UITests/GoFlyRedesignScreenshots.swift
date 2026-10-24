@@ -166,7 +166,7 @@ final class GoFlyRedesignScreenshots: XCTestCase {
         wait(app.buttons["route.start"])
         snapshot(app, "step-4-imported-\(sample)")
         app.selectGoFlyMode("joystick")
-        wait(app.switches["joystick.wander"])
+        wait(app.buttons["joystick.wander"])
         snapshot(app, "step-5-joystick-origin-\(sample)")
         app.buttons["map.settings"].tap()
         wait(app.buttons["settings.language"])

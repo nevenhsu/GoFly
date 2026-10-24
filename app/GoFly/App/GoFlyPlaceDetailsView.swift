@@ -10,6 +10,7 @@ struct GoFlyPlaceDetailsView: View {
     /// Current simulated position, used only to show the Figma distance line.
     var distanceFrom: GeoCoordinate?
     var canGo = false
+    var primaryTitleKey = "map.go"
     var onGo: (() -> Void)? = nil
     var onRouteStart: (() -> Void)? = nil
     var onRouteEnd: (() -> Void)? = nil
@@ -94,7 +95,7 @@ struct GoFlyPlaceDetailsView: View {
         HStack(spacing: 8) {
             if let onGo {
                 Button(action: onGo) {
-                    Text(goFlyString("map.go"))
+                    Text(goFlyString(primaryTitleKey))
                         .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, 16)
                         .frame(height: 40)
