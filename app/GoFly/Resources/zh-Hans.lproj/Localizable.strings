@@ -162,10 +162,10 @@
 "route.progress" = "路线进度";
 "route.useCurrentLocation" = "使用当前位置";
 "route.picker.cancel" = "取消";
-"route.cancelConfirmation.title" = "取消这次路线？";
-"route.cancelConfirmation.message" = "确认后将结束本次路线，回到编辑模式。最后模拟位置与路线草稿会保留。";
-"route.cancelConfirmation.return" = "返回";
-"route.cancelConfirmation.confirm" = "确认取消";
+"route.cancelConfirmation.title" = "结束这次路线？";
+"route.cancelConfirmation.message" = "确认后将停止模拟路线并保留当前位置，\n回到路线规划模式。";
+"route.cancelConfirmation.return" = "取消";
+"route.cancelConfirmation.confirm" = "结束路线";
 "route.unknown.message" = "设备响应尚未确认。请先到设置停止服务，再开始其他移动。";
 "route.completed" = "路线完成";
 "route.pauseHint" = "保留路线与进度并暂停发送位置。";

@@ -1,0 +1,82 @@
+import SwiftUI
+
+/// Figma D6 bottom controls: position label + percent, 6 pt progress, the 36 pt
+/// control row (round trip, direction, speed) and 結束 / 暫停, 20 pt apart.
+struct GoFlyRouteRunningControls: View {
+    let title: String
+    let fraction: Double
+    let isRoundTrip: Bool
+    let isReversed: Bool
+    let speed: Int
+    var canToggleRoundTrip = true
+    var canToggleDirection = true
+    var canChangeSpeed = true
+    var isPaused = false
+    var canPlayback = true
+    var canEnd = true
+    var onToggleRoundTrip: () -> Void = { }
+    var onToggleDirection: () -> Void = { }
+    var onSpeedTap: () -> Void = { }
+    var onPlayback: () -> Void = { }
+    var onEnd: () -> Void = { }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(.footnote)
+                        .foregroundStyle(GoFlyStyle.secondary)
+                    Spacer(minLength: 8)
+                    Text(min(max(fraction, 0), 1), format: .percent.precision(.fractionLength(0)))
+                        .font(.footnote.monospacedDigit())
+                        .accessibilityIdentifier("route.position.value")
+                }
+                ProgressView(value: min(max(fraction, 0), 1), total: 1)
+                    .progressViewStyle(GoFlyProgressStyle())
+                    .accessibilityLabel(title)
+                    .accessibilityIdentifier("route.progress")
+                if isRoundTrip {
+                    HStack {
+                        Text(goFlyString("route.axis.origin")).font(.caption2).foregroundStyle(GoFlyStyle.secondary)
+                        Spacer()
+                        Text(goFlyString("route.axis.destination")).font(.caption2).foregroundStyle(GoFlyStyle.secondary)
+                    }
+                }
+            }
+
+            GoFlyRouteControlRow(
+                isRoundTrip: isRoundTrip, isReversed: isReversed, speed: speed,
+                canToggleRoundTrip: canToggleRoundTrip, canToggleDirection: canToggleDirection,
+                canChangeSpeed: canChangeSpeed,
+                onToggleRoundTrip: onToggleRoundTrip, onToggleDirection: onToggleDirection, onSpeedTap: onSpeedTap
+            )
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { endButton.frame(width: 120); playbackButton }
+                VStack(spacing: 12) { endButton; playbackButton }
+            }
+        }
+    }
+
+    private var endButton: some View {
+        Button(action: onEnd) {
+            Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
+                .lineLimit(1)
+        }
+        .buttonStyle(GoFlyActionStyle(prominent: true))
+        .disabled(!canEnd)
+        .accessibilityIdentifier("route.cancel")
+    }
+
+    private var playbackButton: some View {
+        Button(action: onPlayback) {
+            Label(goFlyString(isPaused ? "route.resume" : "route.pause"),
+                  systemImage: isPaused ? GoFlySymbols.play : GoFlySymbols.pause)
+                .lineLimit(1)
+        }
+        .buttonStyle(GoFlyActionStyle(primary: true))
+        .disabled(!canPlayback)
+        .accessibilityIdentifier(isPaused ? "route.resume" : "route.pause")
+    }
+}

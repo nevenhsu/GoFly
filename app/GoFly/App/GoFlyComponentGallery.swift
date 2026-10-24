@@ -8,6 +8,8 @@ import SwiftUI
 /// a device build or a release build. Used for screenshots and UI checks.
 struct GoFlyComponentGallery: View {
     @State private var snackbar: GoFlySnackbarMessage?
+    @State private var showingEndDialog = false
+    @State private var endResult = "idle"
     @State private var detent: GoFlySheetDetent = .half
     @State private var mode: SessionMapMode = .teleport
     @StateObject private var joystick = JoystickMovementController(commands: GalleryJoystickCommands())
@@ -21,12 +23,21 @@ struct GoFlyComponentGallery: View {
                 fieldSection
                 bottomBarSection
                 executionSection
+                routeRunningSection
                 joystickSection
                 sheetSection
             }
             .padding(16)
         }
         .background(GoFlyStyle.canvas)
+        .overlay {
+            if showingEndDialog {
+                GoFlyEndRouteDialog(
+                    onCancel: { endResult = "cancelled"; showingEndDialog = false },
+                    onConfirm: { endResult = "ended"; showingEndDialog = false }
+                )
+            }
+        }
         .goFlySnackbar($snackbar)
         .accessibilityIdentifier("gallery")
     }
@@ -146,6 +157,24 @@ struct GoFlyComponentGallery: View {
                                      identifier: "gallery.execution.roundTrip")
             }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private var routeRunningSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("RouteRunning")
+            GoFlyRouteRunningControls(
+                title: goFlyString("route.position"), fraction: 0.26,
+                isRoundTrip: false, isReversed: false, speed: 25,
+                onEnd: { showingEndDialog = true })
+                .padding(.horizontal, 20)
+                .padding(.vertical, 22)
+                .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("gallery.routeRunning")
+            Text(endResult)
+                .font(.footnote)
+                .accessibilityIdentifier("gallery.endResult")
         }
     }
 

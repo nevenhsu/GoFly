@@ -209,6 +209,7 @@ struct GoFlyMapView: View {
     @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
     @State private var isMapPicking = false
+    @State private var confirmingEndRoute = false
     @State private var settingJoystickOrigin = false
     @State private var joystickOriginIntentID: UUID?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -478,12 +479,16 @@ struct GoFlyMapView: View {
             mapCanvas(viewport: viewport, size: geometry.size)
             mapPins(viewport: viewport)
             if isExecutionMode {
-                GoFlyExecutionHeader(
-                    title: executionTitle,
-                    detail: executionDetail,
-                    symbol: executionSymbol,
-                    onTrailingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
-                )
+                VStack(alignment: .leading, spacing: 10) {
+                    GoFlyExecutionHeader(
+                        title: executionTitle,
+                        detail: executionDetail,
+                        symbol: executionSymbol,
+                        onTrailingAction: joystick.wanderEnabled && joystick.canRandomizeWanderTarget ? { _ = joystick.randomizeWanderTarget() } : nil
+                    )
+                    GoFlyStatusPill(text: pillText, tone: pillTone, identifier: "map.statusPill")
+                        .accessibilityValue(goFlyString(movement.status.textKey))
+                }
                     .padding(.horizontal, 16).padding(.top, 8)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
             } else { topBar }
@@ -494,7 +499,19 @@ struct GoFlyMapView: View {
                 .zIndex(50)
             if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
             bottomChrome(in: geometry)
+            if confirmingEndRoute && route.canCancel {
+                GoFlyEndRouteDialog(
+                    onCancel: { confirmingEndRoute = false },
+                    onConfirm: {
+                        confirmingEndRoute = false
+                        _ = route.cancel()
+                    }
+                )
+                .zIndex(100)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: confirmingEndRoute)
+        .onChange(of: route.canCancel) { _, canCancel in if !canCancel { confirmingEndRoute = false } }
         .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
         .onChange(of: service.error) { _, newError in
             if newError != nil { serviceNoticeDismissed = false }
@@ -818,6 +835,7 @@ struct GoFlyMapView: View {
                     GoFlyRoutePanel(
                         controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                         onEditNode: { _ = route.selectNode(id: $0) },
+                        onRequestEnd: { confirmingEndRoute = true },
                         onNodeRemoved: {
                             snackbar = GoFlySnackbarMessage(
                                 text: goFlyString("route.removed"),
@@ -1279,9 +1297,12 @@ struct GoFlyMapView: View {
         }
     }
 
-    private var pillText: String { goFlyString(movement.status.textKey) }
+    /// D6.a: while the end-route dialog is open the pill already reads 停止.
+    private var displayedPillStatus: GoFlySessionStatus { confirmingEndRoute ? .stopped : movement.status }
 
-    private var pillTone: GoFlyStatusTone { movement.status.tone }
+    private var pillText: String { goFlyString(displayedPillStatus.textKey) }
+
+    private var pillTone: GoFlyStatusTone { displayedPillStatus.tone }
 
     private var hasFreshRealGPS: Bool {
         service.positionMarker?.source == .gps && service.positionMarker?.freshness == .fresh

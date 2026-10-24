@@ -162,10 +162,10 @@
 "route.progress" = "Route progress";
 "route.useCurrentLocation" = "Use current location";
 "route.picker.cancel" = "Cancel";
-"route.cancelConfirmation.title" = "Cancel this route?";
-"route.cancelConfirmation.message" = "Confirmation ends this route and returns to editing. Your last simulated position and route draft will be kept.";
-"route.cancelConfirmation.return" = "Return";
-"route.cancelConfirmation.confirm" = "Confirm cancellation";
+"route.cancelConfirmation.title" = "End this route?";
+"route.cancelConfirmation.message" = "Confirming stops the simulated route, keeps your current position and returns to route planning.";
+"route.cancelConfirmation.return" = "Cancel";
+"route.cancelConfirmation.confirm" = "End route";
 "route.unknown.message" = "The device response is unknown. Stop the service in Settings before starting another move.";
 "route.completed" = "Route completed";
 "route.pauseHint" = "Pause sending locations and keep this route and progress.";

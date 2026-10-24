@@ -29,6 +29,9 @@ struct GoFlySpeedChip: View {
     var action: () -> Void
     var isEnabled: Bool = true
     var identifier: String = "route.speedChip"
+    /// Figma D6 uses a 36 pt chip with a trailing chevron; the joystick row keeps the compact 34 pt chip.
+    var height: CGFloat = 34
+    var showsChevron = false
 
     var body: some View {
         Button(action: action) {
@@ -38,8 +41,14 @@ struct GoFlySpeedChip: View {
                     .font(.footnote.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.7))
+                        .accessibilityHidden(true)
+                }
             }
-            .frame(width: 68, height: 34)
+            .frame(width: 68, height: height)
             .background(GoFlyStyle.surface, in: Capsule())
             .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
             .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
@@ -71,14 +80,10 @@ struct GoFlyRouteControlRow: View {
                 Image(systemName: isRoundTrip ? "repeat" : "repeat.slash")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(isRoundTrip ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-                    .frame(width: 44, height: 34)
-                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
-                    }
-                    .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: 36, height: 36)
+                    .background(GoFlyStyle.surface, in: Circle())
+                    .overlay { Circle().strokeBorder(Color(white: 0.78), lineWidth: 0.5) }
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(!canToggleRoundTrip)
@@ -88,14 +93,10 @@ struct GoFlyRouteControlRow: View {
             // Direction button: vertical double arrows (active only when round trip enabled)
             Button(action: onToggleDirection) {
                 GoFlyVerticalArrowsIcon(isReversed: isRoundTrip && isReversed, isEnabled: isRoundTrip && canToggleDirection)
-                    .frame(width: 44, height: 34)
-                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
-                    }
-                    .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: 36, height: 36)
+                    .background(GoFlyStyle.surface, in: Circle())
+                    .overlay { Circle().strokeBorder(Color(white: 0.78), lineWidth: 0.5) }
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .disabled(!isRoundTrip || !canToggleDirection)
@@ -105,7 +106,7 @@ struct GoFlyRouteControlRow: View {
             Spacer(minLength: 0)
 
             // Speed chip: pure number, 68 pt width
-            GoFlySpeedChip(speed: speed, action: onSpeedTap, isEnabled: canChangeSpeed)
+            GoFlySpeedChip(speed: speed, action: onSpeedTap, isEnabled: canChangeSpeed, height: 36, showsChevron: true)
         }
     }
 }

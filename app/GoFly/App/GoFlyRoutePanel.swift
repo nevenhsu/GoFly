@@ -6,6 +6,8 @@ struct GoFlyRoutePanel: View {
     @ObservedObject var controller: RouteExecutionController
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
+    /// 結束 asks the owner to show the D6.a confirmation over the whole screen.
+    var onRequestEnd: () -> Void = { }
     /// Called after a row was cleared or deleted, so the owner can offer the D9 undo snackbar.
     var onNodeRemoved: () -> Void = { }
     var onSettings: () -> Void = { }
@@ -21,7 +23,6 @@ struct GoFlyRoutePanel: View {
     @State private var showingAllPoints = false
     @State private var showingFavoriteRoutes = false
     @State private var showingSaveFavorite = false
-    @State private var confirmingCancellation = false
     @State private var visibleScrollFrame: CGRect = .zero
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
 
@@ -79,13 +80,6 @@ struct GoFlyRoutePanel: View {
                 showingFavoriteRoutes = false
                 showingSaveFavorite = false
             }
-        }
-        .confirmationDialog(goFlyString("route.cancelConfirmation.title"),
-                            isPresented: $confirmingCancellation, titleVisibility: .visible) {
-            Button(goFlyString("route.cancelConfirmation.confirm"), role: .destructive) { _ = controller.cancel() }
-            Button(goFlyString("route.cancelConfirmation.return"), role: .cancel) { }
-        } message: {
-            Text(goFlyString("route.cancelConfirmation.message"))
         }
     }
 
@@ -199,6 +193,7 @@ struct GoFlyRoutePanel: View {
                         .foregroundStyle(GoFlyStyle.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 16)
             } else if controller.phase == .paused || controller.phase == .interrupted {
                 GoFlyResumePanel(
                     title: goFlyString("background.routePaused"),
@@ -212,65 +207,39 @@ struct GoFlyRoutePanel: View {
                     settingsButton
                     cancelButton
                 }
+                .padding(.bottom, 16)
             } else {
-                VStack(spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"))
-                            .font(.subheadline)
-                            .foregroundStyle(GoFlyStyle.secondary)
-                        Spacer(minLength: 8)
-                        Text(controller.progress?.fraction ?? 0, format: .percent.precision(.fractionLength(0)))
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .accessibilityIdentifier("route.position.value")
-                    }
-                    ProgressView(value: min(max(controller.progress?.fraction ?? 0, 0), 1), total: 1)
-                        .progressViewStyle(GoFlyProgressStyle())
-                        .accessibilityLabel(goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"))
-                        .accessibilityIdentifier("route.progress")
-
-                    if controller.roundTripEnabled {
-                        HStack {
-                            Text(goFlyString("route.axis.origin"))
-                                .font(.caption2)
-                                .foregroundStyle(GoFlyStyle.secondary)
-                            Spacer()
-                            Text(goFlyString("route.axis.destination"))
-                                .font(.caption2)
-                                .foregroundStyle(GoFlyStyle.secondary)
-                        }
-                    }
-                }
-
-                GoFlyRouteControlRow(
+                GoFlyRouteRunningControls(
+                    title: goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"),
+                    fraction: controller.progress?.fraction ?? 0,
                     isRoundTrip: controller.roundTripEnabled,
                     isReversed: controller.heading == .reverse,
                     speed: controller.draft.speed.kilometersPerHour,
                     canToggleRoundTrip: controller.canSetRoundTrip,
                     canToggleDirection: controller.canToggleHeading,
                     canChangeSpeed: controller.canEdit,
+                    isPaused: controller.phase == .paused,
+                    canPlayback: controller.phase == .paused ? controller.canResume : controller.canPause,
+                    canEnd: controller.canCancel,
                     onToggleRoundTrip: { _ = controller.setRoundTripEnabled(!controller.roundTripEnabled) },
                     onToggleDirection: { _ = controller.toggleHeading() },
-                    onSpeedTap: { showingDetails = true }
+                    onSpeedTap: { showingDetails = true },
+                    onPlayback: {
+                        if controller.phase == .paused { _ = controller.resume() } else { _ = controller.pause() }
+                    },
+                    onEnd: onRequestEnd
                 )
-                .padding(.bottom, 8)
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        cancelButton
-                        playbackButton
-                    }
-                    VStack(spacing: 12) {
-                        cancelButton
-                        playbackButton
-                    }
-                }
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 16)
+        // Figma D6: the label row starts 22 pt below the panel top; the safe area supplies the bottom 34 pt.
+        .padding(.top, 22)
         .frame(maxWidth: .infinity)
         .background(GoFlyStyle.cardSurface)
+        .overlay(alignment: .top) {
+            Capsule().fill(GoFlyStyle.border).frame(width: 36, height: 5).padding(.top, 6)
+                .accessibilityHidden(true)
+        }
         .accessibilityIdentifier("route.panel.content")
     }
 
@@ -423,7 +392,7 @@ struct GoFlyRoutePanel: View {
     }
 
     private var cancelButton: some View {
-        Button { confirmingCancellation = true } label: {
+        Button(action: onRequestEnd) {
             Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
         }
         .buttonStyle(GoFlyActionStyle())
@@ -439,15 +408,6 @@ struct GoFlyRoutePanel: View {
     }
 
 
-    private var playbackButton: some View {
-        Button(goFlyString(controller.phase == .paused ? "route.resume" : "route.pause")) {
-            if controller.phase == .paused { _ = controller.resume() }
-            else { _ = controller.pause() }
-        }
-        .buttonStyle(GoFlyActionStyle(primary: true))
-        .disabled(controller.phase == .paused ? !controller.canResume : !controller.canPause)
-        .accessibilityIdentifier(controller.phase == .paused ? "route.resume" : "route.pause")
-    }
 
 }
 

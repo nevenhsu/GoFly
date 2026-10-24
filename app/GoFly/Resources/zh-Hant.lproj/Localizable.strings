@@ -176,10 +176,10 @@
 "route.progress" = "路線進度";
 "route.useCurrentLocation" = "使用目前位置";
 "route.picker.cancel" = "取消";
-"route.cancelConfirmation.title" = "取消這次路線？";
-"route.cancelConfirmation.message" = "確認後將結束本次路線，回到編輯模式。最後模擬位置與路線草稿會保留。";
-"route.cancelConfirmation.return" = "返回";
-"route.cancelConfirmation.confirm" = "確認取消";
+"route.cancelConfirmation.title" = "結束這次路線？";
+"route.cancelConfirmation.message" = "確認後將停止模擬路線並保留目前位置，\n回到路線規劃模式。";
+"route.cancelConfirmation.return" = "取消";
+"route.cancelConfirmation.confirm" = "結束路線";
 "route.unknown.message" = "裝置回應尚未確認。請先到設定停止服務，再開始其他移動。";
 "route.completed" = "路線完成";
 "route.pauseHint" = "保留路線與進度並暫停送點。";

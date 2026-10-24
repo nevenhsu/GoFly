@@ -132,13 +132,15 @@ struct GoFlyActionStyle: ButtonStyle {
     var compactAtAccessibilitySizes = false
     var destructive = false
     var small = false
+    /// A secondary button at the 56 pt primary height (Figma D6 結束).
+    var prominent = false
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var height: CGFloat {
         small ? GoFlyStyle.smallButtonHeight
-            : (primary || destructive ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight)
+            : (primary || destructive || prominent ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight)
     }
 
     func makeBody(configuration: Configuration) -> some View {
@@ -197,6 +199,8 @@ extension GoFlyStyle {
     static let tabSeparator = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
     static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
     static let startSecondarySurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
+    static let dialogMessage = adaptive(light: (0.420, 0.420, 0.451), dark: (0.820, 0.820, 0.839))
+    static let dialogCancelSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
     static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
 }
 
