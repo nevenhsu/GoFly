@@ -494,7 +494,6 @@
 "gallery.dangerTitle" = "设备服务无法连接";
 
 "map.searchHint" = "搜索地点、地址或经纬度。";
-"map.north" = "地图转回正北";
 "placeDetails.copied" = "已复制坐标";
 
 "search.recent" = "最近搜索";
@@ -510,7 +509,6 @@
 
 "status.repairGuidance" = "持续失败请到“设置 › VPN 通道”修复连接。";
 
-"execution.followHeading" = "跟随方向";
 
 "teleport.completed" = "已移至 %@";
 

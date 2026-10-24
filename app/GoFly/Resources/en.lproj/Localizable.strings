@@ -494,7 +494,6 @@
 "gallery.dangerTitle" = "Device service unavailable";
 
 "map.searchHint" = "Search places, addresses or coordinates.";
-"map.north" = "Reset map to north";
 "placeDetails.copied" = "Coordinates copied";
 
 "search.recent" = "Recent searches";
@@ -510,7 +509,6 @@
 
 "status.repairGuidance" = "If this continues, open Settings › VPN Tunnel to repair the connection.";
 
-"execution.followHeading" = "Follow direction";
 
 "teleport.completed" = "Moved to %@";
 

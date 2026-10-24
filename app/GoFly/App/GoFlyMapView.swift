@@ -193,7 +193,6 @@ struct GoFlyMapView: View {
     @State private var searchFavorites = false
     @State private var recentPlaces: [MapPlace] = []
     @State private var snackbar: GoFlySnackbarMessage?
-    @State private var followsHeading = false
     @State private var bottomBarHeight: CGFloat = 83
     @State private var candidateHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
@@ -308,7 +307,7 @@ struct GoFlyMapView: View {
                       mode == .teleport || route.plannedRoute == nil || explicitlyRequested,
                       (route.picker == nil ? activeCandidate == nil : activeSearch.candidate == nil) || explicitlyRequested,
                       let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else { return }
-                cameraIntent = GoFlyCameraIntent(coordinate: coordinate)
+                cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: explicitlyRequested ? 0 : nil)
             }
             .onChange(of: route.picker?.id) { _, id in
                 if id != nil {
@@ -488,7 +487,7 @@ struct GoFlyMapView: View {
                 .padding(.top, (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
                 .frame(maxWidth: .infinity)
                 .zIndex(50)
-            mapControls(bottomInset: geometry.safeAreaInsets.bottom)
+            if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
             bottomChrome(in: geometry)
         }
         .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
@@ -506,11 +505,6 @@ struct GoFlyMapView: View {
         }
         .onChange(of: continuation.noticeKey) { _, newKey in
             if newKey != nil { continuationNoticeDismissed = false }
-        }
-        .onChange(of: service.positionMarker?.coordinate) { _, coordinate in
-            if followsHeading, isExecutionMode, let coordinate {
-                cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: executionCameraBearing)
-            }
         }
     }
 
@@ -1141,11 +1135,6 @@ struct GoFlyMapView: View {
         return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
     }
 
-    private var executionCameraBearing: Double? {
-        if joystick.wanderEnabled { return joystickMarkerBearing }
-        return routeMarkerBearing
-    }
-
     private var joystickMarkerBearing: Double? {
         guard let marker = service.positionMarker, marker.source == .simulation,
               marker.coordinate == joystick.lastAcknowledgedCoordinate else { return nil }
@@ -1243,42 +1232,24 @@ struct GoFlyMapView: View {
         activeSearch.resetSelection()
     }
 
+    /// The only map-side control: Figma `Recenter`. It also resets the map to north,
+    /// so there is no separate compass or follow-heading button.
     private func mapControls(bottomInset: CGFloat) -> some View {
-        VStack(spacing: 8) {
-            if isExecutionMode {
-                Button {
-                    followsHeading.toggle()
-                    if followsHeading, let coordinate = service.positionMarker?.coordinate {
-                        cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: executionCameraBearing)
-                    }
-                } label: {
-                    Image(systemName: GoFlySymbols.followHeading)
-                }
-                .buttonStyle(GoFlyIconStyle(floating: true))
-                .accessibilityLabel(goFlyString("execution.followHeading"))
-                .accessibilityValue(followsHeading ? "1" : "0")
-                .accessibilityIdentifier("map.followHeading")
-            }
-            if let heading = projection?.cameraHeadingDegrees,
-               abs(heading.truncatingRemainder(dividingBy: 360)) > 1 {
-                Button { recenter(resetHeading: true) } label: {
-                    Image(systemName: GoFlySymbols.compass)
-                }
-                .buttonStyle(GoFlyIconStyle(floating: true))
-                .accessibilityLabel(goFlyString("map.north"))
-                .accessibilityIdentifier("map.north")
-            }
-            Button { recenter() } label: {
-                GoFlyRecenterIcon(size: 22)
-            }
-            .buttonStyle(GoFlyIconStyle(floating: true))
-            .accessibilityLabel(goFlyString("map.recenter"))
-            .accessibilityHint(goFlyString("map.recenterHint"))
-            .accessibilityIdentifier("map.recenter")
+        Button { recenter() } label: {
+            GoFlyRecenterIcon(size: 22)
         }
+        .buttonStyle(GoFlyIconStyle(floating: true))
+        .accessibilityLabel(goFlyString("map.recenter"))
+        .accessibilityHint(goFlyString("map.recenterHint"))
+        .accessibilityIdentifier("map.recenter")
         .padding(.trailing, 16)
         .padding(.bottom, max(0, sheetHeight + (showsBottomBar ? bottomBarHeight : 0) - bottomInset) + 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+    }
+
+    /// Hidden while a place card, search or the route point picker covers the sheet.
+    private var showsMapControls: Bool {
+        activeCandidate == nil && wanderCardPlace == nil && !showingSearch && route.picker == nil
     }
 
     private var showsBottomBar: Bool {
@@ -1515,13 +1486,9 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func recenter(resetHeading: Bool = false) {
-        if resetHeading, let center = projection?.centerCoordinate {
-            cameraIntent = GoFlyCameraIntent(coordinate: center, setsHeadingNorth: true)
-            return
-        }
+    private func recenter() {
         if let simulated = service.confirmedSimulatedLocation {
-            cameraIntent = GoFlyCameraIntent(coordinate: simulated)
+            cameraIntent = GoFlyCameraIntent(coordinate: simulated, headingDegrees: 0)
         } else {
             pendingGPSRecenter = true
             location.requestRecenter()

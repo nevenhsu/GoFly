@@ -509,7 +509,6 @@
 "gallery.dangerTitle" = "裝置服務無法連線";
 
 "map.searchHint" = "搜尋地點、地址或經緯度。";
-"map.north" = "地圖轉回正北";
 "placeDetails.copied" = "已複製座標";
 
 "search.recent" = "最近搜尋";
@@ -525,7 +524,6 @@
 
 "status.repairGuidance" = "持續失敗請到「設定 › VPN 通道」修復連線。";
 
-"execution.followHeading" = "跟隨方向";
 
 "teleport.completed" = "已移至 %@";
 

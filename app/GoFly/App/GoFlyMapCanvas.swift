@@ -7,14 +7,11 @@ struct GoFlyCameraIntent: Equatable {
     let id = UUID()
     let coordinate: GeoCoordinate
     var routeCoordinates: [GeoCoordinate]? = nil
-    /// Resets rotation/pitch for the compass control without moving the center.
-    var setsHeadingNorth = false
     var ensureVisibleOnly = false
     var headingDegrees: Double? = nil
 
-    init(coordinate: GeoCoordinate, setsHeadingNorth: Bool = false, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil) {
+    init(coordinate: GeoCoordinate, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil) {
         self.coordinate = coordinate
-        self.setsHeadingNorth = setsHeadingNorth
         self.ensureVisibleOnly = ensureVisibleOnly
         self.headingDegrees = headingDegrees
     }
@@ -114,7 +111,6 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         coordinator.updateMarker(on: map)
         coordinator.updateRoute(on: map)
         coordinator.refreshAppearance(on: map)
-        coordinator.compass?.frame = CGRect(x: max(0, map.bounds.width - 60), y: max(0, viewport.minY + 12), width: 44, height: 44)
         coordinator.applyCameraIfNeeded(on: map)
         coordinator.publishProjection(on: map)
     }
@@ -122,7 +118,6 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: GoFlyMapCanvas
-        var compass: MKCompassButton?
         private var positionAnnotation: PositionAnnotation?
         private var coordinateDisplayLink: CADisplayLink?
         private var displayedRouteDistance: Double?
@@ -349,14 +344,6 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                     map.setCenter(map.convert(CGPoint(x: center.x + target.x - desired.x,
                         y: center.y + target.y - desired.y), toCoordinateFrom: map), animated: false)
                 }
-                return
-            }
-            if intent.setsHeadingNorth {
-                correctionsRemaining = 0
-                let camera = map.camera
-                camera.heading = 0
-                camera.pitch = 0
-                map.setCamera(camera, animated: false)
                 return
             }
             let padding = UIEdgeInsets(

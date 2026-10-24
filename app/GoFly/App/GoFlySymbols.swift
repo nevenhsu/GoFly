@@ -51,8 +51,6 @@ enum GoFlySymbols {
     static let waiting = "clock"
     // 2026-10-20 redesign additions.
     static let folder = "folder"
-    static let compass = "safari"
-    static let followHeading = "location.north.line"
     static let ellipsis = "ellipsis"
     static let selectItems = "checkmark.circle"
     static let undo = "arrow.uturn.backward"

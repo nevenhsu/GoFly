@@ -25,7 +25,7 @@
 | C5 | checkbox（圓形）on／off | `GoFlyCheckboxIcon`（`GoFlyFavoritesView.swift:176`、`GoFlyFavoriteRoutesView.swift:156`） | 回歸：on 24 pt 黑圓白勾（深色白圓黑勾），off 22 pt `#C7C7CC` 1.5 pt 邊（深色 `#2C2C2E` 底＋`#8E8E93` 邊），44 pt 命中。驗收：C3、D21 淺深色。 |
 | C6 | `TabBar / 瞬移・路線・搖桿（等寬）` | `App/GoFlyBottomBar.swift`：圖示 22 pt、`caption2` bold／medium | 圖示 25 pt、選中 2.29 pt 黑線＋10 pt 黑字、未選 1.875 pt `#999999`；背景 `#F9F9F9` 96%＋頂部細線；高 83 pt（含 home indicator）。驗收：D1–D4、D8、D9 的 `Mode=路線` variant 對齊；執行模式（D6／D7／D10）隱藏。<br>**狀態：已實作，待審查**（`GoFlyTabBarUITests`：高 83、三格等寬、選中 trait）。 |
 
-| C7 | 地圖右下角 `Recenter`（Figma 已同步修正為單一按鈕） | `App/GoFlyMapView.swift:1246` `mapControls` 有三顆：執行模式「跟隨方向」、地圖旋轉後「指北」、「回到定位」；位置以 `sheetHeight`＋bottom bar 計算；`GoFlyMapCanvas.swift:117／125` 殘留未使用的 `MKCompassButton` | 所有 mode 只保留「回到定位」，點擊同時重設正北；移除跟隨方向、指北與殘留 compass 程式碼與字串。按鈕固定在當下 panel 上緣上方 16 pt、右側 16 pt。驗收：B1、B2、D1、D2、D3、D6、D10、E1、E2 截圖量測間距皆 16 pt；拖曳 sheet 時按鈕跟隨；地點卡、D5、D6.a、D7 開啟時隱藏；UI test 確認 `map.followHeading`、`map.north` 不存在。 |
+| C7 | 地圖右下角 `Recenter`（Figma 已同步修正為單一按鈕） | `App/GoFlyMapView.swift:1246` `mapControls` 有三顆：執行模式「跟隨方向」、地圖旋轉後「指北」、「回到定位」；位置以 `sheetHeight`＋bottom bar 計算；`GoFlyMapCanvas.swift:117／125` 殘留未使用的 `MKCompassButton` | 所有 mode 只保留「回到定位」，點擊同時重設正北；移除跟隨方向、指北與殘留 compass 程式碼與字串。按鈕固定在當下 panel 上緣上方 16 pt、右側 16 pt。驗收：B1、B2、D1、D2、D3、D6、D10、E1、E2 截圖量測間距皆 16 pt；拖曳 sheet 時按鈕跟隨；地點卡、D5、D6.a、D7 開啟時隱藏；UI test 確認 `map.followHeading`、`map.north` 不存在。<br>**狀態：已實作，待審查**（`GoFlyMapControlsUITests` 量測瞬移／路線／搖桿與收合；按鈕在地點卡、搜尋、選點時隱藏；點擊同時轉正北。未涵蓋：執行／中斷面板與 dialog 隱藏，隨 R6／R7 驗證）。 |
 
 ## 路線頁面
 
