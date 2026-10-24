@@ -24,7 +24,7 @@
 | `B · 地圖、搜尋、地點、瞬移` | B1–B10（10 張） | 全面重新依序編號：Row 1 為瞬移 UI flow（B1–B6 共 6 張：B1 sheet 收合、B2 sheet 半開、B3 全螢幕搜尋空輸入、B4 搜尋座標與結果、B5 地點 sheet 點地圖放 Pin、B6 瞬移成功 snackbar）；Row 2 為瞬移失敗、中斷恢復與未連接 Wi-Fi UI（B7–B10 共 4 張：B7 瞬移失敗 toast，動作按鈕為「重連」，底層地點 sheet 改為高度最窄 76 pt，Go 停用；B8 瞬移中斷恢復 Resume UI，斷連後有真實 GPS，底層面板顯示「目前位置」，箭頭為實心藍 RealArrow；B9 原 B8.a，瞬移中斷 / 最後模擬位置，斷連後無真實 GPS，底層顯示「最後模擬位置」，箭頭轉為灰色；B10 原 B7.a / R01.a，地圖首頁 / 未連接 Wi-Fi error toast，水平置中 x: 16, w: 361, y: 156 pt 置於狀態 pill 下方，實心無透明度）。淺色與深色 B 區均為 10 張完整對齊。 |
 | `C · 最愛地點` | C1–C4（4 張） | C1 最愛地點清單、C2 編輯最愛 sheet（修正 Dark C2 命名 typo `v` 回復完整名稱）、C3 多選模式 / 批次刪除（Dark C3 佈局與 C3 對齊：移除多選模式下不應存在之每列 star icon 星號按鈕，文字與分隔線起始位置靠齊勾選圈至 x: 43 pt；深色勾選圈按鈕選取狀態已全面替換為 `Dark · Check button / on` 共用元件實例；未選取狀態底色採用 `secondarySystemBackground` `#2C2C2E`、邊框採用 `#8E8E93`，不再透明或與 App 黑色背景混同）、C4 刪除後可復原（標示刪除後約 5 秒可復原；舊規格曾寫 2 秒，現已更正為約 5 秒）。淺色與深色 C 區均為 4 張對齊。 |
 | `D · 路線` | D1–D22、D6.a（淺色 23 張、深色 23 張） | 全面重新依序編號：Row 1 Route UI flow（D1–D7 共 7 張：D1 新增路線初始狀態；D2 多停靠點滑動容器；D3 panel 收合高度最窄 76 pt；D4 Pin 設定選中的路線地點；D5 選擇終點點選即回填（頂部「正在選：終點」chip 同行最右側補上「最愛地點」純文字按鈕，點擊開啟最愛地點清單；「最近搜尋」右側補上「清空記錄」純文字按鈕；Dark D5 移除舊版靜態內嵌的最愛地點與多餘點位，淺深色結構 100% 完全對齊）；D6 路線執行模式；D7 設定移動時速 slider sheet，底層背景正式對齊 D6 路線執行模式（因僅路線運行中之控制列才配置時速 pill button），覆蓋 40% Dim overlay 並滑出半開 sheet，配置 4 檔快選膠囊：🚶 5、🚲 25、🛵 50、🚗 100 km/h，預設為 🚲 25，數值與 Slider 完整連動；Dark D6/D6.a 面板已同步補齊高對比深色 `Controls row / 來回·方向·時速`，深色已補齊 Dark D2、Dark D3、Dark D4，且 Dark D5/D6/D7 與對應說明文字水平座標完全與淺色對齊）；Row 2 路線模式狀態 UI（D8–D10、D6.a 共 4 張：D8 無法規劃路線 error toast，帶「重試」按鈕；D9 刪除路線地點 success toast，浮動於 BottomSheet 上方 y: 366 pt 帶「還原」按鈕；D10 路線中斷恢復 Resume UI，Toast 排版為 361 × 80 pt；D6.a 路線執行 / 確認結束 UI 浮窗，位於 x: 1387, y: 1380，覆蓋 35% Dim overlay 並居中彈出 320 pt 圓角 20 pt Alert Dialog，配置「取消」與「結束路線」危險紅色按鈕，防止誤觸結束進行中模擬）；Row 3 匯入路線 flow（D11–D18 共 8 張：D11 已匯入路線 GPX；D12 點選路線動作選單；D13 查看全部點位唯讀；D14 匯出系統分享 sheet；D15 匯入路線超過 10 點折疊點位；D16 匯入 GPX 系統檔案選擇器；D17 匯入成功 snackbar；D18 匯入失敗 toast 提示）；Row 4 最愛路線 flow（D19–D22 共 4 張：D19 最愛路線清單；D20 新增最愛路線 sheet；D21 最愛路線清單多選模式；D22 刪除路線 success toast，浮動於底部刪除 (2) 按鈕上方 y: 618 pt 帶「還原」按鈕；Dark D21 與 Dark D22 已選取勾選按鈕已全面替換為 `Dark · Check button / on` 共用元件實例，修正原先黑底混淆問題，與 Dark C3 統一高對比白底黑勾）。淺色與深色 D 區均為 23 張完整對齊。<br><br>**2026-10-24 StatusPill 更新**：D 區與 Dark D 區左上角已全面補齊標準 StatusPill 元件 instance：D1–D4、D8、D9 配置 `StatusPill / 啟動`（x: 16, y: 118 pt）；D6 執行模式與 D7 時速設定底層配置 `StatusPill / 模擬中`（x: 16, y: 140 pt，D7 置於 Dim overlay 之下保持畫面底層完整性）；D6.a 結束確認浮窗配置 `StatusPill / 停止`（x: 16, y: 140 pt，置於 Dim overlay 之下保持畫面底層完整性）；D10 中斷恢復配置 `StatusPill / 暫停`（x: 16, y: 140 pt）。D8 Toast 下移至 y: 156 pt（與 B7/B8 規範一致保持 8 pt 間距），D10 Toast 下移至 y: 178 pt 消除重疊。依使用者指示，D5（全螢幕選點搜尋）與 D11 以後（GPX 匯入與最愛路線清單 flow）不放置 StatusPill。淺色與深色共 20 個 frame 同步完成並經渲染驗證。 |
-| `E · 搖桿與漫步` | E1–E5（5 張） | 全面重新依序編號：Row 1 搖桿與漫步 UI flow（E1–E4 共 4 張：E1 搖桿待命，Speed row 預設時速更新為 25 km/h；E2 漫步執行模式，頂部深色指示卡左側對齊 D6 配置實心導航箭頭 nav，指示文字更新為 25 km/h，右側新增「更換」outlined icon button，點擊會隨機一個新的目的地，且右側線框按鈕明確區隔左側填色圖示容器；E3 搖桿設定時速 sheet，共用 4 檔快選膠囊：🚶 5、🚲 25、🛵 50、🚗 100 km/h，預設為 🚲 25；E4 漫步目的地 Pin 獨立地點 card，尺寸 361 × 188 pt）；Row 2 漫步模式狀態 UI（E5 搖桿漫步中斷 / 恢復 Resume UI，Toast 符合 361 × 80 pt 標準，Speed chip 預設為 25）。淺色與深色 E 區均為 5 張完整對齊。 |
+| `E · 搖桿與漫步` | E1／E1.a／E2／E2.a／E3／E4／E5（各外觀7張） | 2026-10-24本輪已逐張檢視淺深色共14張渲染及圖層。E5 深色版已比照淺色版完成 panel UI 重構（採用高度最窄 76 pt 可視 BottomSheet、暗色 token、白色實心「恢復漫步」按鈕、TabBar 搖桿態、MapControls y:633 與 Toast 文案/高度 85 pt 對齊）。其餘 E1.a 待命收合角色、E3 服務待命字樣、E4 雙確認一致性等仍待依序處理，見[正式方案](JOYSTICK-WANDER-REFACTOR-PLAN.md)。 |
 | `F · 設定與共用規則` | F1–F9（9 張） | 文件涵蓋設定首頁與定位、VPN、背景、語言、外觀、裝置簽名子頁；`F1 · 設定首頁` 裝置服務卡之狀態標籤已更新為標準 status pill UI（`StatusPill / 啟動` 灰點，移除舊版淡綠底色，對齊 0 區規格）；`F3 · 規則參考 · 狀態與錯誤呈現` 之 Toast UI（danger、warn、success）與 Snackbar 已全面對齊 `0 · 共用元件` Component 標準（寬度 361 pt、居中 x: 16 pt、Auto Layout 邊緣 padding 與動作/關閉按鈕精確對齊，全面採用元件 instance 呈現，消除過往純紅純橘實心底色衝突）；淺色與深色 F 區均已同步完成。與畫面內容相符。 |
 
 
@@ -106,4 +106,15 @@ Figma 與規格的畫面數一致：淺色、深色各 34 張；M1 環境設定 
    - **UI 頁面實例模式全面連動（共 41 處）**：
      - Section B 地圖首頁／瞬移（8 處 Light + 8 處 Dark）：統一保持 `Mode=瞬移`（瞬移圖示與文字加深，其餘淡灰）。
      - Section D 路線規劃（8 處 Light + 8 處 Dark，含 D1、D15、D7、D4、D3、D8、D9、D2）：統一切換為 `Mode=路線`，路線圖示與文字加深，瞬移與搖桿維持灰色。
-     - Section E 搖桿與漫步（4 處 Light + 3 處 Dark，含 E1、E3、E4、E5）：統一切換為 `Mode=搖桿`，搖桿圖示與文字加深，瞬移與路線維持灰色。
+     - Section E 搖桿與漫步（4 處 Light + 4 處 Dark，含 E1、E3、E4、E5）：統一切換為 `Mode=搖桿`，搖桿圖示與文字加深，瞬移與路線維持灰色。
+6. **Dark · E5 · 搖桿漫步中斷 / 恢復（Resume UI）panel UI 對齊 Light E5**：
+   - 移除舊版 380 pt 巨大搖桿面板（`Panel / 漫步控制`）與冗餘 Switch 開關。
+   - 新增深色主題版 `BottomSheet / 漫步控制（高度最窄）`（`393 × 106 pt`，置底 `y: 693`，在 TabBar 上方可視 76 pt）：
+     - 底色：`#1C1C1E`，頂部圓角 20 pt，頂部陰影 `y: -4, radius: 12, opacity: 0.08`。
+     - Grabber：`36 × 5 pt`，底色 `#48484A`，圓角 2.5 pt。
+     - 標題與資訊：白字「漫步模式 · 暫停中」（PingFang TC Semibold 17 pt）與次要灰字「已移動 420m · 速度 9 km/h」（PingFang TC Regular 12 pt，`#98989E`）。
+     - 主要按鈕：白色膠囊底色 `Button / primary / 恢復漫步`（`100 × 40 pt`，圓角 20 pt），黑字「恢復漫步」（PingFang TC Semibold 14 pt）。
+   - 補齊深色底欄 `Dark · TabBar / 瞬移・路線・搖桿（等寬）`（實例 `Mode=搖桿`，`y: 769, h: 83`）。
+   - 回定位按鈕 `MapControls` 配合收合面板位置下移至 `y: 633`（面板上方 16 pt 浮動）。
+   - 頂部 `Dark · Toast / 系統訊息 / warn` 文案與高度對齊淺色版（標題「搖桿漫步已暫停」、副標「背景訊號中斷已安全暫停，可立即重試漫步。」，高度自動貼合為 85 pt）。
+   - 同步更新旁註 `Dark · E5 說明`。
