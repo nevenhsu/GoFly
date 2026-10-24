@@ -97,6 +97,19 @@
 
 狀態：F3 已實作，待審查（`selectMode` 在最小高度時還原；`GoFlyTabRestoreUITests`）；F1、F2 已實作，待審查（最愛路線、最愛地點兩頁改整頁、移除 detents／drag indicator；新增共用 `GoFlyFavoritesBottomBar`＝搜尋區 88 pt＋刪除鍵在其上方 12 pt、snackbar 偏移 100 pt；`GoFlyActionStyle(fixedHeight:)`；`GoFlyFavoriteRoutesPageUITests` 量測 D19／D21／D22 間距；地點頁共用同一元件，未另寫 UI test）。路線列副標改單行「起訖・點位數」，D19 的距離（12.4 km）因紀錄沒有距離資料未顯示。R6 的程式已由使用者另行提交（`385a5ed`），其 UI test 在「dialog 開啟時下方按鈕不可操作」斷言上失敗，原因未釐清，仍待處理；R7、C3、C5、R8 仍待做。
 
+## 三個 mode panel 的預設與最小高度（2026-10-25，Figma 04 頁已更新）
+
+高度以 TabBar 上緣以上的可視點數計（無 TabBar 的執行畫面計到螢幕底，含 34 pt 安全區）。
+
+| Mode | 預設高度（Figma） | 最小高度（Figma） | 實作 |
+| :-- | :-- | :-- | :-- |
+| 瞬移 | 298（B2 半開） | 118（B1 收合） | `sheetPreferredHeight`；恢復列 B8 同為 118 |
+| 路線 | 339（D1，2 列）；D8 3 列 399；上限 414（D2，只有清單捲動） | 76（D3） | 內容定高（`GoFlyRoutePanel`），清單上限＝414 − 207 − 12 |
+| 搖桿 | 350（E1：列 20、搖桿 88、按鈕 262×52、距底 36） | 76（E1.a：標題「搖桿」＋時速 chip） | `GoFlyJoystickPanel` 重排，`isCollapsed` 為最小態 |
+| 執行／恢復 | D6 218；D10 122（88＋34）；E5 76 | — | `GoFlyResumePanel.contentHeight`（sheet 內 64＋12 grabber、D10 88、B8 94＋24） |
+
+狀態：已實作，待審查（`GoFlyBottomSheet.preferredHeight`／`grabberHeight`；輔助字級與恢復態改回內容定高；`GoFlyPanelHeightUITests` 量測三個 mode 的預設／最小高度與搖桿內部間距）。尚未對齊：漫步執行 E2（380）、E2.a／E4（122，皆無 TabBar；App 仍顯示 TabBar）、搖桿標題字級（E1 約 17 pt，現為 20 pt）。D2 的列高（55 pt）與 D1（60 pt）不一致，依 60 pt 並以 414 pt 為上限。
+
 ## 建議順序
 
 C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 → R5 → R4 → R6 → R7 → C3、C5、R8 回歸。R2、R3、R5 都改路線面板，應在同一分支依序處理。每項需單元測試或 UI test；最後依 `docs/AI-INSTALL.md` 安裝到實機，以淺色與深色截圖對照 Figma 驗收。

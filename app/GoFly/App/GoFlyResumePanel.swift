@@ -12,6 +12,8 @@ struct GoFlyResumePanel: View {
     let ctaTitle: String
     let onResume: () -> Void
     var isEnabled: Bool = true
+    /// Panel height below the grabber: 64 inside a sheet (12 pt grabber), 88 when the panel owns the bottom (D10).
+    var contentHeight: CGFloat = 76
     var identifier: String = "resumePanel"
 
     var body: some View {
@@ -46,7 +48,8 @@ struct GoFlyResumePanel: View {
             .accessibilityIdentifier("\(identifier).action")
         }
         .padding(.horizontal, 20)
-        .frame(height: 76)
+        .frame(height: contentHeight - 12)
+        .frame(height: contentHeight, alignment: .top)
         .background(GoFlyStyle.cardSurface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)

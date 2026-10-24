@@ -74,7 +74,7 @@ final class GoFlyJoystickUITests: XCTestCase {
         app.selectGoFlyMode("joystick")
         assertMissingOrigin(app)
         let wander = app.buttons["joystick.wander"]
-        XCTAssertEqual(wander.label, "Start wandering")
+        XCTAssertEqual(wander.label, "Start")
         XCTAssertTrue(wander.isEnabled)
         wander.tap()
         XCTAssertFalse(app.buttons["joystick.randomDestination"].exists)

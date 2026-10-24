@@ -201,6 +201,7 @@ struct GoFlyRoutePanel: View {
                     ctaTitle: goFlyString("route.resumeShort"),
                     onResume: { _ = controller.resume() },
                     isEnabled: controller.canResume,
+                    contentHeight: 88,
                     identifier: "route.resumePanel"
                 )
             } else if controller.phase == .unknown {
@@ -313,14 +314,15 @@ struct GoFlyRoutePanel: View {
         }
     }
 
-    /// Rows are 60 pt; the card shows at most four before the list scrolls.
-    private static let visibleRows = 4
+    /// Rows are 60 pt; the list scrolls once the panel reaches its 414 pt maximum.
+    private static let maxPanelContent: CGFloat = 402
     private static let rowHeight: CGFloat = 60
     /// Everything in the editing panel except the list: header, gaps, action row, Start row and bottom inset.
     private static let panelChrome: CGFloat = 207
 
     private var listHeight: CGFloat {
-        let cap = min(Self.rowHeight * CGFloat(Self.visibleRows), max(Self.rowHeight, maximumHeight - Self.panelChrome))
+        // D2: the sheet tops out at 414 pt above the tab bar (402 pt under the 12 pt grabber); only the list scrolls.
+        let cap = min(Self.maxPanelContent - Self.panelChrome, max(Self.rowHeight, maximumHeight - Self.panelChrome))
         return min(listContentHeight, cap)
     }
 

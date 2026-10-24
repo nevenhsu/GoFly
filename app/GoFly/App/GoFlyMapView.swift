@@ -788,7 +788,8 @@ struct GoFlyMapView: View {
                         maximumHeight: sheetMaxHeight(in: geometry),
                         contentHeight: bottomContentHeight,
                         fitsContent: sheetFitsContent,
-                        grabberHeight: mode == .route && sheetFitsContent ? 12 : 24,
+                        grabberHeight: mode != .teleport && sheetFitsContent ? 12 : 24,
+                        preferredHeight: sheetPreferredHeight,
                         onHeightChange: { sheetHeight = $0 }
                     ) {
                         sheetContent(in: geometry)
@@ -918,8 +919,8 @@ struct GoFlyMapView: View {
     }
 
     private var currentCollapsedHeight: CGFloat {
-        if isResumeState || mode == .route { return 76 }
-        return 116
+        // Figma minimum heights: teleport 118 (B1), route 76 (D3), joystick 76 (E1.a).
+        mode == .teleport && !isResumeState ? 118 : 76
     }
 
     private func modePanel(in geometry: GeometryProxy) -> some View {
@@ -931,6 +932,7 @@ struct GoFlyMapView: View {
                         ctaTitle: goFlyString("wander.resumeShort"),
                         onResume: { _ = joystick.resume() },
                         isEnabled: joystick.canResume,
+                        contentHeight: 64,
                         identifier: "joystick.resumePanel"
                     )
                 } else {
@@ -938,6 +940,7 @@ struct GoFlyMapView: View {
                         GoFlyJoystickPanel(
                             controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                             maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                            isCollapsed: sheetDetent == .collapsed,
                             onRandomDestination: {
                                 replanWander(to: nil)
                             },
@@ -962,6 +965,7 @@ struct GoFlyMapView: View {
                         ctaTitle: goFlyString("route.resumeShort"),
                         onResume: { _ = route.resume() },
                         isEnabled: route.canResume,
+                        contentHeight: isExecutionMode ? 88 : 64,
                         identifier: "route.resumePanel"
                     )
                 } else {
@@ -989,6 +993,7 @@ struct GoFlyMapView: View {
                     ctaTitle: goFlyString("teleport.resumeShort"),
                     onResume: { _ = positionHold.retry() },
                     isEnabled: positionHold.canRetry,
+                    contentHeight: 94,
                     identifier: "teleport.resumePanel"
                 )
             } else {
@@ -1780,7 +1785,18 @@ struct GoFlyMapView: View {
 
     /// Teleport and the route editor size the sheet to their content (Figma D1/D2/D3).
     private var sheetFitsContent: Bool {
-        mode == .teleport || (mode == .route && route.canEdit && route.picker == nil)
+        mode == .teleport || (mode != .teleport && route.canEdit && route.picker == nil)
+    }
+
+    /// Each mode panel has a default and a minimum height (Figma B1/B2, D1–D3, E1/E1.a), in points above the tab bar.
+    /// Route is content-sized (D1 339, D8 399, capped at D2 414). Accessibility text sizes fall back to content height.
+    private var sheetPreferredHeight: CGFloat? {
+        guard !dynamicTypeSize.isAccessibilitySize, !isResumeState else { return nil }
+        switch mode {
+        case .teleport: return sheetDetent == .collapsed ? 118 : 298
+        case .joystick: return sheetDetent == .collapsed ? 76 : 350
+        case .route: return nil
+        }
     }
 
     private var showsBottomBar: Bool {

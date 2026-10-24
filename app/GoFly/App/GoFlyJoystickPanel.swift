@@ -6,36 +6,38 @@ struct GoFlyJoystickPanel: View {
     @ObservedObject var controller: JoystickMovementController
     var cameraHeadingDegrees: Double
     var maximumHeight: CGFloat
+    /// Figma E1.a: only the title row and speed chip remain (76 pt panel).
+    var isCollapsed = false
     var onRandomDestination: () -> Void = { }
     var onStartWander: () -> Void = { }
     var canStartWander: Bool?
     var onStopWander: () -> Void = { }
     var onSettings: () -> Void = { }
-    @State private var contentHeight: CGFloat = 220
     @State private var showingSpeedSheet = false
 
+    /// Figma E1: row 44, 24 pt, 150 pt pad, 24 pt, 52 pt button, then 36 pt — 338 pt under the 12 pt grabber.
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                wanderControls
+        VStack(alignment: .leading, spacing: 0) {
+            wanderControls
+                .padding(.top, isCollapsed ? 2 : 8)
+            if !isCollapsed {
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
-                        .buttonStyle(GoFlyActionStyle())
+                        .buttonStyle(GoFlyActionStyle(fixedHeight: 52))
+                        .padding(.top, 24)
                         .accessibilityIdentifier("joystick.settings")
                 } else {
                     GoFlyManualJoystickPad(controller: controller, cameraHeadingDegrees: cameraHeadingDegrees)
                         .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
                     wanderActions
+                        .padding(.top, 24)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
         }
-        .frame(height: min(contentHeight, max(76, maximumHeight)))
+        .padding(.horizontal, 20)
+        .padding(.bottom, isCollapsed ? 18 : 36)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showingSpeedSheet) {
             GoFlySpeedSheet(
                 speed: controller.speed,
@@ -56,47 +58,53 @@ struct GoFlyJoystickPanel: View {
     }
 
     private var wanderRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "shuffle")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.primary)
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(controller.wanderEnabled ? goFlyString("joystick.wanderActive") : goFlyString("joystick.wander"))
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
+        HStack(spacing: 10) {
+            if controller.wanderEnabled || !isCollapsed {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
             }
+            Text(rowTitle)
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
             Spacer(minLength: 8)
             GoFlySpeedChip(
                 speed: controller.speed.kilometersPerHour,
                 action: { showingSpeedSheet = true },
                 isEnabled: controller.canSetSpeed,
-                identifier: "joystick.speed"
+                identifier: "joystick.speed",
+                height: 36,
+                showsChevron: true
             )
         }
-        .frame(minHeight: 44)
+        .frame(height: 44)
+    }
+
+    private var rowTitle: String {
+        if controller.wanderEnabled { return goFlyString("joystick.wanderActive") }
+        return goFlyString(isCollapsed ? "mode.joystick" : "joystick.wander")
     }
 
     @ViewBuilder
     private var wanderActions: some View {
         if controller.wanderEnabled {
-            HStack(spacing: 12) {
+            HStack(spacing: 13) {
                 Button(action: onStopWander) { Text(goFlyString("joystick.stopWander")) }
-                    .buttonStyle(GoFlyActionStyle())
+                    .buttonStyle(GoFlyActionStyle(fixedHeight: 52))
                     .accessibilityIdentifier("joystick.stopWander")
                 Button(action: onRandomDestination) { Text(goFlyString("joystick.changePlace")) }
-                    .buttonStyle(GoFlyActionStyle(primary: true))
+                    .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 52))
                     .accessibilityIdentifier("joystick.randomDestination")
             }
         } else {
             Button(action: onStartWander) { Text(goFlyString("joystick.startWander")) }
-                .buttonStyle(GoFlyActionStyle(primary: true))
+                .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 52))
                 .disabled(!(canStartWander ?? controller.canSetWanderEnabled))
                 .accessibilityIdentifier("joystick.wander")
         }
     }
-
 }
 
 /// The live destination row is also rendered by the simulator component gallery.

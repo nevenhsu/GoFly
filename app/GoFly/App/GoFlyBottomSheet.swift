@@ -23,6 +23,8 @@ struct GoFlyBottomSheet<Content: View>: View {
     var fitsContent: Bool = false
     /// Height of the grabber row. The route editor uses 12 pt so its header sits 12 pt below the sheet top (Figma D1).
     var grabberHeight: CGFloat = 24
+    /// Figma default panel height for the mode (teleport 298, joystick 350 …); content-fitted when nil.
+    var preferredHeight: CGFloat? = nil
     var onHeightChange: (CGFloat) -> Void = { _ in }
     @ViewBuilder let content: () -> Content
 
@@ -33,7 +35,7 @@ struct GoFlyBottomSheet<Content: View>: View {
     }
 
     private var fittedHeight: CGFloat {
-        min(availableHeight, max(minimumHeight, contentHeight + grabberHeight))
+        min(availableHeight, max(minimumHeight, preferredHeight ?? (contentHeight + grabberHeight)))
     }
 
     private var expandedHeight: CGFloat {
