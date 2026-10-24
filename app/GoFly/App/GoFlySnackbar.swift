@@ -1,27 +1,32 @@
 import SwiftUI
 import UIKit
 
-/// A one-off result that needs no user decision. It disappears after about two
-/// seconds; anything the person must act on belongs in `GoFlyStatusBanner`.
+/// A one-off result. Plain messages disappear after about two seconds; one with
+/// an action (undo) stays about five. Anything that blocks the person belongs in
+/// `GoFlyStatusBanner`. `bottomPadding` places it above the sheet or button.
 struct GoFlySnackbarMessage: Identifiable {
     let id = UUID()
     let text: String
     var actionTitle: String?
     var action: (() -> Void)?
+
+    /// Figma `Snackbar / 2 秒自動消失` vs `Snackbar / 可復原` (about 5 seconds).
+    var defaultDuration: Duration { action == nil ? .seconds(2) : .seconds(5) }
 }
 
 struct GoFlySnackbar: View {
     let message: GoFlySnackbarMessage
     var onDismiss: () -> Void = {}
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: GoFlySymbols.successFilled)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(GoFlyStyle.success)
                 .accessibilityHidden(true)
             Text(message.text)
-                .font(.footnote)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(GoFlyStyle.snackbarForeground)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -31,20 +36,36 @@ struct GoFlySnackbar: View {
                     onDismiss()
                 } label: {
                     Text(actionTitle)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.snackbarForeground)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                        .padding(.horizontal, 12)
+                        .frame(minWidth: 56, minHeight: 32)
+                        .background(colorScheme == .dark ? Color(white: 0.227) : Color.white, in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(
+                                colorScheme == .dark ? Color.white.opacity(0.18) : GoFlyStyle.toastActionBorder.opacity(0.45),
+                                lineWidth: colorScheme == .dark ? 1 : 0.5)
+                        }
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("snackbar.action")
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
+        .frame(minHeight: 52)
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
+        .overlay {
+            if colorScheme == .dark {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .shadow(color: .black.opacity(0.09), radius: 12, x: 0, y: 5)
+        .shadow(color: .black.opacity(0.06), radius: 1.5, x: 0, y: 1)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("snackbar")
         .onAppear {
@@ -56,7 +77,7 @@ struct GoFlySnackbar: View {
 private struct GoFlySnackbarModifier: ViewModifier {
     @Binding var message: GoFlySnackbarMessage?
     let bottomPadding: CGFloat
-    let duration: Duration
+    let duration: Duration?
 
     func body(content: Content) -> some View {
         content
@@ -67,7 +88,7 @@ private struct GoFlySnackbarModifier: ViewModifier {
                         .padding(.bottom, bottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .task(id: message.id) {
-                            try? await Task.sleep(for: duration)
+                            try? await Task.sleep(for: duration ?? message.defaultDuration)
                             guard !Task.isCancelled else { return }
                             withAnimation(.easeOut(duration: 0.2)) { self.message = nil }
                         }
@@ -80,7 +101,7 @@ private struct GoFlySnackbarModifier: ViewModifier {
 extension View {
     func goFlySnackbar(_ message: Binding<GoFlySnackbarMessage?>,
                        bottomPadding: CGFloat = 12,
-                       duration: Duration = .seconds(2)) -> some View {
+                       duration: Duration? = nil) -> some View {
         modifier(GoFlySnackbarModifier(message: message, bottomPadding: bottomPadding, duration: duration))
     }
 }

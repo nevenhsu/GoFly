@@ -325,7 +325,7 @@ D · 路線 section 已大幅更新並改用以下共用元件實例；路線頁
 
 | Figma 元件 | 規格 | App 對應 |
 | :-- | :-- | :-- |
-| `Toast / 系統訊息 / danger｜warn｜success` | 361 pt 寬、高度隨內容（單行說明約 67 pt，兩行約 85 pt）、圓角 14、內距 12／14、間距 10；底色 `#FFF0EE`／`#FFF6E6`／`#F0FAF2`＋1 pt 同色系邊框（35% 不透明：`#FF3B30`／`#FF9500`／`#34C759`）；22 pt 圖示；標題 15 pt Semibold、說明 13 pt Regular `#3C3C43`；白色膠囊動作 56 × 32 pt（圓角 16、0.5 pt 邊、15 pt Semibold）；✕ 20 pt `#8C8C94`。success 無動作按鈕 | `GoFlyStatusBanner`、`GoFlyWarningToast` |
+| `Toast / 系統訊息 / danger｜warn｜success` | 361 pt 寬、高度隨內容（單行說明約 67 pt，兩行約 85 pt）、圓角 14、內距 12／14、間距 10；底色 `#FFF0EE`／`#FFF6E6`／`#F0FAF2`＋1 pt 同色系邊框（35% 不透明：`#FF3B30`／`#FF9500`／`#34C759`）；22 pt 圖示；標題 15 pt Semibold、說明 13 pt Regular `#3C3C43`；白色膠囊動作 56 × 32 pt（圓角 16、0.5 pt 邊、15 pt Semibold）；✕ 20 pt `#8C8C94`。success 無動作按鈕 | `GoFlyStatusBanner`（已合併 `GoFlyWarningToast`） |
 | `Snackbar / 2 秒自動消失` | 361 × 52 pt、`#1C1C1E`、圓角 14、內距 10／14、24 pt 綠色勾選、白字 15 pt Medium、雙層陰影（9%／y5／24、6%／y1／3） | `GoFlySnackbar` |
 | `Snackbar / 可復原` | 同上，右側白色膠囊「復原」56 × 32 pt；約 5 秒 | `GoFlySnackbar`（含 action） |
 | `StatusPill / 啟動｜模擬中｜暫停｜停止｜連線中斷` | 高 30 pt、圓角 15、白底 0.5 pt 邊＋雙層陰影、8 pt 狀態點（灰 `#8E8E93`／綠 `#34C759`／橙 `#FF9F0A`／灰／紅 `#FF3B30`）、13 pt Semibold；狀態文案依本文件「三模式 session pill 五態規格」 | `GoFlyStatusPill` |
