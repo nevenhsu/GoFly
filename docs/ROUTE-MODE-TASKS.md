@@ -83,6 +83,18 @@
 - 最近搜尋：`App/GoFlyMapView.swift:194` `recentPlaces` 已共用；D5「清空記錄」後瞬移也清空，仍只存在記憶體、最多 8 筆。
 - D19／D20 入口、D1 無速度膠囊、D22 黑底「復原」維持正確。
 
+## 最愛清單版面與 tab 行為（2026-10-24 追加）
+
+視覺準據：D19（最愛路線清單）、D20（新增最愛路線 sheet）、D21（多選模式）、D22（刪除復原）。D19／D20 的版面正確；D21／D22 目前被當成可拖曳 sheet，是錯的。
+
+| # | 項目 | 現況 | 待辦與驗收 |
+| :-- | :-- | :-- | :-- |
+| F1 | 最愛路線清單是整頁，不是 dragger sheet | `GoFlyRoutePanel` 以 `.sheet` 開 `GoFlyFavoriteRoutesView`，並設 `presentationDetents`／`presentationDragIndicator`；地點版 `GoFlyFavoritesView` 同樣設定 | 路線版改 `fullScreenCover`，兩頁移除 detents／drag indicator／presentationBackground；返回鍵文字依 D19 為「路線」；列為 64 pt（36 pt 星號圓、17 pt 標題、13 pt 單行副標＝起訖・點位數）；底部搜尋區 122 pt（頂部 1 pt 分隔線、欄位 361 × 48、上 12／下 28＋安全區），欄位與 D20 標籤欄同用 `goFlySearchField`。D20 仍是 sheet。 |
+| F2 | 多選刪除鍵移出搜尋區 | 刪除鍵在 `bottomSearch` 內，與搜尋欄同一背景 | 刪除鍵移到搜尋區上方、獨立於搜尋區背景：361 × 48 紅色 capsule，距搜尋區頂 12 pt（D21：y 670–718、搜尋區 y 730）。最愛地點頁比照。D22 復原 snackbar 位置同為搜尋區上方 12 pt。 |
+| F3 | 點 tab 還原最小高度的 panel | `selectMode` 只對非瞬移 tab 強制 `.expanded`，瞬移 tab 不還原 | 點瞬移／路線／搖桿任一 tab，若目前 panel 為最小高度（收合），還原到可見高度（瞬移最多可見 4 個地點；路線、搖桿為內容高度）；非最小高度時不變。 |
+
+狀態：以上三項待實作（本節為計畫更新）。R6 的程式已由使用者另行提交（`385a5ed`），其 UI test 在「dialog 開啟時下方按鈕不可操作」斷言上失敗，原因未釐清，仍待處理；R7、C3、C5、R8 仍待做。
+
 ## 建議順序
 
 C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 → R5 → R4 → R6 → R7 → C3、C5、R8 回歸。R2、R3、R5 都改路線面板，應在同一分支依序處理。每項需單元測試或 UI test；最後依 `docs/AI-INSTALL.md` 安裝到實機，以淺色與深色截圖對照 Figma 驗收。
