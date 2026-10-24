@@ -63,7 +63,7 @@
 "onboarding.vpn.steps" = "連上 Wi‑Fi → 開啟 LocalDevVPN → Connect → 返回 GoFly\n只用行動網路無法連線。";
 "onboarding.vpn.open" = "開啟 LocalDevVPN";
 "onboarding.vpn.appStore" = "前往 App Store";
-"onboarding.vpn.help" = "連線說明";
+"onboarding.vpn.help" = "說明";
 "onboarding.vpn.helpLink" = "連線說明 ›";
 "onboarding.vpn.step1" = "開啟 LocalDevVPN";
 "onboarding.vpn.step2" = "點 Connect";
@@ -125,7 +125,7 @@
 "operation.retry" = "重試";
 "operation.cancelling" = "正在取消準備⋯";
 "operation.waitForReturn" = "等待目前裝置操作結束。";
-"operation.settings" = "前往設定";
+"operation.settings" = "設定";
 "operation.return" = "返回地圖";
 "operation.destination" = "目的地：%@";
 "operation.startSummary" = "準備定位服務，不變更位置。";
@@ -236,7 +236,7 @@
 "imports.title" = "已匯入路線";
 "imports.import" = "匯入 GPX 檔案";
 "imports.export" = "GPX 匯出";
-"imports.load" = "載入路線";
+"imports.load" = "載入";
 "imports.empty" = "尚未匯入路線。";
 "imports.loading" = "正在讀取匯入清單…";
 "imports.working" = "正在處理檔案…";
@@ -637,7 +637,7 @@
 "common.skip" = "略過";
 "wifi.error.title" = "需要連接 Wi-Fi";
 "wifi.error.message" = "GoFly 需要連接與 Mac 相同的區域 Wi-Fi 才能進行模擬同步。";
-"wifi.error.action" = "連接 Wi-Fi";
+"wifi.error.action" = "設定";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "已連線";
 "settings.wifi.notConnected" = "未連線";
@@ -675,3 +675,4 @@
 "route.paused.remaining" = "剩餘 %.1f km · 預估 %d 分鐘";
 "route.heading.going" = "前往 %@";
 "route.heading.paused" = "已暫停 · 前往 %@";
+"toast.restore" = "恢復";

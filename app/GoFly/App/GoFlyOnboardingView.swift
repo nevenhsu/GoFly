@@ -381,11 +381,8 @@ private struct GoFlyVPNOnboardingView: View {
                     .accessibilityIdentifier("onboarding.vpn.check")
 
                     Button {
-                        if controller.canAdvanceVPN {
-                            controller.advanceVPN(onAdvance: onComplete)
-                        } else {
-                            onComplete()
-                        }
+                        // Next is only reachable once a check has succeeded; it never bypasses the VPN requirement.
+                        controller.advanceVPN(onAdvance: onComplete)
                     } label: {
                         HStack(spacing: 8) {
                             if controller.isAdvancing { ProgressView() }
@@ -393,6 +390,7 @@ private struct GoFlyVPNOnboardingView: View {
                         }
                     }
                     .buttonStyle(GoFlyCompactActionStyle(primary: true))
+                    .disabled(!controller.canAdvanceVPN)
                     .accessibilityHint(goFlyString("onboarding.vpn.nextHint"))
                     .accessibilityIdentifier("onboarding.vpn.next")
                 }

@@ -601,7 +601,7 @@ struct GoFlyMapView: View {
         ZStack(alignment: .topLeading) {
             mapCanvas(viewport: viewport, size: geometry.size)
             mapPins(viewport: viewport)
-            if isExecutionMode {
+            if isExecutionMode || isWanderMap {
                 VStack(alignment: .leading, spacing: 10) {
                     GoFlyExecutionHeader(
                         title: executionTitle,
@@ -806,7 +806,8 @@ struct GoFlyMapView: View {
             if isWanderMap, let place = wanderCardPlace {
                 wanderLocationCard(for: place)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 12)
+                    // E4: the card ends 28 pt above the screen bottom when there is no tab bar.
+                    .padding(.bottom, showsBottomBar ? bottomBarHeight + 12 : 28)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }
@@ -925,7 +926,8 @@ struct GoFlyMapView: View {
 
     private var currentCollapsedHeight: CGFloat {
         // Figma minimum heights: teleport 118 (B1), route 76 (D3), joystick 76 (E1.a).
-        mode == .teleport && !isResumeState ? 118 : 76
+        if isWanderRunning { return 122 }
+        return mode == .teleport && !isResumeState ? 118 : 76
     }
 
     private func modePanel(in geometry: GeometryProxy) -> some View {
@@ -946,6 +948,7 @@ struct GoFlyMapView: View {
                             controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                             maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                             isCollapsed: sheetDetent == .collapsed,
+                            bottomPadding: isWanderRunning ? (sheetDetent == .collapsed ? 58 : 66) : nil,
                             onRandomDestination: {
                                 replanWander(to: nil)
                             },
@@ -1799,13 +1802,19 @@ struct GoFlyMapView: View {
         guard !dynamicTypeSize.isAccessibilitySize, !isResumeState else { return nil }
         switch mode {
         case .teleport: return sheetDetent == .collapsed ? 118 : 298
-        case .joystick: return sheetDetent == .collapsed ? 76 : 350
+        // Wander simulation has no tab bar: E2 is 380 and E2.a / E4 are 122, measured to the screen bottom.
+        case .joystick: return isWanderRunning ? (sheetDetent == .collapsed ? 122 : 380) : (sheetDetent == .collapsed ? 76 : 350)
         case .route: return nil
         }
     }
 
     private var showsBottomBar: Bool {
-        route.picker == nil && !showsOperationPanel && !isExecutionMode
+        route.picker == nil && !showsOperationPanel && !isExecutionMode && !isWanderRunning
+    }
+
+    /// Route and wander simulation hide the tab bar; a paused wander keeps it for the resume row (E5).
+    private var isWanderRunning: Bool {
+        isWanderMap && ![.paused, .suspended, .interrupted].contains(joystick.phase)
     }
 
     private func beginSearch() {
@@ -2179,22 +2188,14 @@ struct GoFlyMapView: View {
                 identifier: "route.error",
                 isFloating: true
             )
-        } else if let key = location.noticeKey, key != "location.noFix" {
-            GoFlyStatusBanner(
-                tone: .warning,
-                title: goFlyString(key),
-                onDismiss: { location.dismissNotice() },
-                identifier: "map.locationNotice",
-                isFloating: true
-            )
         } else if let key = recovery.noticeKey, !recoveryNoticeDismissed {
             let cold = recovery.requiresColdConfirmation
-            let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .warning
+            let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .danger
             GoFlyStatusBanner(
                 tone: tone,
                 title: goFlyString(key),
                 message: goFlyString("recovery.connectionGuidance"),
-                actionTitle: goFlyString(cold ? "service.restoreGPS" : recovery.canRetryAutomaticRepair ? "common.retry" : "onboarding.vpn.check"),
+                actionTitle: goFlyString(cold ? "toast.restore" : "common.retry"),
                 onAction: {
                     if cold { _ = service.restoreGPS() }
                     else { recovery.checkConnection() }

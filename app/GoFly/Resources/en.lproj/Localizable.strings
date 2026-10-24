@@ -638,7 +638,7 @@
 "common.skip" = "Skip";
 "wifi.error.title" = "Wi-Fi connection required";
 "wifi.error.message" = "GoFly needs the same local Wi-Fi as your Mac to sync the simulation.";
-"wifi.error.action" = "Connect";
+"wifi.error.action" = "Settings";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "Connected";
 "settings.wifi.notConnected" = "Not connected";
@@ -676,3 +676,4 @@
 "route.paused.remaining" = "%.1f km left · about %d min";
 "route.heading.going" = "To %@";
 "route.heading.paused" = "Paused · To %@";
+"toast.restore" = "Restore";

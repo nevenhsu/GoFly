@@ -59,10 +59,10 @@ struct GoFlyRecoveryView: View {
 
     private func connectionBanner(_ key: String) -> some View {
         let cold = recovery.requiresColdConfirmation
-        let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .warning
+        let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .danger
         return GoFlyStatusBanner(tone: tone, title: goFlyString(key),
             message: goFlyString("recovery.connectionGuidance"),
-            actionTitle: goFlyString(cold ? "service.restoreGPS" : recovery.canRetryAutomaticRepair ? "common.retry" : "onboarding.vpn.check"),
+            actionTitle: goFlyString(cold ? "toast.restore" : "common.retry"),
             onAction: {
                 if cold { _ = service.restoreGPS() }
                 else { recovery.checkConnection() }

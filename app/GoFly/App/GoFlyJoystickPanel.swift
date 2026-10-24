@@ -8,6 +8,8 @@ struct GoFlyJoystickPanel: View {
     var maximumHeight: CGFloat
     /// Figma E1.a: only the title row and speed chip remain (76 pt panel).
     var isCollapsed = false
+    /// Wander simulation has no tab bar, so the panel itself ends 66 pt (E2) or 58 pt (E2.a) below its content.
+    var bottomPadding: CGFloat? = nil
     var onRandomDestination: () -> Void = { }
     var onStartWander: () -> Void = { }
     var canStartWander: Bool?
@@ -19,7 +21,7 @@ struct GoFlyJoystickPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             wanderControls
-                .padding(.top, isCollapsed ? 2 : 8)
+                .padding(.top, isCollapsed && !controller.wanderEnabled ? 2 : 8)
             if !isCollapsed {
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
@@ -36,7 +38,7 @@ struct GoFlyJoystickPanel: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, isCollapsed ? 18 : 36)
+        .padding(.bottom, bottomPadding ?? (isCollapsed ? 18 : 36))
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showingSpeedSheet) {
             GoFlySpeedSheet(

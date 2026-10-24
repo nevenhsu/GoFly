@@ -111,6 +111,12 @@
 
 狀態：已實作，待審查（`GoFlyBottomSheet.preferredHeight`／`grabberHeight`；輔助字級與恢復態改回內容定高；`GoFlyPanelHeightUITests` 量測三個 mode 的預設／最小高度與搖桿內部間距）。尚未對齊：漫步執行 E2（380）、E2.a／E4（122，皆無 TabBar；App 仍顯示 TabBar）、搖桿標題字級（E1 約 17 pt，現為 20 pt）。D2 的列高（55 pt）與 D1（60 pt）不一致，依 60 pt 並以 414 pt 為上限。
 
+## 追加修正（2026-10-25）
+
+- **VPN 不可達不可下一步：** `GoFlyVPNOnboardingView` 的「下一步」原本在檢查未通過時仍呼叫 `onComplete()`（繞過），已移除；按鈕在 `canAdvanceVPN`（檢查成功）前停用。`GoFlyOnboardingUITests.testSkipLocationRequiresReachableVPNAndBackKeepsFlow` 驗證。
+- **路線／漫步模擬中沒有 TabBar：** 路線執行原本即隱藏；漫步執行中（非暫停）現在也隱藏（`isWanderRunning`，暫停的 E5 仍保留 tabs），並顯示頂部導航卡＋pill；E2 面板 380／E2.a 與 E4 為 122（量到螢幕底），E4 地點卡距底 28 pt。因模擬器無法實際漫步，這部分只有建置與靜態對照，未做 UI 自動驗證。
+- **Toast：** 「尚未允許 GPS 定位」warning toast 移除；「連線無法使用」改 error（danger）toast、按鈕「重試」（共用 `recovery.checkConnection`；冷啟動待確認時為「恢復」）；有按鈕的 toast／snackbar 中文按鈕不超過 2 字（設定、重試、復原、載入、恢復、說明），英文單字；`EnglishButtonLabelTests` 檢查，`GoFlyConnectionToastUITests` 驗證。
+
 ## 建議順序
 
 C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 → R5 → R4 → R6 → R7 → C3、C5、R8 回歸。R2、R3、R5 都改路線面板，應在同一分支依序處理。每項需單元測試或 UI test；最後依 `docs/AI-INSTALL.md` 安裝到實機，以淺色與深色截圖對照 Figma 驗收。

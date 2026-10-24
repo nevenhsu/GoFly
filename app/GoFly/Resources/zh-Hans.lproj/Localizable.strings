@@ -57,7 +57,7 @@
 "onboarding.vpn.steps" = "连上 Wi‑Fi → 打开 LocalDevVPN → Connect → 返回 GoFly\n只用蜂窝网络无法连接。";
 "onboarding.vpn.open" = "打开 LocalDevVPN";
 "onboarding.vpn.appStore" = "前往 App Store";
-"onboarding.vpn.help" = "连接帮助";
+"onboarding.vpn.help" = "说明";
 "onboarding.vpn.help.heading" = "四步完成连接";
 "onboarding.vpn.help.intro" = "先建立本机通道，再让 GoFly 确认连接。";
 "onboarding.vpn.help.step1.title" = "连上 Wi‑Fi";
@@ -111,7 +111,7 @@
 "operation.retry" = "重试";
 "operation.cancelling" = "正在取消准备…";
 "operation.waitForReturn" = "等待当前设备操作结束。";
-"operation.settings" = "前往设置";
+"operation.settings" = "设置";
 "operation.return" = "返回地图";
 "operation.destination" = "目的地：%@";
 "operation.startSummary" = "准备定位服务，不更改位置。";
@@ -222,7 +222,7 @@
 "imports.title" = "已导入路线";
 "imports.import" = "导入 GPX 文件";
 "imports.export" = "GPX 导出";
-"imports.load" = "载入路线";
+"imports.load" = "载入";
 "imports.empty" = "尚未导入路线。";
 "imports.loading" = "正在读取导入列表…";
 "imports.working" = "正在处理文件…";
@@ -638,7 +638,7 @@
 "common.skip" = "跳过";
 "wifi.error.title" = "需要连接 Wi-Fi";
 "wifi.error.message" = "GoFly 需要连接与 Mac 相同的区域 Wi-Fi 才能进行模拟同步。";
-"wifi.error.action" = "连接 Wi-Fi";
+"wifi.error.action" = "设置";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "已连接";
 "settings.wifi.notConnected" = "未连接";
@@ -676,3 +676,4 @@
 "route.paused.remaining" = "剩余 %.1f km · 预计 %d 分钟";
 "route.heading.going" = "前往 %@";
 "route.heading.paused" = "已暂停 · 前往 %@";
+"toast.restore" = "恢复";
