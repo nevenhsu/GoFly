@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Three equal-width mode tabs (plan 3). Hidden entirely in execution mode and
 /// on full-screen pages; switching tabs only changes what is browsed.
+/// Figma `TabBar / 瞬移・路線・搖桿（等寬）`: 83 pt including the home indicator.
 struct GoFlyBottomBar: View {
     @Binding var selection: SessionMapMode
     var bottomInset: CGFloat = 34
@@ -13,15 +14,16 @@ struct GoFlyBottomBar: View {
                 Button {
                     selection = mode
                 } label: {
-                    VStack(spacing: 3) {
-                        GoFlyTabIcon(mode: mode, selected: selection == mode, size: 22)
+                    VStack(spacing: 1) {
+                        GoFlyTabIcon(mode: mode, selected: selection == mode, size: 25)
                         Text(goFlyString("mode.\(mode.rawValue)"))
-                            .font(.caption2.weight(selection == mode ? .bold : .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 49)
-                    .foregroundStyle(selection == mode ? GoFlyStyle.primary : GoFlyStyle.secondary)
+                    .padding(.top, 7)
+                    .frame(maxWidth: .infinity, minHeight: 49, alignment: .top)
+                    .foregroundStyle(selection == mode ? GoFlyStyle.primary : GoFlyStyle.tabInactive)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -31,8 +33,8 @@ struct GoFlyBottomBar: View {
             }
         }
         .padding(.bottom, bottomInset)
-        .overlay(alignment: .top) { Divider() }
-        .background(GoFlyStyle.cardSurface.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { GoFlyStyle.tabSeparator.frame(height: 0.5) }
+        .background(GoFlyStyle.tabBarSurface.ignoresSafeArea(edges: .bottom))
         // Chrome caps Dynamic Type the way UIKit tab bars do; the labels stay
         // legible and equal-width even at accessibility sizes.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
