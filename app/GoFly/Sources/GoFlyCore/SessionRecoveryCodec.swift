@@ -222,12 +222,14 @@ public enum SessionRecoveryCodec {
             id = node.id.rawValue
             switch node.value {
             case .current: kind = "current"; place = nil
+            case .empty: kind = "empty"; place = nil
             case .place(let value): kind = "place"; place = PlaceDTO(value)
             }
         }
         func value() throws -> RouteNode {
             switch kind {
             case "current": guard place == nil else { throw SessionRecoveryFailure.invalidSnapshot }; return RouteNode(id: RouteNodeID(rawValue: id), value: .current)
+            case "empty": guard place == nil else { throw SessionRecoveryFailure.invalidSnapshot }; return RouteNode(id: RouteNodeID(rawValue: id), value: .empty)
             case "place": guard let place else { throw SessionRecoveryFailure.invalidSnapshot }; return RouteNode(id: RouteNodeID(rawValue: id), value: .place(try place.value()))
             default: throw SessionRecoveryFailure.invalidSnapshot
             }
@@ -256,7 +258,10 @@ public enum SessionRecoveryCodec {
             switch sourceKind {
             case "manual":
                 guard gpxData == nil, gpxFilename == nil, let nodes else { throw SessionRecoveryFailure.invalidSnapshot }
-                guard let draft = RouteDraft(nodes: try nodes.map { try $0.value() }, speed: speed) else {
+                // Snapshots saved before empty endpoints existed hold a lone start node.
+                var decoded = try nodes.map { try $0.value() }
+                while decoded.count < 2 { decoded.append(RouteNode(value: .empty)) }
+                guard let draft = RouteDraft(nodes: decoded, speed: speed) else {
                     throw SessionRecoveryFailure.invalidSnapshot
                 }
                 return draft

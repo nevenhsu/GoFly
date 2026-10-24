@@ -26,7 +26,6 @@ struct GoFlyRouteNodeList: View {
     var onEdit: (RouteNodeID) -> Void
     var onDelete: (RouteNodeID) -> Void
     var onMove: (RouteNodeID, Int) -> Void
-    var onAddDestination: () -> Void = { }
     var onScroll: (RouteNodeID, UnitPoint) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @GestureState private var gestureIsActive = false
@@ -63,13 +62,10 @@ struct GoFlyRouteNodeList: View {
                         .accessibilityHidden(draggingID == id)
                     .id(id)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { rowFrames[id] = $0 }
-                    if index < visibleOrder.count - 1 || (draft.isManual && draft.nodes.count == 1) {
+                    if index < visibleOrder.count - 1 {
                         Divider().padding(.horizontal, 12)
                     }
                 }
-            }
-            if draft.isManual && draft.nodes.count == 1 {
-                placeholderDestinationRow
             }
         }
         .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -107,19 +103,20 @@ struct GoFlyRouteNodeList: View {
                 .contentShape(Rectangle())
                 .gesture(dragGesture(for: node.id))
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.reorderNode"), goFlyRouteRoleTitle(role), title(node.value)))
+                .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.reorderNode"), goFlyRouteRoleTitle(role), title(node.value, role: role)))
                 .accessibilityHint(goFlyString("route.dragHint"))
                 .accessibilityAction(named: Text(goFlyString("route.moveUp"))) { move(node.id, by: -1) }
                 .accessibilityAction(named: Text(goFlyString("route.moveDown"))) { move(node.id, by: 1) }
-                .accessibilityAction(named: Text(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))) {
-                    if isEditable { onDelete(node.id) }
+                .accessibilityAction(named: Text(removeTitle(role))) {
+                    if isEditable, canRemove(node, role: role) { onDelete(node.id) }
                 }
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(goFlyRouteRoleTitle(role)).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(title(node.value)).font(.body)
+                    Text(title(node.value, role: role)).font(.body)
+                        .foregroundStyle(node.value == .empty ? GoFlyStyle.secondary : GoFlyStyle.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -129,65 +126,29 @@ struct GoFlyRouteNodeList: View {
             .buttonStyle(.plain)
             .disabled(!isEditable || draggingID != nil)
             .accessibilityLabel(goFlyRouteEditTitle(role))
-            .accessibilityValue(title(node.value))
+            .accessibilityValue(title(node.value, role: role))
             .accessibilityIdentifier(editIdentifier(role))
-            if case .waypoint = role {
-                Button { if isEditable { onDelete(node.id) } } label: {
-                    GoFlyTrashIcon(size: 18)
-                        .foregroundStyle(GoFlyStyle.danger)
+            if isEditable {
+                Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
+                    Image(systemName: GoFlySymbols.close)
+                        .goFlyControlSymbol(size: 15, weight: .medium)
+                        .foregroundStyle(GoFlyStyle.toastDismiss)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!isEditable || draggingID != nil)
-                .accessibilityLabel(goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)))
+                .disabled(!canRemove(node, role: role) || draggingID != nil)
+                .opacity(canRemove(node, role: role) ? 1 : 0.35)
+                .accessibilityLabel(removeTitle(role))
                 .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
             } else {
-                Spacer()
-                    .frame(width: 16)
+                Spacer().frame(width: 16)
             }
         }
         .frame(minHeight: 60)
         .foregroundStyle(isEditable ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.row.\(node.id.rawValue.uuidString)")
-    }
-
-    private var placeholderDestinationRow: some View {
-        HStack(spacing: 0) {
-            Image(systemName: GoFlySymbols.reorder)
-                .goFlyControlSymbol(size: 18, weight: .semibold)
-                .frame(width: 44, height: 44)
-                .foregroundStyle(GoFlyStyle.border)
-                .accessibilityHidden(true)
-            Button {
-                if isEditable { onAddDestination() }
-            } label: {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(goFlyRouteRoleTitle(.destination))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(goFlyString("route.chooseDestination"))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!isEditable)
-            .accessibilityLabel(goFlyRouteEditTitle(.destination))
-            .accessibilityValue(goFlyString("route.chooseDestination"))
-            .accessibilityIdentifier("route.node.destination")
-            Spacer()
-                .frame(width: 16)
-        }
-        .frame(minHeight: 60)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("route.row.destination.placeholder")
     }
 
     private func dragGesture(for id: RouteNodeID) -> some Gesture {
@@ -270,8 +231,23 @@ struct GoFlyRouteNodeList: View {
         onMove(id, index + offset)
     }
 
-    private func title(_ value: RouteNodeValue) -> String {
-        switch value { case .current: goFlyString("route.currentLocation"); case .place(let place): place.title }
+    private func title(_ value: RouteNodeValue, role: RouteNodeRole) -> String {
+        switch value {
+        case .current: goFlyString("route.currentLocation")
+        case .place(let place): place.title
+        case .empty: goFlyString(role == .start ? "route.chooseOrigin" : "route.chooseDestination")
+        }
+    }
+
+    /// Start and destination rows are only cleared (and disabled once empty); a waypoint row is deleted.
+    private func canRemove(_ node: RouteNode, role: RouteNodeRole) -> Bool {
+        if case .waypoint = role { return true }
+        return node.value != .empty
+    }
+
+    private func removeTitle(_ role: RouteNodeRole) -> String {
+        if case .waypoint = role { return goFlyLocalizedFormat(goFlyString("route.deleteNode"), goFlyRouteRoleTitle(role)) }
+        return goFlyLocalizedFormat(goFlyString("route.clearNode"), goFlyRouteRoleTitle(role))
     }
     private func editIdentifier(_ role: RouteNodeRole) -> String {
         switch role { case .start: "route.node.start"; case .destination: "route.node.destination"; case .waypoint(let n): "route.node.waypoint.\(n)" }

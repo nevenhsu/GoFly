@@ -144,6 +144,7 @@ struct GoFlySaveFavoriteRouteView: View {
             switch node.value {
             case .place: count + 1
             case .current: count + (currentLocationAvailable == true ? 1 : 0)
+            case .empty: count
             }
         }
         return count < 2 ? "favoriteRoutes.error.tooFewValidPlaces" : nil
@@ -158,6 +159,7 @@ struct GoFlySaveFavoriteRouteView: View {
             switch node.value {
             case .current: return goFlyString("route.currentLocation")
             case .place(let place): return place.title
+            case .empty: return nil
             }
         }
         return [title(controller.draft.start), title(controller.draft.destination)].compactMap { $0 }.joined(separator: " → ")
@@ -167,7 +169,7 @@ struct GoFlySaveFavoriteRouteView: View {
         if let source = controller.draft.gpxSource {
             return goFlyLocalizedFormat(goFlyString("favoriteRoutes.pointCount"), source.document.pointCount)
         }
-        return goFlyLocalizedFormat(goFlyString("favoriteRoutes.placeCount"), controller.draft.nodes.count)
+        return goFlyLocalizedFormat(goFlyString("favoriteRoutes.placeCount"), controller.draft.nodes.filter { $0.value != .empty }.count)
     }
 
     private func save() {

@@ -39,6 +39,7 @@ public enum FavoriteRouteSaveBuilder {
         for node in draft.nodes {
             switch node.value {
             case .place(let place): try FavoriteRoutePayload.validate(place); places.append(place)
+            case .empty: continue
             case .current:
                 if let coordinate = currentRouteOrigin {
                     places.append(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate))

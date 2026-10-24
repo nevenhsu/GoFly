@@ -4,7 +4,8 @@ public struct RouteNodeID: Hashable, Sendable {
     public let rawValue: UUID
     public init(rawValue: UUID = UUID()) { self.rawValue = rawValue }
 }
-public enum RouteNodeValue: Equatable, Sendable { case current, place(MapPlace) }
+/// `empty` is an unset start or destination (Figma D1/D2): the row stays, the value is cleared.
+public enum RouteNodeValue: Equatable, Sendable { case current, place(MapPlace), empty }
 public enum RouteNodeRole: Equatable, Sendable { case start, waypoint(Int), destination }
 public struct RouteNode: Identifiable, Equatable, Sendable {
     public let id: RouteNodeID
@@ -32,11 +33,16 @@ public struct RouteDraft: Equatable, Sendable {
     public var nodes: [RouteNode] { if case .manual(let nodes) = source { return nodes }; return [] }
     public var gpxSource: GPXRouteSource? { if case .gpx(let source) = source { return source }; return nil }
     public var isManual: Bool { if case .manual = source { return true }; return false }
+    /// Manual drafts can only be planned or started once start and destination hold a value.
+    public var hasEmptyEndpoint: Bool {
+        guard isManual else { return false }
+        return nodes.count < 2 || nodes.first?.value == .empty || nodes.last?.value == .empty
+    }
     public let speed: RouteSpeed
     public var start: RouteNode? { nodes.first }
     public var destination: RouteNode? { nodes.count >= 2 ? nodes.last : nil }
     public init(speed: RouteSpeed = .standard) {
-        source = .manual([RouteNode(value: .current)]); self.speed = speed
+        source = .manual([RouteNode(value: .current), RouteNode(value: .empty)]); self.speed = speed
     }
     public init?(start: RouteNodeValue? = .current, destination: RouteNodeValue?, speed: RouteSpeed = .standard) {
         self.init(values: [start, destination].compactMap { $0 }, speed: speed)
@@ -87,6 +93,14 @@ public struct RouteDraft: Equatable, Sendable {
     func removing(nodeID: RouteNodeID) -> RouteDraft? {
         guard isManual, nodes.contains(where: { $0.id == nodeID }) else { return nil }
         return RouteDraft(nodes: nodes.filter { $0.id != nodeID }, speed: speed)
+    }
+    /// Clears the value of a start or destination node while keeping its row and identity.
+    func clearing(nodeID: RouteNodeID) -> RouteDraft? {
+        guard isManual, let index = nodes.firstIndex(where: { $0.id == nodeID }) else { return nil }
+        guard index == 0 || index == nodes.count - 1 else { return nil }
+        var nodes = nodes
+        nodes[index] = RouteNode(id: nodeID, value: .empty)
+        return RouteDraft(nodes: nodes, speed: speed)
     }
     func moving(nodeID: RouteNodeID, toIndex: Int) -> RouteDraft? {
         guard isManual, nodes.indices.contains(toIndex), let index = nodes.firstIndex(where: { $0.id == nodeID }) else { return nil }

@@ -37,9 +37,9 @@ struct RouteModelsTests {
 
     @Test func routeSpeedAndDraftKeepValidatedValuesAndStableNodeIdentity() throws {
         let draft = RouteDraft()
-        #expect(draft.nodes.count == 1)
+        #expect(draft.nodes.count == 2)
         #expect(draft.start?.value == .current)
-        #expect(draft.destination == nil)
+        #expect(draft.destination?.value == .empty)
         #expect(draft.speed.kilometersPerHour == 25)
         #expect(RouteSpeed(kilometersPerHour: 0) == nil)
         #expect(RouteSpeed(kilometersPerHour: 1) != nil)

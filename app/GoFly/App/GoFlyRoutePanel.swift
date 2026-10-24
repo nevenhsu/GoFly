@@ -352,7 +352,6 @@ struct GoFlyRoutePanel: View {
                     onEdit: onEditNode,
                     onDelete: { _ = controller.removeNode(id: $0) },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
-                    onAddDestination: { _ = controller.openNewPicker() },
                     onScroll: scrollTo
                 )
                 HStack(spacing: 16) {

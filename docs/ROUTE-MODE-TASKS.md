@@ -41,6 +41,7 @@
 - Figma D1／D2：清單卡 353 pt、圓角 14、0.5 pt 邊；每列 60 pt，左 grip、角色小標 12 pt（起點／停靠點 N／終點）、地點 17 pt；右側中性灰 ✕（44 pt）。
 - 做法：起點與終點為固定欄位、可為空值；端點 ✕ 常駐、空值時停用；停靠點 ✕ 刪除整列；角色名稱統一「停靠點 N」。
 - 驗收：任一端點為空時 Start 停用且不規劃；反轉順序同時交換空值；GPX 唯讀不顯示 ✕；VoiceOver 區分「清除起點」「刪除停靠點 N」。
+- **狀態：已實作，待審查。** Core 新增 `RouteNodeValue.empty`、預設 draft 為〔目前位置、空〕、`removeNode` 對端點改為清除（停靠點仍刪列）、`hasEmptyEndpoint` 阻止規劃與 Start；recovery codec 支援 `empty` 並把舊的單節點快照補成空終點。UI：端點 ✕ 常駐（空值停用）、停靠點 ✕ 刪列、占位列移除、角色名稱統一「停靠點 N」（zh-Hant／zh-Hans／en 同步）。`RouteEndpointTests`、`GoFlyRouteEndpointUITests`。Figma 衝突：D8 的停靠點列畫紅色垃圾桶，D2 與已確認決定為中性灰 ✕，依後者實作。D1 列卡片樣式（353 pt、圓角 14）與 grip 顏色隨 R5。
 
 ### R3 選中欄位模型（D1、D4、D5）
 - 現況：`App/GoFlyMapView.swift:826` `onEditNode` 直接開 D5；頂部搜尋列在路線 tab 開一般搜尋。

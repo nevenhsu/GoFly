@@ -233,8 +233,13 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         session.candidates.cancelPendingLookups()
         return true
     }
+    /// A waypoint row is deleted; the start and destination rows are only cleared.
     @discardableResult public func removeNode(id: RouteNodeID) -> Bool {
-        guard canEdit, let changed = draft.removing(nodeID: id) else { return false }
+        guard canEdit else { return false }
+        let changed: RouteDraft?
+        if case .waypoint? = draft.role(of: id) { changed = draft.removing(nodeID: id) }
+        else { changed = draft.clearing(nodeID: id) ?? draft.removing(nodeID: id) }
+        guard let changed else { return false }
         applyDraft(changed)
         return true
     }
@@ -323,7 +328,8 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
 
     private func schedulePreviewPlanning(for snapshot: RouteDraft) {
         guard canEdit, snapshot.isManual else { return }
-        guard snapshot.nodes.count >= 2, snapshot.start != nil, snapshot.destination != nil else { return }
+        guard snapshot.nodes.count >= 2, snapshot.start != nil, snapshot.destination != nil,
+              !snapshot.hasEmptyEndpoint else { return }
         let resolved: RouteDraft
         do {
             resolved = try resolvedDraft(snapshot)
@@ -453,8 +459,8 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     private func resolvedDraft(_ source: RouteDraft) throws -> RouteDraft {
         if let imported = source.gpxSource { _ = try PlannedRoute(imported: imported.document); return source }
-        guard !source.nodes.isEmpty else { throw RouteExecutionFailure.missingStart }
-        guard source.nodes.count >= 2 else { throw RouteExecutionFailure.missingDestination }
+        guard !source.nodes.isEmpty, source.start?.value != .empty else { throw RouteExecutionFailure.missingStart }
+        guard source.nodes.count >= 2, source.destination?.value != .empty else { throw RouteExecutionFailure.missingDestination }
         let current = source.nodes.contains { $0.value == .current } ? commands.currentRouteOrigin : nil
         guard let resolved = source.resolvingCurrent(to: current) else { throw RouteExecutionFailure.currentLocationUnavailable }
         let coordinates = resolved.nodes.compactMap { node -> GeoCoordinate? in
