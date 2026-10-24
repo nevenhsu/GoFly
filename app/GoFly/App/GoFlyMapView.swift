@@ -869,6 +869,11 @@ struct GoFlyMapView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     sheetDetent = .collapsed
                 }
+            } else if mode == .joystick, !isWanderMap {
+                // Manual joystick: after Go or closing the card the pad is available again.
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    sheetDetent = .expanded
+                }
             }
         }
         .onChange(of: wanderCardPlace != nil) { _, hasCard in
@@ -1809,7 +1814,8 @@ struct GoFlyMapView: View {
             searchFocusRequest = UUID()
             return
         }
-        if !isWanderMap, canSwitchMode, mode != .teleport { selectMode(.teleport) }
+        // The joystick tab keeps its mode: a searched Pin gets the same Go card without switching tabs.
+        if !isWanderMap, canSwitchMode, mode == .route { selectMode(.teleport) }
         showingSearch = true
         searchFocusRequest = UUID()
     }
