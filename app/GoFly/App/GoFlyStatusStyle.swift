@@ -47,6 +47,16 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
 
     var surface: Color { tint.opacity(0.12) }
     var border: Color { tint.opacity(0.35) }
+
+    /// Toast fill from the Figma `Toast / 系統訊息` variants.
+    var toastSurface: Color {
+        switch self {
+        case .danger: GoFlyStyle.toastDangerSurface
+        case .warning: GoFlyStyle.toastWarningSurface
+        case .success: GoFlyStyle.toastSuccessSurface
+        case .neutral, .active: GoFlyStyle.cardSurface
+        }
+    }
 }
 
 /// One display state for the map and Settings service pill.

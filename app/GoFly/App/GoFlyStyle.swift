@@ -34,6 +34,14 @@ enum GoFlyStyle {
         light: (0.788, 0.204, 0.000), dark: (1.000, 0.702, 0.251))
     static let successForeground = adaptive(
         light: (0.141, 0.541, 0.239), dark: (0.188, 0.820, 0.345))
+    // Figma `Toast / 系統訊息` tokens (0 · 共用元件, light / Dark).
+    static let toastDangerSurface = adaptive(light: (1.000, 0.941, 0.933), dark: (0.302, 0.153, 0.165))
+    static let toastWarningSurface = adaptive(light: (1.000, 0.965, 0.902), dark: (0.322, 0.243, 0.106))
+    static let toastSuccessSurface = adaptive(light: (0.941, 0.980, 0.949), dark: (0.141, 0.294, 0.176))
+    static let toastMessage = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
+    static let toastDismiss = adaptive(light: (0.549, 0.549, 0.580), dark: (0.600, 0.600, 0.620))
+    static let toastActionSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
+    static let toastActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.282, 0.282, 0.290))
     static let snackbarSurface = adaptive(
         light: (0.110, 0.110, 0.118), dark: (0.173, 0.173, 0.180))
     static let snackbarForeground = Color.white

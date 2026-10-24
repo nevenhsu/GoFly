@@ -1684,19 +1684,21 @@ struct GoFlyMapView: View {
             let message: String = routePaused ? goFlyString("background.routePaused.message")
                 : (holdPaused ? goFlyString("background.positionPaused.message") : goFlyString("status.repairGuidance"))
 
-            GoFlyWarningToast(
+            GoFlyStatusBanner(
+                tone: .warning,
                 title: title,
                 message: message,
-                retryTitle: goFlyString("common.retry"),
-                onRetry: {
+                actionTitle: goFlyString("common.retry"),
+                onAction: {
                     if routePaused { _ = route.resume() }
                     else if holdPaused { _ = positionHold.retry() }
                     else if wanderPaused { _ = joystick.resume() }
                     else { showingSettings = true }
                 },
                 onDismiss: { continuationNoticeDismissed = true },
-                retryEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
-                identifier: "map.continuationNotice"
+                identifier: "map.continuationNotice",
+                actionEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
+                isFloating: true
             )
         }
     }

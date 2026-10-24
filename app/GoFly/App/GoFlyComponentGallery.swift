@@ -37,7 +37,7 @@ struct GoFlyComponentGallery: View {
                 tone: .danger,
                 title: goFlyString("gallery.dangerTitle"),
                 message: goFlyString("statusBanner.repairHint"),
-                actionTitle: goFlyString("operation.settings"),
+                actionTitle: goFlyString("operation.retry"),
                 onAction: {},
                 onDismiss: {},
                 identifier: "gallery.banner.danger"
@@ -46,6 +46,9 @@ struct GoFlyComponentGallery: View {
                 tone: .warning,
                 title: goFlyString("gallery.warningTitle"),
                 message: goFlyString("gallery.warningMessage"),
+                actionTitle: goFlyString("operation.retry"),
+                onAction: {},
+                onDismiss: {},
                 identifier: "gallery.banner.warning"
             )
             GoFlyStatusBanner(
