@@ -1276,7 +1276,9 @@ struct GoFlyMapView: View {
         settingJoystickOrigin = false
         joystickOriginIntentID = nil
         mode = value
+        // Tapping any tab restores a panel that is at its minimum height.
         if value != .teleport { sheetDetent = .expanded }
+        else if sheetDetent == .collapsed { sheetDetent = .half }
     }
 
     /// Establish a joystick origin only from fresh GPS or a currently
