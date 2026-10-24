@@ -25,7 +25,7 @@ struct GoFlyStatusPill: View {
     private var label: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(tone.tint)
+                .fill(tone.pillDot)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(text)
@@ -36,7 +36,7 @@ struct GoFlyStatusPill: View {
         }
         .padding(.horizontal, 12)
         .frame(minHeight: 30)
-        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(GoFlyStyle.pillSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .strokeBorder(Color(red: 198/255, green: 198/255, blue: 200/255).opacity(0.45), lineWidth: 0.5)

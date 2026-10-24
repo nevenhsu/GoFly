@@ -394,9 +394,10 @@ struct GoFlyCheckboxIcon: View {
     var body: some View {
         ZStack {
             if selected {
+                // Figma `checkbox / on` is 24 pt next to the 22 pt off ring (size is the off diameter).
                 Circle()
                     .fill(GoFlyStyle.primary)
-                    .frame(width: size, height: size)
+                    .frame(width: size + 2, height: size + 2)
                 Canvas { context, canvasSize in
                     let s = min(canvasSize.width, canvasSize.height) / 22.0
                     var check = Path()
@@ -409,7 +410,8 @@ struct GoFlyCheckboxIcon: View {
                 .frame(width: size, height: size)
             } else {
                 Circle()
-                    .strokeBorder(Color(uiColor: .systemGray3), lineWidth: 1.8)
+                    .fill(GoFlyStyle.checkboxOffFill)
+                    .overlay { Circle().strokeBorder(GoFlyStyle.checkboxOffBorder, lineWidth: 1.5) }
                     .frame(width: size, height: size)
             }
         }

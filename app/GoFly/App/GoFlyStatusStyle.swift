@@ -45,6 +45,16 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     /// Spoken severity, so VoiceOver does not depend on the color.
     var accessibilityKey: String { "status.tone.\(rawValue)" }
 
+    /// Figma `StatusPill` dot: gray #8E8E93, green, orange #FF9F0A, red (system green/red adapt in dark).
+    var pillDot: Color {
+        switch self {
+        case .neutral, .active: Color(red: 0.557, green: 0.557, blue: 0.576)
+        case .warning: Color(red: 1.0, green: 0.624, blue: 0.039)
+        case .danger: GoFlyStyle.danger
+        case .success: GoFlyStyle.success
+        }
+    }
+
     var surface: Color { tint.opacity(0.12) }
     var border: Color { tint.opacity(0.35) }
 
