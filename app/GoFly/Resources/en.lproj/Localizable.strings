@@ -13,8 +13,8 @@
 "service.title" = "Device service";
 "service.start" = "Start";
 "service.stop" = "Stop";
-"service.restoreGPS" = "Restore GPS";
-"service.resetTunnel" = "Reset VPN tunnel";
+"service.restoreGPS" = "Restore";
+"service.resetTunnel" = "Reset";
 "service.stopped" = "Stopped";
 "service.stoppedGPSPending" = "Stopped · GPS unconfirmed";
 "service.preparing" = "Preparing service…";
@@ -47,17 +47,17 @@
 "onboarding.next" = "Next";
 "onboarding.location.title" = "Allow GoFly to use location";
 "onboarding.location.message" = "Show your real location on the map and use it as the start of routes and wandering. Only “While Using the App” is needed.";
-"onboarding.location.allow" = "Allow location";
+"onboarding.location.allow" = "Allow";
 "onboarding.location.skip" = "Skip";
 "onboarding.location.authorized" = "Location access is already allowed.";
 "onboarding.location.denied" = "Location access is off. To show your real location on the map, turn it on in iPhone Settings. You can also continue without it.";
-"onboarding.location.openSettings" = "Open Settings";
+"onboarding.location.openSettings" = "Settings";
 "onboarding.vpn.title" = "VPN tunnel";
 "onboarding.vpn.stepsTitle" = "Connection steps";
 "onboarding.vpn.steps" = "Connect to Wi‑Fi → Open LocalDevVPN → Connect → Return to GoFly\nCellular data alone does not work.";
-"onboarding.vpn.open" = "Open LocalDevVPN";
+"onboarding.vpn.open" = "Open";
 "onboarding.vpn.appStore" = "Go to App Store";
-"onboarding.vpn.help" = "Connection help";
+"onboarding.vpn.help" = "Help";
 "onboarding.vpn.help.heading" = "Connect in four steps";
 "onboarding.vpn.help.intro" = "Set up the local tunnel first, then let GoFly confirm the connection.";
 "onboarding.vpn.help.step1.title" = "Connect to Wi‑Fi";
@@ -70,17 +70,17 @@
 "onboarding.vpn.help.step4.message" = "After “Connection successful” appears, tap “Next”.";
 "onboarding.vpn.help.confirmation" = "Connected in LocalDevVPN means its VPN is on. GoFly still needs to confirm that it can reach the local tunnel.";
 "onboarding.vpn.help.troubleshooting" = "Still unable to connect?";
-"onboarding.vpn.help.openSettings" = "Open iPhone Settings";
+"onboarding.vpn.help.openSettings" = "Settings";
 "onboarding.vpn.help.permission" = "Allow “Local Network” when iOS asks. Tap here to open iPhone Settings.";
 "onboarding.vpn.help.reconnect" = "Make sure Wi‑Fi is connected, disconnect and reconnect in LocalDevVPN, then come back and check.";
-"onboarding.vpn.help.returnAndCheck" = "Return and check";
+"onboarding.vpn.help.returnAndCheck" = "Check";
 "onboarding.vpn.help.notChecked" = "Not checked";
 "onboarding.vpn.help.notReachable" = "Not reachable";
 "onboarding.vpn.helpMessage" = "Connect iPhone to Wi‑Fi; cellular data alone does not work. Install LocalDevVPN from the App Store. Open it, tap Connect, and allow its VPN configuration when iOS asks. Then return to GoFly. If the tunnel remains unavailable, disconnect and reconnect in LocalDevVPN, then check again here.";
 "onboarding.vpn.disconnected" = "Not connected";
 "onboarding.vpn.checking" = "Checking…";
 "onboarding.vpn.connected" = "Connection successful";
-"onboarding.vpn.check" = "Check connection";
+"onboarding.vpn.check" = "Check";
 "onboarding.vpn.unavailable" = "GoFly could not reach the local tunnel. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and check again.";
 "onboarding.vpn.timedOut" = "GoFly’s local tunnel check timed out. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and retry.";
 "onboarding.vpn.failureDetail" = "iOS reported";
@@ -106,13 +106,13 @@
 "operation.preparingMove" = "Preparing location change";
 "operation.retrying" = "Retrying preparation";
 "operation.attempt" = "Attempt %ld of 3";
-"operation.cancel" = "Cancel preparation";
+"operation.cancel" = "Cancel";
 "operation.failed" = "Unable to start this operation";
 "operation.retry" = "Retry";
 "operation.cancelling" = "Cancelling preparation…";
 "operation.waitForReturn" = "Waiting for the current device operation to finish.";
-"operation.settings" = "Go to Settings";
-"operation.return" = "Return to map";
+"operation.settings" = "Settings";
+"operation.return" = "Map";
 "operation.destination" = "Destination: %@";
 "operation.startSummary" = "Prepares the service without changing location.";
 "favorites.title" = "Favorite places";
@@ -153,10 +153,10 @@
 "route.chooseDestination" = "Choose destination";
 "route.editOrigin" = "Edit origin";
 "route.editDestination" = "Edit destination";
-"route.start" = "Start route";
+"route.start" = "Start";
 "route.pause" = "Pause";
 "route.resume" = "Resume";
-"route.cancel" = "Cancel route";
+"route.cancel" = "Cancel";
 "route.speed" = "Speed";
 "route.speedValue" = "%ld km/h";
 "route.progress" = "Route progress";
@@ -165,7 +165,7 @@
 "route.cancelConfirmation.title" = "End this route?";
 "route.cancelConfirmation.message" = "Confirming stops the simulated route, keeps your current position and returns to route planning.";
 "route.cancelConfirmation.return" = "Cancel";
-"route.cancelConfirmation.confirm" = "End route";
+"route.cancelConfirmation.confirm" = "End";
 "route.unknown.message" = "The device response is unknown. Stop the service in Settings before starting another move.";
 "route.completed" = "Route completed";
 "route.pauseHint" = "Pause sending locations and keep this route and progress.";
@@ -188,8 +188,8 @@
 "route.editWaypoint" = "Edit stop %ld";
 "route.addOrigin" = "Add origin";
 "route.addDestination" = "Add destination";
-"route.addWaypoint" = "＋ Add stop";
-"route.clearPlace" = "Clear place";
+"route.addWaypoint" = "＋ Add";
+"route.clearPlace" = "Clear";
 "route.reorderNode" = "Reorder %@, %@";
 "route.dragHint" = "Hold the handle to move the whole place. Move up, move down, and delete actions are also available.";
 "route.moveUp" = "Move up";
@@ -220,9 +220,9 @@
 "route.status.roundTrip.pausing.forward" = "Round-trip route pausing… · Forward to destination";
 "route.status.roundTrip.pausing.reverse" = "Round-trip route pausing… · Reverse to origin";
 "imports.title" = "Imported routes";
-"imports.import" = "Import GPX file";
-"imports.export" = "GPX export";
-"imports.load" = "Load route";
+"imports.import" = "Import";
+"imports.export" = "Export";
+"imports.load" = "Load";
 "imports.empty" = "No imported routes yet.";
 "imports.loading" = "Loading imported routes…";
 "imports.working" = "Processing file…";
@@ -232,7 +232,7 @@
 "imports.delete" = "Delete %@";
 "imports.preview" = "Route preview";
 "imports.loadedPath" = "Imported route · read-only";
-"imports.clearLoaded" = "Clear loaded GPX";
+"imports.clearLoaded" = "Clear";
 "imports.metadata" = "%@ · %ld points";
 "imports.kind.tracks" = "Tracks";
 "imports.kind.routes" = "Routes";
@@ -282,7 +282,7 @@
 "favoriteRoutes.deleted" = "Route deleted";
 "favoriteRoutes.deletedCount" = "Deleted %ld favorite routes";
 "favoriteRoutes.undo" = "Undo";
-"favoriteRoutes.return" = "Return to route";
+"favoriteRoutes.return" = "Back";
 "favoriteRoutes.delete" = "Delete %@";
 "favoriteRoutes.deleteSingle" = "Delete";
 "favoriteRoutes.pointCount" = "%ld points";
@@ -335,9 +335,9 @@
 
 // Automatic wander
 "joystick.wander" = "Wander";
-"joystick.startWander" = "Start wandering";
-"joystick.stopWander" = "Stop wandering";
-"joystick.changePlace" = "Change place";
+"joystick.startWander" = "Start";
+"joystick.stopWander" = "Stop";
+"joystick.changePlace" = "Change";
 "joystick.randomDestination" = "Random destination";
 "joystick.phase.suspended" = "Waiting to continue";
 "joystick.error.noCandidate" = "No new destination is available. Choose a place on the map or try again.";
@@ -418,15 +418,15 @@
 "settings.status.denied" = "Not allowed";
 "settings.status.notDetermined" = "Not determined";
 "settings.status.restricted" = "Restricted";
-"settings.openSystemSettings" = "Open System Settings";
+"settings.openSystemSettings" = "Settings";
 "settings.externalOpenFailed" = "System Settings could not be opened. Open it manually and return to GoFly to check again.";
 "settings.location.purpose" = "Use location access to show the real position and phone heading. It does not affect simulated location.";
 "settings.background.purposeTitle" = "Route and wander";
 "settings.background.purpose" = "Routes and Wander can continue simulating GPS in the background. When the system restricts execution, GoFly pauses; return to the app to resume.";
 "settings.vpn.steps" = "Connect iPhone to Wi‑Fi (cellular data alone does not work), open LocalDevVPN, tap Connect, then return to GoFly and check the tunnel.";
-"settings.vpn.openLocalDevVPN" = "Open LocalDevVPN";
+"settings.vpn.openLocalDevVPN" = "Open";
 "settings.vpn.externalOpenFailed" = "LocalDevVPN could not be opened. Open it manually, connect the tunnel, then return to GoFly.";
-"settings.vpn.check" = "Check connection";
+"settings.vpn.check" = "Check";
 "settings.vpn.failureGuide" = "Make sure iPhone is on Wi‑Fi, reconnect in LocalDevVPN, then return and check the tunnel again.";
 "settings.device.pairing" = "Pairing";
 "settings.device.pairingReady" = "Pairing data available";
@@ -462,14 +462,14 @@
 "setup.blocked.artifact" = "The device support package is incomplete or does not match setup. Connect this iPhone to the GoFly Mac app to repair setup.";
 "setup.blocked.input" = "The setup package is invalid. Connect this iPhone to the GoFly Mac app to retry setup.";
 "setup.blocked.storage" = "GoFly could not safely read setup. Connect this iPhone to the GoFly Mac app to retry setup.";
-"setup.retry" = "Retry setup";
+"setup.retry" = "Retry";
 
 
 "recovery.coldClearPending" = "Last simulated position may still be active. Tap Restore to clear it.";
 
 "settings.diagnostics.title" = "Diagnostics";
 "settings.diagnostics.description" = "Saves the connection, movement, and background records to a file you can share. Coordinates are rounded to three decimals; pairing data and device identifiers are not included.";
-"settings.diagnostics.export" = "Export diagnostics";
+"settings.diagnostics.export" = "Export";
 "settings.diagnostics.exportFailed" = "Could not create the diagnostics file.";
 
 "status.tone.neutral" = "Waiting";
@@ -503,13 +503,13 @@
 "placeDetails.copied" = "Coordinates copied";
 
 "search.recent" = "Recent searches";
-"search.clearHistory" = "Clear history";
+"search.clearHistory" = "Clear";
 
 "search.coordinateHint" = "Enter a place or latitude, longitude.";
 
-"placeDetails.setStart" = "Set as start";
+"placeDetails.setStart" = "Start";
 
-"placeDetails.setEnd" = "Set as destination";
+"placeDetails.setEnd" = "End";
 
 "placeDetails.copy" = "Copy";
 
@@ -522,7 +522,7 @@
 
 "settings.languageAndAppearance" = "Language & appearance";
 
-"route.exchange" = "Reverse order";
+"route.exchange" = "Reverse";
 
 "route.summary" = "%.1f km · %d min · %d km/h";
 
@@ -530,11 +530,11 @@
 
 "imports.points.allCount" = "View all %d points";
 
-"imports.points.all" = "View all points";
+"imports.points.all" = "View all";
 
 "imports.points.point" = "Point";
 
-"imports.deleteAction" = "Delete route";
+"imports.deleteAction" = "Delete";
 
 "imports.imported" = "Imported “%@”";
 
@@ -583,16 +583,16 @@
 "service.statusPill.ready" = "Running";
 "service.statusPill.stopped" = "Stopped";
 "service.statusPill.error" = "Needs repair";
-"service.stopService" = "Stop service";
-"service.startService" = "Start service";
+"service.stopService" = "Stop";
+"service.startService" = "Start";
 
-"onboarding.location.continue" = "Skip and continue";
+"onboarding.location.continue" = "Skip";
 "onboarding.location.currentStatus" = "Current permission";
 "onboarding.location.status.notDetermined" = "Not set";
 "onboarding.location.status.denied" = "Not allowed";
 "onboarding.location.status.authorized" = "While using the app";
 "onboarding.location.deniedTitle" = "Location permission is off";
-"onboarding.vpn.helpLink" = "Connection guide ›";
+"onboarding.vpn.helpLink" = "Guide ›";
 "onboarding.vpn.step1" = "Open LocalDevVPN";
 "onboarding.vpn.step2" = "Tap Connect";
 "onboarding.vpn.step3" = "Return to GoFly to recheck automatically";
@@ -613,10 +613,10 @@
 "route.error.shortTitle" = "Unable to get route";
 "joystick.wanderDetail" = "Walks to a random destination automatically";
 "joystick.currentDestinationLabel" = "Current destination";
-"joystick.endWander" = "End wander";
+"joystick.endWander" = "End";
 
 "favorites.selectedCount" = "%d selected";
-"favorites.selectAll" = "Select all";
+"favorites.selectAll" = "All";
 
 "settings.permissionsAndConnection" = "Permissions and connection";
 "settings.permissionsFooter" = "Only \"While Using the App\" is needed; background continuation is handled by system background tasks.";
@@ -624,7 +624,7 @@
 "settings.deviceSection" = "Device";
 "onboarding.location.statusFormat" = "Current permission: %@";
 "onboarding.vpn.subtitle" = "GoFly talks to the device service through LocalDevVPN.";
-"route.addStop" = "Add stop";
+"route.addStop" = "Add";
 "route.speedShort" = "%ld km/h";
 "imports.pointsFormat" = "%@ points";
 "imports.footnote" = "Tap a route for actions: load, view all points, export, delete. Imported routes cannot be edited; change the source file and import again.";
@@ -638,7 +638,7 @@
 "common.skip" = "Skip";
 "wifi.error.title" = "Wi-Fi connection required";
 "wifi.error.message" = "GoFly needs the same local Wi-Fi as your Mac to sync the simulation.";
-"wifi.error.action" = "Connect to Wi-Fi";
+"wifi.error.action" = "Connect";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "Connected";
 "settings.wifi.notConnected" = "Not connected";
@@ -652,10 +652,10 @@
 "common.confirm" = "Confirm";
 "common.retry" = "Retry";
 "search.chooseOnMap" = "Choose on map";
-"route.clearRoute" = "Clear Route";
-"route.resumeShort" = "Resume Route";
-"teleport.resumeShort" = "Resume Teleport";
-"wander.resumeShort" = "Resume Wander";
+"route.clearRoute" = "Clear";
+"route.resumeShort" = "Resume";
+"teleport.resumeShort" = "Resume";
+"wander.resumeShort" = "Resume";
 "route.roundTrip.on" = "Round Trip On";
 "route.roundTrip.off" = "Round Trip Off";
 "route.direction.forward" = "Forward";

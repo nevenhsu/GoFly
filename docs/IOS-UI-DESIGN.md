@@ -345,6 +345,8 @@ D · 路線 section 已大幅更新並改用以下共用元件實例；路線頁
 
 移動速度（D7）：快選 5／25／50／100（🚶🚲🛵🚗）、Slider 1–120、預設 25；路線、搖桿與漫步共用同一個偏好（`GoFlyPreferences.movementSpeed`，由 `MovementSpeedSynchronizer` 同步），重開 App 保留。
 
+按鈕英文字：所有按鈕的英文文案只用一個單字（如 Resume、End、Add、Reverse、Clear、Settings、Check），避免在膠囊內換行或跑版；中文不受此限。`EnglishButtonLabelTests` 檢查清單內的按鈕 key，新增按鈕文案須加入該清單。
+
 Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中斷` 元件名稱與實際文字「錯誤」不一致；`Toast / 系統訊息 / warn` 元件預設按鈕為「繼續」，D10 實例覆寫為「重試」，以 D10 渲染畫面為準；本節取代先前「Warning／Danger Toast 固定 80 pt、實心 1 pt 邊框」描述中的高度與邊框不透明度。
 
 ## 2026-10-24 Section E補充定案（線框修正與實作分開追蹤）
