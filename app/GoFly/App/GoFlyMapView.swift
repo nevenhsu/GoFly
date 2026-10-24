@@ -29,6 +29,7 @@ final class GoFlyMovementModel: ObservableObject {
     let positionHold: PositionHoldController
     private let service: ServiceController
     private var subscriptions: [AnyCancellable] = []
+    private var speedSynchronizer: MovementSpeedSynchronizer?
     private var mapAdmission: (@MainActor () -> Bool)?
 
     init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
@@ -40,7 +41,7 @@ final class GoFlyMovementModel: ObservableObject {
             commands: service, search: MapKitPlaceSearch()
         )
         _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
-        joystick = JoystickMovementController(commands: service, speed: snapshot.joystickSpeed)
+        joystick = JoystickMovementController(commands: service, speed: GoFlyPreferences.shared.movementSpeed)
         positionHold = PositionHoldController(service: service)
         recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
@@ -62,6 +63,9 @@ final class GoFlyMovementModel: ObservableObject {
                     goFlyString("background.activity.routeProgress"), percent))
             }
         )
+        speedSynchronizer = MovementSpeedSynchronizer(
+            route: route, joystick: joystick, initial: GoFlyPreferences.shared.movementSpeed,
+            onChange: { GoFlyPreferences.shared.setMovementSpeed($0) })
         // Both screens observe this owner and read the same status projection.
         subscriptions = [service.objectWillChange, recovery.objectWillChange,
                          route.objectWillChange, joystick.objectWillChange,

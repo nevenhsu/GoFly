@@ -10,7 +10,7 @@ struct JoystickModelTests {
         let normal = try #require(full.displacement(speed: .standard))
         let fastest = try #require(full.displacement(speed: RouteSpeed(kilometersPerHour: 120)!))
         #expect(abs(slow.distanceMeters - (1.0 / 3.6 * 0.5)) < 1e-15)
-        #expect(abs(normal.distanceMeters - 2.7777777777777777) < 1e-15)
+        #expect(abs(normal.distanceMeters - (25.0 / 3.6 * 0.5)) < 1e-15)
         #expect(fastest.distanceMeters == JoystickDisplacement.maximumDistanceMeters)
         #expect(JoystickDisplacement(bearingDegrees: 0, distanceMeters: JoystickDisplacement.maximumDistanceMeters.nextUp) == nil)
         #expect(JoystickInput(bearingDegrees: 360, strength: -1)?.displacement(speed: .standard) == nil)

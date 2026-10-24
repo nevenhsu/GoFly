@@ -39,6 +39,8 @@ final class GoFlyPreferences {
     static let shared = GoFlyPreferences()
     private(set) var language: GoFlyLanguage
     private(set) var appearance: GoFlyAppearance
+    /// Shared by route, joystick and wander so a change in one shows in the others.
+    private(set) var movementSpeed: RouteSpeed
     private var systemLanguages: [String]
     @ObservationIgnored private let defaults: UserDefaults
     private static let storageKey = "gofly.preferences.v1"
@@ -49,6 +51,7 @@ final class GoFlyPreferences {
         let saved = store.dictionary(forKey: Self.storageKey)
         language = (saved?["language"] as? String).flatMap(GoFlyLanguage.init(rawValue:)) ?? .system
         appearance = (saved?["appearance"] as? String).flatMap(GoFlyAppearance.init(rawValue:)) ?? .system
+        movementSpeed = (saved?["movementSpeed"] as? Int).flatMap(RouteSpeed.init(kilometersPerHour:)) ?? .standard
         systemLanguages = Locale.preferredLanguages
     }
 
@@ -80,6 +83,12 @@ final class GoFlyPreferences {
         save()
     }
 
+    func setMovementSpeed(_ value: RouteSpeed) {
+        guard movementSpeed != value else { return }
+        movementSpeed = value
+        save()
+    }
+
     /// Re-reads the one persisted preferences dictionary after Core activates
     /// a restore. Unknown keys and the restore marker stay in UserDefaults;
     /// this method only refreshes the presentation projection.
@@ -89,6 +98,8 @@ final class GoFlyPreferences {
            let decoded = GoFlyLanguage(rawValue: value) { language = decoded }
         if let value = saved?["appearance"] as? String,
            let decoded = GoFlyAppearance(rawValue: value) { appearance = decoded }
+        if let value = saved?["movementSpeed"] as? Int,
+           let decoded = RouteSpeed(kilometersPerHour: value) { movementSpeed = decoded }
     }
 
     func refreshSystemPreferences() {
@@ -99,6 +110,7 @@ final class GoFlyPreferences {
         var dictionary = defaults.dictionary(forKey: Self.storageKey) ?? [:]
         dictionary["language"] = language.rawValue
         dictionary["appearance"] = appearance.rawValue
+        dictionary["movementSpeed"] = movementSpeed.kilometersPerHour
         defaults.set(dictionary, forKey: Self.storageKey)
     }
 }

@@ -34,6 +34,7 @@
 - Figma D7：40% dim、標題「設定移動速度」＋右上「完成」、「目前時速 25 km/h」、4 膠囊（選中黑底白字）、Slider 1–120、底部「完成設定」。
 - 做法：快選改 5／25／50／100、預設 25；在 `GoFlyPreferences` 新增單一移動速度偏好，路線與搖桿共用；保留 session 復原但以偏好為初始值。
 - 驗收：首次安裝兩處皆 25；D7 改 50 後漫步顯示 50，反之亦然；重開 App 保留；執行中改速即時更新 D6 剩餘時間；單元測試涵蓋共用與保存。
+- **狀態：已實作，待審查。** `RouteSpeed.standard` 改 25、`RouteSpeed.presets` 為 5／25／50／100；新增 Core `MovementSpeedSynchronizer`（路線 draft 與搖桿／漫步速度雙向同步，忙碌中的一方於 phase 變化後補同步）與 `GoFlyPreferences.movementSpeed` 持久化；`MovementSpeedSynchronizerTests`、`GoFlySpeedUITests`。`SessionRecoveryStore.joystickSpeed` 仍保存，但啟動初始值改取偏好。舊預設 20 的兩處單元測試期望值（`JoystickModelTests`、`RouteModelsTests`、`JoystickMovementControllerTests`）依新預設 25 更新。「執行中改速即時更新 D6 剩餘時間」待 R6 的 D6 面板驗證。
 
 ### R2 起訖空值與 D1／D2 清單（D1、D2）
 - 現況：`RouteNodeValue` 無空值；`RouteDraft()` 只建立起點；`App/GoFlyRouteNodeList.swift:134` 只對停靠點顯示刪除。

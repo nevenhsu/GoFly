@@ -336,4 +336,6 @@ D · 路線 section 已大幅更新並改用以下共用元件實例；路線頁
 | checkbox（圓形） | on：24 pt 黑色實心圓＋白勾（深色：白圓黑勾，`Dark · Check button / on`）；off：22 pt 圓、1.5 pt `#C7C7CC` 邊（深色 `#2C2C2E` 底＋`#8E8E93` 邊） | `GoFlyCheckboxIcon` |
 | `TabBar / 瞬移・路線・搖桿（等寬）` | variants `Mode=瞬移｜路線｜搖桿`；393 × 83 pt、`#F9F9F9` 96% 底＋頂部 `#C6C6C8` 細線；每格 131 × 49 pt、25 pt 圖示；選中黑色 2.29 pt 線條＋10 pt 黑字，未選 1.875 pt `#999999`＋10 pt Medium | `GoFlyBottomBar`、`GoFlyTabIcon` |
 
+移動速度（D7）：快選 5／25／50／100（🚶🚲🛵🚗）、Slider 1–120、預設 25；路線、搖桿與漫步共用同一個偏好（`GoFlyPreferences.movementSpeed`，由 `MovementSpeedSynchronizer` 同步），重開 App 保留。
+
 Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中斷` 元件名稱與實際文字「錯誤」不一致；`Toast / 系統訊息 / warn` 元件預設按鈕為「繼續」，D10 實例覆寫為「重試」，以 D10 渲染畫面為準；本節取代先前「Warning／Danger Toast 固定 80 pt、實心 1 pt 邊框」描述中的高度與邊框不透明度。

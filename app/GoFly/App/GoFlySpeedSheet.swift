@@ -7,14 +7,14 @@ struct GoFlySpeedSheet: View {
     var onSpeedChanged: (RouteSpeed) -> Void
     var onDismiss: () -> Void
 
-    private let presets: [Int] = [5, 20, 60, 120]
+    private let presets: [Int] = RouteSpeed.presets.map(\.kilometersPerHour)
 
     private func presetIcon(for preset: Int) -> String {
         switch preset {
         case 5: return "🚶"
-        case 20: return "🚲"
-        case 60: return "🚗"
-        case 120: return "🏎️"
+        case 25: return "🚲"
+        case 50: return "🛵"
+        case 100: return "🚗"
         default: return ""
         }
     }

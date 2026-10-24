@@ -5,7 +5,8 @@ import XCTest
 /// be compared with the Figma frames side by side.
 @MainActor
 class GoFlyRouteModeTestCase: XCTestCase {
-    func launch(_ extra: [String] = [], appearance: String = "light", largeText: Bool = false) -> XCUIApplication {
+    func launch(_ extra: [String] = [], appearance: String = "light", largeText: Bool = false,
+                preferencesStore: String = UUID().uuidString) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-gofly-ui-session-store", UUID().uuidString,
@@ -13,7 +14,7 @@ class GoFlyRouteModeTestCase: XCTestCase {
             "-gofly-ui-favorites-store", UUID().uuidString,
             "-gofly-ui-imports-store", UUID().uuidString,
             "-gofly-ui-favorite-routes-store", UUID().uuidString,
-            "-gofly-ui-preferences-store", UUID().uuidString,
+            "-gofly-ui-preferences-store", preferencesStore,
             "-gofly-ui-preferences-language", "zh-Hant",
             "-gofly-ui-preferences-appearance", appearance,
             "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
