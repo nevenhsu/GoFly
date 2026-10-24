@@ -143,7 +143,9 @@ struct RoutePreviewUpdateTests {
 
     @Test func multipleStopsContinueFromThePreviousRoadEntrance() async throws {
         let final = GeoCoordinate(latitude: 25.02, longitude: 121.55)!
-        let source = draft(to: end).appendingDestination(MapPlace(id: .coordinate(final), title: "Final", coordinate: final))!
+        let source = RouteDraft(values: [start, end, final].map {
+            .place(MapPlace(id: .coordinate($0), title: $0.displayText, coordinate: $0))
+        })!
         let planner = EntrancePreviewPlanner()
         let route = RouteExecutionController(draft: source, planner: planner,
             commands: ServiceController(service: PreviewDevice()), search: PreviewSearch())

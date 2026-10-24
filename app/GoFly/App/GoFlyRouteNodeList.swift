@@ -21,8 +21,10 @@ func goFlyRouteEditTitle(_ role: RouteNodeRole) -> String {
 
 struct GoFlyRouteNodeList: View {
     let draft: RouteDraft
+    var selectedID: RouteNodeID? = nil
     let isEditable: Bool
     let viewport: CGRect
+    /// Selecting a row only chooses which field D5, the map Pin and the Location Card fill.
     var onEdit: (RouteNodeID) -> Void
     var onDelete: (RouteNodeID) -> Void
     var onMove: (RouteNodeID, Int) -> Void
@@ -96,6 +98,7 @@ struct GoFlyRouteNodeList: View {
 
     private func row(_ node: RouteNode) -> some View {
         let role = draft.role(of: node.id) ?? .start
+        let isSelected = isEditable && selectedID == node.id
         return HStack(spacing: 0) {
             Image(systemName: GoFlySymbols.reorder)
                 .goFlyControlSymbol(size: 18, weight: .semibold)
@@ -127,6 +130,7 @@ struct GoFlyRouteNodeList: View {
             .disabled(!isEditable || draggingID != nil)
             .accessibilityLabel(goFlyRouteEditTitle(role))
             .accessibilityValue(title(node.value, role: role))
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier(editIdentifier(role))
             if isEditable {
                 Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
@@ -146,6 +150,9 @@ struct GoFlyRouteNodeList: View {
             }
         }
         .frame(minHeight: 60)
+        .background {
+            if isSelected { Color.clear.goFlySearchField(isFocused: true) }
+        }
         .foregroundStyle(isEditable ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.row.\(node.id.rawValue.uuidString)")

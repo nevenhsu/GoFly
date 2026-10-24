@@ -240,7 +240,8 @@ struct GoFlyMapView: View {
     private var activeCandidate: TeleportCandidate? {
         if let picker = route.picker { return picker.candidates.candidate }
         if isWanderMap { return wanderSearch.candidate }
-        return mode == .teleport && route.canEdit ? search.candidate : nil
+        // Teleport goes to the Pin; the route tab confirms it into the selected field (D4).
+        return (mode == .teleport || mode == .route) && route.canEdit ? search.candidate : nil
     }
     private var canSwitchMode: Bool { route.canEdit && route.picker == nil && !showsOperationPanel }
 
@@ -414,7 +415,7 @@ struct GoFlyMapView: View {
                     search: picker.candidates,
                     focusRequest: searchFocusRequest,
                     placeholderOverride: routePickerPlaceholder(picker.role),
-                    roleTitle: routePickerPlaceholder(picker.role),
+                    roleTitle: goFlyLocalizedFormat(goFlyString("route.picker.selecting"), goFlyRouteRoleTitle(picker.role)),
                     onBack: { route.cancelPicker(id: picker.id) },
                     onFavorites: { searchFavorites = true },
                     recentPlaces: recentPlaces,
@@ -550,6 +551,11 @@ struct GoFlyMapView: View {
             onMapTap: { coordinate in
                 if let picker = route.picker {
                     picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
+                } else if mode == .route, route.canEdit, route.draft.isManual {
+                    // D4: a map Pin fills the selected field only after "確認".
+                    search.selectMapCoordinate(coordinate, resolver: mapPlaces)
+                    cameraIntent = GoFlyCameraIntent(coordinate: coordinate, ensureVisibleOnly: true)
+                    sheetDetent = .collapsed
                 } else if isWanderMap {
                     wanderSearch.selectMapCoordinate(coordinate, resolver: mapPlaces)
                 } else if mode == .teleport, route.canEdit {
@@ -664,22 +670,9 @@ struct GoFlyMapView: View {
             if mode == .route, let candidate = activeCandidate {
                 GoFlyLocationCard(
                     place: candidate.place,
-                    primaryActionType: isMapPicking ? .confirm : .add,
-                    primaryActionTitle: isMapPicking ? goFlyString("common.confirm") : goFlyString("common.add"),
-                    onPrimaryAction: {
-                        if isMapPicking {
-                            if let picker = route.picker {
-                                _ = route.confirmPicker(id: picker.id)
-                            }
-                            isMapPicking = false
-                            activeSearch.resetSelection()
-                            sheetDetent = .expanded
-                        } else {
-                            _ = route.appendDestination(candidate.place)
-                            activeSearch.resetSelection()
-                            sheetDetent = .expanded
-                        }
-                    },
+                    primaryActionType: .confirm,
+                    primaryActionTitle: goFlyString("common.confirm"),
+                    onPrimaryAction: { confirmRouteCandidate(candidate) },
                     onDismiss: {
                         activeSearch.resetSelection()
                         if isMapPicking {
@@ -691,7 +684,7 @@ struct GoFlyMapView: View {
                         snackbar = GoFlySnackbarMessage(text: goFlyString("placeDetails.copied"))
                     },
                     distanceFrom: service.positionMarker?.coordinate,
-                    identifier: isMapPicking ? "map.route.confirmCard" : "map.route.addCard"
+                    identifier: "map.route.confirmCard"
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 16)
@@ -745,7 +738,8 @@ struct GoFlyMapView: View {
             if shown { sheetDetent = .expanded }
         }
         .onChange(of: route.picker?.id) { _, id in
-            if id != nil { sheetDetent = .expanded }
+            // D5 picks collapse the sheet while a candidate is selected; closing it returns to D1.
+            if id != nil || !isMapPicking { sheetDetent = .expanded }
         }
     }
 
@@ -821,7 +815,7 @@ struct GoFlyMapView: View {
                 } else {
                     GoFlyRoutePanel(
                         controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                        onEditNode: { _ = route.openPicker(for: $0) },
+                        onEditNode: { _ = route.selectNode(id: $0) },
                         onSettings: { showingSettings = true },
                         onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
                         currentLocationAvailable: service.currentRouteOrigin != nil,
@@ -910,22 +904,15 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func useCandidateInRoute(_ candidate: TeleportCandidate, asStart: Bool) {
-        guard route.canEdit, route.draft.isManual else { return }
-        // A destination always needs a start; use the same current-location
-        // placeholder as a fresh route when the person removed every field.
-        if !asStart, route.draft.nodes.isEmpty {
-            guard route.openNewPicker(), let picker = route.picker,
-                  route.confirmPicker(id: picker.id, useCurrentLocation: true) else { return }
-        }
-        let node = asStart ? route.draft.nodes.first : (route.draft.nodes.count > 1 ? route.draft.nodes.last : nil)
-        if let node { _ = route.openPicker(for: node.id) }
-        else { _ = route.openNewPicker() }
+    /// D4 "確認": the Pin or Location Card fills the selected field and returns to D1.
+    private func confirmRouteCandidate(_ candidate: TeleportCandidate) {
         if let picker = route.picker {
-            picker.candidates.select(candidate.place)
             _ = route.confirmPicker(id: picker.id)
+        } else {
+            _ = route.confirmSelectedNode(with: candidate.place)
         }
-        mode = .route
+        isMapPicking = false
+        activeSearch.resetSelection()
         sheetDetent = .expanded
     }
 
@@ -1261,6 +1248,11 @@ struct GoFlyMapView: View {
     }
 
     private func beginSearch() {
+        // On the route tab the search bar searches for the selected field (D5).
+        if mode == .route, route.canEdit, route.draft.isManual, route.picker == nil, route.openSelectedPicker() {
+            searchFocusRequest = UUID()
+            return
+        }
         if !isWanderMap, canSwitchMode, mode != .teleport { selectMode(.teleport) }
         showingSearch = true
         searchFocusRequest = UUID()
@@ -1379,18 +1371,7 @@ struct GoFlyMapView: View {
     private func goButton(_ candidate: TeleportCandidate) -> some View {
         Button {
             if mode == .route {
-                if isMapPicking {
-                    if let picker = route.picker {
-                        _ = route.confirmPicker(id: picker.id)
-                    }
-                    isMapPicking = false
-                    activeSearch.resetSelection()
-                    sheetDetent = .expanded
-                } else {
-                    _ = route.appendDestination(candidate.place)
-                    activeSearch.resetSelection()
-                    sheetDetent = .expanded
-                }
+                confirmRouteCandidate(candidate)
             } else {
                 performGo(candidate)
             }
@@ -1410,9 +1391,7 @@ struct GoFlyMapView: View {
     }
 
     private var goButtonTitle: String {
-        if mode == .route {
-            return isMapPicking ? goFlyString("common.confirm") : goFlyString("common.add")
-        }
+        if mode == .route { return goFlyString("common.confirm") }
         return goFlyString("map.go")
     }
 

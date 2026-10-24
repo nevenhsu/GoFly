@@ -16,6 +16,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
 }
 
     @Published public private(set) var draft: RouteDraft
+    @Published private var selection: RouteNodeID?
     @Published public private(set) var picker: RoutePickerSession? {
         didSet {
             pickerCandidateSubscription?.cancel()
@@ -157,8 +158,26 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         applyDraft(RouteDraft(speed: draft.speed))
         return true
     }
-    @discardableResult public func appendDestination(_ place: MapPlace) -> Bool {
-        guard canEdit, let changed = draft.appendingDestination(place) else { return false }
+    /// The field that D5, the map Pin and the Location Card fill (Figma D1 selected row).
+    /// It defaults to the start and falls back to it when the selected row is gone.
+    public var selectedNodeID: RouteNodeID? {
+        if let selection, draft.nodes.contains(where: { $0.id == selection }) { return selection }
+        return draft.start?.id
+    }
+    /// Selecting a row never opens a picker or changes any value.
+    @discardableResult public func selectNode(id: RouteNodeID) -> Bool {
+        guard canEdit, picker == nil, draft.nodes.contains(where: { $0.id == id }) else { return false }
+        selection = id
+        return true
+    }
+    @discardableResult public func openSelectedPicker() -> Bool {
+        guard let id = selectedNodeID else { return false }
+        return openPicker(for: id)
+    }
+    /// Fills only the selected field with a confirmed map or search place.
+    @discardableResult public func confirmSelectedNode(with place: MapPlace) -> Bool {
+        guard canEdit, draft.isManual, picker == nil, let id = selectedNodeID,
+              let changed = draft.replacing(nodeID: id, value: .place(place)) else { return false }
         applyDraft(changed)
         return true
     }

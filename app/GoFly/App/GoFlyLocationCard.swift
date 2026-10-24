@@ -4,14 +4,12 @@ import SwiftUI
 import UIKit
 
 public enum LocationCardPrimaryAction: Equatable, Sendable {
-    case add
     case confirm
     case teleport
     case custom(String)
 
     public var titleKey: String {
         switch self {
-        case .add: return "common.add" // "新增"
         case .confirm: return "common.confirm" // "確認"
         case .teleport: return "map.go" // "Go"
         case .custom(let str): return str
@@ -19,12 +17,12 @@ public enum LocationCardPrimaryAction: Equatable, Sendable {
     }
 }
 
-/// Floating location details card (D1b, D2a, E5)
+/// Floating location details card (D4, D2a, E5)
 ///
 /// Features:
 /// - Minimum height 188 pt, corner radius 16 pt, double-layer soft shadow.
 /// - Sits above narrowest bottom panel at y = 573, 16 pt above TabBar.
-/// - Primary CTA button: solid black capsule with text "新增" (D1b), "確認" (D2a), or "Go".
+/// - Primary CTA button: solid black capsule with text "確認" (D4) or "Go".
 /// - Secondary buttons: Favorite star button and Copy coordinates button.
 /// - Dismiss (✕) button in top right.
 struct GoFlyLocationCard: View {
@@ -147,7 +145,6 @@ struct GoFlyLocationCard: View {
     private var resolvedPrimaryTitle: String {
         if let primaryActionTitle { return primaryActionTitle }
         switch primaryActionType {
-        case .add: return goFlyString("common.add")
         case .confirm: return goFlyString("common.confirm")
         case .teleport: return goFlyString("map.go")
         case .custom(let str): return str

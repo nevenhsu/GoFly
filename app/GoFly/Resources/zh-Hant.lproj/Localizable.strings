@@ -162,6 +162,7 @@
 "route.origin" = "起點";
 "route.destination" = "終點";
 "route.currentLocation" = "目前位置";
+"route.picker.selecting" = "正在選：%@";
 "route.chooseOrigin" = "選擇起點";
 "route.chooseDestination" = "選擇終點";
 "route.editOrigin" = "編輯起點";
@@ -643,7 +644,6 @@
 "background.positionPaused" = "位置維持已暫停";
 "background.positionPaused.message" = "重試以維持此位置。";
 "background.positionRetry" = "重試";
-"common.add" = "新增";
 "common.confirm" = "確認";
 "common.retry" = "重試";
 "search.chooseOnMap" = "從地圖上選擇";

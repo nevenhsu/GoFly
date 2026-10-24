@@ -67,6 +67,43 @@ struct RouteEndpointTests {
         }
     }
 
+    @Test func selectionDefaultsToStartAndOnlyTheSelectedFieldIsFilled() throws {
+        let route = fixture(draft: RouteDraft())
+        let ids = route.draft.nodes.map(\.id)
+        #expect(route.selectedNodeID == ids[0], "new routes select the start")
+        #expect(route.selectNode(id: ids[1]))
+        #expect(route.picker == nil, "selecting a row never opens a picker")
+        #expect(route.draft.nodes.map(\.value) == [.current, .empty])
+
+        #expect(route.confirmSelectedNode(with: place(1)))
+        #expect(route.draft.nodes.map(\.value) == [.current, .place(place(1))], "only the destination changes")
+        #expect(route.selectedNodeID == ids[1])
+        #expect(!route.selectNode(id: RouteNodeID()), "unknown rows cannot be selected")
+    }
+
+    @Test func selectionFallsBackToTheStartWhenItsRowDisappears() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let route = fixture(draft: draft)
+        let ids = draft.nodes.map(\.id)
+        #expect(route.selectNode(id: ids[1]))
+        #expect(route.removeNode(id: ids[1]))
+        #expect(route.selectedNodeID == ids[0])
+        #expect(route.clearRoute())
+        #expect(route.selectedNodeID == route.draft.start?.id)
+    }
+
+    @Test func selectedPickerIsOpenedForTheSelectedFieldOnly() throws {
+        let route = fixture(draft: RouteDraft())
+        let destination = route.draft.nodes[1].id
+        #expect(route.selectNode(id: destination))
+        #expect(route.openSelectedPicker())
+        #expect(route.picker?.nodeID == destination)
+        #expect(route.picker?.role == .destination)
+        let session = try #require(route.picker)
+        route.cancelPicker(id: session.id)
+        #expect(route.draft.nodes[1].value == .empty, "backing out never changes the value")
+    }
+
     private func settle(_ condition: @MainActor () -> Bool) async {
         for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(condition())

@@ -148,6 +148,7 @@
 "route.origin" = "Origin";
 "route.destination" = "Destination";
 "route.currentLocation" = "Current location";
+"route.picker.selecting" = "Selecting: %@";
 "route.chooseOrigin" = "Choose origin";
 "route.chooseDestination" = "Choose destination";
 "route.editOrigin" = "Edit origin";
@@ -644,7 +645,6 @@
 "background.positionPaused" = "Position hold paused";
 "background.positionPaused.message" = "Retry to keep this location.";
 "background.positionRetry" = "Retry";
-"common.add" = "Add";
 "common.confirm" = "Confirm";
 "common.retry" = "Retry";
 "search.chooseOnMap" = "Choose on map";

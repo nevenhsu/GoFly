@@ -48,6 +48,7 @@
 - Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側「最愛地點」，「最近搜尋」＋「清空記錄」。
 - 做法：新增選中欄位狀態，預設起點；點列只切換選中；路線 tab 頂部搜尋列開 D5（chip 與 placeholder 依選中欄位）；D4 Pin「確認」與 LocationCard「確認」回填選中欄位並回到 D1。
 - 驗收：進入路線 tab 不彈出 D5 或鍵盤；點終點列再點搜尋列，chip 顯示「正在選：終點」；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（加 `.isSelected` trait）。
+- **狀態：已實作，待審查。** Core：`RouteExecutionController.selectedNodeID`（預設起點，列消失時回退起點）、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App：列點擊只選取（`.isSelected`、`goFlySearchField(isFocused: true)`）；路線 tab 搜尋列開 D5（chip「正在選：%@」）；路線 tab 點地圖放 Pin（收合 76 pt）；Pin 與卡片「確認」只改選中欄位並回 D1；D5 選取後回 D1 展開。`RouteEndpointTests`（selection）、`GoFlyRouteSelectionUITests`。舊的 `GoFlyRouteUITests`（點列即開 D5）依使用者確認隨舊 UI 刪除。D1 選中列的藍色游標不實作（依已確認決定）。
 
 ### R4 D9 清除復原
 - 現況：`removeNode` 無復原。
@@ -69,6 +70,7 @@
 - 現況：`App/GoFlyMapView.swift:680` 與 `:1415` 呼叫 `route.appendDestination`（`RouteExecutionController.swift:160`）。
 - 做法：與 R3 一起處理；路線 Pin 與 LocationCard 只保留「確認」（D4：Pin 上 28 pt 黑底「確認」、卡片「確認／收藏／複製」）；移除未使用的 append API、字串與 UI test。
 - 驗收：路線 tab 點 Pin 不出現「新增」；選中停靠點時確認只改該停靠點。
+- **狀態：已實作，待審查。** 已移除 `appendDestination`／`RouteDraft.appendingDestination`、`LocationCardPrimaryAction.add`、`common.add` 字串與未使用的 `useCandidateInRoute`；`map.route.addCard` 改為 `map.route.confirmCard`。
 
 ### R7 D10 中斷恢復
 - Figma D10：頂部卡改為暫停圖示＋「已暫停 · 前往 …」；`StatusPill / 暫停`；C1 warn toast「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕；底部 76 pt 窄面板「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」＋黑色「繼續路線」；無 TabBar。

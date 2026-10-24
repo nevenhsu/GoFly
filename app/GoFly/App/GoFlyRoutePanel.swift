@@ -348,7 +348,8 @@ struct GoFlyRoutePanel: View {
                 .accessibilityIdentifier("route.clearImported")
             } else {
                 GoFlyRouteNodeList(
-                    draft: controller.draft, isEditable: controller.canEdit, viewport: visibleScrollFrame,
+                    draft: controller.draft, selectedID: controller.selectedNodeID,
+                    isEditable: controller.canEdit, viewport: visibleScrollFrame,
                     onEdit: onEditNode,
                     onDelete: { _ = controller.removeNode(id: $0) },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
