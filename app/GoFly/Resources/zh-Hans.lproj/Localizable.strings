@@ -663,3 +663,5 @@
 "status.pill.paused" = "暂停";
 "status.pill.stopped" = "停止";
 "status.pill.error" = "错误";
+"gallery.fieldFocused" = "台北";
+"gallery.fieldNormal" = "搜索最爱地点";

@@ -13,8 +13,6 @@ enum GoFlyStyle {
     static let errorSurface = Color(uiColor: .secondarySystemBackground)
     static let border = Color(uiColor: .separator)
     static let subtleBorder = Color(uiColor: .opaqueSeparator).opacity(0.45)
-    static let inputSurface = Color(uiColor: .systemGray5)
-    static let inputBorder = Color(uiColor: .systemGray)
     static let cornerRadius: CGFloat = 20
     static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 14
@@ -187,5 +185,53 @@ struct GoFlyIconStyle: ButtonStyle {
             .shadow(color: .black.opacity(floating ? 0.09 : 0), radius: 12, x: 0, y: 5)
             .contentShape(Circle())
             .opacity(isEnabled && configuration.isPressed ? 0.65 : 1)
+    }
+}
+
+// Figma `SearchField / focused｜normal` and `Progress` (0 · 共用元件).
+extension GoFlyStyle {
+    static let fieldSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
+    static let fieldBorder = Color(red: 0.557, green: 0.557, blue: 0.576)
+    static let fieldFocus = adaptive(light: (0.000, 0.478, 1.000), dark: (0.039, 0.518, 1.000))
+    static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
+}
+
+private struct GoFlySearchFieldBackground: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background(GoFlyStyle.fieldSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(isFocused ? GoFlyStyle.fieldFocus : GoFlyStyle.fieldBorder,
+                                  lineWidth: isFocused ? 1.5 : 0.75)
+            }
+    }
+}
+
+extension View {
+    /// `SearchField` surface: `#F2F2F7` fill, 14 pt radius, 1.5 pt blue border when
+    /// focused (also the selected route row), 0.75 pt gray otherwise.
+    func goFlySearchField(isFocused: Bool) -> some View {
+        modifier(GoFlySearchFieldBackground(isFocused: isFocused))
+    }
+}
+
+/// Figma `Progress`: 6 pt capsule, black value on a `#E5E5EA` track (inverted in dark).
+struct GoFlyProgressStyle: ProgressViewStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let fraction = min(max(configuration.fractionCompleted ?? 0, 0), 1)
+        Capsule()
+            .fill(GoFlyStyle.progressTrack)
+            .frame(height: 6)
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule().fill(GoFlyStyle.primary)
+                        .frame(width: proxy.size.width * fraction)
+                }
+            }
+            .accessibilityElement()
+            .accessibilityValue(Text(fraction, format: .percent.precision(.fractionLength(0))))
     }
 }

@@ -18,6 +18,7 @@ struct GoFlyComponentGallery: View {
                 bannerSection
                 pillSection
                 snackbarSection
+                fieldSection
                 bottomBarSection
                 executionSection
                 joystickSection
@@ -88,6 +89,36 @@ struct GoFlyComponentGallery: View {
                 actionTitle: goFlyString("common.undo"),
                 action: {}))
             .accessibilityIdentifier("gallery.snackbar.preview")
+        }
+    }
+
+    private var fieldSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("SearchField")
+            HStack(spacing: 8) {
+                Image(systemName: GoFlySymbols.search).accessibilityHidden(true)
+                Text(goFlyString("gallery.fieldFocused"))
+                Spacer()
+            }
+            .padding(.horizontal, 12).frame(minHeight: 48)
+            .goFlySearchField(isFocused: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("gallery.field.focused")
+            HStack(spacing: 8) {
+                Image(systemName: GoFlySymbols.search).accessibilityHidden(true)
+                Text(goFlyString("gallery.fieldNormal")).foregroundStyle(GoFlyStyle.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 12).frame(minHeight: 48)
+            .goFlySearchField(isFocused: false)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("gallery.field.normal")
+            ProgressView(value: 0.35, total: 1)
+                .progressViewStyle(GoFlyProgressStyle())
+                .accessibilityIdentifier("gallery.progress")
+            Slider(value: .constant(40), in: 1...120)
+                .tint(GoFlyStyle.primary)
+                .accessibilityIdentifier("gallery.slider")
         }
     }
 

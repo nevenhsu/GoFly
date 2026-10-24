@@ -46,12 +46,7 @@ struct GoFlyFavoriteEditorSheet: View {
                         }
                         .padding(.leading, 16)
                         .frame(minHeight: 48)
-                        .background(labelFieldSurface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
-                                              lineWidth: focused ? 1.5 : 0.75)
-                        }
+                        .goFlySearchField(isFocused: focused)
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text(place.address ?? place.title).font(.subheadline)
@@ -88,12 +83,6 @@ struct GoFlyFavoriteEditorSheet: View {
                 draft = l
             }
         }
-    }
-
-    private var labelFieldSurface: Color {
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? .systemGray4 : .systemGray6
-        })
     }
 
     private var isFavorite: Bool {

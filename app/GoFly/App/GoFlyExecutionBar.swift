@@ -130,7 +130,7 @@ struct GoFlyExecutionControls<Leading: View>: View {
         VStack(spacing: 12) {
             if let progress {
                 ProgressView(value: min(max(progress, 0), 1))
-                    .tint(GoFlyStyle.primary)
+                    .progressViewStyle(GoFlyProgressStyle())
                     .accessibilityIdentifier("execution.progress")
             }
             actionLayout {

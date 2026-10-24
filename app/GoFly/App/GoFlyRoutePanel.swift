@@ -228,7 +228,7 @@ struct GoFlyRoutePanel: View {
                             .accessibilityIdentifier("route.position.value")
                     }
                     ProgressView(value: min(max(controller.progress?.fraction ?? 0, 0), 1), total: 1)
-                        .tint(GoFlyStyle.primary)
+                        .progressViewStyle(GoFlyProgressStyle())
                         .accessibilityLabel(goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"))
                         .accessibilityIdentifier("route.progress")
 

@@ -63,12 +63,7 @@ struct GoFlySaveFavoriteRouteView: View {
                             }
                             .padding(.leading, 16)
                             .frame(minHeight: 48)
-                            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14)
-                                    .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
-                                                  lineWidth: focused ? 1.5 : 0.75)
-                            }
+                            .goFlySearchField(isFocused: focused)
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
@@ -256,12 +251,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                         }
                         .padding(.leading, 16)
                         .frame(minHeight: 48)
-                        .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
-                                              lineWidth: focused ? 1.5 : 0.75)
-                        }
+                        .goFlySearchField(isFocused: focused)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {

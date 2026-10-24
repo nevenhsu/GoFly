@@ -105,12 +105,7 @@ struct GoFlySearchPanel: View {
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 50)
-            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(focused ? GoFlyStyle.primary : GoFlyStyle.inputBorder,
-                                  lineWidth: focused ? 1.5 : 0.75)
-            }
+            .goFlySearchField(isFocused: focused)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)

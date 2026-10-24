@@ -663,3 +663,5 @@
 "status.pill.paused" = "Paused";
 "status.pill.stopped" = "Stopped";
 "status.pill.error" = "Error";
+"gallery.fieldFocused" = "Search places";
+"gallery.fieldNormal" = "Search favorite places";

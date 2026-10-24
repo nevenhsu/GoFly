@@ -251,8 +251,7 @@ struct GoFlyFavoriteRoutesView: View {
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 52)
-            .background(GoFlyStyle.inputSurface, in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius))
-            .overlay { RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius).strokeBorder(GoFlyStyle.inputBorder, lineWidth: 0.75) }
+            .goFlySearchField(isFocused: false)
         }
         .padding(16)
         .background(GoFlyStyle.surface)
