@@ -60,13 +60,18 @@ struct GoFlyFavoriteRoutesView: View {
                 .padding(.horizontal, 20)
             }
             .accessibilityIdentifier("favoriteRoutes.content")
-            .safeAreaInset(edge: .bottom) { bottomSearch }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                GoFlyFavoritesBottomBar(
+                    placeholder: goFlyString("favoriteRoutes.searchSaved"), query: $query,
+                    searchIdentifier: "favoriteRoutes.search",
+                    deleteTitle: selecting ? goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count) : nil,
+                    deleteEnabled: !selected.isEmpty && favorites.canMutate,
+                    deleteIdentifier: "favoriteRoutes.deleteSelected",
+                    onDelete: { delete(selected) })
+            }
         }
         .background(GoFlyStyle.surface)
-        .goFlySnackbar($snackbar)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(GoFlyStyle.surface)
+        .goFlySnackbar($snackbar, bottomPadding: GoFlyFavoritesBottomBar.snackbarOffset)
         .sheet(item: $editing) { record in
             GoFlyFavoriteRouteLabelEditor(record: record, onDismiss: { editing = nil }) {
                 delete(Set([record.id]))
@@ -94,7 +99,7 @@ struct GoFlyFavoriteRoutesView: View {
                     if selecting {
                         Text(goFlyString("favorites.cancel"))
                     } else {
-                        Label(goFlyString("common.back"), systemImage: "chevron.backward")
+                        Label(goFlyString("mode.route"), systemImage: "chevron.backward")
                             .labelStyle(.titleAndIcon)
                     }
                 }
@@ -172,21 +177,15 @@ struct GoFlyFavoriteRoutesView: View {
                 if selecting { toggleSelection(record.id) }
                 else { load(record) }
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(record.label ?? goFlyFavoriteRouteEndpoints(record))
-                        .font(.body.weight(.medium))
+                        .font(.body)
                         .foregroundStyle(GoFlyStyle.primary)
                         .lineLimit(1)
-                    if record.label != nil {
-                        Text(goFlyFavoriteRouteEndpoints(record))
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.secondary)
-                            .lineLimit(1)
-                    }
-                    Text(goFlyLocalizedFormat(goFlyString(record.sourceKind == .gpx
-                        ? "favoriteRoutes.pointCount" : "favoriteRoutes.placeCount"), record.count))
+                    Text(goFlyFavoriteRouteSubtitle(record))
                         .font(.footnote)
                         .foregroundStyle(GoFlyStyle.secondary)
+                        .lineLimit(1)
                     if let failure = favorites.unavailable[record.id] {
                         Text(goFlyString(failure.localizationKey))
                             .font(.footnote)
@@ -218,44 +217,6 @@ struct GoFlyFavoriteRoutesView: View {
             }
         }
         .background(favorites.selectedID == record.id ? GoFlyStyle.secondarySurface : .clear)
-    }
-
-    private var bottomSearch: some View {
-        VStack(spacing: 12) {
-            if selecting {
-                Button {
-                    delete(selected)
-                } label: {
-                    HStack(spacing: 8) {
-                        GoFlyTrashIcon(size: 17)
-                        Text(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count))
-                    }
-                }
-                .buttonStyle(GoFlyActionStyle(destructive: true))
-                .disabled(selected.isEmpty || !favorites.canMutate)
-                .accessibilityIdentifier("favoriteRoutes.deleteSelected")
-            }
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(GoFlyStyle.secondary)
-                TextField(goFlyString("favoriteRoutes.searchSaved"), text: $query)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.search)
-                    .accessibilityIdentifier("favoriteRoutes.search")
-                if !query.isEmpty {
-                    Button { query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(goFlyString("search.clear"))
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 52)
-            .goFlySearchField(isFocused: false)
-        }
-        .padding(16)
-        .background(GoFlyStyle.surface)
-        .overlay(alignment: .top) { Divider() }
     }
 
     private func toggleSelection(_ id: UUID) {
@@ -339,4 +300,13 @@ struct GoFlyFavoriteRouteFailureNotice: View {
 
 func goFlyFavoriteRouteEndpoints(_ record: FavoriteRouteRecord) -> String {
     (record.startTitle ?? record.start.displayText) + " → " + (record.endTitle ?? record.end.displayText)
+}
+
+/// D19 subtitle: endpoints (when a label is the title) joined with the point count.
+@MainActor
+func goFlyFavoriteRouteSubtitle(_ record: FavoriteRouteRecord) -> String {
+    let count = goFlyLocalizedFormat(goFlyString(record.sourceKind == .gpx
+        ? "favoriteRoutes.pointCount" : "favoriteRoutes.placeCount"), record.count)
+    guard record.label != nil else { return count }
+    return goFlyFavoriteRouteEndpoints(record) + "・" + count
 }

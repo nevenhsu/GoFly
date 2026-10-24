@@ -134,13 +134,15 @@ struct GoFlyActionStyle: ButtonStyle {
     var small = false
     /// A secondary button at the 56 pt primary height (Figma D6 結束).
     var prominent = false
+    /// Overrides the button height (Figma D21 delete is 48 pt).
+    var fixedHeight: CGFloat? = nil
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var height: CGFloat {
-        small ? GoFlyStyle.smallButtonHeight
-            : (primary || destructive || prominent ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight)
+        fixedHeight ?? (small ? GoFlyStyle.smallButtonHeight
+            : (primary || destructive || prominent ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight))
     }
 
     func makeBody(configuration: Configuration) -> some View {

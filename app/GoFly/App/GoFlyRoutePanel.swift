@@ -65,7 +65,7 @@ struct GoFlyRoutePanel: View {
                 onDismiss: { showingDetails = false }
             )
         }
-        .sheet(isPresented: $showingFavoriteRoutes) {
+        .fullScreenCover(isPresented: $showingFavoriteRoutes) {
             GoFlyFavoriteRoutesView(controller: controller) { showingFavoriteRoutes = false }
         }
         .sheet(isPresented: $showingSaveFavorite) {

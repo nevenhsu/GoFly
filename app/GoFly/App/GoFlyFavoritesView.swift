@@ -40,13 +40,18 @@ struct GoFlyFavoritesView: View {
                 }
                 .padding(.horizontal, 20)
             }
-            .safeAreaInset(edge: .bottom) { bottomSearch }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                GoFlyFavoritesBottomBar(
+                    placeholder: goFlyString("favorites.searchSaved"), query: $query,
+                    searchIdentifier: "favorites.search",
+                    deleteTitle: selecting ? goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count) : nil,
+                    deleteEnabled: !selected.isEmpty && favorites.canMutate,
+                    deleteIdentifier: "favorites.deleteSelected",
+                    onDelete: { delete(selected) })
+            }
         }
         .background(GoFlyStyle.surface)
-        .goFlySnackbar($snackbar)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(GoFlyStyle.surface)
+        .goFlySnackbar($snackbar, bottomPadding: GoFlyFavoritesBottomBar.snackbarOffset)
         .sheet(item: $editing) { favorite in
             GoFlyFavoriteEditorSheet(place: favorite.place, initialLabel: favorite.label, onDismiss: { editing = nil }) {
                 delete([favorite.key])
@@ -126,44 +131,6 @@ struct GoFlyFavoritesView: View {
     private var failure: FavoritePlacesFailure? {
         if case .blocked(let failure) = favorites.loadState { return failure }
         return favorites.error
-    }
-
-    private var bottomSearch: some View {
-        VStack(spacing: 12) {
-            if selecting {
-                Button {
-                    delete(selected)
-                } label: {
-                    HStack(spacing: 8) {
-                        GoFlyTrashIcon(size: 17)
-                        Text(goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count))
-                    }
-                }
-                .buttonStyle(GoFlyActionStyle(destructive: true))
-                .disabled(selected.isEmpty || !favorites.canMutate)
-                .accessibilityIdentifier("favorites.deleteSelected")
-            }
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(GoFlyStyle.secondary)
-                TextField(goFlyString("favorites.searchSaved"), text: $query)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.search)
-                    .accessibilityIdentifier("favorites.search")
-                if !query.isEmpty {
-                    Button { query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(goFlyString("search.clear"))
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 52)
-            .goFlySearchField(isFocused: false)
-        }
-        .padding(16)
-        .background(GoFlyStyle.surface)
-        .overlay(alignment: .top) { Divider() }
     }
 
     private func row(_ favorite: FavoritePlace) -> some View {

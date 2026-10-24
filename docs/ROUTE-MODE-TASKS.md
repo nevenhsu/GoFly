@@ -93,7 +93,7 @@
 | F2 | 多選刪除鍵移出搜尋區 | 刪除鍵在 `bottomSearch` 內，與搜尋欄同一背景 | 刪除鍵移到搜尋區上方、獨立於搜尋區背景：361 × 48 紅色 capsule，距搜尋區頂 12 pt（D21：y 670–718、搜尋區 y 730）。最愛地點頁比照。D22 復原 snackbar 位置同為搜尋區上方 12 pt。 |
 | F3 | 點 tab 還原最小高度的 panel | `selectMode` 只對非瞬移 tab 強制 `.expanded`，瞬移 tab 不還原 | 點瞬移／路線／搖桿任一 tab，若目前 panel 為最小高度（收合），還原到可見高度（瞬移最多可見 4 個地點；路線、搖桿為內容高度）；非最小高度時不變。 |
 
-狀態：F3 已實作，待審查（`selectMode` 在最小高度時還原；`GoFlyTabRestoreUITests`）；F1、F2 待實作。R6 的程式已由使用者另行提交（`385a5ed`），其 UI test 在「dialog 開啟時下方按鈕不可操作」斷言上失敗，原因未釐清，仍待處理；R7、C3、C5、R8 仍待做。
+狀態：F3 已實作，待審查（`selectMode` 在最小高度時還原；`GoFlyTabRestoreUITests`）；F1、F2 已實作，待審查（最愛路線、最愛地點兩頁改整頁、移除 detents／drag indicator；新增共用 `GoFlyFavoritesBottomBar`＝搜尋區 88 pt＋刪除鍵在其上方 12 pt、snackbar 偏移 100 pt；`GoFlyActionStyle(fixedHeight:)`；`GoFlyFavoriteRoutesPageUITests` 量測 D19／D21／D22 間距；地點頁共用同一元件，未另寫 UI test）。路線列副標改單行「起訖・點位數」，D19 的距離（12.4 km）因紀錄沒有距離資料未顯示。R6 的程式已由使用者另行提交（`385a5ed`），其 UI test 在「dialog 開啟時下方按鈕不可操作」斷言上失敗，原因未釐清，仍待處理；R7、C3、C5、R8 仍待做。
 
 ## 建議順序
 
