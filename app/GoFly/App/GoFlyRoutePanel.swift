@@ -13,7 +13,7 @@ struct GoFlyRoutePanel: View {
     var isNarrow: Bool = false
     var onExpand: (() -> Void)? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var contentHeight: CGFloat = 240
+    @State private var listContentHeight: CGFloat = 120
     @State private var showingDetails = false
     @State private var showingImports = false
     @State private var showingAllPoints = false
@@ -87,30 +87,27 @@ struct GoFlyRoutePanel: View {
         }
     }
 
+    /// Figma D1/D2: header 12 pt below the sheet top, list card, add / reverse row,
+    /// star + Start row, 35 pt above the tab bar. Only the list scrolls (D2: up to 4 rows).
     private var editingView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    editingContent { id, anchor in
-                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
+        VStack(alignment: .leading, spacing: 0) {
+            editingHeader
+                .padding(.bottom, 12)
+            if let imported = controller.draft.gpxSource {
+                importedContent(imported)
+            } else {
+                routeListCard
+                routeActionRow
+                    .padding(.top, 4)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                startControl.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 16)
-                    .background(GoFlyStyle.cardSurface)
-            }
-            .frame(height: min(contentHeight + 76, max(100, maximumHeight)))
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("route.panel.content")
+            startControl
+                .padding(.top, 16)
         }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 35)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("route.panel.content")
     }
 
     private var isRouteUsable: Bool {
@@ -149,11 +146,8 @@ struct GoFlyRoutePanel: View {
         } label: {
             GoFlyStarIcon(size: 20, filled: isFavorite)
                 .foregroundStyle(GoFlyStyle.primary)
-                .frame(width: 50, height: 50)
-                .background(GoFlyStyle.secondarySurface, in: Circle())
-                .overlay {
-                    Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
-                }
+                .frame(width: GoFlyStyle.primaryButtonHeight, height: GoFlyStyle.primaryButtonHeight)
+                .background(GoFlyStyle.startSecondarySurface, in: Circle())
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
@@ -282,7 +276,7 @@ struct GoFlyRoutePanel: View {
         HStack(spacing: 8) {
             Button(action: { onExpand?() }) {
                 Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
-                    .font(.title3.weight(.bold))
+                    .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .foregroundStyle(GoFlyStyle.primary)
                     .accessibilityAddTraits(.isHeader)
@@ -302,8 +296,8 @@ struct GoFlyRoutePanel: View {
                 showingImports = true
             } icon: { GoFlyRouteFolderIcon(size: 20) }
         }
+        .padding(.bottom, 20)
         .padding(.horizontal, 20)
-        .frame(height: 76)
         .background(GoFlyStyle.cardSurface)
         .contentShape(Rectangle())
         .onTapGesture { onExpand?() }
@@ -311,78 +305,104 @@ struct GoFlyRoutePanel: View {
         .accessibilityIdentifier("route.panel.narrow")
     }
 
-    private func editingContent(scrollTo: @escaping (RouteNodeID, UnitPoint) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
-                        .font(.title3.weight(.bold))
-                        .lineLimit(1)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                .accessibilityElement(children: .combine)
+    private var editingHeader: some View {
+        HStack(spacing: 8) {
+            Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(controller.draft.gpxSource == nil ? "route.heading" : "route.importedSummary")
-                Spacer(minLength: 8)
-                headerButton(identifier: "route.favoriteRoutes",
-                             label: goFlyString("favoriteRoutes.title"), enabled: controller.canEdit) {
-                    showingFavoriteRoutes = true
-                } icon: { GoFlyStarIcon(size: 18, filled: false) }
-                headerButton(identifier: "route.importedRoutes",
-                             label: goFlyString("imports.title"), enabled: controller.canEdit) {
-                    showingImports = true
-                } icon: { GoFlyRouteFolderIcon(size: 20) }
-            }
-            .padding(.trailing, 4)
+            Spacer(minLength: 8)
+            headerButton(identifier: "route.favoriteRoutes",
+                         label: goFlyString("favoriteRoutes.title"), enabled: controller.canEdit) {
+                showingFavoriteRoutes = true
+            } icon: { GoFlyStarIcon(size: 18, filled: false) }
+            headerButton(identifier: "route.importedRoutes",
+                         label: goFlyString("imports.title"), enabled: controller.canEdit) {
+                showingImports = true
+            } icon: { GoFlyRouteFolderIcon(size: 20) }
+        }
+        .padding(.trailing, 4)
+    }
 
-            if let imported = controller.draft.gpxSource {
-                GoFlyGPXPointList(points: imported.document.segments.flatMap { $0 }, summarized: true,
-                                   onFocus: onFocusPoint, onShowAll: { showingAllPoints = true })
-                Button(action: { _ = controller.clearImportedRoute() }) {
-                    Label(goFlyString("route.clearRoute"), systemImage: "trash")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("route.clearImported")
-            } else {
+    private func importedContent(_ imported: GPXRouteSource) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GoFlyGPXPointList(points: imported.document.segments.flatMap { $0 }, summarized: true,
+                               onFocus: onFocusPoint, onShowAll: { showingAllPoints = true })
+            Button(action: { _ = controller.clearImportedRoute() }) {
+                Label(goFlyString("route.clearRoute"), systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(GoFlyStyle.primary)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("route.clearImported")
+        }
+    }
+
+    /// Rows are 60 pt; the card shows at most four before the list scrolls.
+    private static let visibleRows = 4
+    private static let rowHeight: CGFloat = 60
+    /// Everything in the editing panel except the list: header, gaps, action row, Start row and bottom inset.
+    private static let panelChrome: CGFloat = 207
+
+    private var listHeight: CGFloat {
+        let cap = min(Self.rowHeight * CGFloat(Self.visibleRows), max(Self.rowHeight, maximumHeight - Self.panelChrome))
+        return min(listContentHeight, cap)
+    }
+
+    private var routeListCard: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
                 GoFlyRouteNodeList(
                     draft: controller.draft, selectedID: controller.selectedNodeID,
                     isEditable: controller.canEdit, viewport: visibleScrollFrame,
                     onEdit: onEditNode,
                     onDelete: { _ = controller.removeNode(id: $0) },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
-                    onScroll: scrollTo
+                    onScroll: { id, anchor in
+                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
+                    }
                 )
-                HStack(spacing: 16) {
-                    Button { _ = controller.openNewPicker() } label: {
-                        Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
-                            .font(.subheadline.weight(.semibold))
-                            .frame(minHeight: 44, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-                    .disabled(!controller.canAddNode)
-                    .accessibilityIdentifier("route.addNode")
-                    .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
-                    Spacer(minLength: 0)
-                    Button(action: { _ = controller.reverseNodes() }) {
-                        Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!controller.canEdit || controller.draft.nodes.count < 2)
-                    .accessibilityIdentifier("route.exchange")
-                }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { listContentHeight = $0 }
             }
+            .scrollIndicators(.visible)
+            .frame(height: listHeight)
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
         }
+        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("route.nodes.card")
     }
 
-
+    private var routeActionRow: some View {
+        HStack(spacing: 16) {
+            Button { _ = controller.openNewPicker() } label: {
+                Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 40, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+            .disabled(!controller.canAddNode)
+            .accessibilityIdentifier("route.addNode")
+            .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
+            Spacer(minLength: 0)
+            Button(action: { _ = controller.reverseNodes() }) {
+                Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 40)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!controller.canEdit || controller.draft.nodes.count < 2)
+            .accessibilityIdentifier("route.exchange")
+        }
+    }
 
     private func headerButton<Icon: View>(identifier: String, label: String,
                               enabled: Bool, action: @escaping () -> Void,

@@ -36,6 +36,7 @@ struct GoFlyStatusBanner: View {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(GoFlyStyle.primary)
+                        .frame(minHeight: 21, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
                         .accessibilityIdentifier(titleIdentifier
@@ -44,6 +45,9 @@ struct GoFlyStatusBanner: View {
                         Text(message)
                             .font(.footnote)
                             .foregroundStyle(GoFlyStyle.toastMessage)
+                            // Figma sets 13 pt text on an 18 pt line.
+                            .lineSpacing(2.5)
+                            .padding(.vertical, 1)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier(messageIdentifier
                                 ?? identifier.map { "\($0).message" } ?? "statusBanner.message")

@@ -633,7 +633,7 @@
 "common.done" = "Done";
 "common.skip" = "Skip";
 "wifi.error.title" = "Wi-Fi connection required";
-"wifi.error.message" = "GoFly requires a Wi-Fi connection to communicate with the device service. Please connect to Wi-Fi.";
+"wifi.error.message" = "GoFly needs the same local Wi-Fi as your Mac to sync the simulation.";
 "wifi.error.action" = "Connect to Wi-Fi";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "Connected";

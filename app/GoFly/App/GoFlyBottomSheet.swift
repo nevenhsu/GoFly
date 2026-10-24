@@ -21,6 +21,8 @@ struct GoFlyBottomSheet<Content: View>: View {
     var contentHeight: CGFloat = 0
     /// Fit the currently visible panel without imposing a scrolling container.
     var fitsContent: Bool = false
+    /// Height of the grabber row. The route editor uses 12 pt so its header sits 12 pt below the sheet top (Figma D1).
+    var grabberHeight: CGFloat = 24
     var onHeightChange: (CGFloat) -> Void = { _ in }
     @ViewBuilder let content: () -> Content
 
@@ -31,7 +33,7 @@ struct GoFlyBottomSheet<Content: View>: View {
     }
 
     private var fittedHeight: CGFloat {
-        min(availableHeight, max(minimumHeight, contentHeight + 24))
+        min(availableHeight, max(minimumHeight, contentHeight + grabberHeight))
     }
 
     private var expandedHeight: CGFloat {
@@ -89,11 +91,12 @@ struct GoFlyBottomSheet<Content: View>: View {
 
     private var grabber: some View {
         Color.clear
-            .frame(height: 24)
-            .overlay {
+            .frame(height: grabberHeight)
+            .overlay(alignment: .top) {
                 Capsule()
                     .fill(GoFlyStyle.border)
                     .frame(width: 36, height: 5)
+                    .padding(.top, grabberHeight < 24 ? 6 : (grabberHeight - 5) / 2)
             }
             .contentShape(Rectangle())
             .gesture(

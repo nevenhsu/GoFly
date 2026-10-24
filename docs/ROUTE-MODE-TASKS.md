@@ -18,7 +18,7 @@
 
 | # | Figma 元件 | App 現況 | 待辦與驗收 |
 | :-- | :-- | :-- | :-- |
-| C1 | `Toast / 系統訊息 / danger｜warn｜success` | 兩套實作：`App/GoFlyStatusBanner.swift`，與 `App/GoFlyWarningToast.swift`（14／12 pt 字、實心 `#FF9500` 邊、固定 80 pt、寫死「重試」） | 合併為單一 tone 驅動元件：15 pt Semibold／13 pt Regular、圓角 14、內距 12／14、邊框 35% 不透明、白色 56 × 32 膠囊動作、20 pt ✕、高度隨內容。驗收：D8（danger＋重試）、D10（warn＋重試）、D18 渲染對齊；深色對齊 Dark D8／D10；最大字級可換行。<br>**狀態：已實作，待審查**（`GoFlyWarningToast` 已移除，D10 改用 `GoFlyStatusBanner(tone: .warning)`；`GoFlyToastUITests`）。 |
+| C1 | `Toast / 系統訊息 / danger｜warn｜success` | 兩套實作：`App/GoFlyStatusBanner.swift`，與 `App/GoFlyWarningToast.swift`（14／12 pt 字、實心 `#FF9500` 邊、固定 80 pt、寫死「重試」） | 合併為單一 tone 驅動元件：15 pt Semibold／13 pt Regular、圓角 14、內距 12／14、邊框 35% 不透明、白色 56 × 32 膠囊動作、20 pt ✕、高度隨內容。驗收：D8（danger＋重試）、D10（warn＋重試）、D18 渲染對齊；深色對齊 Dark D8／D10；最大字級可換行。<br>**狀態：已實作，待審查**（2026-10-24 補：B10「需要連接 Wi-Fi」改為 danger＋「重試」、說明文字依渲染畫面，行高 21／18 對齊，`GoFlyWiFiToastUITests`；B10 說明文字寫「無動作按鈕」，與渲染畫面的「重試」衝突，依渲染畫面；「重試」＝重新讀取 Wi-Fi 狀態，Figma 未定義其他行為）（`GoFlyWarningToast` 已移除，D10 改用 `GoFlyStatusBanner(tone: .warning)`；`GoFlyToastUITests`）。 |
 | C2 | `Snackbar / 2 秒自動消失`、`Snackbar / 可復原` | `App/GoFlySnackbar.swift`：`.footnote` 字、純文字 action、時長固定 2 秒（modifier 可傳 duration）、陰影 18%／12 | 白字 15 pt Medium、24 pt 綠勾、內距 10／14、Figma 雙層陰影；action 改白色 56 × 32 膠囊；可復原版本 5 秒；可指定位置（D9 為 sheet 上方約 12 pt，D22 為底部按鈕上方 12 pt）。驗收：B6、D9、D17、D22 對齊。<br>**狀態：已實作，待審查**（含 action 的 snackbar 預設 5 秒、其餘 2 秒；位置仍由 `bottomPadding` 決定，D9／D22 位置隨 R4 處理；`GoFlySnackbarUITests`）。 |
 | C3 | `StatusPill / 啟動｜模擬中｜暫停｜停止｜連線中斷` | `App/GoFlyStatusPill.swift` 版型相符 | 回歸：點色 `#8E8E93`／`#34C759`／`#FF9F0A`／`#8E8E93`／`#FF3B30`、雙層陰影。D6 顯示「模擬中」、D10「暫停」、D6.a 開啟時「停止」。文案依「三模式 session pill 五態規格」。 |
 | C4 | `SearchBar / 浮動`、`SearchField / focused｜normal`、Slider、Progress | 搜尋列已存在；DESIGN.md 舊規則用 `systemGray5` 輸入底 | SearchField 改 `#F2F2F7` 底、focused 1.5 pt `#007AFF`、normal 0.75 pt `#8E8E93`。路線選中列沿用 focused 樣式。Progress 6 pt、Slider 黑白軌道。驗收：D5、D1 選中列、D6 進度列、D7 slider 對齊。<br>**狀態：已實作，待審查**（`goFlySearchField(isFocused:)`、`GoFlyProgressStyle` 已套用；D1 選中列隨 R3 套用；`GoFlyFieldUITests`）。 |
@@ -59,6 +59,7 @@
 - 現況：`GoFlyRoutePanel.editingView` 將標題、清單、新增、反轉放在同一 `ScrollView`；底部星號 50 pt 有邊框。
 - Figma：sheet 高 369 pt（D1）；標題 20 pt Semibold；右上 44 pt 圓鈕（`#F2F2F7`、0.5 pt 邊）；「＋ 新增停靠點」與「⇅ 反轉順序」15 pt Semibold；底部 56 pt 星號（`#EEEEF0`、無邊）＋56 pt「開始」capsule。D2 只有清單捲動（最多 4 列可視、顯示捲動指示器），其餘固定。
 - 驗收：D1、D2 截圖並排對齊；5 個以上地點時捲動清單不拖動 sheet；最大字級時可重排。
+- **狀態：已實作，待審查。** 路線規劃 sheet 改為依內容定高（`sheetFitsContent`、`grabberHeight: 12`）。依 Figma D1 量測：header 距 sheet 頂 12、清單距 header 12、清單（2 列 × 60 = 120）→ 新增／反轉列 4 → 星號／開始列 16 → 距 TabBar 35（sheet 共 339 pt）；D3 收合 76 pt（標題＋兩圓鈕，header 距頂 12、距底 20）；星號 56 pt（`#EEEEF0`、無邊）。清單卡 14 圓角、0.5 pt 邊、最多 4 列後捲動（`.scrollIndicators(.visible)`），其餘區塊固定。`GoFlyRoutePanelLayoutUITests` 量測 D1／D3 間距。Figma 差異：D2 渲染為 55 pt 列、11／15 pt 字、sheet 高 414 與 D1 的 60 pt 列不一致，依文件決定（D1／D2 皆 60 pt 列，4 列＝240 pt）實作，故 4 列時 sheet 約 459 pt，與 D2 的 414 pt 不同；D2 與 D1 的底部間距（16 vs 35）也不一致，採 D1 的 35 pt。D2（5 個以上地點）的捲動未以 UI test 量測。
 
 ### R6 D6／D6.a 執行面板與結束確認
 - 現況：`App/GoFlyRoutePanel.swift:81` 使用系統 `confirmationDialog`，文案「取消這次路線？」。

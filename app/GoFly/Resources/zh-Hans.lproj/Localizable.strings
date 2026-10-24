@@ -633,7 +633,7 @@
 "common.done" = "完成";
 "common.skip" = "跳过";
 "wifi.error.title" = "需要连接 Wi-Fi";
-"wifi.error.message" = "GoFly 需通过 Wi-Fi 与设备服务通信，请确认已连接至 Wi-Fi。";
+"wifi.error.message" = "GoFly 需要连接与 Mac 相同的区域 Wi-Fi 才能进行模拟同步。";
 "wifi.error.action" = "连接 Wi-Fi";
 "settings.wifi" = "Wi-Fi";
 "settings.wifi.connected" = "已连接";

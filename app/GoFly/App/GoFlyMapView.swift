@@ -646,7 +646,8 @@ struct GoFlyMapView: View {
                         collapsedHeight: currentCollapsedHeight,
                         maximumHeight: sheetMaxHeight(in: geometry),
                         contentHeight: bottomContentHeight,
-                        fitsContent: mode == .teleport,
+                        fitsContent: sheetFitsContent,
+                        grabberHeight: mode == .route && sheetFitsContent ? 12 : 24,
                         onHeightChange: { sheetHeight = $0 }
                     ) {
                         sheetContent(in: geometry)
@@ -745,7 +746,7 @@ struct GoFlyMapView: View {
 
     private func sheetContent(in geometry: GeometryProxy) -> some View {
         bottomPanelContent(in: geometry)
-            .fixedSize(horizontal: false, vertical: mode == .teleport)
+            .fixedSize(horizontal: false, vertical: sheetFitsContent)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
             .frame(maxWidth: .infinity, alignment: .top)
     }
@@ -1243,6 +1244,11 @@ struct GoFlyMapView: View {
         activeCandidate == nil && wanderCardPlace == nil && !showingSearch && route.picker == nil
     }
 
+    /// Teleport and the route editor size the sheet to their content (Figma D1/D2/D3).
+    private var sheetFitsContent: Bool {
+        mode == .teleport || (mode == .route && route.canEdit && route.picker == nil)
+    }
+
     private var showsBottomBar: Bool {
         route.picker == nil && !showsOperationPanel && !isExecutionMode
     }
@@ -1521,8 +1527,8 @@ struct GoFlyMapView: View {
                 tone: .danger,
                 title: goFlyString("wifi.error.title"),
                 message: goFlyString("wifi.error.message"),
-                actionTitle: goFlyString("wifi.error.action"),
-                onAction: { network.openWiFiSettings() },
+                actionTitle: goFlyString("common.retry"),
+                onAction: { network.recheck() },
                 onDismiss: { network.dismissNotice() },
                 identifier: "map.wifiError",
                 isFloating: true

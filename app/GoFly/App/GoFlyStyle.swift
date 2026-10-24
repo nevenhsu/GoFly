@@ -196,6 +196,7 @@ extension GoFlyStyle {
     static let tabBarSurface = adaptive(light: (0.976, 0.976, 0.976), dark: (0.110, 0.110, 0.118)).opacity(0.96)
     static let tabSeparator = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
     static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
+    static let startSecondarySurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
     static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
 }
 

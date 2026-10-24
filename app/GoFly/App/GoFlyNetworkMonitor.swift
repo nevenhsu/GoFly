@@ -59,6 +59,12 @@ final class GoFlyNetworkMonitor: ObservableObject {
         !isWiFiConnected && !wifiNoticeDismissed
     }
 
+    /// Re-reads the current path; the toast stays only while Wi-Fi is still missing.
+    func recheck() {
+        isWiFiConnected = Self.evaluate(monitor.currentPath)
+        wifiNoticeDismissed = false
+    }
+
     func dismissNotice() {
         wifiNoticeDismissed = true
     }

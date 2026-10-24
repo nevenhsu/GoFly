@@ -70,8 +70,6 @@ struct GoFlyRouteNodeList: View {
                 }
             }
         }
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { listFrame = $0 }
         .overlay(alignment: .topLeading) {
             if let id = draggingID, let node = draft.nodes.first(where: { $0.id == id }) {
