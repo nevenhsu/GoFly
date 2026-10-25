@@ -41,8 +41,8 @@ struct GoFlySearchPanel: View {
                         HStack(spacing: 8) {
                             ProgressView()
                             Text(goFlyString("search.searching"))
-                                .font(.subheadline)
-                                .foregroundStyle(GoFlyStyle.secondary)
+                                .font(GoFlyFont.subheadline)
+                                .foregroundStyle(GoFlyTextColor.secondary)
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
@@ -72,7 +72,7 @@ struct GoFlySearchPanel: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(GoFlyStyle.primary)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .accessibilityLabel(goFlyString("common.back"))
                 .accessibilityIdentifier("search.back")
                 .padding(.leading, -8)
@@ -80,7 +80,7 @@ struct GoFlySearchPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: GoFlySymbols.search)
                     .goFlyControlSymbol(size: 17, weight: .medium)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityHidden(true)
                 TextField(placeholderOverride ?? goFlyString(placeholderKey), text: Binding(
                     get: { search.query }, set: { search.updateQuery($0) }
@@ -98,7 +98,7 @@ struct GoFlySearchPanel: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityLabel(goFlyString("search.clear"))
                     .accessibilityIdentifier("search.clear")
                 }
@@ -109,26 +109,26 @@ struct GoFlySearchPanel: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
     }
 
     private func roleChip(_ title: String) -> some View {
         HStack {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: GoFlySymbols.flag)
                     .goFlyControlSymbol(size: 12, maximum: 14, weight: .semibold)
                 Text(title)
-                    .font(.footnote)
+                    .font(GoFlyFont.footnote)
             }
-            .foregroundStyle(GoFlyStyle.primary)
+            .foregroundStyle(GoFlyTextColor.primary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(GoFlyStyle.secondarySurface, in: Capsule())
             Spacer()
             Button(action: onFavorites) {
                 Text(goFlyString("favorites.title"))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.subheadlineEmphasis)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
@@ -230,14 +230,14 @@ struct GoFlySearchPanel: View {
                                action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(.subheadline.weight(.semibold))
+                .font(GoFlyFont.subheadlineEmphasis)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
                 Button(action: action) {
                     Text(actionTitle)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -247,7 +247,7 @@ struct GoFlySearchPanel: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
-        .padding(.bottom, 2)
+        .padding(.bottom, 4)
         .accessibilityIdentifier("search.section.\(key)")
     }
 
@@ -259,14 +259,14 @@ struct GoFlySearchPanel: View {
             } label: {
                 HStack(spacing: 12) {
                     iconTile(GoFlySymbols.heading, filled: true)
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(goFlyLocalizedFormat(goFlyString("search.goToCoordinate"),
                                                   place.coordinate.shortDisplayText))
-                            .font(.body)
+                            .font(GoFlyFont.body)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(goFlyString("search.validCoordinate"))
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -291,14 +291,14 @@ struct GoFlySearchPanel: View {
                 } label: {
                     HStack(spacing: 12) {
                         pinIconTile
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(place.title)
-                                .font(.body)
+                                .font(GoFlyFont.body)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                             Text(place.address ?? place.coordinate.displayText)
-                                .font(.footnote)
-                                .foregroundStyle(GoFlyStyle.secondary)
+                                .font(GoFlyFont.footnote)
+                                .foregroundStyle(GoFlyTextColor.secondary)
                                 .lineLimit(1)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,7 +317,7 @@ struct GoFlySearchPanel: View {
 
     private var pinIconTile: some View {
         GoFlyTabIcon(mode: .teleport, selected: false, size: 18)
-            .foregroundStyle(GoFlyStyle.primary)
+            .foregroundStyle(GoFlyTextColor.primary)
             .frame(width: 36, height: 36)
             .background(GoFlyStyle.secondarySurface, in: Circle())
             .accessibilityHidden(true)
@@ -332,14 +332,14 @@ struct GoFlySearchPanel: View {
             } label: {
                 HStack(spacing: 12) {
                     iconTile(symbol)
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(title?.isEmpty == false ? title! : place.title)
-                            .font(.body)
+                            .font(GoFlyFont.body)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(place.address ?? place.coordinate.displayText)
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,10 +365,10 @@ struct GoFlySearchPanel: View {
             HStack(spacing: 12) {
                 iconTile(symbol)
                 Text(title)
-                    .font(.body)
+                    .font(GoFlyFont.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
             .frame(minHeight: 64)
             .contentShape(Rectangle())
         }
@@ -382,7 +382,7 @@ struct GoFlySearchPanel: View {
     private func iconTile(_ symbol: String, filled: Bool = false) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(filled ? GoFlyStyle.surface : GoFlyStyle.primary)
+            .foregroundStyle(filled ? GoFlyStyle.surface : GoFlyTextColor.primary)
             .frame(width: 36, height: 36)
             .background(filled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface, in: Circle())
             .accessibilityHidden(true)

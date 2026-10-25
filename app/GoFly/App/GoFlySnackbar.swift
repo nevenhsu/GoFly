@@ -20,14 +20,14 @@ struct GoFlySnackbar: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: GoFlySymbols.successFilled)
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(GoFlyStyle.success)
                 .accessibilityHidden(true)
             Text(message.text)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(GoFlyStyle.snackbarForeground)
+                .font(GoFlyFont.subheadlineEmphasis)
+                .foregroundStyle(GoFlyTextColor.onDark)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle = message.actionTitle, let action = message.action {
@@ -36,9 +36,9 @@ struct GoFlySnackbar: View {
                     onDismiss()
                 } label: {
                     Text(actionTitle)
-                        .font(.subheadline.weight(.semibold))
+                        .font(GoFlyFont.subheadlineEmphasis)
                         .lineLimit(1)
-                        .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .padding(.horizontal, 12)
                         .frame(minWidth: 56, minHeight: 32)
                         .background(colorScheme == .dark ? Color(white: 0.227) : Color.white, in: Capsule())
@@ -53,9 +53,9 @@ struct GoFlySnackbar: View {
                 .accessibilityIdentifier("snackbar.action")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(minHeight: 52)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 56)
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {

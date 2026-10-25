@@ -57,13 +57,13 @@ struct GoFlyOnboardingView: View {
                     .padding(.top, 48)
                 VStack(spacing: 8) {
                     Text(goFlyString("onboarding.location.title"))
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .font(GoFlyFont.display)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(goFlyString("onboarding.location.message"))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.body)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -185,8 +185,8 @@ struct GoFlyWelcomeView: View {
         } actions: {
             if isPreparing {
                 ProgressView(goFlyString("setup.preparing.message"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityIdentifier("onboarding.welcome.loading")
             }
             Button {
@@ -225,7 +225,7 @@ private struct GoFlyOnboardingPage<Content: View, Actions: View>: View {
                 GoFlyOnboardingEmblem(symbol: symbol)
                     .padding(.top, emblemTopSpacing)
                 Text(goFlyString(title))
-                    .font(.title.weight(.semibold))
+                    .font(GoFlyFont.display)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
@@ -263,7 +263,7 @@ private struct GoFlyOnboardingEmblem: View {
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 48, weight: .medium))
-            .foregroundStyle(GoFlyStyle.primary)
+            .foregroundStyle(GoFlyTextColor.primary)
             .frame(width: 120, height: 120)
             .background(GoFlyStyle.secondarySurface,
                         in: RoundedRectangle(cornerRadius: 36, style: .continuous))
@@ -276,8 +276,8 @@ private struct GoFlyOnboardingFeatureIcon: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 28, weight: .semibold))
-            .foregroundStyle(GoFlyStyle.primary)
+            .font(GoFlyFont.display)
+            .foregroundStyle(GoFlyTextColor.primary)
             .frame(width: 72, height: 72)
             .background(GoFlyStyle.secondarySurface,
                         in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -303,12 +303,12 @@ private struct GoFlyVPNOnboardingView: View {
                     .padding(.top, 10)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(goFlyString("onboarding.vpn.title"))
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .font(GoFlyFont.display)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(goFlyString("onboarding.vpn.subtitle"))
-                        .font(.body)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.body)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -326,8 +326,8 @@ private struct GoFlyVPNOnboardingView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(goFlyString("onboarding.vpn.stepsTitle"))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnoteEmphasis)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                     vpnStepRow(number: 1, title: "onboarding.vpn.step1")
                     Divider().padding(.leading, 32)
                     vpnStepRow(number: 2, title: "onboarding.vpn.step2")
@@ -343,8 +343,8 @@ private struct GoFlyVPNOnboardingView: View {
                     showingHelp = true
                 } label: {
                     Text(goFlyString("onboarding.vpn.helpLink"))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .font(GoFlyFont.footnoteEmphasis)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .frame(minHeight: 32, alignment: .leading)
                         .contentShape(Rectangle())
                 }
@@ -472,12 +472,12 @@ private struct GoFlyVPNOnboardingView: View {
             Text(goFlyString(key))
             Spacer(minLength: 8)
             Image(systemName: icon)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.footnoteEmphasis)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityHidden(true)
         }
-        .font(.body)
-        .foregroundStyle(GoFlyStyle.primary)
+        .font(GoFlyFont.body)
+        .foregroundStyle(GoFlyTextColor.primary)
         .frame(minHeight: 52)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -487,14 +487,14 @@ private struct GoFlyVPNOnboardingView: View {
     private func vpnStepRow(number: Int, title: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Text("\(number)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(GoFlyStyle.surface)
+                .font(GoFlyFont.captionEmphasis)
+                .foregroundStyle(GoFlyTextColor.inverse)
                 .frame(width: 22, height: 22)
                 .background(GoFlyStyle.primary, in: Circle())
                 .accessibilityHidden(true)
             Text(goFlyString(title))
-                .font(.subheadline)
-                .foregroundStyle(GoFlyStyle.primary)
+                .font(GoFlyFont.subheadline)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -518,8 +518,8 @@ private struct GoFlyOnboardingStepIndicator: View {
                 }
             }
             Text(goFlyLocalizedFormat(goFlyString("onboarding.step"), step))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.caption.monospacedDigit())
+                .foregroundStyle(GoFlyTextColor.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(format: goFlyString("onboarding.step"), step))
@@ -532,7 +532,7 @@ private struct GoFlyCompactActionStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(GoFlyFont.bodyEmphasis)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: 48)
             .foregroundStyle(foreground)
@@ -552,7 +552,7 @@ private struct GoFlyCompactActionStyle: ButtonStyle {
     }
 
     private var foreground: Color {
-        guard isEnabled else { return GoFlyStyle.disabledForeground }
-        return primary ? GoFlyStyle.surface : GoFlyStyle.primary
+        guard isEnabled else { return GoFlyTextColor.disabled }
+        return primary ? GoFlyTextColor.inverse : GoFlyTextColor.primary
     }
 }

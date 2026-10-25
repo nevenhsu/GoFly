@@ -26,28 +26,26 @@ struct GoFlyStatusBanner: View {
 
     var body: some View {
         if !isDismissedLocally {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
                 Image(systemName: tone.symbol)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(tone.tint)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
-                        .frame(minHeight: 21, alignment: .leading)
+                        .font(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.primary)
+                        .frame(minHeight: 20, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
                         .accessibilityIdentifier(titleIdentifier
                             ?? identifier.map { "\($0).title" } ?? "statusBanner.title")
                     if let message {
                         Text(message)
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.toastMessage)
-                            // Figma sets 13 pt text on an 18 pt line.
-                            .lineSpacing(2.5)
-                            .padding(.vertical, 1)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.message)
+                            .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier(messageIdentifier
                                 ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
@@ -58,7 +56,7 @@ struct GoFlyStatusBanner: View {
                 if let actionTitle, let onAction {
                     Button(action: onAction) {
                         Text(actionTitle)
-                            .font(.subheadline.weight(.semibold))
+                            .font(GoFlyFont.subheadlineEmphasis)
                             .lineLimit(1)
                             .padding(.horizontal, 12)
                             .frame(minWidth: 56, minHeight: 32)
@@ -67,7 +65,7 @@ struct GoFlyStatusBanner: View {
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(actionEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                    .foregroundStyle(actionEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
                     .disabled(!actionEnabled)
                     .accessibilityIdentifier(actionIdentifier
                         ?? identifier.map { "\($0).action" } ?? "statusBanner.action")
@@ -83,7 +81,7 @@ struct GoFlyStatusBanner: View {
                     }) {
                         Image(systemName: GoFlySymbols.close)
                             .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
-                            .foregroundStyle(GoFlyStyle.toastDismiss)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                             .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
@@ -93,7 +91,7 @@ struct GoFlyStatusBanner: View {
                     .padding(.horizontal, -6)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(tone.toastSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {

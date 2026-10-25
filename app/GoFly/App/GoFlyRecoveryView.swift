@@ -27,7 +27,7 @@ struct GoFlyRecoveryView: View {
                 }
                 if hasSummary {
                     Text(goFlyString("recovery.previousTask"))
-                        .font(.headline)
+                        .font(GoFlyFont.headline)
                         .accessibilityIdentifier("recovery.summary.title")
                     summary
                     action("recovery.discard", id: "recovery.discard") {
@@ -43,7 +43,7 @@ struct GoFlyRecoveryView: View {
                 }
                 if hasContent && store.isSaving {
                     ProgressView(goFlyString("recovery.saving"))
-                        .font(.footnote)
+                        .font(GoFlyFont.footnote)
                 }
             }
             .padding(16)
@@ -61,8 +61,8 @@ struct GoFlyRecoveryView: View {
         let cold = recovery.requiresColdConfirmation
         let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .danger
         return GoFlyStatusBanner(tone: tone, title: goFlyString(key),
-            message: goFlyString("recovery.connectionGuidance"),
-            actionTitle: goFlyString(cold ? "toast.restore" : "common.retry"),
+            message: key == "recovery.connectionRecovered" ? nil : goFlyString("recovery.connectionGuidance"),
+            actionTitle: key == "recovery.connectionRecovered" ? nil : goFlyString(cold ? "toast.restore" : "common.retry"),
             onAction: {
                 if cold { _ = service.restoreGPS() }
                 else { recovery.checkConnection() }
@@ -97,7 +97,7 @@ struct GoFlyRecoveryView: View {
     @ViewBuilder private var summary: some View {
         switch recovery.unverifiedMovement {
         case .route(let route):
-            Text(goFlyString("mode.route")).font(.subheadline.weight(.semibold))
+            Text(goFlyString("mode.route")).font(GoFlyFont.subheadlineEmphasis)
             Text(goFlyLocalizedFormat(goFlyString("recovery.routeProgress"),
                 route.progress.fraction.formatted(.percent.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale))))
                 .accessibilityIdentifier("recovery.routeProgress")
@@ -107,7 +107,7 @@ struct GoFlyRecoveryView: View {
                     Spacer(minLength: 8)
                     Text(goFlyString("route.axis.destination")).multilineTextAlignment(.trailing)
                 }
-                .font(.caption)
+                .font(GoFlyFont.caption)
             }
             Text(goFlyString("route.direction.\(route.heading.rawValue)"))
                 .accessibilityIdentifier("recovery.routeHeading")

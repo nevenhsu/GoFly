@@ -46,8 +46,8 @@ struct GoFlyImportedRoutesView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
                         Text(goFlyString("imports.footnote"))
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                             .padding(.horizontal, 16)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -121,7 +121,7 @@ struct GoFlyImportedRoutesView: View {
             .accessibilityIdentifier("imports.back")
             Spacer(minLength: 0)
             Text(goFlyString("imports.title"))
-                .font(.headline)
+                .font(GoFlyFont.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
             Label(goFlyString("common.back"), systemImage: "chevron.backward")
@@ -182,23 +182,23 @@ struct GoFlyImportedRoutesView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(record.filename).font(.body.weight(.semibold)).lineLimit(2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(record.filename).font(GoFlyFont.bodyEmphasis).lineLimit(2)
                     Text(record.start.displayText + " → " + record.end.displayText + " · "
                          + goFlyLocalizedFormat(goFlyString("imports.pointsFormat"),
                                                 record.pointCount.formatted(.number.locale(GoFlyPreferences.shared.locale))))
-                        .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let failure = imports.unavailable[record.id] {
                         Text(goFlyString(failure.localizationKey))
-                            .font(.footnote).foregroundStyle(GoFlyStyle.errorForeground)
+                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.danger)
                             .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: GoFlySymbols.disclosure)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnoteEmphasis)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 63, alignment: .leading)

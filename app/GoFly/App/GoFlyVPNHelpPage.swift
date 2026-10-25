@@ -12,11 +12,11 @@ struct GoFlyVPNHelpPage: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goFlyString("onboarding.vpn.help.heading"))
-                        .font(.title2.weight(.bold))
+                        .font(GoFlyFont.title)
                         .accessibilityAddTraits(.isHeader)
                     Text(goFlyString("onboarding.vpn.help.intro"))
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnote)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -34,19 +34,19 @@ struct GoFlyVPNHelpPage: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(goFlyString("onboarding.vpn.help.troubleshooting"))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnoteEmphasis)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .padding(.horizontal, 4)
                         .accessibilityAddTraits(.isHeader)
 
                     VStack(spacing: 0) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(goFlyString("onboarding.vpn.help.reconnectTitle"))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(GoFlyStyle.primary)
+                                .font(GoFlyFont.subheadlineEmphasis)
+                                .foregroundStyle(GoFlyTextColor.primary)
                             Text(goFlyString("onboarding.vpn.help.reconnect"))
-                                .font(.footnote)
-                                .foregroundStyle(GoFlyStyle.secondary)
+                                .font(GoFlyFont.footnote)
+                                .foregroundStyle(GoFlyTextColor.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
@@ -59,17 +59,17 @@ struct GoFlyVPNHelpPage: View {
                             HStack(spacing: 10) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(goFlyString("onboarding.vpn.help.permissionTitle"))
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(GoFlyStyle.primary)
+                                        .font(GoFlyFont.subheadlineEmphasis)
+                                        .foregroundStyle(GoFlyTextColor.primary)
                                     Text(goFlyString("onboarding.vpn.help.permission"))
-                                        .font(.footnote)
-                                        .foregroundStyle(GoFlyStyle.secondary)
+                                        .font(GoFlyFont.footnote)
+                                        .foregroundStyle(GoFlyTextColor.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 Image(systemName: GoFlySymbols.disclosure)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(GoFlyStyle.secondary)
+                                    .font(GoFlyFont.captionEmphasis)
+                                    .foregroundStyle(GoFlyTextColor.secondary)
                                     .accessibilityHidden(true)
                             }
                             .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
@@ -114,19 +114,19 @@ struct GoFlyVPNHelpPage: View {
     private func helpStep(_ number: Int) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Text("\(number)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(GoFlyStyle.surface)
+                .font(GoFlyFont.captionEmphasis)
+                .foregroundStyle(GoFlyTextColor.inverse)
                 .frame(width: 24, height: 24)
                 .background(GoFlyStyle.primary, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(goFlyString("onboarding.vpn.help.step\(number).title"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .font(GoFlyFont.subheadlineEmphasis)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .accessibilityIdentifier("onboarding.vpn.help.step\(number)")
                 Text(goFlyString("onboarding.vpn.help.step\(number).message"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

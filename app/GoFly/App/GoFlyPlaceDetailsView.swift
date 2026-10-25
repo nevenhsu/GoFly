@@ -30,14 +30,14 @@ struct GoFlyPlaceDetailsView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             GoFlyFavoriteFailureNotice()
             HStack {
                 Spacer()
                 Button(action: onDismiss) {
                     Image(systemName: GoFlySymbols.close)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
@@ -46,29 +46,29 @@ struct GoFlyPlaceDetailsView: View {
                 .accessibilityIdentifier("placeDetails.dismiss")
             }
             Text(place.title)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(GoFlyStyle.primary)
+                .font(GoFlyFont.title)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("placeDetails.title")
             if place.address != nil || place.title != place.coordinate.displayText {
                 Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                    .font(.subheadline).foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.subheadline).foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityIdentifier("placeDetails.address")
             }
             Text(coordinateLine)
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.footnote.monospacedDigit())
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .textSelection(.enabled)
                 .accessibilityIdentifier("placeDetails.coordinates")
             ScrollView(.horizontal, showsIndicators: false) {
-                actions.padding(.horizontal, 20).padding(.vertical, 2)
+                actions.padding(.horizontal, 20).padding(.vertical, 4)
             }
             .padding(.horizontal, -20)
             .padding(.top, 20)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
     }
 
     private var coordinateLine: String {
@@ -96,11 +96,11 @@ struct GoFlyPlaceDetailsView: View {
             if let onGo {
                 Button(action: onGo) {
                     Text(goFlyString(primaryTitleKey))
-                        .font(.subheadline.weight(.semibold))
+                        .font(GoFlyFont.subheadlineEmphasis)
                         .padding(.horizontal, 16)
                         .frame(height: 40)
                         .background(canGo ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
-                        .foregroundStyle(canGo ? GoFlyStyle.surface : GoFlyStyle.disabledForeground)
+                        .foregroundStyle(canGo ? GoFlyStyle.surface : GoFlyTextColor.disabled)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -115,8 +115,8 @@ struct GoFlyPlaceDetailsView: View {
                     if let onRouteEnd { Button(goFlyString("placeDetails.setEnd"), action: onRouteEnd) }
                 } label: {
                     Label(goFlyString("placeDetails.setEnd"), systemImage: GoFlySymbols.flag)
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 14)
+                        .font(GoFlyFont.subheadlineEmphasis)
+                        .padding(.horizontal, 16)
                         .frame(height: 40)
                         .background(GoFlyStyle.secondarySurface, in: Capsule())
                         .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
@@ -129,8 +129,8 @@ struct GoFlyPlaceDetailsView: View {
                 UIPasteboard.general.string = place.coordinate.displayText
             } label: {
                 Label(goFlyString("placeDetails.copy"), systemImage: "doc.on.doc")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 14)
+                    .font(GoFlyFont.subheadlineEmphasis)
+                    .padding(.horizontal, 16)
                     .frame(height: 40)
                     .background(GoFlyStyle.secondarySurface, in: Capsule())
                     .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }

@@ -16,8 +16,8 @@ struct GoFlyGPXPointList: View {
                 pointRow(1, compact: true)
                 Divider()
                 Text(goFlyLocalizedFormat(goFlyString("imports.points.middle"), points.count - 3))
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .padding(.horizontal, 12)
                 Divider()
@@ -47,17 +47,17 @@ struct GoFlyGPXPointList: View {
         Button { onFocus(points[index]) } label: {
             HStack(spacing: 12) {
                 Text("\(index + 1)")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.subheadline.monospacedDigit())
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(width: 24, alignment: .leading)
                 Text(points[index].displayText)
-                    .font(.body.monospacedDigit())
+                    .font(GoFlyFont.body.monospacedDigit())
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if index == 0 || index == points.count - 1 {
                     Text(goFlyString(index == 0 ? "route.origin" : "route.destination"))
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadline)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(1)
                 }
             }
@@ -81,8 +81,8 @@ struct GoFlyGPXPointsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(title + " · " + goFlyLocalizedFormat(goFlyString("imports.metadata"),
                                                             goFlyString("imports.kind.tracks"), document.pointCount))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .padding(.horizontal, 16)
                 GoFlyGPXPointList(points: document.segments.flatMap { $0 }, onFocus: { coordinate in
                     dismiss()

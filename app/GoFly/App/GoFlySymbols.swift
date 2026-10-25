@@ -435,7 +435,7 @@ struct GoFlySettingsBadgeIcon: View {
             if kind == .wifi {
                 Image(systemName: "wifi")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.surface)
+                    .foregroundStyle(GoFlyTextColor.inverse)
             } else {
                 Canvas { context, canvasSize in
                 let s = min(canvasSize.width, canvasSize.height) / 16.0

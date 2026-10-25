@@ -25,7 +25,7 @@ struct GoFlyExecutionHeader: View {
                 Button(action: onLeadingAction) {
                     Image(systemName: instructionSymbol)
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.instructionForeground)
+                        .foregroundStyle(GoFlyTextColor.onDark)
                         .frame(width: 44, height: 44)
                         .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .contentShape(Rectangle())
@@ -36,21 +36,21 @@ struct GoFlyExecutionHeader: View {
             } else {
                 Image(systemName: instructionSymbol)
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.instructionForeground)
+                    .foregroundStyle(GoFlyTextColor.onDark)
                     .frame(width: 44, height: 44)
                     .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(GoFlyStyle.instructionForeground)
+                    .font(GoFlyFont.title)
+                    .foregroundStyle(GoFlyTextColor.onDark)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if let detail {
                     Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.instructionForeground.opacity(0.75))
+                        .font(GoFlyFont.footnote)
+                        .foregroundStyle(GoFlyTextColor.onDark.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -59,7 +59,7 @@ struct GoFlyExecutionHeader: View {
                 Button(action: onTrailingAction) {
                     Image(systemName: trailingSymbol)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.instructionForeground)
+                        .foregroundStyle(GoFlyTextColor.onDark)
                         .frame(width: 44, height: 44)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -74,7 +74,7 @@ struct GoFlyExecutionHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 16)
         .background(GoFlyStyle.instructionSurface,
                     in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 4)
@@ -195,12 +195,12 @@ struct GoFlyExecutionToggle: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: symbol)
-                .font(.subheadline.weight(.medium))
+                .font(GoFlyFont.subheadlineEmphasis)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 44)
-                .foregroundStyle(isOn ? GoFlyStyle.primary : GoFlyStyle.secondary)
+                .foregroundStyle(isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                 .background(isOn ? GoFlyStyle.secondarySurface : .clear, in: Capsule())
                 .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                 .contentShape(Capsule())

@@ -48,6 +48,8 @@ enum GoFlyStyle {
     static let instructionSurface = snackbarSurface
     static let instructionForeground = Color.white
     static let sheetCornerRadius: CGFloat = 20
+    /// Alias kept for existing call sites; see `GoFlyFont`.
+    static let panelTitleFont = GoFlyFont.title
 
     private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
                                  dark: (CGFloat, CGFloat, CGFloat)) -> Color {
@@ -92,13 +94,13 @@ struct GoFlyEmptyState: View {
         VStack(spacing: 16) {
             Image(systemName: symbol)
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(GoFlyStyle.secondary)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .frame(width: 80, height: 80)
                 .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 24))
                 .accessibilityHidden(true)
             Text(message)
-                .font(.body)
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.body)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -147,7 +149,7 @@ struct GoFlyActionStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(small ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+            .font(small ? GoFlyFont.subheadlineEmphasis : GoFlyFont.bodyEmphasis)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: height)
             .padding(.horizontal, small ? 14 : 16)
@@ -167,9 +169,9 @@ struct GoFlyActionStyle: ButtonStyle {
     }
 
     private var foreground: Color {
-        guard isEnabled else { return GoFlyStyle.disabledForeground }
-        if destructive { return .white }
-        return primary ? GoFlyStyle.surface : GoFlyStyle.primary
+        guard isEnabled else { return GoFlyTextColor.disabled }
+        if destructive { return GoFlyTextColor.onDark }
+        return primary ? GoFlyTextColor.inverse : GoFlyTextColor.primary
     }
 }
 
@@ -182,7 +184,7 @@ struct GoFlyIconStyle: ButtonStyle {
         configuration.label
             .font(.system(size: min(symbolSize, 24), weight: .semibold))
             .frame(minWidth: 44, minHeight: 44)
-            .foregroundStyle(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
             .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .background(isEnabled ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.secondarySurface) : GoFlyStyle.disabledSurface, in: Circle())
             .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
@@ -247,4 +249,64 @@ struct GoFlyProgressStyle: ProgressViewStyle {
             .accessibilityElement()
             .accessibilityValue(Text(fraction, format: .percent.precision(.fractionLength(0))))
     }
+}
+
+
+/// The app's one type scale (docs/IOS-TYPOGRAPHY.md). Every text uses one of these tokens: iOS text styles, so
+/// Dynamic Type still applies, and only two weights (regular, semibold).
+enum GoFlyFont {
+    /// 28 — onboarding and setup hero titles.
+    static let display = Font.title.weight(.semibold)
+    /// 20 — panel, card and navigation-card titles.
+    static let title = Font.title3.weight(.semibold)
+    /// 17 semibold — page titles, dialog titles, section titles.
+    static let headline = Font.headline
+    /// 17 — list rows and text fields.
+    static let body = Font.body
+    /// 17 semibold — primary buttons.
+    static let bodyEmphasis = Font.body.weight(.semibold)
+    /// 15 — secondary text.
+    static let subheadline = Font.subheadline
+    /// 15 semibold — compact buttons, toast titles, chips.
+    static let subheadlineEmphasis = Font.subheadline.weight(.semibold)
+    /// 13 — subtitles, toast messages, captions.
+    static let footnote = Font.footnote
+    /// 13 semibold — status pill, small chips.
+    static let footnoteEmphasis = Font.footnote.weight(.semibold)
+    /// 12 — role labels and axis labels.
+    static let caption = Font.caption
+    /// 12 semibold.
+    static let captionEmphasis = Font.caption.weight(.semibold)
+    /// 10 semibold, fixed — tab labels and compass letters.
+    static let micro = Font.system(size: 10, weight: .semibold)
+    /// 36 semibold, fixed — the speed readout.
+    static let metric = Font.system(size: 36, weight: .semibold)
+}
+
+
+// MARK: - Text colors (docs/IOS-TYPOGRAPHY.md)
+extension GoFlyStyle {
+    fileprivate static let textSecondary = adaptive(light: (0.541, 0.541, 0.557), dark: (0.596, 0.596, 0.624))
+    fileprivate static let textMessage = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
+    fileprivate static let textDisabled = adaptive(light: (0.600, 0.600, 0.627), dark: (0.420, 0.420, 0.447))
+}
+
+/// The app's one text color set. Text and text-like icons use these roles, never raw colors.
+enum GoFlyTextColor {
+    /// Titles, list text, primary labels (#000 / #FFF).
+    static let primary = Color.primary
+    /// Subtitles, captions, placeholders, inactive tab labels (#8A8A8E / #98989F).
+    static let secondary = GoFlyStyle.textSecondary
+    /// Text that explains a title inside a toast or dialog (#3C3C43 / #D1D1D6).
+    static let message = GoFlyStyle.textMessage
+    /// Disabled controls and unavailable rows.
+    static let disabled = GoFlyStyle.textDisabled
+    /// Text on a primary (black / white) fill: the page background color.
+    static let inverse = GoFlyStyle.surface
+    /// Text on fixed dark surfaces (snackbar, navigation card) and on danger fills.
+    static let onDark = Color.white
+    /// Error, warning and success wording.
+    static let danger = GoFlyStyle.dangerForeground
+    static let warning = GoFlyStyle.warningForeground
+    static let success = GoFlyStyle.successForeground
 }

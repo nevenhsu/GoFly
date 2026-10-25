@@ -19,7 +19,7 @@ final class GoFlyRouteExecutionUITests: GoFlyRouteModeTestCase {
         let pause = element(app, "route.pause")
 
         XCTAssertEqual(progress.frame.height, 6, accuracy: 1)
-        XCTAssertEqual(progress.frame.minY - percent.frame.maxY, 6, accuracy: 2, "label row to progress is 6 pt")
+        XCTAssertEqual(progress.frame.minY - percent.frame.maxY, 8, accuracy: 2, "label row to progress is 8 pt")
         XCTAssertEqual(repeatButton.frame.width, 36, accuracy: 1)
         XCTAssertEqual(repeatButton.frame.height, 36, accuracy: 1)
         XCTAssertEqual(chip.frame.width, 68, accuracy: 1)
@@ -44,8 +44,8 @@ final class GoFlyRouteExecutionUITests: GoFlyRouteModeTestCase {
             let confirm = element(app, "route.end.dialog.confirm")
             XCTAssertEqual(cancel.label, "取消")
             XCTAssertEqual(confirm.label, "結束路線")
-            // 320 pt dialog with 21 pt padding leaves a 278 pt action row.
-            XCTAssertEqual(confirm.frame.maxX - cancel.frame.minX, 278, accuracy: 2)
+            // 320 pt dialog with 20 pt padding leaves a 280 pt action row.
+            XCTAssertEqual(confirm.frame.maxX - cancel.frame.minX, 280, accuracy: 2)
             XCTAssertEqual(cancel.frame.midX + confirm.frame.midX, app.frame.width, accuracy: 2, "dialog is centered")
             XCTAssertEqual(cancel.frame.height, 48, accuracy: 1)
             XCTAssertEqual(confirm.frame.height, 48, accuracy: 1)

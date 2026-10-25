@@ -24,7 +24,7 @@ final class GoFlyRoutePanelLayoutUITests: GoFlyRouteModeTestCase {
             XCTAssertEqual(star.frame.minY - add.frame.maxY, 16, accuracy: 1, "Start row 16 pt below the action row")
             XCTAssertEqual(star.frame.height, 56, accuracy: 1)
             XCTAssertEqual(start.frame.height, 56, accuracy: 1)
-            XCTAssertEqual(bar.frame.minY - star.frame.maxY, 35, accuracy: 1, "35 pt between the Start row and the tab bar")
+            XCTAssertEqual(bar.frame.minY - star.frame.maxY, 36, accuracy: 1, "36 pt between the Start row and the tab bar")
             XCTAssertEqual(bar.frame.minY - sheet.frame.maxY, 0, accuracy: 1, "the sheet ends where the tab bar begins")
             evidence(app, task: "R5", name: "d1-initial-\(appearance)")
             app.terminate()

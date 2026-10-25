@@ -602,7 +602,7 @@ struct GoFlyMapView: View {
             mapCanvas(viewport: viewport, size: geometry.size)
             mapPins(viewport: viewport)
             if isExecutionMode || isWanderMap {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     GoFlyExecutionHeader(
                         title: executionTitle,
                         detail: executionDetail,
@@ -925,9 +925,9 @@ struct GoFlyMapView: View {
     }
 
     private var currentCollapsedHeight: CGFloat {
-        // Figma minimum heights: teleport 118 (B1), route 76 (D3), joystick 76 (E1.a).
-        if isWanderRunning { return 122 }
-        return mode == .teleport && !isResumeState ? 118 : 76
+        // Minimum heights on the 4 pt grid: teleport 120 (B1), route 76 (D3), joystick 76 (E1.a).
+        if isWanderRunning { return 120 }
+        return mode == .teleport && !isResumeState ? 120 : 76
     }
 
     private func modePanel(in geometry: GeometryProxy) -> some View {
@@ -948,7 +948,7 @@ struct GoFlyMapView: View {
                             controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                             maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                             isCollapsed: sheetDetent == .collapsed,
-                            bottomPadding: isWanderRunning ? (sheetDetent == .collapsed ? 58 : 66) : nil,
+                            bottomPadding: isWanderRunning ? (sheetDetent == .collapsed ? 24 : 32) + geometry.safeAreaInsets.bottom : nil,
                             onRandomDestination: {
                                 replanWander(to: nil)
                             },
@@ -1001,7 +1001,7 @@ struct GoFlyMapView: View {
                     ctaTitle: goFlyString("teleport.resumeShort"),
                     onResume: { _ = positionHold.retry() },
                     isEnabled: positionHold.canRetry,
-                    contentHeight: 94,
+                    contentHeight: 96,
                     identifier: "teleport.resumePanel"
                 )
             } else {
@@ -1122,7 +1122,7 @@ struct GoFlyMapView: View {
             if sheetDetent == .collapsed {
                 collapsedPositionSummary
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 12)
             } else {
                 expandedTeleportContent
             }
@@ -1132,21 +1132,21 @@ struct GoFlyMapView: View {
     /// Figma B1: the collapsed sheet is one row about the current simulated
     /// position, with the same favorite and copy actions as the place sheet.
     private var collapsedPositionSummary: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(service.positionMarker?.source == .simulation ? goFlyString("sheet.currentPosition") : goFlyString("sheet.realPosition"))
-                .font(.footnote)
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.footnote)
+                .foregroundStyle(GoFlyTextColor.secondary)
             HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(currentPositionPlace?.title ?? goFlyString("sheet.noPosition"))
-                        .font(.title3.weight(.semibold))
+                        .font(GoFlyFont.title)
                         .monospacedDigit()
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
                     if let coordinate = service.positionMarker?.coordinate {
                         Text(coordinate.displayText)
-                            .font(.footnote)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
                 Spacer(minLength: 8)
@@ -1200,8 +1200,8 @@ struct GoFlyMapView: View {
             .padding(.bottom, 4)
             if favorites.favorites.isEmpty {
                 Text(goFlyString("favorites.empty"))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             } else {
                 VStack(spacing: 0) {
@@ -1222,13 +1222,13 @@ struct GoFlyMapView: View {
                                        action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(.subheadline.weight(.semibold))
+                .font(GoFlyFont.subheadlineEmphasis)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
                 Button(goFlyString(actionTitle), action: action)
-                    .font(.subheadline)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("favorites.open")
             }
@@ -1244,20 +1244,20 @@ struct GoFlyMapView: View {
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.secondarySurface, in: Circle())
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .font(GoFlyFont.headline)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .lineLimit(1)
                     Text(place.address ?? place.coordinate.displayText)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnote)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: GoFlySymbols.disclosure)
                     .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityHidden(true)
             }
             .frame(minHeight: 64)
@@ -1684,16 +1684,16 @@ struct GoFlyMapView: View {
     /// Floating search bar and status pill (plan 3). The gear and the clear
     /// control live inside the same rounded search field, as in Figma B1/B5.
     private var topBar: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             HStack(spacing: 0) {
                 Button(action: beginSearch) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 12) {
                         Image(systemName: GoFlySymbols.search)
                             .goFlyControlSymbol(size: 17, weight: .medium)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                         Text(searchBarText)
-                            .font(.body)
-                            .foregroundStyle(hasSearchBarContent ? GoFlyStyle.primary : GoFlyStyle.secondary)
+                            .font(GoFlyFont.body)
+                            .foregroundStyle(hasSearchBarContent ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
@@ -1711,7 +1711,7 @@ struct GoFlyMapView: View {
                     Button(action: clearSearchBar) {
                         Image(systemName: GoFlySymbols.clearSearch)
                             .goFlyControlSymbol(size: 16, maximum: 18, weight: .medium)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
@@ -1723,7 +1723,7 @@ struct GoFlyMapView: View {
                 Button { showingSettings = true } label: {
                     Image(systemName: GoFlySymbols.settings)
                         .goFlyControlSymbol(size: 19, maximum: 22, weight: .medium)
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -1801,9 +1801,9 @@ struct GoFlyMapView: View {
     private var sheetPreferredHeight: CGFloat? {
         guard !dynamicTypeSize.isAccessibilitySize, !isResumeState else { return nil }
         switch mode {
-        case .teleport: return sheetDetent == .collapsed ? 118 : 298
-        // Wander simulation has no tab bar: E2 is 380 and E2.a / E4 are 122, measured to the screen bottom.
-        case .joystick: return isWanderRunning ? (sheetDetent == .collapsed ? 122 : 380) : (sheetDetent == .collapsed ? 76 : 350)
+        case .teleport: return sheetDetent == .collapsed ? 120 : 300
+        // Wander simulation has no tab bar, so its panel is content-sized plus the safe area (E2 / E2.a / E4).
+        case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 76 : 352)
         case .route: return nil
         }
     }
@@ -1953,10 +1953,10 @@ struct GoFlyMapView: View {
             }
         } label: {
             Text(goButtonTitle)
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 14)
+                .font(GoFlyFont.footnoteEmphasis)
+                .padding(.horizontal, 16)
                 .frame(minWidth: 44, minHeight: 28)
-                .foregroundStyle(GoFlyStyle.surface)
+                .foregroundStyle(GoFlyTextColor.inverse)
                 .background(GoFlyStyle.primary, in: Capsule())
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
@@ -1996,7 +1996,7 @@ struct GoFlyMapView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(GoFlyStyle.primary)
+        .foregroundStyle(GoFlyTextColor.primary)
         .accessibilityLabel(goFlyString("search.placeDetails"))
         .accessibilityValue(candidate.place.coordinate.displayText)
         .accessibilityIdentifier("map.candidate.pin")
@@ -2092,6 +2092,18 @@ struct GoFlyMapView: View {
         .accessibilityIdentifier("map.wander.locationCard")
     }
 
+    /// The one toast button for an error key (see `IssueCatalog`). `retry` is the
+    /// shared reset-session-and-retry unless the caller has a narrower retry.
+    private func issueButton(for key: String, retry: (() -> Void)? = nil) -> (title: String?, action: (() -> Void)?) {
+        guard let action = IssueCatalog.info(for: key).action else { return (nil, nil) }
+        let title = goFlyString(action.localizationKey)
+        switch action {
+        case .retry: return (title, retry ?? { _ = service.resetTunnel() })
+        case .settings: return (title, { showingSettings = true })
+        case .chooseFile: return (nil, nil)
+        }
+    }
+
     @ViewBuilder
     private var floatingSystemToast: some View {
         if network.shouldShowWiFiError {
@@ -2125,6 +2137,8 @@ struct GoFlyMapView: View {
                 tone: .danger,
                 title: goFlyString(error.rawValue),
                 message: goFlyString("status.repairGuidance"),
+                actionTitle: issueButton(for: error.rawValue).title,
+                onAction: issueButton(for: error.rawValue).action,
                 onDismiss: { serviceNoticeDismissed = true },
                 identifier: "map.serviceError",
                 isFloating: true
@@ -2160,8 +2174,8 @@ struct GoFlyMapView: View {
                 tone: .danger,
                 title: goFlyString(error.localizationKey),
                 message: goFlyString("status.repairGuidance"),
-                actionTitle: goFlyString("operation.settings"),
-                onAction: { showingSettings = true },
+                actionTitle: issueButton(for: error.localizationKey).title,
+                onAction: issueButton(for: error.localizationKey).action,
                 onDismiss: { joystickErrorDismissed = true },
                 identifier: "joystick.error",
                 isFloating: true
@@ -2182,8 +2196,8 @@ struct GoFlyMapView: View {
                 tone: .warning,
                 title: goFlyString("route.error.shortTitle"),
                 message: goFlyString(error.localizationKey),
-                actionTitle: goFlyString("operation.retry"),
-                onAction: { _ = route.retryPlanning() },
+                actionTitle: issueButton(for: error.localizationKey).title,
+                onAction: issueButton(for: error.localizationKey, retry: { _ = route.retryPlanning() }).action,
                 onDismiss: { routeErrorDismissed = true },
                 identifier: "route.error",
                 isFloating: true
@@ -2194,8 +2208,8 @@ struct GoFlyMapView: View {
             GoFlyStatusBanner(
                 tone: tone,
                 title: goFlyString(key),
-                message: goFlyString("recovery.connectionGuidance"),
-                actionTitle: goFlyString(cold ? "toast.restore" : "common.retry"),
+                message: key == "recovery.connectionRecovered" ? nil : goFlyString("recovery.connectionGuidance"),
+                actionTitle: key == "recovery.connectionRecovered" ? nil : goFlyString(cold ? "toast.restore" : "common.retry"),
                 onAction: {
                     if cold { _ = service.restoreGPS() }
                     else { recovery.checkConnection() }

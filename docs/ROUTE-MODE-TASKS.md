@@ -104,9 +104,9 @@
 
 | Mode | 預設高度（Figma） | 最小高度（Figma） | 實作 |
 | :-- | :-- | :-- | :-- |
-| 瞬移 | 298（B2 半開） | 118（B1 收合） | `sheetPreferredHeight`；恢復列 B8 同為 118 |
-| 路線 | 339（D1，2 列）；D8 3 列 399；上限 414（D2，只有清單捲動） | 76（D3） | 內容定高（`GoFlyRoutePanel`），清單上限＝414 − 207 − 12 |
-| 搖桿 | 350（E1：列 20、搖桿 88、按鈕 262×52、距底 36） | 76（E1.a：標題「搖桿」＋時速 chip） | `GoFlyJoystickPanel` 重排，`isCollapsed` 為最小態 |
+| 瞬移 | 300（B2 半開 298） | 120（B1 收合 118） | `sheetPreferredHeight`；恢復列 B8 同為 120 |
+| 路線 | 340（D1 339，2 列）；3 列 400；上限 416（D2 414，只有清單捲動） | 76（D3） | 內容定高（`GoFlyRoutePanel`），清單上限＝404 − 208 |
+| 搖桿 | 352（E1 350：列 20、搖桿 88×152、按鈕 264×52、距底 36） | 76（E1.a：標題「搖桿」＋時速 chip） | `GoFlyJoystickPanel` 重排，`isCollapsed` 為最小態 |
 | 執行／恢復 | D6 218；D10 122（88＋34）；E5 76 | — | `GoFlyResumePanel.contentHeight`（sheet 內 64＋12 grabber、D10 88、B8 94＋24） |
 
 狀態：已實作，待審查（`GoFlyBottomSheet.preferredHeight`／`grabberHeight`；輔助字級與恢復態改回內容定高；`GoFlyPanelHeightUITests` 量測三個 mode 的預設／最小高度與搖桿內部間距）。尚未對齊：漫步執行 E2（380）、E2.a／E4（122，皆無 TabBar；App 仍顯示 TabBar）、搖桿標題字級（E1 約 17 pt，現為 20 pt）。D2 的列高（55 pt）與 D1（60 pt）不一致，依 60 pt 並以 414 pt 為上限。
@@ -116,6 +116,10 @@
 - **VPN 不可達不可下一步：** `GoFlyVPNOnboardingView` 的「下一步」原本在檢查未通過時仍呼叫 `onComplete()`（繞過），已移除；按鈕在 `canAdvanceVPN`（檢查成功）前停用。`GoFlyOnboardingUITests.testSkipLocationRequiresReachableVPNAndBackKeepsFlow` 驗證。
 - **路線／漫步模擬中沒有 TabBar：** 路線執行原本即隱藏；漫步執行中（非暫停）現在也隱藏（`isWanderRunning`，暫停的 E5 仍保留 tabs），並顯示頂部導航卡＋pill；E2 面板 380／E2.a 與 E4 為 122（量到螢幕底），E4 地點卡距底 28 pt。因模擬器無法實際漫步，這部分只有建置與靜態對照，未做 UI 自動驗證。
 - **Toast：** 「尚未允許 GPS 定位」warning toast 移除；「連線無法使用」改 error（danger）toast、按鈕「重試」（共用 `recovery.checkConnection`；冷啟動待確認時為「恢復」）；有按鈕的 toast／snackbar 中文按鈕不超過 2 字（設定、重試、復原、載入、恢復、說明），英文單字；`EnglishButtonLabelTests` 檢查，`GoFlyConnectionToastUITests` 驗證。
+
+## 間距統一（2026-10-25）
+
+Figma 的間距沒有精修（如 23、17、35、14），實作統一到 4 pt 格：容器內距與間距取最接近的 4 的倍數，剛好在中間的（如 10、14、18、22）往上取；≤1 的線寬不動，2–3 取 4。已套用於地圖、面板、toast、snackbar、卡片、清單與 dialog（不含設定、首次引導、VPN 說明、GPX 頁與圖示幾何）。結果：toast 內距 16／間距 12、icon 24；snackbar 內距 16／12、高 56；面板底距 35→36；執行面板頂距 22→24；進度標籤間距 6→8；dialog 內距 21→20；搖桿圓盤 150→152；瞬移 118／298→120／300；路線上限 414→416。所有面板標題統一 `GoFlyStyle.panelTitleFont`（20 pt Semibold）；「連線無法使用」toast 改短文案（「連線無法使用」＋「請確認 Wi-Fi 與 VPN 後重試。」，恢復成功的 toast 不帶說明與按鈕）。UI test 的數字已改為格線值。
 
 ## 建議順序
 

@@ -22,14 +22,14 @@ struct GoFlyRouteRunningControls: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
-                        .font(.footnote)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.footnote)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                     Spacer(minLength: 8)
                     Text(min(max(fraction, 0), 1), format: .percent.precision(.fractionLength(0)))
-                        .font(.footnote.monospacedDigit())
+                        .font(GoFlyFont.footnote.monospacedDigit())
                         .accessibilityIdentifier("route.position.value")
                 }
                 ProgressView(value: min(max(fraction, 0), 1), total: 1)
@@ -38,9 +38,9 @@ struct GoFlyRouteRunningControls: View {
                     .accessibilityIdentifier("route.progress")
                 if isRoundTrip {
                     HStack {
-                        Text(goFlyString("route.axis.origin")).font(.caption2).foregroundStyle(GoFlyStyle.secondary)
+                        Text(goFlyString("route.axis.origin")).font(GoFlyFont.caption).foregroundStyle(GoFlyTextColor.secondary)
                         Spacer()
-                        Text(goFlyString("route.axis.destination")).font(.caption2).foregroundStyle(GoFlyStyle.secondary)
+                        Text(goFlyString("route.axis.destination")).font(GoFlyFont.caption).foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
             }

@@ -42,7 +42,7 @@ struct GoFlyFavoritesBottomBar: View {
         HStack(spacing: 8) {
             Image(systemName: GoFlySymbols.search)
                 .goFlyControlSymbol(size: 17, weight: .medium)
-                .foregroundStyle(GoFlyStyle.secondary)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityHidden(true)
             TextField(placeholder, text: $query)
                 .textFieldStyle(.plain)
@@ -52,7 +52,7 @@ struct GoFlyFavoritesBottomBar: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -60,7 +60,7 @@ struct GoFlyFavoritesBottomBar: View {
                 .accessibilityLabel(goFlyString("search.clear"))
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .frame(minHeight: 48)
         .goFlySearchField(isFocused: focused)
         .padding(.horizontal, 16)

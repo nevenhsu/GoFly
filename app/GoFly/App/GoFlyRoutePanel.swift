@@ -100,7 +100,7 @@ struct GoFlyRoutePanel: View {
                 .padding(.top, 16)
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 35)
+        .padding(.bottom, 36)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel.content")
@@ -141,7 +141,7 @@ struct GoFlyRoutePanel: View {
             }
         } label: {
             GoFlyStarIcon(size: 20, filled: isFavorite)
-                .foregroundStyle(GoFlyStyle.primary)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .frame(width: GoFlyStyle.primaryButtonHeight, height: GoFlyStyle.primaryButtonHeight)
                 .background(GoFlyStyle.startSecondarySurface, in: Circle())
         }
@@ -184,13 +184,13 @@ struct GoFlyRoutePanel: View {
     }
 
     private var executionPanel: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             if [.planning, .preparing, .pausing, .cancelling].contains(controller.phase) {
                 HStack(spacing: 8) {
                     ProgressView()
                     Text(goFlyString("route.phase.\(controller.phase.rawValue)"))
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadline)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 16)
@@ -235,11 +235,11 @@ struct GoFlyRoutePanel: View {
         }
         .padding(.horizontal, 20)
         // Figma D6: the label row starts 22 pt below the panel top; the safe area supplies the bottom 34 pt.
-        .padding(.top, 22)
+        .padding(.top, 24)
         .frame(maxWidth: .infinity)
         .background(GoFlyStyle.cardSurface)
         .overlay(alignment: .top) {
-            Capsule().fill(GoFlyStyle.border).frame(width: 36, height: 5).padding(.top, 6)
+            Capsule().fill(GoFlyStyle.border).frame(width: 36, height: 5).padding(.top, 8)
                 .accessibilityHidden(true)
         }
         .accessibilityIdentifier("route.panel.content")
@@ -249,9 +249,9 @@ struct GoFlyRoutePanel: View {
         HStack(spacing: 8) {
             Button(action: { onExpand?() }) {
                 Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
-                    .font(.title3.weight(.semibold))
+                    .font(GoFlyFont.title)
                     .lineLimit(1)
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .accessibilityAddTraits(.isHeader)
             }
             .buttonStyle(.plain)
@@ -281,7 +281,7 @@ struct GoFlyRoutePanel: View {
     private var editingHeader: some View {
         HStack(spacing: 8) {
             Text(controller.draft.gpxSource?.displayFilename ?? goFlyString("route.planTitle"))
-                .font(.title3.weight(.semibold))
+                .font(GoFlyFont.title)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier(controller.draft.gpxSource == nil ? "route.heading" : "route.importedSummary")
@@ -304,8 +304,8 @@ struct GoFlyRoutePanel: View {
                                onFocus: onFocusPoint, onShowAll: { showingAllPoints = true })
             Button(action: { _ = controller.clearImportedRoute() }) {
                 Label(goFlyString("route.clearRoute"), systemImage: "trash")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .font(GoFlyFont.subheadlineEmphasis)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
@@ -315,13 +315,13 @@ struct GoFlyRoutePanel: View {
     }
 
     /// Rows are 60 pt; the list scrolls once the panel reaches its 414 pt maximum.
-    private static let maxPanelContent: CGFloat = 402
+    private static let maxPanelContent: CGFloat = 404
     private static let rowHeight: CGFloat = 60
     /// Everything in the editing panel except the list: header, gaps, action row, Start row and bottom inset.
-    private static let panelChrome: CGFloat = 207
+    private static let panelChrome: CGFloat = 208
 
     private var listHeight: CGFloat {
-        // D2: the sheet tops out at 414 pt above the tab bar (402 pt under the 12 pt grabber); only the list scrolls.
+        // D2: the sheet tops out at 416 pt above the tab bar (404 pt under the 12 pt grabber); only the list scrolls.
         let cap = min(Self.maxPanelContent - Self.panelChrome, max(Self.rowHeight, maximumHeight - Self.panelChrome))
         return min(listContentHeight, cap)
     }
@@ -356,19 +356,19 @@ struct GoFlyRoutePanel: View {
         HStack(spacing: 16) {
             Button { _ = controller.openNewPicker() } label: {
                 Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
-                    .font(.subheadline.weight(.semibold))
+                    .font(GoFlyFont.subheadlineEmphasis)
                     .frame(minHeight: 40, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(controller.canAddNode ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+            .foregroundStyle(controller.canAddNode ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
             .disabled(!controller.canAddNode)
             .accessibilityIdentifier("route.addNode")
             .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             Spacer(minLength: 0)
             Button(action: { _ = controller.reverseNodes() }) {
                 Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
-                    .font(.subheadline.weight(.semibold))
+                    .font(GoFlyFont.subheadlineEmphasis)
                     .frame(minHeight: 40)
                     .contentShape(Rectangle())
             }
@@ -421,17 +421,17 @@ private struct GoFlyRoundTripControl: View {
         Button {
             _ = controller.setRoundTripEnabled(!controller.roundTripEnabled)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 GoFlyRoundTripIcon(enabled: controller.roundTripEnabled, size: 14)
                 Text(goFlyString("route.roundTripShort"))
-                    .font(.footnote.weight(.semibold))
+                    .font(GoFlyFont.footnoteEmphasis)
             }
             .padding(.horizontal, 12)
             .frame(height: 36)
             .background(controller.roundTripEnabled ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
             .overlay { if !controller.roundTripEnabled { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) } }
             .contentShape(Capsule())
-            .foregroundStyle(!controller.canSetRoundTrip ? GoFlyStyle.disabledForeground
+            .foregroundStyle(!controller.canSetRoundTrip ? GoFlyTextColor.disabled
                              : (controller.roundTripEnabled ? GoFlyStyle.surface : GoFlyStyle.primary))
         }
         .buttonStyle(.plain)

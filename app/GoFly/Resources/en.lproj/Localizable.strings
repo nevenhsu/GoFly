@@ -352,7 +352,7 @@
 "recovery.manualWaiting" = "Previous joystick movement · unverified";
 "recovery.uncertain" = "Previous position change is unconfirmed.";
 "recovery.connectionChecking" = "Checking connection…";
-"recovery.connectionLost" = "Connection unavailable. Check Wi‑Fi and the VPN.";
+"recovery.connectionLost" = "Connection unavailable";
 "recovery.connectionRecovered" = "Connection reachable. Continue explicitly.";
 "recovery.saving" = "Saving…";
 "recovery.unsaved" = "Changes are not saved.";
@@ -556,7 +556,7 @@
 
 "operation.failureGuidance" = "If this keeps failing, open Settings › VPN Tunnel for repair guidance.";
 
-"recovery.connectionGuidance" = "If the connection remains unavailable, connect to Wi-Fi and open Settings › VPN Tunnel for repair guidance.";
+"recovery.connectionGuidance" = "Check Wi-Fi and VPN, then retry.";
 
 "recovery.storageGuidance" = "Check available device storage. If saving remains unavailable, export diagnostics from Settings › Device Info.";
 
@@ -677,3 +677,8 @@
 "route.heading.going" = "To %@";
 "route.heading.paused" = "Paused · To %@";
 "toast.restore" = "Restore";
+
+/* Shared error toast buttons (IssueAction) */
+"issue.action.retry" = "Retry";
+"issue.action.settings" = "Settings";
+"issue.action.chooseFile" = "Choose File";

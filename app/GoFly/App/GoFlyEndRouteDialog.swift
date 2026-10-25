@@ -15,14 +15,14 @@ struct GoFlyEndRouteDialog: View {
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
                 Text(goFlyString("route.cancelConfirmation.title"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .font(GoFlyFont.headline)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("route.end.dialog.title")
                 Text(goFlyString("route.cancelConfirmation.message"))
-                    .font(.system(size: 14))
-                    .foregroundStyle(GoFlyStyle.dialogMessage)
+                    .font(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.message)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 16)
@@ -30,8 +30,8 @@ struct GoFlyEndRouteDialog: View {
                 HStack(spacing: 12) {
                     Button(action: onCancel) {
                         Text(goFlyString("route.cancelConfirmation.return"))
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(GoFlyStyle.primary)
+                            .font(GoFlyFont.bodyEmphasis)
+                            .foregroundStyle(GoFlyTextColor.primary)
                             .frame(maxWidth: .infinity, minHeight: 48)
                             .background(GoFlyStyle.dialogCancelSurface, in: Capsule())
                             .contentShape(Capsule())
@@ -40,8 +40,8 @@ struct GoFlyEndRouteDialog: View {
                     .accessibilityIdentifier("route.end.dialog.cancel")
                     Button(action: onConfirm) {
                         Text(goFlyString("route.cancelConfirmation.confirm"))
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .font(GoFlyFont.bodyEmphasis)
+                            .foregroundStyle(GoFlyTextColor.onDark)
                             .frame(maxWidth: .infinity, minHeight: 48)
                             .background(GoFlyStyle.danger, in: Capsule())
                             .contentShape(Capsule())
@@ -51,7 +51,7 @@ struct GoFlyEndRouteDialog: View {
                 }
                 .padding(.top, 16)
             }
-            .padding(21)
+            .padding(20)
             .frame(maxWidth: 320)
             .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay {

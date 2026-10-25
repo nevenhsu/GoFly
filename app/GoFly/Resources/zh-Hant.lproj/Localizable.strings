@@ -366,7 +366,7 @@
 "recovery.manualWaiting" = "上次搖桿移動・尚未驗證";
 "recovery.uncertain" = "上次位置變更尚未確認。";
 "recovery.connectionChecking" = "正在檢查連線…";
-"recovery.connectionLost" = "連線無法使用，請檢查 Wi‑Fi 與 VPN。";
+"recovery.connectionLost" = "連線無法使用";
 "recovery.connectionRecovered" = "連線已恢復，請手動繼續。";
 "recovery.saving" = "儲存中…";
 "recovery.unsaved" = "變更尚未儲存。";
@@ -571,7 +571,7 @@
 
 "operation.failureGuidance" = "若持續失敗，請到「設定 › VPN 通道」查看修復指引。";
 
-"recovery.connectionGuidance" = "若連線持續無法使用，請先連上 Wi-Fi，再到「設定 › VPN 通道」查看修復指引。";
+"recovery.connectionGuidance" = "請確認 Wi-Fi 與 VPN 後重試。";
 
 "recovery.storageGuidance" = "請檢查裝置可用儲存空間。若仍無法儲存，請到「設定 › 裝置資訊」匯出診斷記錄。";
 
@@ -676,3 +676,8 @@
 "route.heading.going" = "前往 %@";
 "route.heading.paused" = "已暫停 · 前往 %@";
 "toast.restore" = "恢復";
+
+/* Shared error toast buttons (IssueAction) */
+"issue.action.retry" = "重試";
+"issue.action.settings" = "設定";
+"issue.action.chooseFile" = "選檔";

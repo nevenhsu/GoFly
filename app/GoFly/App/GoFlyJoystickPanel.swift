@@ -8,7 +8,7 @@ struct GoFlyJoystickPanel: View {
     var maximumHeight: CGFloat
     /// Figma E1.a: only the title row and speed chip remain (76 pt panel).
     var isCollapsed = false
-    /// Wander simulation has no tab bar, so the panel itself ends 66 pt (E2) or 58 pt (E2.a) below its content.
+    /// Wander simulation has no tab bar, so the panel itself leaves 32 pt (E2) or 24 pt (E2.a) plus the safe area below its content.
     var bottomPadding: CGFloat? = nil
     var onRandomDestination: () -> Void = { }
     var onStartWander: () -> Void = { }
@@ -17,11 +17,11 @@ struct GoFlyJoystickPanel: View {
     var onSettings: () -> Void = { }
     @State private var showingSpeedSheet = false
 
-    /// Figma E1: row 44, 24 pt, 150 pt pad, 24 pt, 52 pt button, then 36 pt — 338 pt under the 12 pt grabber.
+    /// Row 44, 24 pt, 152 pt pad, 24 pt, 52 pt button, then 36 pt — 340 pt under the 12 pt grabber.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             wanderControls
-                .padding(.top, isCollapsed && !controller.wanderEnabled ? 2 : 8)
+                .padding(.top, isCollapsed && !controller.wanderEnabled ? 4 : 8)
             if !isCollapsed {
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)
@@ -38,7 +38,7 @@ struct GoFlyJoystickPanel: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, bottomPadding ?? (isCollapsed ? 18 : 36))
+        .padding(.bottom, bottomPadding ?? (isCollapsed ? 16 : 36))
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showingSpeedSheet) {
             GoFlySpeedSheet(
@@ -60,16 +60,16 @@ struct GoFlyJoystickPanel: View {
     }
 
     private var wanderRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             if controller.wanderEnabled || !isCollapsed {
                 Image(systemName: "shuffle")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 22, height: 22)
                     .accessibilityHidden(true)
             }
             Text(rowTitle)
-                .font(.title3.weight(.semibold))
+                .font(GoFlyFont.title)
                 .lineLimit(1)
             Spacer(minLength: 8)
             GoFlySpeedChip(
@@ -92,7 +92,7 @@ struct GoFlyJoystickPanel: View {
     @ViewBuilder
     private var wanderActions: some View {
         if controller.wanderEnabled {
-            HStack(spacing: 13) {
+            HStack(spacing: 12) {
                 Button(action: onStopWander) { Text(goFlyString("joystick.stopWander")) }
                     .buttonStyle(GoFlyActionStyle(fixedHeight: 52))
                     .accessibilityIdentifier("joystick.stopWander")
@@ -134,8 +134,8 @@ struct GoFlyWanderDestinationRow: View {
                     .background(GoFlyStyle.secondarySurface, in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(caption).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
-                    Text(title).font(.body.weight(.semibold))
+                    Text(caption).font(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
+                    Text(title).font(GoFlyFont.bodyEmphasis)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,7 +179,7 @@ private struct GoFlyManualJoystickPad: View {
     @State private var admitted = false
     @State private var endedWhileHeld = false
     @State private var screenVector = CGPoint.zero
-    private let diameter: CGFloat = 150
+    private let diameter: CGFloat = 152
     private let thumbDiameter: CGFloat = 44
     private var radius: CGFloat { (diameter - thumbDiameter) / 2 - 8 }
 
@@ -199,8 +199,8 @@ private struct GoFlyManualJoystickPad: View {
             ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
                 let angle = Double(index) * 90 - cameraHeadingDegrees
                 Text(letter)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.micro)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .offset(x: CGFloat(sin(angle * .pi / 180)) * (diameter / 2 - 24),
                             y: -CGFloat(cos(angle * .pi / 180)) * (diameter / 2 - 24))
                     .accessibilityHidden(true)

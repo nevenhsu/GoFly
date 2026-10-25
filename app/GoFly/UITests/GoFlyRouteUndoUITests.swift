@@ -18,8 +18,8 @@ final class GoFlyRouteUndoUITests: GoFlyRouteModeTestCase {
             let undo = element(app, "snackbar.action")
             XCTAssertEqual(undo.label, "復原")
             XCTAssertTrue(app.staticTexts["已清空路線地點"].waitForExistence(timeout: 2))
-            // The snackbar is 52 pt high with a 32 pt action centered in it.
-            XCTAssertEqual(sheet.frame.minY - (undo.frame.midY + 26), 12, accuracy: 2.5, "12 pt above the sheet")
+            // The snackbar is 56 pt high with a 32 pt action centered in it.
+            XCTAssertEqual(sheet.frame.minY - (undo.frame.midY + 28), 12, accuracy: 2.5, "12 pt above the sheet")
             evidence(app, task: "R4", name: "d9-undo-\(appearance)")
 
             undo.tap()

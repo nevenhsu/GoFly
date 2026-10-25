@@ -12,13 +12,13 @@ struct GoFlyFavoriteStar: View {
     var body: some View {
         Button { showingEditor = true } label: {
             if let labelTitle {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
                     Text(labelTitle)
-                        .font(.subheadline.weight(.medium))
+                        .font(GoFlyFont.subheadlineEmphasis)
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .frame(height: 40)
                 .background(GoFlyStyle.secondarySurface, in: Capsule())
                 .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
@@ -30,7 +30,7 @@ struct GoFlyFavoriteStar: View {
             }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(favorites.canMutate ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+        .foregroundStyle(favorites.canMutate ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
         .disabled(!favorites.canMutate)
         .accessibilityLabel(goFlyString(favorites.canMutate
             ? (favorites.isFavorite(place) ? "favorites.remove" : "favorites.add") : "favorites.title"))

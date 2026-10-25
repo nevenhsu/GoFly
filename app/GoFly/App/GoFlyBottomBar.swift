@@ -17,13 +17,13 @@ struct GoFlyBottomBar: View {
                     VStack(spacing: 1) {
                         GoFlyTabIcon(mode: mode, selected: selection == mode, size: 25)
                         Text(goFlyString("mode.\(mode.rawValue)"))
-                            .font(.system(size: 10, weight: .medium))
+                            .font(GoFlyFont.micro)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
-                    .padding(.top, 7)
+                    .padding(.top, 8)
                     .frame(maxWidth: .infinity, minHeight: 49, alignment: .top)
-                    .foregroundStyle(selection == mode ? GoFlyStyle.primary : GoFlyStyle.tabInactive)
+                    .foregroundStyle(selection == mode ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

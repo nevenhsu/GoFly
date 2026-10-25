@@ -11,13 +11,13 @@ struct GoFlyVerticalArrowsIcon: View {
     let isEnabled: Bool
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: "arrow.down")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyStyle.disabledForeground.opacity(0.4) : (isReversed ? GoFlyStyle.primary : GoFlyStyle.secondary.opacity(0.4)))
+                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled.opacity(0.4) : (isReversed ? GoFlyTextColor.primary : GoFlyTextColor.secondary.opacity(0.4)))
             Image(systemName: "arrow.up")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyStyle.disabledForeground.opacity(0.4) : (isReversed ? GoFlyStyle.secondary.opacity(0.4) : GoFlyStyle.primary))
+                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled.opacity(0.4) : (isReversed ? GoFlyTextColor.secondary.opacity(0.4) : GoFlyTextColor.primary))
         }
         .accessibilityHidden(true)
     }
@@ -38,13 +38,13 @@ struct GoFlySpeedChip: View {
             HStack(spacing: 4) {
                 GoFlySpeedIcon(size: 16)
                 Text("\(speed)")
-                    .font(.footnote.weight(.semibold))
+                    .font(GoFlyFont.footnoteEmphasis)
                     .monospacedDigit()
                     .lineLimit(1)
                 if showsChevron {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color(white: 0.7))
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .accessibilityHidden(true)
                 }
             }
@@ -74,12 +74,12 @@ struct GoFlyRouteControlRow: View {
     var onSpeedTap: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             // Repeat button: repeat / repeat.slash
             Button(action: onToggleRoundTrip) {
                 Image(systemName: isRoundTrip ? "repeat" : "repeat.slash")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isRoundTrip ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+                    .foregroundStyle(isRoundTrip ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.surface, in: Circle())
                     .overlay { Circle().strokeBorder(Color(white: 0.78), lineWidth: 0.5) }

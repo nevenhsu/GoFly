@@ -82,7 +82,7 @@ struct GoFlyFavoritesView: View {
             Text(selecting
                  ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
                  : goFlyString("favorites.title"))
-                .font(.headline)
+                .font(GoFlyFont.headline)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
             if selecting {
@@ -157,10 +157,10 @@ struct GoFlyFavoritesView: View {
                 else { onSelect(favorite.place) }
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(favorite.displayTitle).font(.body)
+                    Text(favorite.displayTitle).font(GoFlyFont.body)
                     if let subtitle = favoriteSubtitle(favorite) {
                         Text(subtitle)
-                            .font(.footnote).foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
                 .padding(.vertical, 8)
@@ -182,7 +182,7 @@ struct GoFlyFavoritesView: View {
                 .accessibilityIdentifier("favorites.edit.\(favorite.place.coordinate.displayText)")
             }
         }
-        .foregroundStyle(GoFlyStyle.primary)
+        .foregroundStyle(GoFlyTextColor.primary)
     }
 
     /// A coordinate favorite already shows its coordinate as the title; the

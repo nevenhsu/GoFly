@@ -443,12 +443,12 @@ struct GoFlySetupLockView: View {
             VStack(alignment: .leading, spacing: 20) {
                 Image(systemName: iconName)
                     .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .accessibilityHidden(true)
                 Text(goFlyString(titleKey))
-                    .font(.title2.weight(.semibold))
+                    .font(GoFlyFont.title)
                 Text(goFlyString(messageKey))
-                    .font(.body)
+                    .font(GoFlyFont.body)
                     .fixedSize(horizontal: false, vertical: true)
                 if case .blocked = phase {
                     Button(action: onRetry) {
@@ -533,7 +533,7 @@ struct GoFlyStartupView: View {
                     .position(x: midX, y: midY - 48)
 
                 Text("GoFly")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(GoFlyFont.display)
                     .foregroundStyle(.black)
                     .frame(width: 120, height: 34)
                     .position(x: midX, y: midY + 41)

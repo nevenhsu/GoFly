@@ -114,10 +114,10 @@ struct GoFlyRouteNodeList: View {
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(goFlyRouteRoleTitle(role)).font(.caption.weight(.medium)).foregroundStyle(GoFlyStyle.secondary)
+                    Text(goFlyRouteRoleTitle(role)).font(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(title(node.value, role: role)).font(.body)
-                        .foregroundStyle(node.value == .empty ? GoFlyStyle.secondary : GoFlyStyle.primary)
+                    Text(title(node.value, role: role)).font(GoFlyFont.body)
+                        .foregroundStyle(node.value == .empty ? GoFlyTextColor.secondary : GoFlyTextColor.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -134,7 +134,7 @@ struct GoFlyRouteNodeList: View {
                 Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
                     Image(systemName: GoFlySymbols.close)
                         .goFlyControlSymbol(size: 15, weight: .medium)
-                        .foregroundStyle(GoFlyStyle.toastDismiss)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -151,7 +151,7 @@ struct GoFlyRouteNodeList: View {
         .background {
             if isSelected { Color.clear.goFlySearchField(isFocused: true) }
         }
-        .foregroundStyle(isEditable ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
+        .foregroundStyle(isEditable ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.row.\(node.id.rawValue.uuidString)")
     }

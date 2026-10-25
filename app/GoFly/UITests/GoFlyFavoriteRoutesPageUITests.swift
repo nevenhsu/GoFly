@@ -53,7 +53,7 @@ final class GoFlyFavoriteRoutesPageUITests: GoFlyRouteModeTestCase {
             delete.tap()
             let undo = element(app, "snackbar.action")
             XCTAssertEqual(undo.label, "復原")
-            XCTAssertEqual(fieldTop - 12 - (undo.frame.midY + 26), 12, accuracy: 3, "snackbar 12 pt above the search section")
+            XCTAssertEqual(fieldTop - 12 - (undo.frame.midY + 28), 12, accuracy: 3, "snackbar 12 pt above the search section")
             evidence(app, task: "F2", name: "d22-undo-\(appearance)")
             undo.tap()
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'favoriteRoutes.record.'")).element(boundBy: 0)

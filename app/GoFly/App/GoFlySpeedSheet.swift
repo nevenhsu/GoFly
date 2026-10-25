@@ -24,13 +24,13 @@ struct GoFlySpeedSheet: View {
             // Header
             HStack {
                 Text(goFlyString("route.speedSetting"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .font(GoFlyFont.headline)
+                    .foregroundStyle(GoFlyTextColor.primary)
                 Spacer()
                 Button(action: onDismiss) {
                     Text(goFlyString("common.done"))
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .font(GoFlyFont.bodyEmphasis)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                         .contentShape(Rectangle())
@@ -44,21 +44,21 @@ struct GoFlySpeedSheet: View {
             // Current Speed Readout in a single row
             HStack(alignment: .firstTextBaseline) {
                 Text(goFlyString("route.speedCurrent"))
-                    .font(.body)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.body)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(speed.kilometersPerHour)")
-                        .font(.system(size: 36, weight: .bold))
+                        .font(GoFlyFont.metric)
                         .monospacedDigit()
-                        .foregroundStyle(GoFlyStyle.primary)
+                        .foregroundStyle(GoFlyTextColor.primary)
                     Text(goFlyString("route.speedUnit"))
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                 }
                 .accessibilityIdentifier("route.speed.value")
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
 
             // Preset Chips with icons
             HStack(spacing: 8) {
@@ -73,7 +73,7 @@ struct GoFlySpeedSheet: View {
                             Text(presetIcon(for: preset))
                             Text("\(preset)")
                         }
-                        .font(.footnote.weight(.semibold))
+                        .font(GoFlyFont.footnoteEmphasis)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
@@ -84,7 +84,7 @@ struct GoFlySpeedSheet: View {
                                 Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 1)
                             }
                         }
-                        .foregroundStyle(isSelected ? GoFlyStyle.surface : GoFlyStyle.primary)
+                        .foregroundStyle(isSelected ? GoFlyStyle.surface : GoFlyTextColor.primary)
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -94,7 +94,7 @@ struct GoFlySpeedSheet: View {
             }
 
             // Slider with min/max labels below
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 Slider(
                     value: Binding(
                         get: { Double(speed.kilometersPerHour) },
@@ -112,12 +112,12 @@ struct GoFlySpeedSheet: View {
 
                 HStack {
                     Text("1 \(goFlyString("route.speedUnit"))")
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.caption)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                     Spacer()
                     Text("120 \(goFlyString("route.speedUnit"))")
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.caption)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                 }
             }
             .padding(.top, 4)

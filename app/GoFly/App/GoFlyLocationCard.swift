@@ -37,25 +37,25 @@ struct GoFlyLocationCard: View {
     var identifier: String = "locationCard"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             // Title
             Text(place.title)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(GoFlyStyle.primary)
+                .font(GoFlyFont.title)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .lineLimit(1)
                 .padding(.trailing, 32)
                 .accessibilityIdentifier("\(identifier).title")
 
             Text(place.address ?? "")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.footnote)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .lineLimit(2, reservesSpace: true)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("\(identifier).address")
 
             Text(coordinateLine)
-                .font(.system(size: 12, weight: .regular).monospacedDigit())
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.caption.monospacedDigit())
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityIdentifier("\(identifier).coordinates")
 
             Spacer(minLength: 12)
@@ -70,13 +70,13 @@ struct GoFlyLocationCard: View {
                                 .font(.system(size: 12, weight: .bold))
                         }
                         Text(resolvedPrimaryTitle)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(GoFlyFont.subheadlineEmphasis)
                             .lineLimit(1)
                     }
-                    .foregroundStyle(primaryEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledForeground)
+                    .foregroundStyle(primaryEnabled ? GoFlyStyle.surface : GoFlyTextColor.disabled)
                     .frame(minWidth: 77)
                     .frame(height: 40)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 16)
                     .background(primaryEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
                     .contentShape(Capsule())
                 }
@@ -93,14 +93,14 @@ struct GoFlyLocationCard: View {
                     UIPasteboard.general.string = place.coordinate.displayText
                     onCopy?()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: 14, weight: .medium))
                         Text(goFlyString("placeDetails.copy"))
-                            .font(.subheadline.weight(.medium))
+                            .font(GoFlyFont.subheadlineEmphasis)
                             .lineLimit(1)
                     }
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 16)
                     .frame(minWidth: 86)
                     .frame(height: 40)
                     .background(GoFlyStyle.secondarySurface, in: Capsule())
@@ -114,7 +114,7 @@ struct GoFlyLocationCard: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 24)
-        .padding(.bottom, 18)
+        .padding(.bottom, 20)
         .frame(height: 188)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -127,13 +127,13 @@ struct GoFlyLocationCard: View {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(width: 24, height: 24)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 14)
-            .padding(.trailing, 14)
+            .padding(.top, 16)
+            .padding(.trailing, 16)
             .accessibilityLabel(goFlyString("common.dismiss"))
             .accessibilityIdentifier("\(identifier).dismiss")
         }

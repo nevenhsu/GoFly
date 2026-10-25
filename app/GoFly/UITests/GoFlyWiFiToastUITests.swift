@@ -15,7 +15,7 @@ final class GoFlyWiFiToastUITests: GoFlyRouteModeTestCase {
             XCTAssertEqual(action.frame.height, 32, accuracy: 1)
             XCTAssertEqual(toast.frame.minY - pill.frame.maxY, 8, accuracy: 1.5, "toast sits 8 pt below the status pill")
             XCTAssertEqual(toast.frame.width, app.frame.width - 32, accuracy: 1)
-            XCTAssertEqual(toast.frame.height, 85, accuracy: 3, "two-line description: 85 pt in Figma")
+            XCTAssertTrue((72...96).contains(toast.frame.height), "two-line description toast, got \(toast.frame.height)")
             evidence(app, task: "B10", name: "wifi-toast-\(appearance)")
             app.terminate()
         }

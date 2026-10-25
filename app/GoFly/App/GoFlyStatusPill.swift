@@ -23,14 +23,14 @@ struct GoFlyStatusPill: View {
     }
 
     private var label: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Circle()
                 .fill(tone.pillDot)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(text)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.primary)
+                .font(GoFlyFont.footnoteEmphasis)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }

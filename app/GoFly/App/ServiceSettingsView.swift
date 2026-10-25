@@ -131,8 +131,8 @@ struct ServiceSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(goFlyString(titleKey))
-                .font(.footnote)
-                .foregroundStyle(GoFlyStyle.secondary)
+                .font(GoFlyFont.footnote)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .padding(.horizontal, 16)
                 .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
@@ -141,8 +141,8 @@ struct ServiceSettingsView: View {
             .goFlyCard(radius: 14)
             if let footerKey {
                 Text(goFlyString(footerKey))
-                    .font(.footnote)
-                    .foregroundStyle(GoFlyStyle.secondary)
+                    .font(GoFlyFont.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
                     .padding(.horizontal, 16)
             }
         }
@@ -169,26 +169,26 @@ struct ServiceSettingsView: View {
                 .accessibilityHidden(true)
             GoFlySettingsValueRow {
                 Text(goFlyString(titleKey))
-                    .font(.body)
-                    .foregroundStyle(GoFlyStyle.primary)
+                    .font(GoFlyFont.body)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .multilineTextAlignment(.leading)
             } value: {
                 if let value {
                     if (titleKey == "settings.location" && systemStatus.locationAuthorization == .denied) ||
                        (titleKey == "settings.wifi" && !network.isWiFiConnected) {
                         Label(value, systemImage: GoFlySymbols.warning)
-                            .font(.subheadline)
-                            .foregroundStyle(GoFlyStyle.warningForeground)
+                            .font(GoFlyFont.subheadline)
+                            .foregroundStyle(GoFlyTextColor.warning)
                     } else {
                         Text(value)
-                            .font(.subheadline)
-                            .foregroundStyle(GoFlyStyle.secondary)
+                            .font(GoFlyFont.subheadline)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
             }
             Image(systemName: GoFlySymbols.disclosure)
                 .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
-                .foregroundStyle(GoFlyStyle.secondary)
+                .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
@@ -217,7 +217,7 @@ struct ServiceSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(goFlyString("service.title")).font(.headline)
+                    Text(goFlyString("service.title")).font(GoFlyFont.headline)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 GoFlyStatusPill(text: goFlyString(movement.status.textKey), tone: movement.status.tone,
@@ -255,18 +255,18 @@ struct ServiceSettingsView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     Label(goFlyString("gps.title"), systemImage: "location.circle")
-                        .font(.subheadline.weight(.semibold))
+                        .font(GoFlyFont.subheadlineEmphasis)
                     Text(goFlyString(service.gpsStatusKey))
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadline)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .accessibilityIdentifier("service.gpsStatus")
                     if let date = service.clearConfirmedAt {
                         HStack(spacing: 4) {
                             Text(goFlyString("gps.clearConfirmedAt"))
                             Text(date, style: .time)
                         }
-                        .font(.caption)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.caption)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
             }
@@ -277,8 +277,8 @@ struct ServiceSettingsView: View {
 
     private var status: some View {
         Text(goFlyString(service.statusKey))
-            .font(.subheadline)
-            .foregroundStyle(GoFlyStyle.secondary)
+            .font(GoFlyFont.subheadline)
+            .foregroundStyle(GoFlyTextColor.secondary)
             .accessibilityIdentifier("service.status")
     }
 

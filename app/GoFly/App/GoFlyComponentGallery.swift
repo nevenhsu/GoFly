@@ -118,7 +118,7 @@ struct GoFlyComponentGallery: View {
             .accessibilityIdentifier("gallery.field.focused")
             HStack(spacing: 8) {
                 Image(systemName: GoFlySymbols.search).accessibilityHidden(true)
-                Text(goFlyString("gallery.fieldNormal")).foregroundStyle(GoFlyStyle.secondary)
+                Text(goFlyString("gallery.fieldNormal")).foregroundStyle(GoFlyTextColor.secondary)
                 Spacer()
             }
             .padding(.horizontal, 12).frame(minHeight: 48)
@@ -175,7 +175,7 @@ struct GoFlyComponentGallery: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("gallery.routeRunning")
             Text(endResult)
-                .font(.footnote)
+                .font(GoFlyFont.footnote)
                 .accessibilityIdentifier("gallery.endResult")
         }
     }
@@ -223,13 +223,13 @@ struct GoFlyComponentGallery: View {
             sectionTitle("BottomSheet")
             GoFlyBottomSheet(detent: $detent, availableHeight: 520, collapsedHeight: 96) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(goFlyString("gallery.sheetTitle")).font(.headline)
+                    Text(goFlyString("gallery.sheetTitle")).font(GoFlyFont.headline)
                     Text(goFlyString("gallery.sheetBody"))
-                        .font(.subheadline)
-                        .foregroundStyle(GoFlyStyle.secondary)
+                        .font(GoFlyFont.subheadline)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                     ForEach(0..<6, id: \.self) { index in
                         Text(goFlyString("gallery.sheetRow"))
-                            .font(.body)
+                            .font(GoFlyFont.body)
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         Divider()
                     }
@@ -241,7 +241,7 @@ struct GoFlyComponentGallery: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.title3.weight(.semibold))
+            .font(GoFlyFont.title)
             .accessibilityAddTraits(.isHeader)
     }
 }
