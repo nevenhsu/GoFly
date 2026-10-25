@@ -131,6 +131,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var coordinateAnimationStart: GeoCoordinate?
         private var coordinateAnimationTarget: GeoCoordinate?
         private var coordinateAnimationStartedAt: CFTimeInterval = 0
+        private var coordinateAnimationDuration: CFTimeInterval = 0.45
+        private var lastAcknowledgedUpdateAt: CFTimeInterval?
         private var lastMarker: PositionMarker?
         private var appliedIntent: UUID?
         private var appliedViewport = CGRect.zero
@@ -232,7 +234,12 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             stopCoordinateAnimation()
             let distance = CLLocation(latitude: current.latitude, longitude: current.longitude)
                 .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
-            guard distance > 0.15, distance <= 30 else {
+            // Route and wander acknowledge once a second (up to ~28 m at
+            // 100 km/h); manual joystick steps arrive every half second.
+            let now = CACurrentMediaTime()
+            let interval = lastAcknowledgedUpdateAt.map { now - $0 } ?? 0.45
+            lastAcknowledgedUpdateAt = now
+            guard distance > 0.15, distance <= 60 else {
                 annotation.coordinate = target.clLocationCoordinate
                 displayedRouteDistance = parent.markerRouteDistance
                 return
@@ -245,7 +252,11 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 coordinateAnimationRouteEnd = to
             }
             coordinateAnimationTarget = target
-            coordinateAnimationStartedAt = CACurrentMediaTime()
+            coordinateAnimationStartedAt = now
+            // Spread each move over the time until the next acknowledgement is
+            // expected, at constant speed, so the arrow glides instead of
+            // jumping between points. It still never runs ahead of an ACK.
+            coordinateAnimationDuration = min(1.1, max(0.25, interval))
             let displayLink = CADisplayLink(target: self, selector: #selector(advanceCoordinateAnimation(_:)))
             coordinateDisplayLink = displayLink
             displayLink.add(to: .main, forMode: .common)
@@ -259,8 +270,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 return
             }
             let elapsed = CACurrentMediaTime() - coordinateAnimationStartedAt
-            let progress = min(1, max(0, elapsed / 0.45))
-            let eased = progress * progress * (3 - 2 * progress)
+            let progress = min(1, max(0, elapsed / coordinateAnimationDuration))
+            let eased = progress
             let latitude = start.latitude + (target.latitude - start.latitude) * eased
             var longitudeDelta = target.longitude - start.longitude
             if longitudeDelta > 180 { longitudeDelta -= 360 }

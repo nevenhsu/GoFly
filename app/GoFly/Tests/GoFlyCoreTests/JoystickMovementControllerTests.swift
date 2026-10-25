@@ -64,7 +64,8 @@ struct JoystickMovementControllerTests {
         clock.advance(by: .milliseconds(500)); await wait { commands.stepWaiting }
         #expect(commands.steps.last?.revision == commands.inputRevision)
         #expect(commands.steps.last?.displacement.bearingDegrees == 270)
-        #expect(commands.steps.last?.displacement.distanceMeters == JoystickDisplacement.maximumDistanceMeters)
+        #expect(abs((commands.steps.last?.displacement.distanceMeters ?? 0) - 120.0 / 3.6 * 0.5) < 1e-9,
+                "the manual step is speed × half a second with no cap")
         #expect(controller.endGesture(id: finger))
         commands.finishStep(.acknowledged(GeoCoordinate(latitude: 23, longitude: 119)!))
         await wait { controller.phase == .neutral }

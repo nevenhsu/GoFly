@@ -42,6 +42,10 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private let commands: any RouteCommanding
     private let search: any PlaceSearching
     private let clock: any RouteClock
+    private let cadence: Duration
+    private var cadenceSeconds: Double {
+        Double(cadence.components.seconds) + Double(cadence.components.attoseconds) / 1e18
+    }
     public private(set) var favoriteLoadAdmissionRevision: UInt64 = 0
     private var issuedFavoriteLoadAdmission: UInt64?
     private var issuedImportedLoadAdmission: UInt64?
@@ -64,7 +68,6 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private let continuationControlSubject = PassthroughSubject<MovementContinuationControlEvent, Never>()
     private let movementAcknowledgementSubject = PassthroughSubject<MovementAcknowledgement, Never>()
     private var continuationIdentity: MovementContinuationIdentity?
-    private static let cadence: Duration = .milliseconds(500)
 
     public var continuationControlEvents: AnyPublisher<MovementContinuationControlEvent, Never> {
         continuationControlSubject.eraseToAnyPublisher()
@@ -82,8 +85,10 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
 
     public init(draft: RouteDraft = RouteDraft(), planner: any RoutePlanning, commands: any RouteCommanding,
-                search: any PlaceSearching, clock: any RouteClock = ContinuousRouteClock()) {
+                search: any PlaceSearching, clock: any RouteClock = ContinuousRouteClock(),
+                cadence: Duration = MovementCadence.path) {
         self.draft = draft; self.planner = planner; self.commands = commands; self.search = search; self.clock = clock
+        self.cadence = cadence
         if let source = draft.gpxSource {
             // A persisted GPX draft is display data. Build only its existing
             // exact preview; do not plan roads or touch the command seam.
@@ -678,7 +683,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         // Resume must continue the service's next sequence, not reuse an old one.
         if let previous = nextSequence[intent.id] { sequence = previous }
         while revision == token, phase == .running {
-            do { try await clock.sleep(for: Self.cadence) } catch { return }
+            do { try await clock.sleep(for: cadence) } catch { return }
             guard revision == token, phase == .running, !Task.isCancelled else { return }
             guard sequence < UInt64.max else {
                 continuationDidBecomeUnavailable()
@@ -687,7 +692,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             guard let controlRevision = commands.routeControlRevision(executionID: intent.id, lease: intent.lease) else { return }
             let direction = heading == .forward ? 1.0 : -1.0
             let distance = min(intent.route.totalDistanceMeters, max(0,
-                (progress?.committedDistanceMeters ?? 0) + direction * intent.speed.metersPerSecond * 0.5))
+                (progress?.committedDistanceMeters ?? 0) + direction * intent.speed.metersPerSecond * cadenceSeconds))
             guard let coordinate = intent.route.coordinate(at: distance) else { phase = .interrupted; error = .invalidPath; return }
             let outcome = await commands.sendRoutePoint(executionID: intent.id, lease: intent.lease,
                 sequence: sequence, expectedControlRevision: controlRevision, coordinate: coordinate)

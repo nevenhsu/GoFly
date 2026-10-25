@@ -10,10 +10,11 @@ public struct JoystickInput: Equatable, Sendable {
         self.strength = min(1, max(0, strength))
     }
 
-    public func displacement(speed: RouteSpeed) -> JoystickDisplacement? {
+    /// - Parameter seconds: the cadence this step covers.
+    public func displacement(speed: RouteSpeed, seconds: Double = MovementCadence.manualSeconds) -> JoystickDisplacement? {
         guard strength > 0 else { return nil }
         return JoystickDisplacement(bearingDegrees: bearingDegrees,
-            distanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * strength * 0.5))
+            distanceMeters: speed.metersPerSecond * strength * seconds)
     }
 
     /// Screen coordinates use +x right and +y down. Camera heading rotates screen-up into world north.

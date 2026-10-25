@@ -33,7 +33,8 @@
    此狀態不修改 movement lease／health 或既有 ACK 座標，也不提供原生 session 持續健康的保證。
 4. Stop 先撤銷舊結果發布權，再排入唯一一筆 clear；clear 必須等已 claim 呼叫返回。
 5. watchdog 逾時只回報未知；`repairRequired` 時只允許冪等 Stop。
-6. 路線／搖桿／漫步共用一個 writer 與 500ms ACK cadence；瞬移後的固定位置維持每 15 秒送同一座標作為心跳，
+6. 路線／搖桿／漫步共用一個 writer；路線與道路漫步每 1 秒送一點，手動搖桿（含漫步手動接管）每 0.5 秒（`MovementCadence`），
+   步距為速度 × 該間隔，無另外的每步上限；地圖箭頭在兩筆 ACK 之間以等速補間，不超前 ACK（2026-10-25）。瞬移後的固定位置維持每 15 秒送同一座標作為心跳，
    網路路徑變化時立即補送一次（2026-10-25）。沒有 writer 的保留狀態（路線／漫步暫停、手動搖桿放開）由
    `PositionKeepAlive` 在前景每 15 秒經同一 FIFO 重送同一座標；keepalive gate 只在同 lease、健康、執行或暫停且具前景
    或有效授權時派送，不改 lease、run state 或顯示位置。取消路線、取消漫步或搖桿結束後，若裝置仍有未清除的

@@ -77,7 +77,6 @@ public final class JoystickMovementController: ObservableObject {
     private var physicalOperations: Set<UUID> = []
     private let continuationControlSubject = PassthroughSubject<MovementContinuationControlEvent, Never>()
     private var continuationIdentity: MovementContinuationIdentity?
-    private static let cadence: Duration = .milliseconds(500)
 
 private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,
                       _ fields: [String: DiagnosticsField] = [:]) {
@@ -512,7 +511,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
 
     private func run(_ operation: JoystickMovementIntent, token: UInt64) async {
         while generation == token, phase == .moving, !Task.isCancelled {
-            do { try await clock.sleep(for: Self.cadence) } catch { return }
+            // A finger on the joystick keeps the manual cadence, including
+            // during a wander override; road wander alone uses the path cadence.
+            let manual = input != nil || !wanderEnabled
+            let seconds = manual ? MovementCadence.manualSeconds : MovementCadence.pathSeconds
+            do { try await clock.sleep(for: manual ? MovementCadence.manual : MovementCadence.path) } catch { return }
             guard generation == token, phase == .moving, !Task.isCancelled,
                   let revision = commands.joystickInputRevision(executionID: operation.id, lease: operation.lease) else { return }
             if wanderNeedsReplan, input == nil { return }
@@ -523,17 +526,17 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             let recipe: JoystickStepRecipe
             var capturedRouteRevision: UUID? = nil
             var routeStepDistance: Double? = nil
-            if let input, let displacement = input.displacement(speed: speed) { recipe = .manual(displacement) }
+            if let input, let displacement = input.displacement(speed: speed, seconds: seconds) { recipe = .manual(displacement) }
             else if wanderEnabled, !wanderNeedsTarget, let route = wanderRoute, let target = wanderTarget,
-                    let distance = nextRouteStepDistance(route: route, speed: speed),
+                    let distance = nextRouteStepDistance(route: route, speed: speed, seconds: seconds),
                     let coordinate = route.coordinate(at: distance),
                     let step = JoystickTargetStep(targetID: target.id, coordinate: coordinate,
-                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) {
+                        maximumDistanceMeters: speed.metersPerSecond * seconds) {
                 recipe = .target(step); capturedRouteRevision = wanderRouteRevision; routeStepDistance = distance
             }
             else if wanderEnabled, !wanderNeedsTarget, let target = wanderTarget,
                     let step = JoystickTargetStep(targetID: target.id, coordinate: target.coordinate,
-                        maximumDistanceMeters: min(JoystickDisplacement.maximumDistanceMeters, speed.metersPerSecond * 0.5)) {
+                        maximumDistanceMeters: speed.metersPerSecond * seconds) {
                 recipe = .target(step); capturedRouteRevision = nil; routeStepDistance = nil
             }
             else { return }
@@ -591,10 +594,10 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         }
     }
 
-    private func nextRouteStepDistance(route: PlannedRoute, speed: RouteSpeed) -> Double? {
+    private func nextRouteStepDistance(route: PlannedRoute, speed: RouteSpeed, seconds: Double) -> Double? {
         guard route.totalDistanceMeters.isFinite, route.totalDistanceMeters > 0,
               wanderProgressMeters.isFinite, wanderProgressMeters >= 0 else { return nil }
-        return min(route.totalDistanceMeters, wanderProgressMeters + speed.metersPerSecond * 0.5)
+        return min(route.totalDistanceMeters, wanderProgressMeters + speed.metersPerSecond * seconds)
     }
 
     private func markUnknown(_ failure: DeviceServiceFailure) {

@@ -163,6 +163,23 @@ struct SessionRefreshTests {
         f.recovery.releaseForInactiveScene()
     }
 
+    @Test func routeSendsOnePointPerSecondCoveringOneSecondOfDistance() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        let before = try #require(f.route.progress?.committedDistanceMeters)
+        let speed = try #require(f.route.intent?.speed.metersPerSecond)
+        let count = await f.device.points.count
+        f.clock.advance(by: .milliseconds(500))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(await f.device.points.count == count)
+        f.clock.advance(by: .milliseconds(500))
+        await wait { await f.device.points.count == count + 1 && !f.service.nativeBusy }
+        await wait { (f.route.progress?.committedDistanceMeters ?? 0) > before }
+        #expect(abs((f.route.progress?.committedDistanceMeters ?? 0) - before - speed) < 1e-6)
+        #expect(f.service.stopSimulation())
+        f.recovery.releaseForInactiveScene()
+    }
+
     @Test func userPauseDuringRebuildKeepsRoutePaused() async throws {
         let f = try fixture()
         try await start("route", f)
@@ -346,7 +363,7 @@ struct SessionRefreshTests {
             f.service.observeRealLocation(RealLocationObservation(latitude: 25, longitude: 121, horizontalAccuracy: 1, observedAt: Date())!)
             #expect(f.joystick.setWanderEnabled(true))
             await wait { f.joystick.phase == .moving && f.clock.sleepingCount > 0 }
-            f.clock.advance(by: .milliseconds(500))
+            f.clock.advance(by: .seconds(1))
             await wait { f.joystick.lastAcknowledgedCoordinate != nil && !f.service.nativeBusy && f.clock.sleepingCount > 0 }
         }
     }

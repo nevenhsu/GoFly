@@ -6,8 +6,7 @@ public struct JoystickTargetStep: Equatable, Sendable {
     public let maximumDistanceMeters: Double
 
     public init?(targetID: UUID, coordinate: GeoCoordinate, maximumDistanceMeters: Double) {
-        guard maximumDistanceMeters.isFinite, maximumDistanceMeters > 0,
-              maximumDistanceMeters <= JoystickDisplacement.maximumDistanceMeters else { return nil }
+        guard maximumDistanceMeters.isFinite, maximumDistanceMeters > 0 else { return nil }
         self.targetID = targetID
         self.coordinate = coordinate
         self.maximumDistanceMeters = maximumDistanceMeters

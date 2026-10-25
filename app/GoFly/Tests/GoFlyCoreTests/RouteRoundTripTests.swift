@@ -8,7 +8,8 @@ struct RouteRoundTripTests {
     @Test func enablingRoundTripDuringASingleRunLatchesTheAxisWithoutChangingItsPosition() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock, roundTrip: false)
         let before = controller.progress
         #expect(!controller.usesPositionAxis)
@@ -38,7 +39,8 @@ struct RouteRoundTripTests {
         let service = ServiceController(service: device)
         let middle = GeoCoordinate(latitude: 25.00004, longitude: 121)!, destination = GeoCoordinate(latitude: 25.0001, longitude: 121)!
         let values = [start, middle, destination].map { RouteNodeValue.place(MapPlace(id: .coordinate($0), title: $0.displayText, coordinate: $0)) }
-        let controller = RouteExecutionController(draft: RouteDraft(values: values)!, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: RouteDraft(values: values)!, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock)
         let route = try #require(controller.intent?.route)
         let step = try #require(controller.intent?.speed.metersPerSecond) * 0.5
@@ -62,7 +64,8 @@ struct RouteRoundTripTests {
     func controlsRejectPreparingAndEveryUnhealthyExecutionState(unknown: Bool) async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         #expect(controller.setRoundTripEnabled(true))
         #expect(controller.start())
         await wait { await device.waiting }
@@ -93,7 +96,8 @@ struct RouteRoundTripTests {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device), commands: EntryHoldingRouteCommands
         commands = EntryHoldingRouteCommands(service: service)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: commands, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: commands, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock)
         let intent = try #require(controller.intent), before = try #require(controller.progress).committedDistanceMeters
         let step = intent.speed.metersPerSecond * 0.5
@@ -125,7 +129,8 @@ struct RouteRoundTripTests {
     func changingDirectionWaitsForTruthFromAnAlreadyEnteredNativeCall(claimed: Bool) async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock(), service: ServiceController
         service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock)
         let intent = try #require(controller.intent), before = try #require(controller.progress).committedDistanceMeters
         let step = intent.speed.metersPerSecond * 0.5
@@ -156,7 +161,8 @@ struct RouteRoundTripTests {
     @Test func pausedDirectionAndDisabledRoundTripKeepTheAxisUntilTheActualStartEndpointCompletes() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock)
         let axis = try #require(controller.progress).committedDistanceMeters
         #expect(controller.pause())
@@ -192,7 +198,8 @@ struct RouteRoundTripTests {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
         let routeDraft = draft(end: GeoCoordinate(latitude: 25.000001, longitude: 121)!)
-        let controller = RouteExecutionController(draft: routeDraft, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: routeDraft, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         #expect(controller.setRoundTripEnabled(true))
         #expect(controller.start())
         await wait { await device.waiting }; await device.finish(.acknowledged)
@@ -219,7 +226,8 @@ struct RouteRoundTripTests {
     @Test func anEndpointAcknowledgementDuringPausingBouncesBeforePublishingThePausedETA() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(end: GeoCoordinate(latitude: 25.000001, longitude: 121)!), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(end: GeoCoordinate(latitude: 25.000001, longitude: 121)!), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         #expect(controller.setRoundTripEnabled(true))
         #expect(controller.start())
         await wait { await device.waiting }; await device.finish(.acknowledged)
@@ -245,7 +253,8 @@ struct RouteRoundTripTests {
     @Test func anAcceptedDirectionChangeSurvivesAPauseBeforeTheUnclaimedCallActuallyReturns() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
-        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         try await runToTwoAcknowledgedSteps(controller, device, clock)
         let axis = try #require(controller.progress).committedDistanceMeters
         clock.advance(by: .milliseconds(500))
@@ -269,7 +278,8 @@ struct RouteRoundTripTests {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)
         let draft = draft(end: GeoCoordinate(latitude: 25.000001, longitude: 121)!)
-        let controller = RouteExecutionController(draft: draft, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock)
+        let controller = RouteExecutionController(draft: draft, planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
         #expect(controller.setRoundTripEnabled(true))
         #expect(controller.start())
         await wait { await device.waiting }; await device.finish(.acknowledged)
