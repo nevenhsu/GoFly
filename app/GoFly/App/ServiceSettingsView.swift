@@ -226,7 +226,7 @@ struct ServiceSettingsView: View {
             }
             Button {
                 if offersStop {
-                    _ = service.stopSimulation()
+                    _ = service.stop()
                 } else {
                     _ = service.start()
                 }
