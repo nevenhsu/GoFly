@@ -15,18 +15,24 @@
    上一筆原生呼叫實際返回後才執行下一筆。
 2. `PointDispatchGate` 是最後派送門檻；native adapter 真正送點前同步 `claim()`。已 dispatched 的呼叫
    不能被取消或 Stop 假裝撤回。
-   Teleport、路線與搖桿／漫步共用同一個 native session owner；準備成功後保留可重用 session，閒置 30 秒
+   Teleport、路線與搖桿／漫步共用同一個 native session owner。`DeviceSessionKeeper`（GoFlyCore）是唯一決定
+   session 重用、重建、重試與閒置關閉的 module；`NativeDeviceService` 只做單次嘗試（ADR 0001）。裝置可能仍有
+   模擬位置時（任何已派送的寫入之後，直到 clear ACK），session 不因閒置關閉；只有 clear 之後才套用閒置 30 秒
    後在下次操作前重建。服務／通道錯誤在派送前會回收舊 session 並安全重試一次；2026-10-23 使用者另授權
    session 中斷時自動恢復同一模擬座標：已派送的暫時性服務／通道／adapter timeout 錯誤，只能在同 lease、
-   執行中、未停止且仍具前景或有效背景授權時，重建 session 並重新確認同一絕對座標一次。原始不確定結果
+   執行中、未停止且仍具前景或有效背景授權時，重建 session 並重新確認同一絕對座標一次。兩種重試都算自動重連，
+   60 秒內最多一次（2026-10-25）；使用者明確重試不計入並重新計時。原始不確定結果
    只有真實恢復 ACK 才可解除；失敗、身分／配對錯誤及外層 watchdog 到期仍走原本未知／Stop 流程。
+   連線檢查不定時輪詢：只在回到前景、網路路徑變化（唯一的 `GoFlyPathMonitor`）、未知／中斷狀態的後續狀態
+   變化（最多每 5 秒一次）及使用者檢查時探測；已可連線時不再探測。任務中以 ACK 證明存活。
 3. 位置只在核對過的 ACK 後更新；`unconfirmed` 保留候選並鎖住 Go，直到明確 Stop 完成。
    箭頭另有僅供顯示的驗證狀態：失去通道、背景 runtime 或無有效 runtime 離開前景時保留最後座標、轉為灰色等待。
    前景恢復、TCP 探測成功與 prepare 不會恢復箭頭，新的定位 ACK 才可恢復；有效背景 runtime 中的 ACK 同樣有效。
    此狀態不修改 movement lease／health 或既有 ACK 座標，也不提供原生 session 持續健康的保證。
 4. Stop 先撤銷舊結果發布權，再排入唯一一筆 clear；clear 必須等已 claim 呼叫返回。
 5. watchdog 逾時只回報未知；`repairRequired` 時只允許冪等 Stop。
-6. 路線／搖桿／漫步共用一個 writer 與 500ms ACK cadence；瞬移後的固定位置維持每 5 秒送同一座標。
+6. 路線／搖桿／漫步共用一個 writer 與 500ms ACK cadence；瞬移後的固定位置維持每 15 秒送同一座標作為心跳，
+   網路路徑變化時立即補送一次（2026-10-25）。
    `PositionHoldController` 只接受新瞬移的真實 ACK，並在 async 開始前核對原點位、lease 與顯示／admission epoch。
    固定位置 intent 與 recipe 互相限制，不能用方向移動或朝目標靠近；新的使用者操作會先撤回舊維持任務。
    所有原生命令仍共用同一 FIFO，遲到 ACK 不得復活舊 lease。
@@ -34,7 +40,7 @@
 8. 背景由 `GoFlyContinuedProcessingDriver` 管理：Info.plist 宣告 `processing` 背景模式；瞬移維持、路線及漫步共用一個
    `com.neven.gofly.movement` 任務；採 `.queue` 等待系統可用的繼續執行名額。單程路線回報 ACK 距離比例，目的地終點 ACK
    呼叫 `finishFiniteArrival` 正常完成；瞬移維持、來回路線及漫步使用 `finiteDuration(43_200)` 的 12 小時百分比，
-   進度只累計相鄰有效 ACK 間的單調時間（第一筆為零，超過 15 秒的缺口不計入）。固定位置 ACK 由其 controller
+   進度只累計相鄰有效 ACK 間的單調時間（第一筆為零，超過 15 秒的缺口不計入；瞬移維持為心跳 3 倍的 45 秒）。固定位置 ACK 由其 controller
    提供時間，來回／漫步由 facade 的同 identity／sequence epoch 計時，避免重複計入。達到目標後先完成有效的系統
    任務，再停止維持或暫停移動，不自動接續另一個 12 小時；即使背景 request 未啟動或遭拒，前景 writer 也須到期停止。
    expiry 會暫停移動並在
