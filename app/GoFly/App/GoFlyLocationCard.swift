@@ -137,7 +137,7 @@ struct GoFlyLocationCard: View {
             .accessibilityLabel(goFlyString("common.dismiss"))
             .accessibilityIdentifier("\(identifier).dismiss")
         }
-        .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 5)
+        .goFlyShadow(.card)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }

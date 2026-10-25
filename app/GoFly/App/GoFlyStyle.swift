@@ -52,10 +52,12 @@ enum GoFlyStyle {
     static let panelTitleFont = GoFlyFont.title
 
     private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
-                                 dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+                                 dark: (CGFloat, CGFloat, CGFloat),
+                                 lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(uiColor: UIColor { traits in
-            let value = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: value.0, green: value.1, blue: value.2, alpha: 1)
+            let isDark = traits.userInterfaceStyle == .dark
+            let value = isDark ? dark : light
+            return UIColor(red: value.0, green: value.1, blue: value.2, alpha: isDark ? darkAlpha : lightAlpha)
         })
     }
 }
@@ -65,7 +67,6 @@ enum GoFlyStyle {
 private struct GoFlyCard: ViewModifier {
     var floating: Bool
     var radius: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
@@ -75,8 +76,7 @@ private struct GoFlyCard: ViewModifier {
                     .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
                     .allowsHitTesting(false)
             }
-            .shadow(color: .black.opacity(floating ? (colorScheme == .dark ? 0.28 : 0.09) : 0),
-                    radius: 16, x: 0, y: 5)
+            .goFlyShadow(floating ? .floating : nil)
     }
 }
 
@@ -156,6 +156,11 @@ struct GoFlyActionStyle: ButtonStyle {
             .foregroundStyle(foreground)
             .tint(foreground)
             .background(background, in: Capsule())
+            .overlay {
+                if isEnabled && !primary && !destructive {
+                    Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false)
+                }
+            }
             .brightness(isEnabled && configuration.isPressed ? (primary || destructive ? 0.12 : -0.04) : 0)
             .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
             .frame(minHeight: small ? GoFlyStyle.smallButtonHeight : 44)
@@ -188,7 +193,7 @@ struct GoFlyIconStyle: ButtonStyle {
             .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .background(isEnabled ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.secondarySurface) : GoFlyStyle.disabledSurface, in: Circle())
             .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
-            .shadow(color: .black.opacity(floating ? 0.09 : 0), radius: 12, x: 0, y: 5)
+            .goFlyShadow(floating ? .floating : nil)
             .contentShape(Circle())
             .opacity(isEnabled && configuration.isPressed ? 0.65 : 1)
     }
@@ -200,7 +205,7 @@ extension GoFlyStyle {
     static let fieldBorder = Color(red: 0.557, green: 0.557, blue: 0.576)
     static let fieldFocus = adaptive(light: (0.000, 0.478, 1.000), dark: (0.039, 0.518, 1.000))
     static let tabBarSurface = adaptive(light: (0.976, 0.976, 0.976), dark: (0.110, 0.110, 0.118)).opacity(0.96)
-    static let tabSeparator = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
+    static let tabSeparator = hairline
     static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
     static let startSecondarySurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
     static let dialogMessage = adaptive(light: (0.420, 0.420, 0.451), dark: (0.820, 0.820, 0.839))
@@ -209,6 +214,42 @@ extension GoFlyStyle {
     static let checkboxOffBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.557, 0.557, 0.576))
     static let checkboxOffFill = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
     static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
+    /// Figma `StatusPill` stroke: #C6C6C8 at 45 % (light), #545458 1 pt (dark).
+    static let pillBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.329, 0.329, 0.345), lightAlpha: 0.45)
+    /// Figma `StatusPill` dots for the neutral and paused states.
+    static let pillDotNeutral = Color(uiColor: .systemGray)
+    static let pillDotWarning = Color(red: 1.000, green: 0.624, blue: 0.039)
+    /// Opaque hairline (#C6C6C8 / #38383A): tab bar separator and small round controls.
+    static let hairline = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
+    /// Figma `Snackbar / 可復原` action button.
+    static let snackbarActionSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
+    static let snackbarActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (1, 1, 1),
+                                               lightAlpha: 0.45, darkAlpha: 0.18)
+    static let snackbarBorder = adaptive(light: (1, 1, 1), dark: (1, 1, 1), lightAlpha: 0, darkAlpha: 0.12)
+}
+
+/// Figma 04 drop shadows. `floating`: search bar, status pill, map controls, panels,
+/// snackbar and instruction card. `card`: location cards. `chip`: speed chip and small icon buttons.
+enum GoFlyShadow {
+    case floating, card, chip
+}
+
+extension View {
+    @ViewBuilder
+    func goFlyShadow(_ shadow: GoFlyShadow?) -> some View {
+        switch shadow {
+        case .floating:
+            // SwiftUI radius is half the Figma blur.
+            self.shadow(color: .black.opacity(0.06), radius: 1.5, x: 0, y: 1)
+                .shadow(color: .black.opacity(0.09), radius: 12, x: 0, y: 5)
+        case .card:
+            self.shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 8)
+        case .chip:
+            self.shadow(color: .black.opacity(0.06), radius: 2, x: 0, y: 1)
+        case nil:
+            self
+        }
+    }
 }
 
 private struct GoFlySearchFieldBackground: ViewModifier {

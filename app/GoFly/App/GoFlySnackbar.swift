@@ -41,11 +41,10 @@ struct GoFlySnackbar: View {
                         .foregroundStyle(GoFlyTextColor.primary)
                         .padding(.horizontal, 12)
                         .frame(minWidth: 56, minHeight: 32)
-                        .background(colorScheme == .dark ? Color(white: 0.227) : Color.white, in: Capsule())
+                        .background(GoFlyStyle.snackbarActionSurface, in: Capsule())
                         .overlay {
-                            Capsule().strokeBorder(
-                                colorScheme == .dark ? Color.white.opacity(0.18) : GoFlyStyle.toastActionBorder.opacity(0.45),
-                                lineWidth: colorScheme == .dark ? 1 : 0.5)
+                            Capsule().strokeBorder(GoFlyStyle.snackbarActionBorder,
+                                                   lineWidth: colorScheme == .dark ? 1 : 0.5)
                         }
                         .contentShape(Capsule())
                 }
@@ -59,13 +58,10 @@ struct GoFlySnackbar: View {
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            if colorScheme == .dark {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(GoFlyStyle.snackbarBorder, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.09), radius: 12, x: 0, y: 5)
-        .shadow(color: .black.opacity(0.06), radius: 1.5, x: 0, y: 1)
+        .goFlyShadow(.floating)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("snackbar")
         .onAppear {

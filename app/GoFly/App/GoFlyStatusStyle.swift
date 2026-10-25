@@ -48,8 +48,8 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     /// Figma `StatusPill` dot: gray #8E8E93, green, orange #FF9F0A, red (system green/red adapt in dark).
     var pillDot: Color {
         switch self {
-        case .neutral, .active: Color(red: 0.557, green: 0.557, blue: 0.576)
-        case .warning: Color(red: 1.0, green: 0.624, blue: 0.039)
+        case .neutral, .active: GoFlyStyle.pillDotNeutral
+        case .warning: GoFlyStyle.pillDotWarning
         case .danger: GoFlyStyle.danger
         case .success: GoFlyStyle.success
         }

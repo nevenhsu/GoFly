@@ -21,7 +21,7 @@
 | 底面 | `.systemGroupedBackground`；內容卡 `.systemBackground`；內嵌控制 `.secondarySystemBackground` |
 | 邊界 | 主面板 20 pt 連續圓角、0.5 pt 語意分隔線；搜尋／地點 14 pt；資料列及較小卡 12 pt |
 | 輸入區 | 搜尋／標籤欄位使用 `systemGray5` 底色與 `systemGray` 0.75 pt 常態邊線；聚焦 1.5 pt primary。這取代原先與頁面相近的 secondarySystemBackground＋淡邊線 |
-| 層次 | 一般頁面卡平面；地圖卡 16 pt 模糊、向下 5 pt 的克制陰影；深色提高陰影不透明度 |
+| 層次 | 一般頁面卡平面。地圖浮層只用 Figma 04 的三種陰影 token（`GoFlyShadow`，淺深色相同，2026-10-25 依 0 區元件核對）：`floating`＝9% y5 blur24＋6% y1 blur3（搜尋列、狀態 pill、Recenter、bottom sheet／面板、snackbar、頂部指示卡）；`card`＝14% y8 blur24（地點卡）；`chip`＝6% y1 blur4（時速 chip、36 pt 純 icon 鈕）。對話框、搖桿握柄、Pin 另依各自 Figma 元件 |
 | 主要按鈕 | 17 pt 語意 body semibold，最低內容高 44 pt，加上下各 6 pt；可因換行長高。僅地圖候選 Go 在無障礙字級取消額外上下留白，保留自然字高與至少 44 pt 操作範圍，避免鍵盤壓縮可視地圖 |
 | 次要按鈕 | 同主按鈕字級，最低內容高 44 pt，加上下各 2 pt、柔灰底與細邊界 |
 | 圖示按鈕 | 最小 44 × 44 pt，圓形柔灰底；共用圖示隨字級有限度縮放至最大 24 pt，避免極大字級溢出圓形；設定圖示依容器使用 18–24 pt。標籤與目前可用狀態由原有 accessibility 說明提供 |
@@ -159,6 +159,7 @@ App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的
 - 全螢幕頁、sheet 與執行模式面板的底部主要按鈕，下緣一律對齊距螢幕底 34 pt（home indicator 上方）；有 bottom bar 的畫面則在 bottom bar 上方。
 - 搖桿在搖桿 tab 與漫步執行模式使用同一尺寸（150 pt）。
 - 地圖右下角控制（2026-10-24 使用者確認，所有平台與 Figma 唯一定案規範）：所有 mode 與狀態（瞬移、路線規劃／收合／執行／中斷、搖桿／漫步）都只有一個「回到定位」icon button（`Recenter` / `Dark · Recenter`，44 pt），不顯示圖層／Layers、指北或「跟隨方向」按鈕。按鈕固定在當下底部 panel 上緣上方 16 pt、距右緣 16 pt（x = 333 pt），panel 高度改變（半開、收合 76 pt、執行面板、中斷面板）時隨之移動，間距維持 16 pt 不變；地點卡、全螢幕頁或 dialog 覆蓋時隱藏。因指北按鈕移除，點「回到定位」同時將地圖方位重設為正北。Figma 同步狀態：Figma `04 · iOS Redesign（Google Maps 參考）` 頁面上所有 48 個含地圖的 UI frame 已全數檢查並同步修正完畢，D6／D6.a／D7／D10 與 E 區已全面移除 `Follow` 指北針按鈕，D 區規劃態已補齊 MapControls，全數統一為單顆 44 pt 圓鈕且距離 panel 上緣固定為 16 pt；置中模擬位置（`GoFlyRecenterIcon`）中心採實心黑圓點，外圍為圓圈與十字準心，1:1 對齊 Figma `icon / locate`。
+- Apple Maps 標誌與「法律」連結必須保持可見、可點擊：地圖 `layoutMargins.bottom` 隨底部面板、TabBar 與地點卡的上緣移動（另加 4 pt），不得被任何底部 chrome 覆蓋（`GoFlyMapAttributionUITests`）。
 - 候選 Pin 上方的小型 Go 約 28 pt 高，點擊範圍至少 44 × 44 pt。
 - 路線 sheet 右上「路線資料夾」按鈕使用資料夾類 icon（SF Symbol `folder`），不使用文件／`doc` 類 icon。
 - 2026-10-23 路徑取得規則（使用者確認，取代步行優先與 50 公尺端點吸附限制）：選取地點保留名稱及 POI 座標；可執行路徑與地圖起終點使用 MapKit 實際回傳的道路入口，不補接地點中心，不設 POI 到道路端點的距離上限。每段依序嘗試汽車 → 行人 → 公共交通，取得有效路徑即停止；全部失敗顯示頂部「無法取得路徑」Toast。Apple SDK 的公共交通 `.transit` 僅支援 ETA，第三順位仍會嘗試，但不能宣稱可取得公共交通幾何路徑；不引入其他供應商。此行為沿用 D1 版面；Figma 線框未定義交通模式 fallback，依本次使用者確認補充。

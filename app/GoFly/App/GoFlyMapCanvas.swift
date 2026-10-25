@@ -70,6 +70,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var markerRoute: PlannedRoute? = nil
     var markerRouteDistance: Double? = nil
     var adjustsFocusForViewportChanges = true
+    /// Keeps the Apple Maps logo and Legal link above the bottom panel, tab bar and cards.
+    var attributionBottomInset: CGFloat = 0
     var onMapTap: (GeoCoordinate) -> Void
     var onProjection: (GoFlyMapProjection) -> Void
 
@@ -106,6 +108,8 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
+        let margins = UIEdgeInsets(top: 0, left: 8, bottom: attributionBottomInset, right: 8)
+        if map.layoutMargins != margins { map.layoutMargins = margins }
         coordinator.applyColorScheme(colorScheme, on: map)
         coordinator.applyAnnotationLocale(locale, on: map)
         coordinator.updateMarker(on: map)

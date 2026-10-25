@@ -77,7 +77,7 @@ struct GoFlyExecutionHeader: View {
         .padding(.vertical, 16)
         .background(GoFlyStyle.instructionSurface,
                     in: RoundedRectangle(cornerRadius: GoFlyStyle.cornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.16), radius: 14, x: 0, y: 4)
+        .goFlyShadow(.floating)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("execution.header")
     }

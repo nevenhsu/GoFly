@@ -8,6 +8,7 @@ struct GoFlyStatusPill: View {
     let tone: GoFlyStatusTone
     var action: (() -> Void)?
     var identifier: String = "map.statusPill"
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let action {
@@ -39,11 +40,10 @@ struct GoFlyStatusPill: View {
         .background(GoFlyStyle.pillSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(Color(red: 198/255, green: 198/255, blue: 200/255).opacity(0.45), lineWidth: 0.5)
+                .strokeBorder(GoFlyStyle.pillBorder, lineWidth: colorScheme == .dark ? 1 : 0.5)
                 .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 3)
+        .goFlyShadow(.floating)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }

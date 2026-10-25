@@ -51,7 +51,7 @@ struct GoFlySpeedChip: View {
             .frame(width: 68, height: height)
             .background(GoFlyStyle.surface, in: Capsule())
             .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-            .shadow(color: .black.opacity(0.04), radius: 3, x: 0, y: 1)
+            .goFlyShadow(.chip)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -82,7 +82,7 @@ struct GoFlyRouteControlRow: View {
                     .foregroundStyle(isRoundTrip ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.surface, in: Circle())
-                    .overlay { Circle().strokeBorder(Color(white: 0.78), lineWidth: 0.5) }
+                    .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -95,7 +95,7 @@ struct GoFlyRouteControlRow: View {
                 GoFlyVerticalArrowsIcon(isReversed: isRoundTrip && isReversed, isEnabled: isRoundTrip && canToggleDirection)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.surface, in: Circle())
-                    .overlay { Circle().strokeBorder(Color(white: 0.78), lineWidth: 0.5) }
+                    .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)

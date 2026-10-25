@@ -203,6 +203,7 @@ struct GoFlyMapView: View {
     @State private var topFrame = CGRect.zero
     @State private var panelFrame = CGRect.zero
     @State private var teleportCardFrame = CGRect.zero
+    @State private var bottomCardFrame = CGRect.zero
     @State private var bottomContentHeight: CGFloat = 260
     @State private var sheetDetent: GoFlySheetDetent = .collapsed
     @State private var sheetHeight: CGFloat = 320
@@ -599,7 +600,8 @@ struct GoFlyMapView: View {
     private func mapContent(in geometry: GeometryProxy) -> some View {
         let viewport = visibleViewport(in: geometry)
         ZStack(alignment: .topLeading) {
-            mapCanvas(viewport: viewport, size: geometry.size)
+            mapCanvas(viewport: viewport, size: geometry.size,
+                      attributionBottomInset: attributionBottomInset(in: geometry))
             mapPins(viewport: viewport)
             if isExecutionMode || isWanderMap {
                 VStack(alignment: .leading, spacing: 12) {
@@ -675,7 +677,21 @@ struct GoFlyMapView: View {
         route.plannedRoute?.waypoints ?? []
     }
 
-    private func mapCanvas(viewport: CGRect, size: CGSize) -> some View {
+    /// Distance from the screen bottom to the top of whatever covers the map there.
+    private func attributionBottomInset(in geometry: GeometryProxy) -> CGFloat {
+        var top = panelFrame.height > 0 ? panelFrame.minY : geometry.size.height
+        if (mode == .teleport || mode == .joystick) && !isWanderMap && activeCandidate != nil
+            && teleportCardFrame.height > 0 {
+            top = min(top, teleportCardFrame.minY)
+        }
+        if ((mode == .route && activeCandidate != nil) || (isWanderMap && wanderCardPlace != nil))
+            && bottomCardFrame.height > 0 {
+            top = min(top, bottomCardFrame.minY)
+        }
+        return max(0, geometry.size.height - top) + 4
+    }
+
+    private func mapCanvas(viewport: CGRect, size: CGSize, attributionBottomInset: CGFloat) -> some View {
         let cameraViewport = activeCandidate == nil
             ? viewport
             : CGRect(origin: .zero, size: size)
@@ -689,6 +705,7 @@ struct GoFlyMapView: View {
             markerRoute: isWanderMap ? (joystick.wanderNeedsReplan ? nil : joystick.wanderRoute) : movement.presentation.route,
             markerRouteDistance: isWanderMap ? joystick.wanderProgressMeters : movement.presentation.routeDistance,
             adjustsFocusForViewportChanges: false,
+            attributionBottomInset: attributionBottomInset,
             onMapTap: { coordinate in
                 if let picker = route.picker {
                     picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
@@ -808,6 +825,7 @@ struct GoFlyMapView: View {
                     .padding(.horizontal, 16)
                     // E4: the card ends 28 pt above the screen bottom when there is no tab bar.
                     .padding(.bottom, showsBottomBar ? bottomBarHeight + 12 : 28)
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { bottomCardFrame = $0 }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }
@@ -832,6 +850,7 @@ struct GoFlyMapView: View {
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 16)
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { bottomCardFrame = $0 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
             }
@@ -1735,7 +1754,7 @@ struct GoFlyMapView: View {
             .frame(minHeight: 50)
             .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-            .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 3)
+            .goFlyShadow(.floating)
 
             HStack {
                 GoFlyStatusPill(text: pillText, tone: pillTone, action: expandSheet,
@@ -2088,7 +2107,7 @@ struct GoFlyMapView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
         }
-        .shadow(color: .black.opacity(0.14), radius: 16, x: 0, y: 5)
+        .goFlyShadow(.card)
         .accessibilityIdentifier("map.wander.locationCard")
     }
 
