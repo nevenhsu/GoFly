@@ -797,7 +797,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             ?? joystickOwners.values.first { $0.intent.lease == lease && !$0.ended }?.intent.id
         guard let executionID else { return false }
         let recovery = MovementConnectionRecovery(id: UUID(), executionID: executionID,
-            lease: lease, coordinate: position.coordinate, failure: failure, resumesTask: snapshot.runState == .running)
+            lease: lease, coordinate: position.coordinate, failure: failure, resumesTask: snapshot.runState == .running,
+            explicitlyRequested: explicitlyRequested)
         connectionRecovery = recovery
         guard connectionRecoveryRequested?(recovery) == true else {
             connectionRecovery = nil
@@ -820,6 +821,20 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         if let owner = joystickOwners[recovery.executionID] {
             owner.paused = true; owner.neutral = false; owner.disposition = nil
         }
+    }
+
+    /// Records an automatic recovery request as failed without native work:
+    /// the device keeper already spent the automatic reconnect. The suspended
+    /// task waits for an explicit Retry, exactly as after a failed repair.
+    public func declineAutomaticConnectionRecovery(_ recovery: MovementConnectionRecovery) {
+        guard connectionRecovery == recovery, !recovery.explicitlyRequested else { return }
+        connectionRecovery = nil
+        connectionRecoveryGate = nil
+        isRecoveringConnection = false
+        failedConnectionRecovery = recovery
+        phase = .repairRequired
+        error = recovery.failure
+        markSimulationPositionUnverified()
     }
 
     /// Runs behind existing native work; never clears GPS or replaces the

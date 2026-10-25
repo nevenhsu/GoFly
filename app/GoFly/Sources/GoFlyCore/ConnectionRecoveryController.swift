@@ -390,7 +390,13 @@ public final class ConnectionRecoveryController: ObservableObject {
                     "phase": .text(self.service.phase.rawValue)
                 ])
                 self.connectionState = failure == .timedOut ? .timedOut : .unavailable
-                if !self.service.requestConnectionRecovery(failure: failure == .timedOut ? .operationTimedOut : .tunnelUnavailable) {
+                let snapshot = self.service.movementAuthority.snapshot
+                if snapshot.lease != nil, snapshot.runState == .running {
+                    // A running task is left alone: its next write proves or
+                    // disproves the connection, and the device keeper owns
+                    // the one automatic reconnect.
+                    self.positionHold?.heartbeatNow()
+                } else {
                     self.service.setMovementConnectionAvailable(false)
                     self.route.connectionDidBecomeUnavailable()
                     self.joystick.connectionDidBecomeUnavailable()
@@ -425,6 +431,24 @@ public final class ConnectionRecoveryController: ObservableObject {
         connectionState = recovery.failure == .operationTimedOut ? .timedOut : .unavailable
         checkNoticeVisible = false
         route.recoveryProbeDidFinish(); joystick.recoveryProbeDidFinish()
+        guard recovery.explicitlyRequested else {
+            automaticRepairTask = Task { [weak self] in
+                guard let self else { return }
+                // Let requestConnectionRecovery finish publishing before the
+                // service records the request as failed.
+                await Task.yield()
+                self.service.declineAutomaticConnectionRecovery(recovery)
+                self.failedAutomaticRepair = recovery
+                self.automaticRepairInProgress = false
+                self.automaticRepairTask = nil
+                self.lastProbeFinishedAt = self.clock.now
+                self.evaluateServiceState()
+            }
+            return true
+        }
+        // A Retry in flight replaces the earlier failure; Retry stays
+        // unavailable until this attempt settles.
+        failedAutomaticRepair = nil
         automaticRepairTask = Task { [weak self] in
             guard let self else { return }
             // The callback is synchronous, before the native failure unwinds.

@@ -30,6 +30,9 @@ public struct MovementConnectionRecovery: Equatable, Sendable {
     public let coordinate: GeoCoordinate
     public let failure: DeviceServiceFailure
     public let resumesTask: Bool
+    /// Only a user Retry repairs at this level. An automatic request means the
+    /// device keeper's own reconnect already failed or is out of budget.
+    public let explicitlyRequested: Bool
 }
 
 /// Concrete error messages behind the shared Error pill. Dismissing a toast
