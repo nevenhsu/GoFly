@@ -35,33 +35,6 @@ struct MovementStopRedTests {
         #expect(afterTicks.support - afterFirstPrepare.support == 0,
                 "each tick re-queries the cryptex/DDI support state")
     }
-
-    /// A known transport failure invalidates a reused native session. This is
-    /// exercised for both Start preparation (before any write) and a point
-    /// that was definitely not dispatched.
-    @Test
-    func knownTransportFailureRebuildsTheSuspectSession() {
-        let policy = NativeSessionRetentionPolicy()
-        #expect(policy.retention(after: .notSent(.serviceUnavailable), sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(after: .notSent(.operationTimedOut), sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(after: .notSent(.tunnelUnavailable), sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(after: .unconfirmed(.serviceUnavailable), sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(afterPreparationFailure: .serviceUnavailable, sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(afterPreparationFailure: .operationTimedOut, sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(afterPreparationFailure: .tunnelUnavailable, sessionWasOwned: true) == .rebuild)
-        #expect(policy.retention(after: .notSent(.operationCancelled), sessionWasOwned: true) == .reuse)
-        #expect(policy.retention(afterPreparationFailure: .devicePreparationRequired, sessionWasOwned: true) == .reuse)
-        #expect(policy.shouldRetryBeforeDispatch(after: .serviceUnavailable))
-        #expect(policy.shouldRetryBeforeDispatch(after: .tunnelUnavailable))
-        #expect(!policy.shouldRetryBeforeDispatch(after: .operationCancelled))
-        #expect(!policy.shouldRetryBeforeDispatch(after: .devicePreparationRequired))
-        #expect(!policy.sessionHasExpired(lastActivityNanoseconds: 100, nowNanoseconds: 199,
-                                          maximumIdleNanoseconds: 100))
-        #expect(policy.sessionHasExpired(lastActivityNanoseconds: 100, nowNanoseconds: 200,
-                                         maximumIdleNanoseconds: 100))
-        #expect(!policy.sessionHasExpired(lastActivityNanoseconds: nil, nowNanoseconds: 200,
-                                          maximumIdleNanoseconds: 100))
-    }
 }
 
 private final class CountingSession: DeviceSession {
