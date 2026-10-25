@@ -222,7 +222,10 @@ struct GoFlyImportedRoutesView: View {
     }
 
     private func notice(_ key: String, identifier: String) -> some View {
-        GoFlyStatusBanner(tone: .danger, title: goFlyString(key), message: goFlyString("imports.error.guidance"), identifier: identifier)
+        let button = goFlyIssueButton(for: key, retry: { Task { await imports.load() } },
+                                      chooseFile: { showingImporter = true })
+        return GoFlyStatusBanner(tone: .danger, title: goFlyString(key), message: goFlyString("imports.error.guidance"),
+                                 actionTitle: button.title, onAction: button.action, identifier: identifier)
     }
 
     private func importURL(_ url: URL) {

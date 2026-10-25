@@ -121,7 +121,9 @@ struct GoFlyFavoritesView: View {
 
     @ViewBuilder private var failureNotice: some View {
         if let failure = failure {
+            let button = goFlyIssueButton(for: failure.rawValue, retry: { favorites.reload() })
             GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue),
+                actionTitle: button.title, onAction: button.action,
                 onDismiss: favorites.canMutate ? { favorites.clearError() } : nil,
                 identifier: "favorites.error")
                 .padding(.vertical, 12)

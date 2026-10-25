@@ -54,7 +54,8 @@ public struct SessionStatusErrors: Equatable, Sendable {
         messages += dataErrors
         var seen: Set<String> = []
         keys = messages.filter {
-            $0 != DeviceServiceFailure.operationCancelled.rawValue && seen.insert($0).inserted
+            $0 != DeviceServiceFailure.operationCancelled.rawValue && !IssueCatalog.isValidation($0)
+                && seen.insert($0).inserted
         }
     }
 }

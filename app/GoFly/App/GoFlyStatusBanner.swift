@@ -1,4 +1,5 @@
 import SwiftUI
+import GoFlyCore
 
 /// The single status presentation for the redesign (plan 4.11), Figma
 /// `Toast / 系統訊息 / danger｜warn｜success`.
@@ -102,4 +103,20 @@ struct GoFlyStatusBanner: View {
             .accessibilityIdentifier(identifier ?? "statusBanner")
         }
     }
+}
+
+/// Maps an error key to its one toast button (see `IssueCatalog`). The caller
+/// passes only the handlers it owns; an action without a handler shows no button.
+@MainActor
+func goFlyIssueButton(for key: String, retry: (() -> Void)? = nil, settings: (() -> Void)? = nil,
+                      chooseFile: (() -> Void)? = nil) -> (title: String?, action: (() -> Void)?) {
+    guard let issue = IssueCatalog.info(for: key).action else { return (nil, nil) }
+    let handler: (() -> Void)?
+    switch issue {
+    case .retry: handler = retry
+    case .settings: handler = settings
+    case .chooseFile: handler = chooseFile
+    }
+    guard let handler else { return (nil, nil) }
+    return (goFlyString(issue.localizationKey), handler)
 }

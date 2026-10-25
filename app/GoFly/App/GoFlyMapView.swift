@@ -2092,16 +2092,30 @@ struct GoFlyMapView: View {
         .accessibilityIdentifier("map.wander.locationCard")
     }
 
-    /// The one toast button for an error key (see `IssueCatalog`). `retry` is the
-    /// shared reset-session-and-retry unless the caller has a narrower retry.
+    /// The one toast button for an error key. Retry stays in the current mode:
+    /// teleport retries its prepared operation, route its planning, wander its
+    /// stream. Only when none applies does it reconnect the device.
     private func issueButton(for key: String, retry: (() -> Void)? = nil) -> (title: String?, action: (() -> Void)?) {
-        guard let action = IssueCatalog.info(for: key).action else { return (nil, nil) }
-        let title = goFlyString(action.localizationKey)
-        switch action {
-        case .retry: return (title, retry ?? { _ = service.resetTunnel() })
-        case .settings: return (title, { showingSettings = true })
-        case .chooseFile: return (nil, nil)
+        goFlyIssueButton(for: key, retry: retry ?? { retryInCurrentMode() }, settings: { showingSettings = true })
+    }
+
+    private func retryInCurrentMode() {
+        switch mode {
+        case .teleport:
+            if let operation = service.preparedOperation, case .failed = operation.state {
+                _ = service.retryPreparedOperation(id: operation.id)
+            } else { reconnectDevice() }
+        case .route:
+            if route.error == .planningFailed { _ = route.retryPlanning() } else { reconnectDevice() }
+        case .joystick:
+            if joystick.wanderEnabled, joystick.canRetryWander { _ = joystick.retryWander() } else { reconnectDevice() }
         }
+    }
+
+    /// Resets the tunnel when idle; during a task the recovery controller repairs
+    /// the connection and continues the original movement.
+    private func reconnectDevice() {
+        if recovery.canResetTunnel { _ = recovery.resetTunnel() } else { recovery.checkConnection() }
     }
 
     @ViewBuilder

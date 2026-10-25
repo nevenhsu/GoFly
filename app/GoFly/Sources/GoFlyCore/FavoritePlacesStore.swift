@@ -15,9 +15,18 @@ public final class FavoritePlacesStore: ObservableObject {
 
     public init(persistence: any FavoritePlacesPersistence) {
         self.persistence = persistence
+        reload()
+    }
+
+    /// Rereads the stored favorites; used by the shared retry. Unsaved in-memory
+    /// changes are dropped, so the list matches what is on disk.
+    public func reload() {
         do {
-            if let data = try persistence.read() { favorites = try FavoritePlacesArchive.decode(data) }
+            favorites = try persistence.read().map { try FavoritePlacesArchive.decode($0) } ?? []
+            rememberedLabels = [:]
             for favorite in favorites { rememberedLabels[favorite.key] = favorite.label }
+            loadState = .ready
+            error = nil
         } catch {
             let failure = error as? FavoritePlacesFailure ?? .unavailable
             loadState = .blocked(failure)
