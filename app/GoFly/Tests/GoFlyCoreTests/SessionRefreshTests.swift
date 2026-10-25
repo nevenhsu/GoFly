@@ -108,6 +108,61 @@ struct SessionRefreshTests {
         f.recovery.releaseForInactiveScene()
     }
 
+    @Test func cancelledRouteLeavesItsLastPositionToAHoldWithAFreshLease() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        let routeLease = try #require(f.service.movementAuthority.snapshot.lease)
+        let last = try #require(f.service.unclearedSimulatedCoordinate)
+        #expect(f.route.cancel())
+        await wait { f.hold.phase == .running && !f.service.nativeBusy }
+        #expect(f.hold.intent?.fixedPosition == last)
+        #expect(f.hold.intent?.lease != routeLease)
+        #expect(f.service.movementAuthority.snapshot.lease == f.hold.intent?.lease)
+        #expect(await f.device.points.last == last)
+        #expect(await f.device.clears == 0)
+        #expect(f.service.stopSimulation())
+        f.recovery.releaseForInactiveScene()
+    }
+
+    @Test func stopDoesNotLeaveAHoldBehind() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        #expect(f.service.stopSimulation())
+        await wait { !f.service.nativeBusy && f.route.phase == .editing }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(f.hold.phase == .idle)
+        #expect(f.service.movementAuthority.snapshot.lease == nil)
+        f.recovery.releaseForInactiveScene()
+    }
+
+    @Test func pausedRouteResendsItsHeldPositionWithoutResuming() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        #expect(f.route.pause())
+        await wait { f.route.phase == .paused && !f.service.nativeBusy }
+        let lease = f.service.movementAuthority.snapshot.lease
+        let held = try #require(f.service.unclearedSimulatedCoordinate)
+        let keepAlive = PositionKeepAlive(service: f.service, clock: f.clock, interval: .seconds(15))
+        keepAlive.sceneDidBecomeActive()
+        let count = await f.device.points.count
+        await wait { f.clock.sleepingCount > 0 }
+        f.clock.advance(by: .seconds(15))
+        await wait { await f.device.points.count == count + 1 }
+        #expect(await f.device.points.last == held)
+        #expect(f.route.phase == .paused)
+        #expect(f.service.movementAuthority.snapshot.lease == lease)
+        #expect(f.service.movementAuthority.snapshot.runState == .paused)
+
+        #expect(f.service.stopSimulation())
+        await wait { !f.service.nativeBusy }
+        let afterStop = await f.device.points.count
+        f.clock.advance(by: .seconds(15))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(await f.device.points.count == afterStop, "Stop ends the heartbeat")
+        keepAlive.releaseForInactiveScene()
+        f.recovery.releaseForInactiveScene()
+    }
+
     @Test func userPauseDuringRebuildKeepsRoutePaused() async throws {
         let f = try fixture()
         try await start("route", f)

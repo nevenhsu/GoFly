@@ -42,6 +42,7 @@ final class GoFlyMovementModel: ObservableObject {
     let recovery: ConnectionRecoveryController
     let continuation: MovementContinuationController
     let positionHold: PositionHoldController
+    let keepAlive: PositionKeepAlive
     private let service: ServiceController
     private var subscriptions: [AnyCancellable] = []
     private var speedSynchronizer: MovementSpeedSynchronizer?
@@ -58,6 +59,7 @@ final class GoFlyMovementModel: ObservableObject {
         _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
         joystick = JoystickMovementController(commands: service, speed: GoFlyPreferences.shared.movementSpeed)
         positionHold = PositionHoldController(service: service)
+        keepAlive = PositionKeepAlive(service: service)
         recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
             probe: NetworkTunnelProbe(), positionHold: positionHold, retainedColdSnapshot: snapshot
@@ -311,7 +313,10 @@ struct GoFlyMapView: View {
                         cameraIntent = GoFlyCameraIntent(coordinate: position.coordinate)
                     }
                 }
-                if scenePhase == .active { continuation.sceneDidBecomeActive() }
+                if scenePhase == .active {
+                    continuation.sceneDidBecomeActive()
+                    movement.keepAlive.sceneDidBecomeActive()
+                }
                 recovery.requestForegroundCheck()
                 service.warmupSession()
                 if dynamicTypeSize.isAccessibilitySize { sheetDetent = .expanded }
@@ -416,10 +421,12 @@ struct GoFlyMapView: View {
                     checkpointWindowStarted = false
                     finishCheckpointWindow(id: checkpointWindowID)
                     continuation.sceneDidBecomeActive()
+                    movement.keepAlive.sceneDidBecomeActive()
                     recovery.requestForegroundCheck()
                 } else {
                     cancelUncommittedWanderPlanning()
                     continuation.releaseForInactiveScene()
+                    movement.keepAlive.releaseForInactiveScene()
                     captureCheckpoint()
                     beginCheckpointFlush()
                 }

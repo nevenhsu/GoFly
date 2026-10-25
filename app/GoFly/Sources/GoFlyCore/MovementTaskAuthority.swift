@@ -94,6 +94,18 @@ public final class MovementTaskAuthority: @unchecked Sendable {
         }
     }
 
+    /// A keepalive resends the position the current task already holds. It is
+    /// allowed while that healthy task is running or paused and admitted in the
+    /// foreground or by its bound grant; it never installs or changes a lease.
+    func permitsKeepAlive(for lease: MovementTaskLease) -> Bool {
+        lock.withLock {
+            guard !connectionBlocked, !coldRecoveryHeld, stored.lease == lease,
+                  stored.runState != nil, stored.health == .confirmedHealthy else { return false }
+            if let binding = grantBinding, binding.grant.lease == lease { return binding.grant.isValid }
+            return foreground
+        }
+    }
+
     public func permitsDispatch(for lease: MovementTaskLease) -> Bool {
         lock.withLock {
             guard !connectionBlocked, !coldRecoveryHeld,

@@ -10,6 +10,7 @@ public final class PointDispatchGate: @unchecked Sendable {
     private let replacing: MovementAuthoritySnapshot?
     private let connectionRepair: Bool
     private let repairPausedTask: Bool
+    private let keepAlive: Bool
     public enum State: Sendable { case available, dispatched, invalidated }
     private var storedState: State = .available
     private var recoveryRevoked = false
@@ -23,6 +24,7 @@ public final class PointDispatchGate: @unchecked Sendable {
         replacing = nil
         connectionRepair = false
         repairPausedTask = false
+        keepAlive = false
     }
 
     public init(authority: MovementTaskAuthority, lease: MovementTaskLease,
@@ -33,6 +35,7 @@ public final class PointDispatchGate: @unchecked Sendable {
         self.replacing = replacing
         self.connectionRepair = false
         repairPausedTask = false
+        keepAlive = false
         self.onDispatch = onDispatch
     }
 
@@ -42,6 +45,17 @@ public final class PointDispatchGate: @unchecked Sendable {
         replacing = nil
         connectionRepair = true
         repairPausedTask = allowingPaused
+        keepAlive = false
+        onDispatch = {}
+    }
+
+    init(keepingAlive authority: MovementTaskAuthority, lease: MovementTaskLease) {
+        self.authority = authority
+        self.lease = lease
+        replacing = nil
+        connectionRepair = false
+        repairPausedTask = false
+        keepAlive = true
         onDispatch = {}
     }
 
@@ -61,7 +75,8 @@ public final class PointDispatchGate: @unchecked Sendable {
         let claimed = lock.withLock {
             guard storedState == .available else { return false }
             if let authority, let lease {
-                let permitted = connectionRepair ? authority.permitsConnectionRepair(for: lease, allowingPaused: repairPausedTask)
+                let permitted = keepAlive ? authority.permitsKeepAlive(for: lease)
+                    : connectionRepair ? authority.permitsConnectionRepair(for: lease, allowingPaused: repairPausedTask)
                     : (replacing.map { authority.install(lease, replacing: $0) } ?? authority.permitsDispatch(for: lease))
                 guard permitted else {
                     storedState = .invalidated

@@ -53,6 +53,7 @@ public final class PositionHoldController: ObservableObject {
     private var acknowledgedWholeSeconds: Int64 = 0
     private var nextSequence: UInt64 = 1
     private var sleepingHeartbeat = false
+    private var takeoverTask: Task<Void, Never>?
 
     /// The held coordinate is resent this often. The open location channel
     /// keeps the position; the resend proves liveness and feeds background
@@ -76,6 +77,10 @@ public final class PositionHoldController: ObservableObject {
             },
             service.joystickEvents.sink { [weak self] event in
                 self?.receive(event)
+                if case .ended(let id) = event, id != self?.intent?.id { self?.scheduleTakeover() }
+            },
+            service.routeEvents.sink { [weak self] event in
+                if case .ended = event { self?.scheduleTakeover() }
             }
         ]
     }
@@ -158,13 +163,48 @@ public final class PositionHoldController: ObservableObject {
     }
 
     private func start(after acknowledgement: TeleportAcknowledgement) {
+        let operation = JoystickMovementIntent(lease: acknowledgement.lease,
+                                               fixedPosition: acknowledgement.coordinate)
+        start(operation, place: acknowledgement.intent.candidate.place) { service in
+            await service.beginPositionHold(after: acknowledgement, intent: operation)
+        }
+    }
+
+    /// Cancelling a route or wander, or ending the joystick, leaves the last
+    /// simulated position on the device. It becomes an ordinary hold with a
+    /// fresh lease, so only Stop or Restore returns the device to real GPS.
+    private func takeOverLastPosition() {
+        guard foreground, phase == .idle || phase == .completed,
+              service.movementAuthority.snapshot.lease == nil,
+              let coordinate = service.unclearedSimulatedCoordinate else { return }
+        let operation = JoystickMovementIntent(lease: MovementTaskLease(), fixedPosition: coordinate)
+        let revision = service.movementAdmissionRevision
+        diagnose("positionHold.takeover", level: .notice, [:])
+        start(operation, place: MapPlace(id: .coordinate(coordinate), title: "", coordinate: coordinate)) { service in
+            await service.beginJoystick(operation, expectedMovementAdmissionRevision: revision)
+        }
+    }
+
+    private func scheduleTakeover() {
+        guard takeoverTask == nil else { return }
+        takeoverTask = Task { [weak self] in
+            // Let the ended owner settle and its native work drain first.
+            guard let busy = self?.service.$nativeBusy.values else { return }
+            for await value in busy where !value { break }
+            await Task.yield()
+            guard let self else { return }
+            self.takeoverTask = nil
+            self.takeOverLastPosition()
+        }
+    }
+
+    private func start(_ operation: JoystickMovementIntent, place: MapPlace,
+                       begin: @escaping @MainActor (ServiceController) async -> JoystickPreparationOutcome) {
         invalidateWork()
         generation &+= 1
         let token = generation
-        let operation = JoystickMovementIntent(lease: acknowledgement.lease,
-                                               fixedPosition: acknowledgement.coordinate)
         intent = operation
-        lastPlace = acknowledgement.intent.candidate.place
+        lastPlace = place
         phase = .preparing
         lastAcknowledgementAt = nil
         acknowledgedDuration = .zero
@@ -183,13 +223,16 @@ public final class PositionHoldController: ObservableObject {
 
         work = Task { [weak self] in
             guard let self else { return }
-            let preparation = await self.service.beginPositionHold(after: acknowledgement, intent: operation)
+            let preparation = await begin(self.service)
             guard self.isCurrent(token, operation), self.phase == .preparing else { return }
             guard preparation == .prepared else {
                 self.finishWithoutOwner(token: token, operation: operation)
                 return
             }
-            guard self.isEligible(operation, allowUnknownHealth: true),
+            // A takeover lease is installed by its first write's gate, which
+            // re-checks foreground and admission under the authority lock.
+            let installsLease = self.service.movementAuthority.snapshot.lease == nil
+            guard installsLease || self.isEligible(operation, allowUnknownHealth: true),
                   let input = self.service.joystickInputRevision(executionID: operation.id,
                                                                   lease: operation.lease) else {
                 self.pause(reason: .userPaused)

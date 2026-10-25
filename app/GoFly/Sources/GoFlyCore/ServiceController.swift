@@ -1520,6 +1520,50 @@ extension ServiceController {
     }
     /// Execution admission accepts only a verified simulation coordinate or
     /// a fresh real fix. Retained simulation history remains display-only.
+    /// The simulated position the device still holds: verified and not being
+    /// cleared. Only Stop or Restore removes it.
+    public var unclearedSimulatedCoordinate: GeoCoordinate? {
+        guard !clearScheduled, !coldClearPending, let marker = displayPositionMarker,
+              marker.source == .simulation, marker.freshness == .fresh else { return nil }
+        return marker.coordinate
+    }
+    /// The position a paused task or an idle manual joystick still holds. No
+    /// writer runs in these states, so a heartbeat resends it.
+    var keepAliveTarget: (lease: MovementTaskLease, coordinate: GeoCoordinate)? {
+        guard !nativeBusy, let coordinate = unclearedSimulatedCoordinate else { return nil }
+        let snapshot = movementAuthority.snapshot
+        guard let lease = snapshot.lease, snapshot.health == .confirmedHealthy else { return nil }
+        if snapshot.runState == .paused { return (lease, coordinate) }
+        let idleJoystick = joystickOwners.values.contains {
+            $0.intent.lease == lease && !$0.ended && $0.neutral && $0.intent.fixedPosition == nil && $0.tick == nil
+        }
+        return idleJoystick ? (lease, coordinate) : nil
+    }
+
+    /// Resends the held position without changing the task, its lease or the
+    /// displayed position. The device keeper may reconnect once inside it.
+    @discardableResult
+    public func sendKeepAlive() async -> Bool {
+        guard let target = keepAliveTarget else { return false }
+        let gate = PointDispatchGate(keepingAlive: movementAuthority, lease: target.lease)
+        return await withCheckedContinuation { continuation in
+            enqueueAdapter({ device in
+                .point(await device.movePoint(to: target.coordinate, dispatch: gate))
+            }) { [weak self] result in
+                guard let self else { continuation.resume(returning: false); return }
+                let acknowledged: Bool
+                if case .point(.acknowledged) = result { acknowledged = true } else { acknowledged = false }
+                self.diagnose("keeper.heartbeat", level: acknowledged ? .debug : .notice, [
+                    "result": .text(acknowledged ? "acked" : (gate.hasDispatched ? "unconfirmed" : "notSent"))
+                ])
+                if !acknowledged, gate.hasDispatched, self.movementAuthority.snapshot.lease == target.lease {
+                    self.markSimulationPositionUnverified()
+                }
+                continuation.resume(returning: acknowledged)
+            }
+        }
+    }
+
     public var currentJoystickOrigin: GeoCoordinate? {
         if let marker = displayPositionMarker, marker.source == .simulation, marker.freshness == .fresh {
             return marker.coordinate
