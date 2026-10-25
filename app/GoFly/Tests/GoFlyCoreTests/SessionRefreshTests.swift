@@ -180,6 +180,37 @@ struct SessionRefreshTests {
         f.recovery.releaseForInactiveScene()
     }
 
+    @Test func pausedRouteKeepaliveResumesAfterABackgroundTripAndReverifiesTheArrow() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        #expect(f.route.pause())
+        await wait { f.route.phase == .paused && !f.service.nativeBusy }
+        f.service.setMovementSceneActive(false)
+        f.recovery.releaseForInactiveScene()
+        f.service.markSimulationPositionUnverified()
+        #expect(f.service.positionMarker?.freshness != .fresh)
+        f.service.setMovementSceneActive(true)
+        let keepAlive = PositionKeepAlive(service: f.service, clock: f.clock, interval: .seconds(15))
+        keepAlive.sceneDidBecomeActive()
+        let count = await f.device.points.count
+        await wait { f.clock.sleepingCount > 0 }
+        f.clock.advance(by: .seconds(15))
+        await wait { await f.device.points.count == count + 1 && !f.service.nativeBusy }
+        await wait { f.service.positionMarker?.freshness == .fresh }
+        #expect(f.route.phase == .paused)
+        keepAlive.releaseForInactiveScene()
+        #expect(f.service.stopSimulation())
+    }
+
+    @Test func settingsStopLeavesNoKeepaliveTarget() async throws {
+        let f = try fixture()
+        try await start("route", f)
+        #expect(f.service.stopSimulation())
+        await wait { !f.service.nativeBusy }
+        #expect(f.service.unclearedSimulatedCoordinate == nil)
+        #expect(f.service.keepAliveTarget == nil)
+    }
+
     @Test func userPauseDuringRebuildKeepsRoutePaused() async throws {
         let f = try fixture()
         try await start("route", f)

@@ -146,6 +146,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private var clearScheduled = false
     private var clearAttempted = false
     private var lastDisplayedPosition: DisplayedPosition?
+    /// From an acknowledged simulated write until Stop or an acknowledged clear.
+    private var deviceMayHoldSimulation = false
     private var simulationDisplayEpoch = UUID()
     private var didRestoreColdRecovery = false
     private var didPerformActualOperation = false
@@ -779,6 +781,9 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         preparedOperation = nil
         pointState = .idle
         markSimulationPositionUnverified()
+        // Stop ends simulation for the user: nothing takes over or keeps the
+        // last position alive, even before Restore clears the device.
+        deviceMayHoldSimulation = false
         hasSimulated = true
         phase = .ready
         error = nil
@@ -1073,6 +1078,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                 }
                 if operation == .stopping || operation == .restoring {
                     coldClearAttempt = false
+                    deviceMayHoldSimulation = false
                     clearState = .confirmed
                     clearConfirmedAt = now()
                 }
@@ -1392,6 +1398,7 @@ extension ServiceController {
     }
     private func publishSimulation(_ coordinate: GeoCoordinate, displayEpoch: UUID) {
         hasSimulated = true
+        deviceMayHoldSimulation = true
         confirmedSimulatedLocation = coordinate
         lastDisplayedPosition = DisplayedPosition(coordinate: coordinate, source: .simulation)
         simulationDisplayVerified = displayEpoch == simulationDisplayEpoch && movementConnectionAvailable &&
@@ -1522,10 +1529,13 @@ extension ServiceController {
     /// a fresh real fix. Retained simulation history remains display-only.
     /// The simulated position the device still holds: verified and not being
     /// cleared. Only Stop or Restore removes it.
+    ///
+    /// Display freshness is not consulted: leaving the foreground greys the
+    /// arrow until a new ACK, but the device still holds this position.
     public var unclearedSimulatedCoordinate: GeoCoordinate? {
-        guard !clearScheduled, !coldClearPending, let marker = displayPositionMarker,
-              marker.source == .simulation, marker.freshness == .fresh else { return nil }
-        return marker.coordinate
+        guard deviceMayHoldSimulation, !clearScheduled, !coldClearPending,
+              let position = lastDisplayedPosition, position.source == .simulation else { return nil }
+        return position.coordinate
     }
     /// The position a paused task or an idle manual joystick still holds. No
     /// writer runs in these states, so a heartbeat resends it.
@@ -1556,7 +1566,10 @@ extension ServiceController {
                 self.diagnose("keeper.heartbeat", level: acknowledged ? .debug : .notice, [
                     "result": .text(acknowledged ? "acked" : (gate.hasDispatched ? "unconfirmed" : "notSent"))
                 ])
-                if !acknowledged, gate.hasDispatched, self.movementAuthority.snapshot.lease == target.lease {
+                if acknowledged, self.movementAuthority.snapshot.lease == target.lease {
+                    // A real ACK of the held coordinate re-verifies the arrow.
+                    self.publishSimulation(target.coordinate, displayEpoch: self.simulationDisplayEpoch)
+                } else if gate.hasDispatched, self.movementAuthority.snapshot.lease == target.lease {
                     self.markSimulationPositionUnverified()
                 }
                 continuation.resume(returning: acknowledged)

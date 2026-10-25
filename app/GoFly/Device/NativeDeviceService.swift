@@ -71,6 +71,12 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
 
     func resetClientConnection() async throws {
         try await perform("reset") {
+            // After an acknowledged clear an owned session is only an idle
+            // warmup; closing it cannot return the device to real GPS.
+            if self.ownedSession != nil, !self.keeper.mayHoldSimulatedPosition {
+                self.closeSession()
+                self.keeper.sessionDidClose()
+            }
             guard self.ownedSession == nil else {
                 Diagnostics.shared.record("device.resetRejected", category: .device, level: .notice, [
                     "reason": .text("ownedSession"),
