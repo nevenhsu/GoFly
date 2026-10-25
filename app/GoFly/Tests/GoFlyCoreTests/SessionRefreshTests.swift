@@ -24,17 +24,17 @@ struct SessionRefreshTests {
         #expect(SessionStatusErrors(connection: .reachable).isEmpty)
     }
 
-    @Test func healthyProbeWaitsFiveSecondsAndKeepsLastResultWhileChecking() async throws {
+    @Test func healthyConnectionIsNotPolledAndPathChangeKeepsLastResultWhileChecking() async throws {
         let f = try fixture()
         #expect(f.service.start())
         await wait { f.service.phase == .ready && !f.service.nativeBusy }
         f.recovery.sceneDidBecomeActive()
-        await wait { f.recovery.connectionState == .reachable && f.monitorClock.sleepingCount > 0 }
-        await f.probe.setHeld(true)
-        f.monitorClock.advance(by: .seconds(2))
+        await wait { f.recovery.connectionState == .reachable && !f.recovery.isChecking }
+        f.monitorClock.advance(by: .seconds(60))
         await Task.yield()
         #expect(await f.probe.count == 1)
-        f.monitorClock.advance(by: .seconds(3))
+        await f.probe.setHeld(true)
+        f.recovery.networkPathDidChange()
         await wait { await f.probe.count == 2 && f.recovery.isChecking }
         #expect(f.recovery.connectionState == .reachable)
         await f.probe.release()
@@ -117,7 +117,7 @@ struct SessionRefreshTests {
         #expect(!f.service.movementConnectionAvailable)
         #expect(await f.device.rebuilds == 1)
         f.recovery.sceneDidBecomeActive()
-        await wait { !f.recovery.isChecking && f.monitorClock.sleepingCount > 0 }
+        await wait { !f.recovery.isChecking }
         #expect(!f.service.movementConnectionAvailable)
         #expect(await f.device.rebuilds == 1)
         f.recovery.checkConnection()
@@ -139,7 +139,7 @@ struct SessionRefreshTests {
         #expect(mode == "route" ? f.route.pause() : f.joystick.pause())
         #expect(f.service.movementAuthority.snapshot.runState == .paused)
         f.recovery.sceneDidBecomeActive()
-        await wait { !f.recovery.isChecking && f.monitorClock.sleepingCount > 0 }
+        await wait { !f.recovery.isChecking }
         f.recovery.checkConnection()
         await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
         #expect(mode == "route" ? f.route.phase == .paused : f.joystick.phase == .paused)
@@ -165,7 +165,7 @@ struct SessionRefreshTests {
         await wait { f.recovery.canRetryAutomaticRepair && !f.service.nativeBusy }
         #expect(!f.service.isRecoveringConnection)
         f.recovery.sceneDidBecomeActive()
-        await wait { !f.recovery.isChecking && f.monitorClock.sleepingCount > 0 }
+        await wait { !f.recovery.isChecking }
         f.recovery.checkConnection()
         await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
         #expect(f.route.phase == .running)
@@ -246,7 +246,8 @@ struct SessionRefreshTests {
         let draft = RouteDraft(start: .place(place(a)), destination: .place(place(b)))!
         let route = RouteExecutionController(draft: draft, planner: RefreshPlanner(), commands: service, search: RefreshSearch(), clock: clock)
         let joystick = JoystickMovementController(commands: service, clock: clock)
-        let hold = PositionHoldController(service: service, clock: clock)
+        let hold = PositionHoldController(service: service, clock: clock, cadence: .seconds(5),
+                                          maximumAcknowledgementGap: .seconds(15))
         let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick, probe: probe, positionHold: hold, clock: monitorClock)
         return Fixture(service: service, route: route, joystick: joystick, hold: hold, recovery: recovery, clock: clock, monitorClock: monitorClock, device: device, probe: probe)
     }

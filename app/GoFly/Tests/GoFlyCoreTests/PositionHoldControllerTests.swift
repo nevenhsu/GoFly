@@ -78,7 +78,7 @@ struct PositionHoldControllerTests {
         let service = ServiceController(service: device)
         let clock = PositionHoldManualClock()
         let controller = PositionHoldController(service: service, clock: clock,
-            interval: .seconds(10), cadence: .seconds(5))
+            interval: .seconds(10), cadence: .seconds(5), maximumAcknowledgementGap: .seconds(15))
         let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
         #expect(service.teleport(to: TeleportCandidate(place: place(coordinate))))
         await wait { await device.sent.count == 1 }
@@ -171,6 +171,9 @@ struct PositionHoldControllerTests {
         await device.finishNext(.acknowledged)
         await wait { controller.phase == .running && clock.sleepingCount > 0 }
         clock.advance(by: .seconds(5))
+        await Task.yield()
+        #expect(await device.sent.count == 2, "the heartbeat is fifteen seconds")
+        clock.advance(by: .seconds(10))
         await wait { (await device.sent.count) == 3 }
         #expect(service.stop())
         await device.finishNext(.acknowledged)

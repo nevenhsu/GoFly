@@ -29,7 +29,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     private var sceneActive = false
     private var generation: UInt64 = 0
     private var checkTask: Task<Void, Never>?
-    private var monitorTask: Task<Void, Never>?
+    private static let recheckSpacing: Duration = .seconds(5)
     private var foregroundCheckPending = false
     private var lastProbeFinishedAt: Duration?
     private var lastObservedPhase: ServicePhase
@@ -93,7 +93,6 @@ public final class ConnectionRecoveryController: ObservableObject {
 
     deinit {
         checkTask?.cancel()
-        monitorTask?.cancel()
         resetTask?.cancel()
         automaticRepairTask?.cancel()
     }
@@ -181,14 +180,20 @@ public final class ConnectionRecoveryController: ObservableObject {
         evaluateServiceState(immediate: true)
     }
 
+    /// Wi-Fi, utun or interface changes are a freshness boundary like a
+    /// foreground return: one immediate check, no polling afterwards.
+    public func networkPathDidChange() {
+        guard sceneActive else { return }
+        positionHold?.heartbeatNow()
+        evaluateServiceState(immediate: true)
+    }
+
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
         retirePendingReset()
         sceneActive = false
         foregroundCheckPending = false
         generation &+= 1
         checkTask?.cancel()
-        monitorTask?.cancel()
-        monitorTask = nil
         isChecking = false
         connectionState = .unknown
         recoveredNotice = false
@@ -216,8 +221,6 @@ public final class ConnectionRecoveryController: ObservableObject {
             automaticRepairAttempted = nil
             if service.requestConnectionRecovery(failure: failedAutomaticRepair.failure, explicitlyRequested: true) { return }
         }
-                monitorTask?.cancel()
-        monitorTask = nil
         guard sceneActive, isManualProbeEligible else { return }
         guard checkTask == nil else { return }
         beginProbe(manual: true, showCheckingNotice: true)
@@ -300,40 +303,23 @@ public final class ConnectionRecoveryController: ObservableObject {
             return
         }
         guard isAutomaticProbeEligible else {
-            monitorTask?.cancel()
-            monitorTask = nil
             return
         }
         scheduleProbeIfDue(immediate: immediate)
     }
 
+    /// Probes are event-driven: a scene activation or path change asks for an
+    /// immediate check; an unknown or lost connection is re-checked on later
+    /// state changes at most every five seconds; a reachable one is not
+    /// re-checked at all. There is no periodic timer; movement ACKs prove
+    /// liveness while a task runs.
     private func scheduleProbeIfDue(immediate: Bool = false) {
-        guard sceneActive, isAutomaticProbeEligible, checkTask == nil, monitorTask == nil else { return }
-        let delay: Duration
-        if immediate {
-            delay = .zero
-        } else if let lastProbeFinishedAt {
-            delay = max(.zero, .seconds(5) - (clock.now - lastProbeFinishedAt))
-        } else {
-            delay = .zero
+        guard sceneActive, isAutomaticProbeEligible, checkTask == nil else { return }
+        if !immediate, let lastProbeFinishedAt {
+            guard connectionState != .reachable,
+                  clock.now - lastProbeFinishedAt >= Self.recheckSpacing else { return }
         }
-        if delay == .zero {
-            beginProbe(showCheckingNotice: immediate)
-            return
-        }
-        let token = generation
-        let clock = clock
-        monitorTask = Task { [weak self] in
-            do { try await clock.sleep(for: delay) } catch { return }
-            guard let self, self.generation == token, self.sceneActive else { return }
-            // Clear the completed timer before re-checking eligibility. A
-            // native-busy wake may make the probe ineligible without causing
-            // another objectWillChange evaluation, and the finished task must
-            // not block a later automatic schedule.
-            self.monitorTask = nil
-            guard self.isAutomaticProbeEligible else { return }
-            self.beginProbe()
-        }
+        beginProbe(showCheckingNotice: immediate)
     }
 
     private func beginProbe(manual: Bool = false, showCheckingNotice: Bool = false) {
@@ -341,8 +327,6 @@ public final class ConnectionRecoveryController: ObservableObject {
         let eligible = manual ? isManualProbeEligible : isAutomaticProbeEligible
         guard sceneActive, eligible, checkTask == nil else { return }
         foregroundCheckPending = false
-        monitorTask?.cancel()
-        monitorTask = nil
         generation &+= 1
         let token = generation
         let probe = probe
@@ -437,7 +421,6 @@ public final class ConnectionRecoveryController: ObservableObject {
         automaticRepairInProgress = true
         generation &+= 1
         checkTask?.cancel()
-        monitorTask?.cancel(); monitorTask = nil
         isChecking = false
         connectionState = recovery.failure == .operationTimedOut ? .timedOut : .unavailable
         checkNoticeVisible = false
@@ -481,8 +464,6 @@ public final class ConnectionRecoveryController: ObservableObject {
             isResettingTunnel = true
             generation &+= 1
             checkTask?.cancel()
-            monitorTask?.cancel()
-            monitorTask = nil
             isChecking = false
             connectionState = .unknown
             recoveredNotice = false
@@ -547,8 +528,6 @@ public final class ConnectionRecoveryController: ObservableObject {
     private func invalidateProbeForReset() {
         generation &+= 1
         checkTask?.cancel()
-        monitorTask?.cancel()
-        monitorTask = nil
         isChecking = false
         connectionState = .unknown
         recoveredNotice = false
@@ -575,8 +554,6 @@ public final class ConnectionRecoveryController: ObservableObject {
         retirePendingReset()
         generation &+= 1
         checkTask?.cancel()
-        monitorTask?.cancel()
-        monitorTask = nil
         isChecking = false
         connectionState = .unknown
         checkNoticeVisible = false

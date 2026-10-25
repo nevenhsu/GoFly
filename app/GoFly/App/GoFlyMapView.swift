@@ -435,6 +435,7 @@ struct GoFlyMapView: View {
                 }
             }
             .onChange(of: recovery.checkpointRevision) { _, _ in captureCheckpoint() }
+            .onReceive(GoFlyPathMonitor.shared.changes) { _ in recovery.networkPathDidChange() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
             }

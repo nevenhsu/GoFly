@@ -1,10 +1,13 @@
+import Combine
 import Foundation
 import GoFlyCore
 import Network
 
-/// Records Wi-Fi/path changes so a dropped LocalDevVPN tunnel can be told apart
-/// from a native service failure after the fact. The handler runs on one serial
-/// queue, which owns `lastDescription`.
+/// The app's only path monitor. Records Wi-Fi/path changes so a dropped
+/// LocalDevVPN tunnel can be told apart from a native service failure after the
+/// fact, and publishes each distinct path on the main queue for the Wi-Fi
+/// notice and the event-driven connection check. The handler runs on one
+/// serial queue, which owns `lastDescription`.
 final class GoFlyPathMonitor: @unchecked Sendable {
     static let shared = GoFlyPathMonitor()
 
@@ -12,6 +15,9 @@ final class GoFlyPathMonitor: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.neven.gofly.path", qos: .utility)
     private var started = false
     private var lastDescription: String?
+    /// Distinct paths, delivered on the main queue.
+    let changes = PassthroughSubject<NWPath, Never>()
+    var currentPath: NWPath { monitor.currentPath }
 
     private init() {}
 
@@ -35,6 +41,7 @@ final class GoFlyPathMonitor: @unchecked Sendable {
                     "\(Self.label($0.type)):\($0.name)"
                 }.joined(separator: ","))
             ])
+            DispatchQueue.main.async { self.changes.send(path) }
         }
         monitor.start(queue: queue)
     }

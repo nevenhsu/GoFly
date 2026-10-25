@@ -52,18 +52,24 @@ public final class PositionHoldController: ObservableObject {
     private var acknowledgedDuration: Duration = .zero
     private var acknowledgedWholeSeconds: Int64 = 0
     private var nextSequence: UInt64 = 1
+    private var sleepingHeartbeat = false
+
+    /// The held coordinate is resent this often. The open location channel
+    /// keeps the position; the resend proves liveness and feeds background
+    /// progress, which tolerates two missed heartbeats.
+    public static let heartbeat: Duration = .seconds(15)
 
     public init(service: ServiceController,
                 clock: any RouteClock = ContinuousRouteClock(),
                 interval: Duration = .seconds(43_200),
-                cadence: Duration = .seconds(5),
-                maximumAcknowledgementGap: Duration = .seconds(15)) {
+                cadence: Duration = PositionHoldController.heartbeat,
+                maximumAcknowledgementGap: Duration = PositionHoldController.heartbeat * 3) {
         self.service = service
         self.clock = clock
         self.interval = min(interval > .zero ? interval : .seconds(43_200), .seconds(43_200))
-        self.cadence = cadence > .zero ? cadence : .seconds(5)
+        self.cadence = cadence > .zero ? cadence : Self.heartbeat
         self.maximumAcknowledgementGap = maximumAcknowledgementGap > .zero
-            ? maximumAcknowledgementGap : .seconds(15)
+            ? maximumAcknowledgementGap : Self.heartbeat * 3
         subscriptions = [
             service.teleportAcknowledgements.sink { [weak self] acknowledgement in
                 self?.receive(acknowledgement)
@@ -194,13 +200,36 @@ public final class PositionHoldController: ObservableObject {
         }
     }
 
+    /// A path change or foreground return checks liveness now instead of at
+    /// the next heartbeat. Only a sleeping heartbeat is cut short; a write in
+    /// flight already answers the question.
+    public func heartbeatNow() {
+        guard phase == .running, sleepingHeartbeat, let operation = intent else { return }
+        let token = generation
+        sleepingHeartbeat = false
+        work?.cancel()
+        work = Task { [weak self] in
+            guard let self, self.isCurrent(token, operation), self.phase == .running else { return }
+            guard self.isEligible(operation), self.nextSequence < UInt64.max,
+                  let input = self.service.joystickInputRevision(executionID: operation.id,
+                                                                  lease: operation.lease) else {
+                self.pause(reason: .userPaused)
+                return
+            }
+            guard await self.send(operation: operation, token: token, input: input) else { return }
+            await self.run(operation: operation, token: token)
+        }
+    }
+
     private func run(operation: JoystickMovementIntent, token: UInt64) async {
         while isCurrent(token, operation), phase == .running, !Task.isCancelled {
+            sleepingHeartbeat = true
             do {
                 try await clock.sleep(for: cadence)
             } catch {
                 return
             }
+            sleepingHeartbeat = false
             guard isCurrent(token, operation), phase == .running, !Task.isCancelled else { return }
             guard isEligible(operation),
                   nextSequence < UInt64.max,
@@ -389,6 +418,7 @@ public final class PositionHoldController: ObservableObject {
         generation &+= 1
         work?.cancel()
         work = nil
+        sleepingHeartbeat = false
     }
 
     private func isCurrent(_ token: UInt64, _ operation: JoystickMovementIntent) -> Bool {

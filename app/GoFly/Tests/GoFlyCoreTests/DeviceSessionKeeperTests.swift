@@ -92,18 +92,61 @@ struct DeviceSessionKeeperTests {
     }
 
     @Test
-    func idleSessionIsClosedBeforeTheNextWrite() {
+    func sessionHoldingASimulatedPositionIsNeverClosedForIdleness() {
         let clock = Clock()
-        let link = ScriptedLink([.ack, .ack, .ack])
+        let link = ScriptedLink([.ack, .ack])
         let keeper = DeviceSessionKeeper(maximumIdleNanoseconds: 100, now: clock.read)
 
         _ = keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link)
-        clock.value += 99
+        #expect(keeper.mayHoldSimulatedPosition)
+        clock.value += 10_000
         _ = keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link)
         #expect(link.closes == 0)
-        clock.value += 100
+    }
+
+    @Test
+    func idleSessionIsClosedOnlyAfterAClear() throws {
+        let clock = Clock()
+        let link = ScriptedLink([.ack])
+        let keeper = DeviceSessionKeeper(maximumIdleNanoseconds: 100, now: clock.read)
+
         _ = keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link)
+        keeper.locationDidClear()
+        clock.value += 99
+        try keeper.prepare(using: link)
+        #expect(link.closes == 0)
+        clock.value += 100
+        try keeper.prepare(using: link)
         #expect(link.closes == 1)
+    }
+
+    @Test
+    func automaticReconnectHappensAtMostOncePerMinute() {
+        let clock = Clock()
+        let link = ScriptedLink([.notSent(.serviceUnavailable, dispatched: false), .ack,
+                                 .notSent(.serviceUnavailable, dispatched: false),
+                                 .notSent(.serviceUnavailable, dispatched: false), .ack], owned: true)
+        let keeper = DeviceSessionKeeper(now: clock.read)
+
+        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
+        clock.value += 59_000_000_000
+        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .notSent(.serviceUnavailable))
+        #expect(link.attempts.count == 3, "no second reconnect inside the minute")
+        clock.value += 1_000_000_000
+        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
+        #expect(link.attempts.count == 5)
+    }
+
+    @Test
+    func explicitRetryStartsAFreshReconnectWindow() {
+        let clock = Clock()
+        let link = ScriptedLink([.notSent(.serviceUnavailable, dispatched: false), .ack,
+                                 .notSent(.serviceUnavailable, dispatched: false), .ack], owned: true)
+        let keeper = DeviceSessionKeeper(now: clock.read)
+
+        _ = keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link)
+        keeper.reconnectWasRequested()
+        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
     }
 
     @Test

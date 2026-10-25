@@ -31,23 +31,37 @@ public struct DeviceSessionAttempt: Equatable, Sendable {
 /// Decides when a native session is reused, rebuilt, retried or closed for
 /// idleness. Every point write goes through `deliver`; the adapter only
 /// performs single attempts and never retries on its own.
+///
+/// While the device may hold a simulated position the session is never closed
+/// for idleness: closing the location channel can return the device to real
+/// GPS, and only an explicit clear may do that. An automatic reconnect (a
+/// rebuild-and-retry after a transient failure) happens at most once per
+/// `reconnectSpacingNanoseconds`; an explicit user retry resets that window.
 public final class DeviceSessionKeeper {
     public static let defaultMaximumIdleNanoseconds: UInt64 = 30_000_000_000
     /// One deadline covers the first attempt and the one permitted repair. It
     /// is deliberately shorter than the outer service watchdog so an adapter
     /// timeout can still return cleanly.
     public static let defaultPointBudgetNanoseconds: UInt64 = 20_000_000_000
+    public static let defaultReconnectSpacingNanoseconds: UInt64 = 60_000_000_000
 
     private let maximumIdleNanoseconds: UInt64
     private let pointBudgetNanoseconds: UInt64
+    private let reconnectSpacingNanoseconds: UInt64
     private let now: () -> UInt64
     private var lastActivityAt: UInt64?
+    private var lastReconnectAt: UInt64?
+    /// True from any write that may have reached the device until a clear is
+    /// acknowledged.
+    public private(set) var mayHoldSimulatedPosition = false
 
     public init(maximumIdleNanoseconds: UInt64 = defaultMaximumIdleNanoseconds,
                 pointBudgetNanoseconds: UInt64 = defaultPointBudgetNanoseconds,
+                reconnectSpacingNanoseconds: UInt64 = defaultReconnectSpacingNanoseconds,
                 now: @escaping () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }) {
         self.maximumIdleNanoseconds = maximumIdleNanoseconds
         self.pointBudgetNanoseconds = pointBudgetNanoseconds
+        self.reconnectSpacingNanoseconds = reconnectSpacingNanoseconds
         self.now = now
     }
 
@@ -73,6 +87,7 @@ public final class DeviceSessionKeeper {
         let gateAvailable: Bool
         if case .available = dispatch.state { gateAvailable = true } else { gateAvailable = false }
         if case .notSent(let failure) = first, Self.isTransient(failure), gateAvailable {
+            guard claimReconnect(reason: failure) else { return first }
             Diagnostics.shared.record("device.session.repair", category: .device, level: .notice, [
                 "reason": .text(failure.rawValue), "attempt": .count(2)
             ])
@@ -84,6 +99,7 @@ public final class DeviceSessionKeeper {
                 Self.recordRecovery("aborted", reason: "gate")
                 return first
             }
+            guard claimReconnect(reason: failure) else { return first }
             Self.recordRecovery("repair", reason: failure.rawValue)
             let repaired = attempt(coordinate, dispatch: dispatch, recovering: true,
                                    deadline: deadline, link: link)
@@ -104,6 +120,30 @@ public final class DeviceSessionKeeper {
         lastActivityAt = nil
     }
 
+    /// The device acknowledged a clear; it now reports real GPS.
+    public func locationDidClear() {
+        mayHoldSimulatedPosition = false
+    }
+
+    /// An explicit user retry is not counted and starts a fresh window.
+    public func reconnectWasRequested() {
+        lastReconnectAt = nil
+    }
+
+    private func claimReconnect(reason failure: DeviceServiceFailure) -> Bool {
+        let current = now()
+        if let lastReconnectAt, current >= lastReconnectAt,
+           current - lastReconnectAt < reconnectSpacingNanoseconds {
+            Diagnostics.shared.record("keeper.budgetExhausted", category: .device, level: .notice, [
+                "reason": .text(failure.rawValue),
+                "since_ms": .milliseconds(Double((current - lastReconnectAt) / 1_000_000))
+            ])
+            return false
+        }
+        lastReconnectAt = current
+        return true
+    }
+
     private func attempt(_ coordinate: GeoCoordinate, dispatch: PointDispatchGate, recovering: Bool,
                          deadline: UInt64, link: any DeviceSessionLink) -> PointDeliveryOutcome {
         if recovering {
@@ -115,6 +155,7 @@ public final class DeviceSessionKeeper {
         let wasOwned = link.ownsSession
         let result = link.attemptPoint(to: coordinate, dispatch: dispatch,
                                        recovering: recovering, deadline: deadline)
+        if result.reachedDispatch, dispatch.hasDispatched { mayHoldSimulatedPosition = true }
         if shouldRebuild(after: result.outcome, sessionWasOwned: wasOwned) {
             close(link)
         } else if result.reachedDispatch {
@@ -124,7 +165,7 @@ public final class DeviceSessionKeeper {
     }
 
     private func discardIfIdle(_ link: any DeviceSessionLink) {
-        guard link.ownsSession, maximumIdleNanoseconds > 0,
+        guard link.ownsSession, !mayHoldSimulatedPosition, maximumIdleNanoseconds > 0,
               let lastActivityAt else { return }
         let current = now()
         guard current >= lastActivityAt, current - lastActivityAt >= maximumIdleNanoseconds else { return }

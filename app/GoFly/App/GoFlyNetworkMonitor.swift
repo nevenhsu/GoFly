@@ -11,34 +11,27 @@ final class GoFlyNetworkMonitor: ObservableObject {
     @Published private(set) var isWiFiConnected: Bool = true
     @Published var wifiNoticeDismissed: Bool = false
 
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "com.neven.gofly.network", qos: .utility)
-    private var started = false
+    private let paths = GoFlyPathMonitor.shared
+    private var subscription: AnyCancellable?
 
     private init() {
         start()
     }
 
     func start() {
-        guard !started else { return }
-        started = true
-        isWiFiConnected = evaluatePath(monitor.currentPath)
-        monitor.pathUpdateHandler = { [weak self] path in
-            let current = Self.evaluate(path)
-            Task { @MainActor [weak self] in
+        guard subscription == nil else { return }
+        paths.start()
+        isWiFiConnected = Self.evaluate(paths.currentPath)
+        subscription = paths.changes.sink { [weak self] path in
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 let previous = self.isWiFiConnected
-                self.isWiFiConnected = current
-                if !previous && current {
+                self.isWiFiConnected = Self.evaluate(path)
+                if !previous && self.isWiFiConnected {
                     self.wifiNoticeDismissed = false
                 }
             }
         }
-        monitor.start(queue: queue)
-    }
-
-    private func evaluatePath(_ path: NWPath) -> Bool {
-        Self.evaluate(path)
     }
 
     private nonisolated static func evaluate(_ path: NWPath) -> Bool {
@@ -61,7 +54,7 @@ final class GoFlyNetworkMonitor: ObservableObject {
 
     /// Re-reads the current path; the toast stays only while Wi-Fi is still missing.
     func recheck() {
-        isWiFiConnected = Self.evaluate(monitor.currentPath)
+        isWiFiConnected = Self.evaluate(paths.currentPath)
         wifiNoticeDismissed = false
     }
 
