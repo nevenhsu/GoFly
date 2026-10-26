@@ -118,6 +118,22 @@ public struct RouteDraft: Equatable, Sendable {
         }
         return RouteDraft(nodes: resolved, speed: speed)
     }
+    /// Planning input: unset rows are skipped and consecutive rows at the same coordinate
+    /// become one stop. A run keeps its first row, except that it never replaces the destination.
+    func mergingConsecutiveDuplicates() -> RouteDraft {
+        guard isManual else { return self }
+        func coordinate(_ node: RouteNode) -> GeoCoordinate? {
+            if case .place(let place) = node.value { return place.coordinate }
+            return nil
+        }
+        var merged: [RouteNode] = []
+        for node in nodes where node.value != .empty {
+            if let last = merged.last, let a = coordinate(last), a == coordinate(node) {
+                if node.id == nodes.last?.id { merged[merged.count - 1] = node }
+            } else { merged.append(node) }
+        }
+        return RouteDraft(nodes: merged, speed: speed) ?? self
+    }
     func replacing(speed: RouteSpeed) -> RouteDraft { RouteDraft(source: source, speed: speed) }
 }
 
@@ -146,7 +162,8 @@ public struct RouteExecutionIntent: Identifiable, Equatable, Sendable {
     public let lease: MovementTaskLease
     public let draft: RouteDraft
     public let route: PlannedRoute
-    public let speed: RouteSpeed
+    /// The only value a running route may change: the next step uses it.
+    public internal(set) var speed: RouteSpeed
     public init(id: UUID = UUID(), lease: MovementTaskLease = MovementTaskLease(), draft: RouteDraft, route: PlannedRoute) {
         self.id = id; self.lease = lease; self.draft = draft; self.route = route; speed = draft.speed
     }

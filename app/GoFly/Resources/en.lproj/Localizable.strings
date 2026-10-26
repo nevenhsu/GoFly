@@ -10,6 +10,7 @@
 "map.startServiceHint" = "Prepare the device service without moving its location.";
 "map.recenter" = "Center on current location";
 "map.recenterHint" = "Centers the map without moving the device. Phone GPS access is optional.";
+"map.fitRoute" = "Fit route";
 "service.title" = "Device service";
 "service.start" = "Start";
 "service.stop" = "Stop";
@@ -651,7 +652,6 @@
 "background.positionRetry" = "Retry";
 "common.confirm" = "Confirm";
 "common.retry" = "Retry";
-"search.chooseOnMap" = "Choose on map";
 "route.clearRoute" = "Clear";
 "route.resumeShort" = "Resume";
 "teleport.resumeShort" = "Resume";

@@ -400,3 +400,37 @@ enum GoFlyTextColor {
     static let warning = GoFlyStyle.warningForeground
     static let success = GoFlyStyle.successForeground
 }
+
+/// Page and sheet title row: the title stays centered on the page whatever the
+/// widths of the leading and trailing controls.
+struct GoFlySheetHeader<Leading: View, Trailing: View>: View {
+    let title: String
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 12) {
+            leading()
+            Spacer(minLength: 0)
+            trailing()
+        }
+        .frame(minHeight: 44)
+        .overlay {
+            Text(title)
+                .font(GoFlyFont.headline)
+                .foregroundStyle(GoFlyTextColor.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 88)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+extension View {
+    /// A tap outside a text field ends editing; buttons under the tap still fire.
+    func goFlyDismissesKeyboardOnTap() -> some View {
+        simultaneousGesture(TapGesture().onEnded {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        })
+    }
+}

@@ -10,6 +10,7 @@
 "map.startServiceHint" = "准备设备服务，不会移动设备位置。";
 "map.recenter" = "回到当前位置";
 "map.recenterHint" = "只移动地图视角，不改变设备位置；手机定位为可选。";
+"map.fitRoute" = "缩放至整条路线";
 "service.title" = "设备服务";
 "service.start" = "启动";
 "service.stop" = "停止";
@@ -651,7 +652,6 @@
 "background.positionRetry" = "重试";
 "common.confirm" = "确认";
 "common.retry" = "重试";
-"search.chooseOnMap" = "从地图上选择";
 "route.clearRoute" = "清空路线";
 "route.resumeShort" = "继续路线";
 "teleport.resumeShort" = "恢复瞬移";

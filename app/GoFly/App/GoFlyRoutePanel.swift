@@ -11,6 +11,8 @@ struct GoFlyRoutePanel: View {
     /// Called after a row was cleared or deleted, so the owner can offer the D9 undo snackbar.
     var onNodeRemoved: () -> Void = { }
     var onSettings: () -> Void = { }
+    /// 重試 on an interrupted route: repair the connection, then the route continues.
+    var onRetryInterrupted: () -> Void = { }
     var onFocusPoint: (GeoCoordinate) -> Void = { _ in }
     var currentLocationAvailable: Bool? = nil
     var currentRouteOrigin: @MainActor () -> GeoCoordinate? = { nil }
@@ -60,7 +62,7 @@ struct GoFlyRoutePanel: View {
         .sheet(isPresented: $showingDetails) {
             GoFlySpeedSheet(
                 speed: controller.draft.speed,
-                canEdit: controller.canEdit,
+                canEdit: controller.canSetSpeed,
                 onSpeedChanged: { _ = controller.setSpeed($0) },
                 onDismiss: { showingDetails = false }
             )
@@ -100,7 +102,7 @@ struct GoFlyRoutePanel: View {
                 .padding(.top, 16)
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 36)
+        .padding(.bottom, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel.content")
@@ -194,16 +196,6 @@ struct GoFlyRoutePanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 16)
-            } else if controller.phase == .paused || controller.phase == .interrupted {
-                GoFlyResumePanel(
-                    title: controller.pausedPanelTitle,
-                    subtitle: controller.pausedPanelSubtitle,
-                    ctaTitle: goFlyString("route.resumeShort"),
-                    onResume: { _ = controller.resume() },
-                    isEnabled: controller.canResume,
-                    contentHeight: 88,
-                    identifier: "route.resumePanel"
-                )
             } else if controller.phase == .unknown {
                 HStack(spacing: 12) {
                     settingsButton
@@ -219,15 +211,17 @@ struct GoFlyRoutePanel: View {
                     speed: controller.draft.speed.kilometersPerHour,
                     canToggleRoundTrip: controller.canSetRoundTrip,
                     canToggleDirection: controller.canToggleHeading,
-                    canChangeSpeed: controller.canEdit,
-                    isPaused: controller.phase == .paused,
-                    canPlayback: controller.phase == .paused ? controller.canResume : controller.canPause,
+                    canChangeSpeed: controller.canSetSpeed,
+                    isPaused: [.paused, .interrupted].contains(controller.phase),
+                    isInterrupted: controller.phase == .interrupted,
+                    canPlayback: controller.phase == .interrupted ? true : (controller.phase == .paused ? controller.canResume : controller.canPause),
                     canEnd: controller.canCancel,
                     onToggleRoundTrip: { _ = controller.setRoundTripEnabled(!controller.roundTripEnabled) },
                     onToggleDirection: { _ = controller.toggleHeading() },
                     onSpeedTap: { showingDetails = true },
                     onPlayback: {
-                        if controller.phase == .paused { _ = controller.resume() } else { _ = controller.pause() }
+                        if controller.phase == .interrupted { onRetryInterrupted() }
+                        else if controller.phase == .paused { _ = controller.resume() } else { _ = controller.pause() }
                     },
                     onEnd: onRequestEnd
                 )
@@ -315,10 +309,10 @@ struct GoFlyRoutePanel: View {
     }
 
     /// Rows are 60 pt; the list scrolls once the panel reaches its 414 pt maximum.
-    private static let maxPanelContent: CGFloat = 404
+    private static let maxPanelContent: CGFloat = 388
     private static let rowHeight: CGFloat = 60
     /// Everything in the editing panel except the list: header, gaps, action row, Start row and bottom inset.
-    private static let panelChrome: CGFloat = 208
+    private static let panelChrome: CGFloat = 192
 
     private var listHeight: CGFloat {
         // D2: the sheet tops out at 416 pt above the tab bar (404 pt under the 12 pt grabber); only the list scrolls.
@@ -354,7 +348,7 @@ struct GoFlyRoutePanel: View {
 
     private var routeActionRow: some View {
         HStack(spacing: 16) {
-            Button { _ = controller.openNewPicker() } label: {
+            Button { _ = controller.addEmptyWaypoint() } label: {
                 Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
                     .font(GoFlyFont.subheadlineEmphasis)
                     .frame(minHeight: 40, alignment: .leading)

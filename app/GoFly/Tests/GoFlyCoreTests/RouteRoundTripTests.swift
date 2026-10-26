@@ -34,6 +34,30 @@ struct RouteRoundTripTests {
         await wait { controller.phase == .editing }
     }
 
+    @Test func runningRouteTakesANewSpeedFromItsNextStep() async throws {
+        let device = RouteControlledDevice(), clock = RouteTestClock()
+        let service = ServiceController(service: device)
+        let controller = RouteExecutionController(draft: draft(), planner: RoundTripPlanner(), commands: service, search: RoundTripSearch(), clock: clock,
+            cadence: .milliseconds(500))
+        try await runToTwoAcknowledgedSteps(controller, device, clock, roundTrip: false)
+        let executionID = try #require(controller.intent?.id)
+        let before = try #require(controller.progress?.committedDistanceMeters)
+        let faster = try #require(RouteSpeed(kilometersPerHour: 50))
+        #expect(controller.canSetSpeed)
+        #expect(controller.setSpeed(faster))
+        #expect(controller.intent?.id == executionID)
+        #expect(controller.intent?.speed == faster)
+        #expect(controller.draft.speed == faster)
+        clock.advance(by: .milliseconds(500))
+        await wait { await device.waiting }
+        await device.finish(.acknowledged)
+        let route = try #require(controller.intent?.route)
+        let expected = min(route.totalDistanceMeters, before + faster.metersPerSecond * 0.5)
+        await wait { controller.progress?.committedDistanceMeters == expected }
+        #expect(controller.cancel())
+        await wait { controller.phase == .editing }
+    }
+
     @Test func positionAxisStaysContinuousAcrossAWaypointInBothDirections() async throws {
         let device = RouteControlledDevice(), clock = RouteTestClock()
         let service = ServiceController(service: device)

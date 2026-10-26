@@ -9,24 +9,23 @@ struct GoFlySpeedSheet: View {
 
     private let presets: [Int] = RouteSpeed.presets.map(\.kilometersPerHour)
 
-    private func presetIcon(for preset: Int) -> String {
+    /// Flat colorful vector icons on a transparent background (orange, navy, mustard); they carry their own colors, so no light/dark variants are needed.
+    private func presetIcon(for preset: Int) -> String? {
         switch preset {
-        case 5: return "🚶"
-        case 25: return "🚲"
-        case 50: return "🛵"
-        case 100: return "🚗"
-        default: return ""
+        case 5: return "SpeedPresetWalk"
+        case 25: return "SpeedPresetBicycle"
+        case 50: return "SpeedPresetScooter"
+        case 100: return "SpeedPresetCar"
+        default: return nil
         }
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Header
-            HStack {
-                Text(goFlyString("route.speedSetting"))
-                    .font(GoFlyFont.headline)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                Spacer()
+        VStack(spacing: 0) {
+            // Same sheet frame as the favorite place editor: header 12 pt from the top, 20 pt sides.
+            GoFlySheetHeader(title: goFlyString("route.speedSetting")) {
+                EmptyView()
+            } trailing: {
                 Button(action: onDismiss) {
                     Text(goFlyString("common.done"))
                         .font(GoFlyFont.bodyEmphasis)
@@ -38,9 +37,10 @@ struct GoFlySpeedSheet: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("route.speed.done")
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
 
-            Divider()
-
+            VStack(spacing: 16) {
             // Current Speed Readout in a single row
             HStack(alignment: .firstTextBaseline) {
                 Text(goFlyString("route.speedCurrent"))
@@ -70,14 +70,21 @@ struct GoFlySpeedSheet: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Text(presetIcon(for: preset))
+                            if let icon = presetIcon(for: preset) {
+                                Image(icon)
+                                    .renderingMode(.original)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                    .accessibilityHidden(true)
+                            }
                             Text("\(preset)")
                         }
                         .font(GoFlyFont.footnoteEmphasis)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 38)
+                        .frame(height: 40)
                         .background(isSelected ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
                         .overlay {
                             if !isSelected {
@@ -94,7 +101,7 @@ struct GoFlySpeedSheet: View {
             }
 
             // Slider with min/max labels below
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 Slider(
                     value: Binding(
                         get: { Double(speed.kilometersPerHour) },
@@ -122,6 +129,9 @@ struct GoFlySpeedSheet: View {
             }
             .padding(.top, 4)
 
+            }
+            .padding(20)
+
             Spacer(minLength: 0)
 
             // Bottom Confirm Button
@@ -130,14 +140,13 @@ struct GoFlySpeedSheet: View {
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .accessibilityIdentifier("route.speed.confirm")
+            .padding(.top, 40)
+            .padding(.horizontal, 20)
+            .padding(.bottom, -1) // the Home indicator sits 20 pt below the button
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(GoFlyStyle.cardSurface)
-        .presentationDetents([.height(412)])
+        .presentationDetents([.height(373)])
         .presentationDragIndicator(.visible)
-        .presentationBackground(GoFlyStyle.cardSurface)
+        .presentationBackground(GoFlyStyle.surface)
     }
 }

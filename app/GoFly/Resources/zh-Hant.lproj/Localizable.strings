@@ -10,6 +10,7 @@
 "map.startServiceHint" = "準備裝置服務，不會移動裝置位置。";
 "map.recenter" = "回到目前位置";
 "map.recenterHint" = "只移動地圖鏡頭，不改變裝置位置；手機定位為選用。";
+"map.fitRoute" = "縮放至整條路線";
 "service.title" = "裝置服務";
 "service.start" = "啟動";
 "service.stop" = "停止";
@@ -650,7 +651,6 @@
 "background.positionRetry" = "重試";
 "common.confirm" = "確認";
 "common.retry" = "重試";
-"search.chooseOnMap" = "從地圖上選擇";
 "route.clearRoute" = "清空路線";
 "route.resumeShort" = "繼續路線";
 "teleport.resumeShort" = "恢復瞬移";

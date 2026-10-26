@@ -5,6 +5,7 @@ import SwiftUI
 /// A location arrow is reserved for a position; a pin always represents a place.
 enum GoFlySymbols {
     static let recenter = "scope"
+    static let fitRoute = "arrow.up.left.and.arrow.down.right"
     static let location = "location"
     static let place = "mappin"
     static let sample = "circle.fill"

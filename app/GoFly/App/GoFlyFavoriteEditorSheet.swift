@@ -23,7 +23,7 @@ struct GoFlyFavoriteEditorSheet: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 16) {
                     if let failure = favorites.error {
                         GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
                     }
@@ -56,26 +56,29 @@ struct GoFlyFavoriteEditorSheet: View {
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(20)
-            }
-            .accessibilityIdentifier("favorites.editor.form")
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    if favorites.save(place: place, label: draft) {
-                        onDismiss()
+
+                    // C2 / D7: 40 pt between the place card and the Save button; the Home indicator sits 20 pt below it.
+                    Button {
+                        if favorites.save(place: place, label: draft) {
+                            onDismiss()
+                        }
+                    } label: {
+                        Text(goFlyString("favorites.save"))
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Text(goFlyString("favorites.save"))
+                    .buttonStyle(GoFlyActionStyle(primary: true))
+                    .disabled(!favorites.canMutate)
+                    .padding(.top, 24)
+                    .accessibilityIdentifier("favorites.editor.save")
                 }
-                .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(!favorites.canMutate)
-                .accessibilityIdentifier("favorites.editor.save")
                 .padding(.horizontal, 20)
-                .padding(.bottom, 12)
+                .padding(.top, 20)
+                .padding(.bottom, -1)
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier("favorites.editor.form")
         }
-        .presentationDetents([.height(360), .large])
+        .presentationDetents([.height(367), .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
         .onAppear {
@@ -90,15 +93,13 @@ struct GoFlyFavoriteEditorSheet: View {
     }
 
     private var header: some View {
-        HStack {
+        GoFlySheetHeader(title: goFlyString("favorites.editLabel")) {
             Button(goFlyString("favorites.cancel")) {
                 favorites.clearError()
                 onDismiss()
             }
             .accessibilityIdentifier("favorites.editor.cancel")
-            Spacer()
-            Text(goFlyString("favorites.editLabel")).font(GoFlyFont.headline)
-            Spacer()
+        } trailing: {
             if isFavorite {
                 Button {
                     if let onDelete {
@@ -112,14 +113,9 @@ struct GoFlyFavoriteEditorSheet: View {
                         .foregroundStyle(GoFlyTextColor.danger)
                 }
                 .accessibilityIdentifier("favorites.editor.delete")
-            } else {
-                Text(goFlyString("favorites.cancel"))
-                    .opacity(0)
-                    .accessibilityHidden(true)
             }
         }
         .buttonStyle(.plain)
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }

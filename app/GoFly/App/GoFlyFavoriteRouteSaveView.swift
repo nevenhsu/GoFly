@@ -79,15 +79,12 @@ struct GoFlySaveFavoriteRouteView: View {
                         .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
                         .accessibilityIdentifier("favoriteRoutes.save.source")
                     }
-                }
-                .padding(20)
-            }
-            .accessibilityIdentifier("favoriteRoutes.save.content")
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 0) {
+
+                    // D20 / D7: 40 pt between the route info card and the Save button; the Home indicator sits 20 pt below it.
                     if savedOmittingCurrent != nil {
                         Button(goFlyString("favoriteRoutes.done"), action: onDismiss)
                             .buttonStyle(GoFlyActionStyle(primary: true))
+                            .padding(.top, 24)
                             .accessibilityIdentifier("favoriteRoutes.save.done")
                     } else {
                         Button(action: save) {
@@ -96,16 +93,19 @@ struct GoFlySaveFavoriteRouteView: View {
                         }
                         .buttonStyle(GoFlyActionStyle(primary: true))
                         .disabled(saving || !controller.canEdit || !favorites.canMutate || eligibilityError != nil)
+                        .padding(.top, 24)
                         .accessibilityIdentifier("favoriteRoutes.save.confirm")
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .background(GoFlyStyle.cardSurface)
+                .padding(.top, 20)
+                .padding(.bottom, -1)
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier("favoriteRoutes.save.content")
         }
         .background(GoFlyStyle.cardSurface)
-        .presentationDetents([.height(380), .large])
+        .presentationDetents([.height(367), .large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(saving)
         .task { focused = true }
@@ -113,27 +113,16 @@ struct GoFlySaveFavoriteRouteView: View {
     }
 
     private var header: some View {
-        HStack {
+        GoFlySheetHeader(title: goFlyString(savedOmittingCurrent == nil ? "favoriteRoutes.add" : "favoriteRoutes.savedTitle")) {
             Button(goFlyString("favoriteRoutes.cancel")) {
                 favorites.clearError()
                 onDismiss()
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favoriteRoutes.save.cancel")
-
-            Spacer()
-
-            Text(goFlyString(savedOmittingCurrent == nil ? "favoriteRoutes.add" : "favoriteRoutes.savedTitle"))
-                .font(GoFlyFont.headline)
-
-            Spacer()
-
-            // Balance cancel button on the left
-            Text(goFlyString("favoriteRoutes.cancel"))
-                .opacity(0)
-                .accessibilityHidden(true)
+        } trailing: {
+            EmptyView()
         }
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }
@@ -268,33 +257,33 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(20)
-            }
-            .accessibilityIdentifier("favoriteRoutes.editor.content")
-            .safeAreaInset(edge: .bottom) {
-                Button {
-                    guard !saving, favorites.canMutate else { return }
-                    let capturedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : label
-                    saving = true
-                    saveTask = Task {
-                        defer { saving = false }
-                        if await favorites.updateLabel(record.id, label: capturedLabel) { onDismiss() }
+
+                    Button {
+                        guard !saving, favorites.canMutate else { return }
+                        let capturedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : label
+                        saving = true
+                        saveTask = Task {
+                            defer { saving = false }
+                            if await favorites.updateLabel(record.id, label: capturedLabel) { onDismiss() }
+                        }
+                    } label: {
+                        Text(goFlyString("favoriteRoutes.save"))
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Text(goFlyString("favoriteRoutes.save"))
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(GoFlyActionStyle(primary: true))
+                    .disabled(saving || !favorites.canMutate || !favorites.records.contains(where: { $0.id == record.id }))
+                    .padding(.top, 24)
+                    .accessibilityIdentifier("favoriteRoutes.editor.save")
                 }
-                .buttonStyle(GoFlyActionStyle(primary: true))
-                .disabled(saving || !favorites.canMutate || !favorites.records.contains(where: { $0.id == record.id }))
-                .accessibilityIdentifier("favoriteRoutes.editor.save")
                 .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-                .background(GoFlyStyle.cardSurface)
+                .padding(.top, 20)
+                .padding(.bottom, -1)
             }
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier("favoriteRoutes.editor.content")
         }
         .background(GoFlyStyle.cardSurface)
-        .presentationDetents([.height(360), .large])
+        .presentationDetents([.height(367), .large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(saving)
         .task { focused = true }
@@ -302,21 +291,14 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     }
 
     private var header: some View {
-        HStack {
+        GoFlySheetHeader(title: goFlyString("favoriteRoutes.editLabel")) {
             Button(goFlyString("favoriteRoutes.cancel")) {
                 favorites.clearError()
                 onDismiss()
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favoriteRoutes.editor.cancel")
-
-            Spacer()
-
-            Text(goFlyString("favoriteRoutes.editLabel"))
-                .font(GoFlyFont.headline)
-
-            Spacer()
-
+        } trailing: {
             if let onDelete {
                 Button(role: .destructive, action: onDelete) {
                     Text(goFlyString("favoriteRoutes.deleteSingle"))
@@ -325,13 +307,8 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                 .buttonStyle(.plain)
                 .disabled(saving || !favorites.canMutate)
                 .accessibilityIdentifier("favoriteRoutes.editor.delete")
-            } else {
-                Text(goFlyString("favoriteRoutes.cancel"))
-                    .opacity(0)
-                    .accessibilityHidden(true)
             }
         }
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }

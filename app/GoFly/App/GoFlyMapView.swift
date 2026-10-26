@@ -220,9 +220,13 @@ struct GoFlyMapView: View {
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
     @State private var serviceNoticeDismissed = false
-    @State private var selectedWanderPlace: MapPlace? = nil
     @State private var recoveryNoticeDismissed = false
     @State private var continuationNoticeDismissed = false
+    /// False while the scene is leaving or returning: the iOS app snapshot and
+    /// the first frames back must not show a paused-state toast that the
+    /// returning scene is about to resolve.
+    @State private var sceneSettled = true
+    @State private var sceneSettleTask: Task<Void, Never>?
     @State private var joystickErrorDismissed = false
     @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
@@ -238,6 +242,7 @@ struct GoFlyMapView: View {
     @State private var activeWanderPlanningCheckpoint: WanderPlanningCheckpoint?
     @State private var interruptedWanderPlanningCheckpoint: WanderPlanningCheckpoint?
     @State private var pendingWanderStart: PendingWanderStart?
+    @State private var selectedWanderPlace: MapPlace? = nil
     @State private var deferredWanderStart = WanderStartRequestGate()
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
@@ -372,12 +377,12 @@ struct GoFlyMapView: View {
                     }
                     submitJoystickOrigin(coordinate)
                 }
-                guard service.confirmedSimulatedLocation == nil,
-                      mode != .joystick || explicitlyRequested,
-                      mode == .teleport || route.plannedRoute == nil || explicitlyRequested,
-                      (route.picker == nil ? activeCandidate == nil : activeSearch.candidate == nil) || explicitlyRequested,
+                // GPS fixes move the camera only for Recenter or the first
+                // camera of the session; later fixes never pan or zoom it.
+                guard explicitlyRequested || (cameraIntent == nil && service.confirmedSimulatedLocation == nil),
                       let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else { return }
-                cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: explicitlyRequested ? 0 : nil)
+                cameraIntent = GoFlyCameraIntent(coordinate: coordinate, headingDegrees: explicitlyRequested ? 0 : nil,
+                                                 resetsZoom: explicitlyRequested)
             }
             .onChange(of: route.picker?.id) { _, id in
                 if id != nil {
@@ -388,7 +393,9 @@ struct GoFlyMapView: View {
                 }
             }
             .onChange(of: route.plannedRoute) { _, planned in
-                if mode == .route, let planned { cameraIntent = GoFlyCameraIntent(route: planned) }
+                // Whenever the planned route changes while editing, the camera frames the whole route.
+                guard let planned else { return }
+                if mode == .route, route.canEdit { cameraIntent = GoFlyCameraIntent(route: planned) }
             }
             .onChange(of: mode) { _, mode in
                 if mode != .joystick {
@@ -408,11 +415,6 @@ struct GoFlyMapView: View {
                     if !recovery.isChecking { resumePendingWanderPlanning() }
                 }
                 dismissKeyboard()
-                if mode == .route, let planned = route.plannedRoute {
-                    cameraIntent = GoFlyCameraIntent(route: planned)
-                } else if mode == .teleport, let candidate = search.candidate {
-                    cameraIntent = GoFlyCameraIntent(coordinate: candidate.place.coordinate)
-                }
                 captureCheckpoint()
             }
             .onChange(of: scenePhase) { _, phase in
@@ -423,6 +425,16 @@ struct GoFlyMapView: View {
                     "service": .text(service.phase.rawValue),
                     "grant": .flag(continuation.hasRuntime)
                 ])
+                sceneSettleTask?.cancel()
+                if phase == .active {
+                    sceneSettleTask = Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1))
+                        guard !Task.isCancelled else { return }
+                        sceneSettled = true
+                    }
+                } else {
+                    sceneSettled = false
+                }
                 if phase == .active {
                     checkpointWindowStarted = false
                     finishCheckpointWindow(id: checkpointWindowID)
@@ -470,9 +482,12 @@ struct GoFlyMapView: View {
                 switch state {
                 case .acknowledged(let intent):
                     let shouldStartWanderAfterOriginACK = deferredWanderStart.consumeAcknowledgement(for: intent.id)
-                    snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), intent.candidate.place.title))
                     search.clearCandidate(ifMatching: intent.candidate.id)
-                    if search.candidate == nil {
+                    // Only a teleport the person confirmed moves the camera; a
+                    // joystick or wander origin is set without touching it.
+                    let automaticOrigin = (settingJoystickOrigin && joystickOriginIntentID == intent.id)
+                        || pendingWanderStart?.teleportIntentID == intent.id
+                    if search.candidate == nil, !automaticOrigin {
                         cameraIntent = GoFlyCameraIntent(coordinate: intent.candidate.place.coordinate)
                     }
                     dismissKeyboard()
@@ -568,19 +583,9 @@ struct GoFlyMapView: View {
                         _ = route.confirmPicker(id: picker.id)
                     },
                     onUseCurrentLocation: picker.allowsCurrent
-                        ? { _ = route.confirmPicker(id: picker.id, useCurrentLocation: true) } : nil,
-                    onChooseOnMap: {
-                        isMapPicking = true
-                        sheetDetent = .collapsed
-                        if let candidate = picker.candidates.candidate {
-                            activeSearch.select(candidate.place)
-                        } else if let firstResult = picker.candidates.results.first {
-                            activeSearch.select(firstResult)
-                        } else if let coordinate = service.positionMarker?.coordinate {
-                            let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
-                            activeSearch.select(place)
-                        }
-                    }
+                        ? {
+                                _ = route.confirmPicker(id: picker.id, useCurrentLocation: true)
+                        } : nil
                 )
             } else {
                 GoFlySearchPanel(
@@ -599,8 +604,9 @@ struct GoFlyMapView: View {
                 onSelect: { place in
                     activeSearch.select(place)
                     searchFavorites = false
-                    if let picker = route.picker { _ = route.confirmPicker(id: picker.id) }
-                    else { selectSearchPlace(place) }
+                    if let picker = route.picker {
+                        _ = route.confirmPicker(id: picker.id)
+                    } else { selectSearchPlace(place) }
                 }, onSearch: { searchFavorites = false }, onDismiss: { searchFavorites = false })
         }
     }
@@ -678,6 +684,12 @@ struct GoFlyMapView: View {
             let top = activeCandidate != nil && teleportCardFrame.height > 0
                 ? teleportCardFrame.minY : panelFrame.minY
             return max(0, geometry.size.height - top) + 6
+        }
+        if mode == .route, route.canEdit, route.picker == nil, activeCandidate == nil, showsBottomBar {
+            // Route editing: the clear / remove snackbar covers the Start row,
+            // which sits 36 pt above the tab bar.
+            let startCenter = bottomBarHeight - geometry.safeAreaInsets.bottom + 36 + GoFlyStyle.primaryButtonHeight / 2
+            return max(0, startCenter - 28)
         }
         if activeCandidate != nil || wanderCardPlace != nil {
             let cardBottom = geometry.safeAreaInsets.bottom + 12
@@ -962,6 +974,11 @@ struct GoFlyMapView: View {
         return false
     }
 
+    /// The person pressed Pause: the resume panel already says so, no toast.
+    private var isUserPausedRoute: Bool {
+        mode == .route && route.phase == .paused && route.suspensionReason == nil
+    }
+
     private var currentCollapsedHeight: CGFloat {
         // Minimum heights on the 4 pt grid: teleport 120 (B1), route 76 (D3), joystick 76 (E1.a).
         if isWanderRunning { return 120 }
@@ -1004,35 +1021,25 @@ struct GoFlyMapView: View {
             } else if showsOperationPanel {
                 operationPanel(in: geometry)
             } else if mode == .route || !route.canEdit {
-                if isResumeState && (route.phase == .paused || route.phase == .interrupted) {
-                    GoFlyResumePanel(
-                        title: route.pausedPanelTitle,
-                        subtitle: route.pausedPanelSubtitle,
-                        ctaTitle: goFlyString("route.resumeShort"),
-                        onResume: { _ = route.resume() },
-                        isEnabled: route.canResume,
-                        contentHeight: isExecutionMode ? 88 : 64,
-                        identifier: "route.resumePanel"
-                    )
-                } else {
-                    GoFlyRoutePanel(
-                        controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                        onEditNode: { _ = route.selectNode(id: $0) },
-                        onRequestEnd: { confirmingEndRoute = true },
-                        onNodeRemoved: {
-                            snackbar = GoFlySnackbarMessage(
-                                text: goFlyString("route.removed"),
-                                actionTitle: goFlyString("common.undo"),
-                                action: { _ = route.undoRemoval() })
-                        },
-                        onSettings: { showingSettings = true },
-                        onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
-                        currentLocationAvailable: service.currentRouteOrigin != nil,
-                        currentRouteOrigin: { service.currentRouteOrigin },
-                        isNarrow: sheetDetent == .collapsed || isMapPicking || (mode == .route && activeCandidate != nil),
-                        onExpand: { sheetDetent = .expanded }
-                    )
-                }
+                // D10 / D10.a: a paused or interrupted route keeps the running panel; only the button turns into 繼續.
+                GoFlyRoutePanel(
+                    controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                    onEditNode: { _ = route.selectNode(id: $0) },
+                    onRequestEnd: { confirmingEndRoute = true },
+                    onNodeRemoved: {
+                        snackbar = GoFlySnackbarMessage(
+                            text: goFlyString("route.removed"),
+                            actionTitle: goFlyString("common.undo"),
+                            action: { _ = route.undoRemoval() })
+                    },
+                    onSettings: { showingSettings = true },
+                    onRetryInterrupted: { retryInterruptedRoute() },
+                    onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
+                    currentLocationAvailable: service.currentRouteOrigin != nil,
+                    currentRouteOrigin: { service.currentRouteOrigin },
+                    isNarrow: sheetDetent == .collapsed || isMapPicking || (mode == .route && activeCandidate != nil),
+                    onExpand: { sheetDetent = .expanded }
+                )
             } else if isResumeState && mode == .teleport && (positionHold.phase == .paused || positionHold.phase == .completed) {
                 GoFlyResumePanel(
                     title: goFlyString(hasFreshRealGPS ? "sheet.realPosition" : "sheet.lastSimulatedPosition"),
@@ -1140,7 +1147,7 @@ struct GoFlyMapView: View {
         guard isWanderMap, joystick.canApplyWanderTarget else { return }
         dismissKeyboard()
         wanderRetryDestination = nil
-        replanWander(to: place)
+        replanWander(to: place, confirmedByUser: true)
     }
 
     /// D4 "確認": the Pin or Location Card fills the selected field and returns to D1.
@@ -1461,7 +1468,6 @@ struct GoFlyMapView: View {
         wanderPlanningID = nil
         activeWanderPlanningCheckpoint = nil
         interruptedWanderPlanningCheckpoint = nil
-        cameraIntent = GoFlyCameraIntent(route: planned)
         return true
     }
 
@@ -1523,7 +1529,6 @@ struct GoFlyMapView: View {
                     joystick.clearWanderError()
                     activeWanderPlanningCheckpoint = nil
                     interruptedWanderPlanningCheckpoint = nil
-                    cameraIntent = GoFlyCameraIntent(route: planned)
                     return
                 } catch is CancellationError { return }
                 catch { continue }
@@ -1595,7 +1600,7 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func replanWander(to destination: MapPlace?) {
+    private func replanWander(to destination: MapPlace?, confirmedByUser: Bool = false) {
         let isCompletedSegment = joystick.phase == .suspended && joystick.suspensionReason == .targetUnavailable
         if isCompletedSegment, destination != nil {
             wanderReplanningTask?.cancel()
@@ -1666,9 +1671,13 @@ struct GoFlyMapView: View {
                 wanderRetryDestination = nil
                 selectedWanderPlace = nil
                 wanderSearch.resetSelection()
-                // The arrow sits at 1/3 height so the joystick panel cannot cover it.
-                cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start,
-                                                 verticalFraction: 1.0 / 3)
+                // A destination the person confirmed is a set location; a
+                // random or automatic segment leaves the camera alone. The
+                // arrow sits at 1/3 height so the joystick panel cannot cover it.
+                if confirmedByUser {
+                    cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start,
+                                                     verticalFraction: 1.0 / 3)
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -1814,13 +1823,25 @@ struct GoFlyMapView: View {
     /// The only map-side control: Figma `Recenter`. It also resets the map to north,
     /// so there is no separate compass or follow-heading button.
     private func mapControls(bottomInset: CGFloat) -> some View {
-        Button { recenter() } label: {
-            GoFlyRecenterIcon(size: 22)
+        VStack(spacing: 12) {
+            // Route mode only: frame the whole planned route (Figma has no variant yet).
+            if mode == .route, let planned = route.plannedRoute {
+                Button { cameraIntent = GoFlyCameraIntent(route: planned) } label: {
+                    Image(systemName: GoFlySymbols.fitRoute)
+                        .goFlyControlSymbol(size: 18, weight: .semibold)
+                }
+                .buttonStyle(GoFlyIconStyle(floating: true))
+                .accessibilityLabel(goFlyString("map.fitRoute"))
+                .accessibilityIdentifier("map.fitRoute")
+            }
+            Button { recenter() } label: {
+                GoFlyRecenterIcon(size: 22)
+            }
+            .buttonStyle(GoFlyIconStyle(floating: true))
+            .accessibilityLabel(goFlyString("map.recenter"))
+            .accessibilityHint(goFlyString("map.recenterHint"))
+            .accessibilityIdentifier("map.recenter")
         }
-        .buttonStyle(GoFlyIconStyle(floating: true))
-        .accessibilityLabel(goFlyString("map.recenter"))
-        .accessibilityHint(goFlyString("map.recenterHint"))
-        .accessibilityIdentifier("map.recenter")
         .padding(.trailing, 16)
         .padding(.bottom, max(0, sheetHeight + (showsBottomBar ? bottomBarHeight : 0) - bottomInset) + 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -1843,7 +1864,7 @@ struct GoFlyMapView: View {
         switch mode {
         case .teleport: return sheetDetent == .collapsed ? 120 : 300
         // Wander simulation has no tab bar, so its panel is content-sized plus the safe area (E2 / E2.a / E4).
-        case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 76 : 352)
+        case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 76 : 336)
         case .route: return nil
         }
     }
@@ -2075,7 +2096,7 @@ struct GoFlyMapView: View {
 
     private func recenter() {
         if let simulated = service.confirmedSimulatedLocation {
-            cameraIntent = GoFlyCameraIntent(coordinate: simulated, headingDegrees: 0)
+            cameraIntent = GoFlyCameraIntent(coordinate: simulated, headingDegrees: 0, resetsZoom: true)
         } else {
             pendingGPSRecenter = true
             location.requestRecenter()
@@ -2136,6 +2157,13 @@ struct GoFlyMapView: View {
         case .joystick:
             if joystick.wanderEnabled, joystick.canRetryWander { _ = joystick.retryWander() } else { reconnectDevice() }
         }
+    }
+
+    /// D10 重試: repairs the connection of the interrupted route; on success the route continues from where it stopped.
+    private func retryInterruptedRoute() {
+        guard route.phase == .interrupted else { return }
+        if recovery.canRetryAutomaticRepair || recovery.canCheck { recovery.checkConnection() }
+        else if recovery.canResetTunnel { _ = recovery.resetTunnel() }
     }
 
     /// Resets the tunnel when idle; during a task the recovery controller repairs
@@ -2261,7 +2289,8 @@ struct GoFlyMapView: View {
                 titleIdentifier: "recovery.notice",
                 isFloating: true
             )
-        } else if (continuation.noticeKey != nil && !continuationNoticeDismissed) || isResumeState {
+        } else if sceneSettled,
+                  !isUserPausedRoute, (continuation.noticeKey != nil && !continuationNoticeDismissed) || isResumeState {
             let routePaused = mode == .route && (route.phase == .paused || route.phase == .interrupted)
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
             let wanderPaused = mode == .joystick && joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase)
@@ -2279,14 +2308,14 @@ struct GoFlyMapView: View {
                 message: message,
                 actionTitle: goFlyString("common.retry"),
                 onAction: {
-                    if routePaused { _ = route.resume() }
+                    if routePaused { if route.phase == .interrupted { retryInterruptedRoute() } else { _ = route.resume() } }
                     else if holdPaused { _ = positionHold.retry() }
                     else if wanderPaused { _ = joystick.resume() }
                     else { showingSettings = true }
                 },
                 onDismiss: { continuationNoticeDismissed = true },
                 identifier: "map.continuationNotice",
-                actionEnabled: routePaused ? route.canResume : (holdPaused ? positionHold.canRetry : true),
+                actionEnabled: routePaused ? (route.phase == .interrupted || route.canResume) : (holdPaused ? positionHold.canRetry : true),
                 isFloating: true
             )
         }

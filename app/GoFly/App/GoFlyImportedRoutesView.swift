@@ -111,7 +111,7 @@ struct GoFlyImportedRoutesView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        GoFlySheetHeader(title: goFlyString("imports.title")) {
             Button { dismiss() } label: {
                 Label(goFlyString("common.back"), systemImage: "chevron.backward")
                     .labelStyle(.titleAndIcon)
@@ -119,18 +119,9 @@ struct GoFlyImportedRoutesView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("imports.back")
-            Spacer(minLength: 0)
-            Text(goFlyString("imports.title"))
-                .font(GoFlyFont.headline)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
-            Label(goFlyString("common.back"), systemImage: "chevron.backward")
-                .labelStyle(.titleAndIcon)
-                .frame(minHeight: 44)
-                .opacity(0)
-                .accessibilityHidden(true)
+        } trailing: {
+            EmptyView()
         }
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }

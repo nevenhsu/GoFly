@@ -24,6 +24,7 @@ struct GoFlyFavoritesView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .goFlyDismissesKeyboardOnTap()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     failureNotice
@@ -39,7 +40,10 @@ struct GoFlyFavoritesView: View {
                     }
                 }
                 .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, minHeight: 0, alignment: .top)
             }
+            .scrollDismissesKeyboard(.immediately)
+            .goFlyDismissesKeyboardOnTap()
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 GoFlyFavoritesBottomBar(
                     placeholder: goFlyString("favorites.searchSaved"), query: $query,
@@ -61,7 +65,9 @@ struct GoFlyFavoritesView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        GoFlySheetHeader(title: selecting
+                         ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
+                         : goFlyString("favorites.title")) {
             Button {
                 if selecting { selecting = false; selected.removeAll() }
                 else { onDismiss() }
@@ -78,13 +84,7 @@ struct GoFlyFavoritesView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favorites.dismiss")
-            Spacer(minLength: 0)
-            Text(selecting
-                 ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
-                 : goFlyString("favorites.title"))
-                .font(GoFlyFont.headline)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
+        } trailing: {
             if selecting {
                 Button {
                     let keys = Set(visible.map(\.key))
@@ -114,7 +114,6 @@ struct GoFlyFavoritesView: View {
                 .accessibilityIdentifier("favorites.select")
             }
         }
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }

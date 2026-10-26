@@ -240,7 +240,12 @@ struct GoFlyRouteNodeList: View {
         switch value {
         case .current: goFlyString("route.currentLocation")
         case .place(let place): place.title
-        case .empty: goFlyString(role == .start ? "route.chooseOrigin" : "route.chooseDestination")
+        case .empty:
+            switch role {
+            case .start: goFlyString("route.chooseOrigin")
+            case .destination: goFlyString("route.chooseDestination")
+            case .waypoint(let number): goFlyLocalizedFormat(goFlyString("route.chooseWaypoint"), number)
+            }
         }
     }
 

@@ -238,17 +238,17 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         let candidates = CandidateController(search: search)
         if case .place(let place) = node.value { candidates.select(place) }
         picker = RoutePickerSession(id: UUID(), nodeID: nodeID, candidates: candidates,
-            allowsCurrent: allowsCurrent(at: nodeID, isNew: false), initialValue: node.value,
-            isNew: false, role: draft.role(of: nodeID)!)
+            allowsCurrent: allowsCurrent, role: draft.role(of: nodeID)!)
         return true
     }
-    @discardableResult public func openNewPicker() -> Bool {
-        guard canAddNode else { return false }
-        invalidateFavoriteLoadAdmission()
+    /// 新增地點: an empty row goes in before the destination and becomes the selected field.
+    /// It opens no picker; the person fills it from the search bar, the map or a Pin.
+    @discardableResult public func addEmptyWaypoint() -> Bool {
+        guard canAddNode, picker == nil else { return false }
         let nodeID = RouteNodeID()
-        picker = RoutePickerSession(id: UUID(), nodeID: nodeID, candidates: CandidateController(search: search),
-            allowsCurrent: allowsCurrent(at: nodeID, isNew: true), initialValue: nil,
-            isNew: true, role: newNodeRole)
+        guard let changed = draft.inserting(nodeID: nodeID, value: .empty) else { return false }
+        applyDraft(changed)
+        selection = nodeID
         return true
     }
     @discardableResult public func clearPickerPlace(id: UUID) -> Bool {
@@ -261,7 +261,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     @discardableResult public func stagePickerCurrent(id: UUID) -> Bool {
         guard canEdit, let session = picker, session.id == id,
-              allowsCurrent(at: session.nodeID, isNew: session.isNew) else { return false }
+              allowsCurrent else { return false }
         invalidateFavoriteLoadAdmission()
         session.candidates.cancelPendingLookups()
         return true
@@ -302,23 +302,30 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     }
     @discardableResult public func confirmPicker(id: UUID, useCurrentLocation: Bool = false) -> Bool {
         guard canEdit, draft.isManual, let session = picker, session.id == id else { return false }
-        guard session.isNew || draft.nodes.contains(where: { $0.id == session.nodeID }) else { return false }
+        guard draft.nodes.contains(where: { $0.id == session.nodeID }) else { return false }
         if !useCurrentLocation, session.clearedPlace {
             invalidateFavoriteLoadAdmission()
-            if !session.isNew, !removeNode(id: session.nodeID) { return false }
+            if !removeNode(id: session.nodeID) { return false }
             picker = nil
             return true
         }
         let value: RouteNodeValue
         if useCurrentLocation {
-            guard allowsCurrent(at: session.nodeID, isNew: session.isNew) else { return false }
+            guard allowsCurrent else { return false }
             value = .current
         } else {
             guard session.candidates.canGo, let place = session.candidates.candidate?.place else { return false }
             value = .place(place)
         }
-        let changed = session.isNew ? draft.inserting(nodeID: session.nodeID, value: value) : draft.replacing(nodeID: session.nodeID, value: value)
-        guard let changed else { return false }
+        // Only one row can be the current location: choosing it again moves it here.
+        var base = draft
+        if value == .current {
+            for other in draft.nodes where other.id != session.nodeID && other.value == .current {
+                guard let cleared = base.clearing(nodeID: other.id) ?? base.removing(nodeID: other.id) else { return false }
+                base = cleared
+            }
+        }
+        guard let changed = base.replacing(nodeID: session.nodeID, value: value) else { return false }
         applyDraft(changed)
         picker = nil
         return true
@@ -328,15 +335,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         invalidateFavoriteLoadAdmission()
         picker = nil
     }
-    private var newNodeRole: RouteNodeRole {
-        if draft.nodes.isEmpty { return .start }
-        return draft.nodes.count == 1 ? .destination : .waypoint(draft.nodes.count - 1)
-    }
-    private func allowsCurrent(at id: RouteNodeID, isNew: Bool) -> Bool {
-        guard draft.isManual else { return false }
-        let first = isNew ? draft.nodes.isEmpty : draft.start?.id == id
-        return first && !draft.nodes.contains { $0.id != id && $0.value == .current }
-    }
+    private var allowsCurrent: Bool { draft.isManual }  // D5: offered for every field, whichever row is selected.
     public func setLoadedFavoriteRecordID(_ id: UUID?) {
         loadedFavoriteRecordID = id
     }
@@ -347,10 +346,9 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         draft = changed; plannedRoute = nil; completion = nil; error = nil
         guard draft.isManual else { picker = nil; return }
         if var session = picker {
-            if session.isNew { session.role = newNodeRole }
-            else if let role = draft.role(of: session.nodeID) { session.role = role }
-            else { picker = nil; return }
-            session.allowsCurrent = allowsCurrent(at: session.nodeID, isNew: session.isNew)
+            guard let role = draft.role(of: session.nodeID) else { picker = nil; return }
+            session.role = role
+            session.allowsCurrent = allowsCurrent
             picker = session
         }
         schedulePreviewPlanning(for: changed)
@@ -414,10 +412,18 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             }
         }
     }
+    /// Editing changes the draft; a running or paused route also takes the
+    /// new speed from its next step, without restarting the execution.
+    public var canSetSpeed: Bool { canEdit || [.running, .paused].contains(phase) }
     @discardableResult public func setSpeed(_ speed: RouteSpeed) -> Bool {
-        guard canEdit else { return false }
-        invalidateFavoriteLoadAdmission()
+        guard canSetSpeed else { return false }
+        if canEdit { invalidateFavoriteLoadAdmission() }
         draft = draft.replacing(speed: speed)
+        if !canEdit, var current = intent {
+            current.speed = speed
+            intent = current
+            if let progress { publishProgress(distance: progress.committedDistanceMeters, intent: current) }
+        }
         return true
     }
     @discardableResult public func start() -> Bool {
@@ -509,16 +515,18 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         guard !source.nodes.isEmpty, source.start?.value != .empty else { throw RouteExecutionFailure.missingStart }
         guard source.nodes.count >= 2, source.destination?.value != .empty else { throw RouteExecutionFailure.missingDestination }
         let current = source.nodes.contains { $0.value == .current } ? commands.currentRouteOrigin : nil
-        guard let resolved = source.resolvingCurrent(to: current) else { throw RouteExecutionFailure.currentLocationUnavailable }
+        guard let resolvedCurrent = source.resolvingCurrent(to: current) else { throw RouteExecutionFailure.currentLocationUnavailable }
+        let resolved = resolvedCurrent.mergingConsecutiveDuplicates()
         let coordinates = resolved.nodes.compactMap { node -> GeoCoordinate? in
             if case .place(let place) = node.value { return place.coordinate }; return nil
         }
-        guard zip(coordinates, coordinates.dropFirst()).allSatisfy({ $0.0 != $0.1 }) else { throw RouteExecutionFailure.invalidPath }
+        guard coordinates.count >= 2, zip(coordinates, coordinates.dropFirst()).allSatisfy({ $0.0 != $0.1 }) else { throw RouteExecutionFailure.invalidPath }
         return resolved
     }
     func suspendForConnectionRecovery() -> Bool {
         if isRecoveringConnection { return true }
-        guard phase == .running else { return false }
+        // An interrupted route is retried through the same repair as a running one.
+        guard phase == .running || phase == .interrupted else { return false }
         isRecoveringConnection = true
         revision &+= 1
         task?.cancel()
@@ -692,7 +700,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             guard let controlRevision = commands.routeControlRevision(executionID: intent.id, lease: intent.lease) else { return }
             let direction = heading == .forward ? 1.0 : -1.0
             let distance = min(intent.route.totalDistanceMeters, max(0,
-                (progress?.committedDistanceMeters ?? 0) + direction * intent.speed.metersPerSecond * cadenceSeconds))
+                (progress?.committedDistanceMeters ?? 0) + direction * liveSpeed(of: intent).metersPerSecond * cadenceSeconds))
             guard let coordinate = intent.route.coordinate(at: distance) else { phase = .interrupted; error = .invalidPath; return }
             let outcome = await commands.sendRoutePoint(executionID: intent.id, lease: intent.lease,
                 sequence: sequence, expectedControlRevision: controlRevision, coordinate: coordinate)
@@ -747,7 +755,12 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private func publishProgress(distance: Double, intent: RouteExecutionIntent) {
         let elapsed = accumulatedElapsed + (activeStartedAt.map { max(.zero, clock.now - $0) } ?? .zero)
         progress = RouteProgress(committedDistanceMeters: distance, totalDistanceMeters: intent.route.totalDistanceMeters,
-            activeElapsed: elapsed, estimatedRemaining: .seconds((heading == .forward ? intent.route.totalDistanceMeters - distance : distance) / intent.speed.metersPerSecond))
+            activeElapsed: elapsed, estimatedRemaining: .seconds((heading == .forward ? intent.route.totalDistanceMeters - distance : distance)
+                / liveSpeed(of: intent).metersPerSecond))
+    }
+    /// A running route's speed can change; loops hold the intent they started with.
+    private func liveSpeed(of intent: RouteExecutionIntent) -> RouteSpeed {
+        self.intent?.id == intent.id ? self.intent?.speed ?? intent.speed : intent.speed
     }
     private func freezeElapsed() {
         if let activeStartedAt { accumulatedElapsed += max(.zero, clock.now - activeStartedAt) }

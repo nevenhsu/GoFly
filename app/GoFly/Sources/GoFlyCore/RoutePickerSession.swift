@@ -6,8 +6,6 @@ public struct RoutePickerSession: Identifiable {
     public let nodeID: RouteNodeID
     public let candidates: CandidateController
     public internal(set) var allowsCurrent: Bool
-    public let initialValue: RouteNodeValue?
-    public let isNew: Bool
     public internal(set) var role: RouteNodeRole
     var clearRevision: UInt64?
     public var clearedPlace: Bool {

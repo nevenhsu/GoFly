@@ -32,6 +32,7 @@ struct GoFlyFavoriteRoutesView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .goFlyDismissesKeyboardOnTap()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     GoFlyFavoriteRouteFailureNotice(localErrorKey: loadFailureKey)
@@ -59,6 +60,8 @@ struct GoFlyFavoriteRoutesView: View {
                 }
                 .padding(.horizontal, 20)
             }
+            .scrollDismissesKeyboard(.immediately)
+            .goFlyDismissesKeyboardOnTap()
             .accessibilityIdentifier("favoriteRoutes.content")
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 GoFlyFavoritesBottomBar(
@@ -87,7 +90,9 @@ struct GoFlyFavoriteRoutesView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        GoFlySheetHeader(title: selecting
+                         ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
+                         : goFlyString("favoriteRoutes.title")) {
             Button {
                 if selecting { selecting = false; selected.removeAll() }
                 else {
@@ -107,17 +112,7 @@ struct GoFlyFavoriteRoutesView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favoriteRoutes.dismiss")
-
-            Spacer(minLength: 0)
-
-            Text(selecting
-                 ? goFlyLocalizedFormat(goFlyString("favorites.selectedCount"), selected.count)
-                 : goFlyString("favoriteRoutes.title"))
-                .font(GoFlyFont.headline)
-                .accessibilityAddTraits(.isHeader)
-
-            Spacer(minLength: 0)
-
+        } trailing: {
             if selecting {
                 Button {
                     let ids = Set(visible.map(\.id))
@@ -147,7 +142,6 @@ struct GoFlyFavoriteRoutesView: View {
                 .accessibilityIdentifier("favoriteRoutes.select")
             }
         }
-        .frame(minHeight: 44)
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }

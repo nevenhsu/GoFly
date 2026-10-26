@@ -5,19 +5,20 @@ import SwiftUI
 /// Design specification:
 /// - Forward: left arrow down lighter, right arrow up solid dark.
 /// - Reverse: right arrow up lighter, left arrow down solid dark.
-/// - Locked/disabled when round trip is off.
+/// - Locked when round trip is off: both arrows in the disabled text color,
+///   still visible (Figma D6).
 struct GoFlyVerticalArrowsIcon: View {
     let isReversed: Bool
     let isEnabled: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             Image(systemName: "arrow.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled.opacity(0.4) : (isReversed ? GoFlyTextColor.primary : GoFlyTextColor.secondary.opacity(0.4)))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled : (isReversed ? GoFlyTextColor.primary : GoFlyTextColor.disabled))
             Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled.opacity(0.4) : (isReversed ? GoFlyTextColor.secondary.opacity(0.4) : GoFlyTextColor.primary))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled : (isReversed ? GoFlyTextColor.disabled : GoFlyTextColor.primary))
         }
         .accessibilityHidden(true)
     }
@@ -75,11 +76,11 @@ struct GoFlyRouteControlRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Repeat button: repeat / repeat.slash
+            // Round trip: Figma D6 ⇄, primary when on, the disabled text color when off.
             Button(action: onToggleRoundTrip) {
-                Image(systemName: isRoundTrip ? "repeat" : "repeat.slash")
+                Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isRoundTrip ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
+                    .foregroundStyle(isRoundTrip ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.surface, in: Circle())
                     .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }

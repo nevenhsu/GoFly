@@ -75,9 +75,12 @@
 - 驗收：路線 tab 點 Pin 不出現「新增」；選中停靠點時確認只改該停靠點。
 - **狀態：已實作，待審查。** 已移除 `appendDestination`／`RouteDraft.appendingDestination`、`LocationCardPrimaryAction.add`、`common.add` 字串與未使用的 `useCandidateInRoute`；`map.route.addCard` 改為 `map.route.confirmCard`。
 
-### R7 D10 中斷恢復
-- Figma D10：頂部卡改為暫停圖示＋「已暫停 · 前往 …」；`StatusPill / 暫停`；C1 warn toast「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕；底部 76 pt 窄面板「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」＋黑色「繼續路線」；無 TabBar。
-- 驗收：淺深色對齊；「重試」與「繼續路線」呼叫同一 resume；toast 關閉不影響面板。
+### R7 D10 / D10.a 中斷與暫停恢復
+- 2026-10-25 / 2026-10-26 使用者確認與 Figma 拆分：
+  - **D10 · 路線中斷 / 恢復（系統中斷）**：只有系統異常暫停／中斷時（`suspensionReason` 非空或 `interrupted`）才顯示 C1 warn toast（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕）；底部沿用執行控制面板（進度列、控制列、結束＋「繼續」），不再換成 76 pt 窄面板。
+  - **D10.a · 路線中斷 / 恢復（使用者暫停）**：路線進行中由使用者主動按暫停時之畫面，無 warn toast；相對 D6 只換 StatusPill（暫停）、頂部卡文字與暫停圖示、主按鈕（play 圖示＋「繼續」），其餘面板不變。
+- Figma D10 / D10.a：頂部卡改為暫停圖示＋「已暫停 · 前往 …」；`StatusPill / 暫停`；底部 76 pt 窄面板「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」＋主按鈕「繼續」（搭配 17×17 pt 居中之 `play.fill` 圖示）；無 TabBar。
+- 驗收：淺深色（D10、D10.a、Dark D10、Dark D10.a）1:1 對齊；Dark D10 採用 `Dark · Toast / 系統訊息 / warn`，Dark D10.a 無 toast；「重試」與「繼續」呼叫同一 resume；toast 關閉不影響面板。Play icon 向量座標（4.96, 2.83）與 disabled 狀態（D1 等）外框描邊色彩與填色一致（淺色 `#8E8E93`、深色 `#98989F`）。
 - **狀態：已實作，待審查。** 頂部卡標題改「前往 X」／暫停時「已暫停 · 前往 X」（Pause 圖示原已有）；pill「暫停」（R6 已在執行模式顯示 pill）；warn toast 文案改 D10（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕，`route.resume`）；底部 76 pt 面板新增副標（`GoFlyResumePanel.subtitle`：「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」）＋「繼續路線」，無 TabBar。`GoFlyRoutePausedUITests` 以 gallery 驗證文案與 76 pt；實際暫停流程（含頂部卡、pill、關閉 toast 不影響面板）因模擬器無法執行路線，未做 UI 自動驗證。頂部卡的 5 km/h 以實際偏好值顯示（依「待決與 Figma 衝突」）。
 
 ### R8 回歸
@@ -132,3 +135,14 @@ C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 →
 - D1 說明文字仍寫「點欄位開 D5」、D9 說明寫「搜尋列下方」與「還原」、section 說明寫「D1 右上或下方星號開 D19」，皆與渲染畫面或已確認決定不符；以渲染畫面與決定為準，說明文字待更新。
 - D6／D6.a／D10 頂部卡寫「5 km/h」、Speed chip 為「9」，與 D7 預設 25 不一致；實作顯示實際偏好值。
 - `StatusPill / 連線中斷` 元件實際文字為「錯誤」；`Toast / warn` 元件預設按鈕「繼續」，D10 覆寫為「重試」。
+
+
+## 2026-10-26 路線 UI 更新（Figma 04 · iOS Redesign，待裝置驗證）
+- 搜尋 sheet：「使用目前位置」對起點、停靠點、終點皆顯示；目前位置只能有一列，選到新列時舊列被清空（起訖）或刪除（停靠點）。
+- 「新增地點」：在終點前插入空白停靠點並選取，不開搜尋 sheet（`addEmptyWaypoint`）。
+- 編輯中路線規劃結果變更時，地圖自動縮放平移以框住整條路線。
+- 新增最愛路線 sheet：儲存鈕緊接資訊卡下方 24 pt，不再固定於 sheet 底部。
+- D10／D10.a：暫停或中斷皆沿用執行面板；僅系統中斷顯示 warn toast，使用者暫停不顯示。
+- 中斷（interrupted）時主按鈕改為「重試」（enabled，retry 圖示）：走與 toast「重試」相同的連線修復（`retryInterruptedRoute`），成功後自中斷點恢復模擬；使用者暫停仍為「繼續」。
+- 規劃前自動合併連續重複地點（`mergingConsecutiveDuplicates`，保留第一個、不取代終點）；合併後不足兩點仍為 invalidPath。列表不變，只影響規劃與執行用的路線。
+- 路線模式地圖新增 `FitRoute` 按鈕（`map.fitRoute`，位於 Recenter 上方 12 pt，有規劃路線時顯示）。Figma 尚無此 variant，待設計補上；與「地圖只有一個 Recenter」的舊規範衝突，以此使用者指示為準。

@@ -21,7 +21,6 @@ struct GoFlySearchPanel: View {
     var onSelect: (MapPlace) -> Void = { _ in }
     var onUseCurrentLocation: (() -> Void)?
     var onClearPlace: (() -> Void)?
-    var onChooseOnMap: (() -> Void)?
     @EnvironmentObject private var favorites: FavoritePlacesStore
     @FocusState private var focused: Bool
 
@@ -128,7 +127,7 @@ struct GoFlySearchPanel: View {
             Button(action: onFavorites) {
                 Text(goFlyString("favorites.title"))
                     .font(GoFlyFont.subheadlineEmphasis)
-                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
             }
@@ -154,11 +153,6 @@ struct GoFlySearchPanel: View {
 
     @ViewBuilder
     private var emptyContent: some View {
-        if let onChooseOnMap {
-            actionRow(goFlyString("search.chooseOnMap"),
-                      symbol: GoFlySymbols.place, identifier: "search.chooseOnMap",
-                      action: onChooseOnMap)
-        }
         if let onUseCurrentLocation {
             actionRow(goFlyString("route.useCurrentLocation"),
                       symbol: GoFlySymbols.location, identifier: "route.picker.current",

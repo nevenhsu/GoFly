@@ -9,15 +9,19 @@ struct GoFlyCameraIntent: Equatable {
     var routeCoordinates: [GeoCoordinate]? = nil
     var ensureVisibleOnly = false
     var headingDegrees: Double? = nil
+    /// Return to the default distance (about 1 km across the visible map).
+    /// Otherwise a point intent only pans and keeps the person's zoom.
+    var resetsZoom = false
     /// Pan only, placing the coordinate at this fraction of the map height
     /// from the top (e.g. 1/3 keeps it clear of a tall bottom panel).
     var verticalFraction: CGFloat? = nil
 
     init(coordinate: GeoCoordinate, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil,
-         verticalFraction: CGFloat? = nil) {
+         resetsZoom: Bool = false, verticalFraction: CGFloat? = nil) {
         self.coordinate = coordinate
         self.ensureVisibleOnly = ensureVisibleOnly
         self.headingDegrees = headingDegrees
+        self.resetsZoom = resetsZoom
         self.verticalFraction = verticalFraction
     }
     init(route: PlannedRoute) {
@@ -412,18 +416,22 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 map.setVisibleMapRect(routeRect, edgePadding: routePadding, animated: false)
                 return
             }
-            let point = MKMapPoint(intent.coordinate.clLocationCoordinate)
-            let currentScale = map.visibleMapRect.width / map.bounds.width
-            // Only the display's Mercator zoom scale is bounded near the poles;
-            // the selected coordinate and device command remain unchanged.
-            let scaleLatitude = min(85, max(-85, intent.coordinate.latitude))
-            let initialScale = MKMapPointsPerMeterAtLatitude(scaleLatitude) * 1_000 / visible.width
-            let scale = hasFocused && currentScale.isFinite && currentScale > 0 ? currentScale : initialScale
-            let width = max(1, visible.width * scale)
-            let height = max(1, visible.height * scale)
-            let rect = MKMapRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+            if hasFocused && !intent.resetsZoom {
+                // Pan only: refitting a rect at the current scale lets MapKit
+                // round the zoom outwards a little on every intent.
+                map.setCenter(intent.coordinate.clLocationCoordinate, animated: false)
+            } else {
+                let point = MKMapPoint(intent.coordinate.clLocationCoordinate)
+                // Only the display's Mercator zoom scale is bounded near the poles;
+                // the selected coordinate and device command remain unchanged.
+                let scaleLatitude = min(85, max(-85, intent.coordinate.latitude))
+                let scale = MKMapPointsPerMeterAtLatitude(scaleLatitude) * 1_000 / visible.width
+                let width = max(1, visible.width * scale)
+                let height = max(1, visible.height * scale)
+                let rect = MKMapRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+                map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
+            }
             hasFocused = true
-            map.setVisibleMapRect(rect, edgePadding: padding, animated: false)
             correctFocusIfNeeded(on: map)
             if let heading = intent.headingDegrees {
                 let camera = map.camera
