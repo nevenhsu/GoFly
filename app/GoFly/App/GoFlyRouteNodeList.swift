@@ -207,7 +207,7 @@ struct GoFlyRouteNodeList: View {
         guard viewport.width > 0, viewport.height > 0 else { return false }
         // Keep the first and last preview slots reachable when the finger crosses the clipped
         // card edge. The preview order still determines the destination; distant drops cancel.
-        viewport.insetBy(dx: 0, dy: -max(16, dragHeight)).contains(point)
+        return viewport.insetBy(dx: 0, dy: -max(16, dragHeight)).contains(point)
     }
 
     private func scrollAtEdge() {
