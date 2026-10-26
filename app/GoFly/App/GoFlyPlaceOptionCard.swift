@@ -7,6 +7,8 @@ struct GoFlyFavoriteStar: View {
     var identifier: String
     /// The place sheet shows the Figma labeled pill; lists and pins keep the icon.
     var labelTitle: String? = nil
+    /// List rows draw the icon inside a filled circle (Figma B2 favorite row).
+    var circleDiameter: CGFloat? = nil
     @State private var showingEditor = false
 
     var body: some View {
@@ -23,6 +25,12 @@ struct GoFlyFavoriteStar: View {
                 .background(GoFlyStyle.secondarySurface, in: Capsule())
                 .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                 .contentShape(Capsule())
+            } else if let circleDiameter {
+                GoFlyStarIcon(size: 15, filled: favorites.isFavorite(place))
+                    .frame(width: circleDiameter, height: circleDiameter)
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             } else {
                 GoFlyStarIcon(size: 18, filled: favorites.isFavorite(place))
                     .frame(width: 44, height: 44)
@@ -33,7 +41,7 @@ struct GoFlyFavoriteStar: View {
         .foregroundStyle(favorites.canMutate ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
         .disabled(!favorites.canMutate)
         .accessibilityLabel(goFlyString(favorites.canMutate
-            ? (favorites.isFavorite(place) ? "favorites.remove" : "favorites.add") : "favorites.title"))
+            ? (favorites.isFavorite(place) ? "favorites.editLabel" : "favorites.add") : "favorites.title"))
         .accessibilityValue(goFlyString(favorites.canMutate
             ? (favorites.isFavorite(place) ? "favorites.saved" : "favorites.notSaved") : "favorites.unavailable"))
         .accessibilityIdentifier(identifier)

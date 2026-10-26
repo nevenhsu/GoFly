@@ -147,11 +147,17 @@ struct GoFlyFavoritesView: View {
                 .accessibilityLabel(goFlyString("favorites.select"))
                 .accessibilityIdentifier("favorites.checkbox.\(favorite.place.coordinate.displayText)")
             } else {
-                GoFlyStarIcon(size: 16, filled: true)
-                    .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
-                    .frame(width: 44, height: 44)
-                    .accessibilityHidden(true)
+                // Same editor as ⋯ (2026-10-26).
+                Button { editing = favorite } label: {
+                    GoFlyStarIcon(size: 16, filled: true)
+                        .frame(width: 36, height: 36)
+                        .background(GoFlyStyle.secondarySurface, in: Circle())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("favorites.editLabel"))
+                .accessibilityIdentifier("favorites.star.\(favorite.place.coordinate.displayText)")
             }
             Button {
                 if selecting { toggleSelection(favorite.key) }

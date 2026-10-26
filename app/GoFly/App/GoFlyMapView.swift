@@ -1113,7 +1113,6 @@ struct GoFlyMapView: View {
             VStack(spacing: 0) {
                 ForEach(favorites.favorites.prefix(2)) { favorite in
                     teleportPlaceRow(favorite.place, title: favorite.displayTitle,
-                                     symbol: GoFlySymbols.favoriteSelected,
                                      identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
                 }
             }
@@ -1139,43 +1138,42 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func teleportPlaceRow(_ place: MapPlace, title: String, symbol: String,
-                                  identifier: String) -> some View {
-        Button { selectSearchPlace(place) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(GoFlyFont.headline)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .lineLimit(1)
-                    Text(place.address ?? place.coordinate.displayText)
-                        .font(GoFlyFont.footnote)
+    /// The star opens the label editor (C2, no delete); the rest of the row selects the place.
+    private func teleportPlaceRow(_ place: MapPlace, title: String, identifier: String) -> some View {
+        HStack(spacing: 8) {
+            GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", circleDiameter: 36)
+                .padding(.leading, -4)
+            Button { selectSearchPlace(place) } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(GoFlyFont.headline)
+                            .foregroundStyle(GoFlyTextColor.primary)
+                            .lineLimit(1)
+                        Text(place.address ?? place.coordinate.displayText)
+                            .font(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: GoFlySymbols.disclosure)
+                        .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
                         .foregroundStyle(GoFlyTextColor.secondary)
-                        .lineLimit(1)
+                        .accessibilityHidden(true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: GoFlySymbols.disclosure)
-                    .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .accessibilityHidden(true)
+                .frame(minHeight: 64)
+                .contentShape(Rectangle())
             }
-            .frame(minHeight: 64)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(GoFlyStyle.subtleBorder)
-                    .frame(height: 0.5)
-                    .padding(.leading, 48)
-            }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(identifier)
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(identifier)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(GoFlyStyle.subtleBorder)
+                .frame(height: 0.5)
+                .padding(.leading, 48)
+        }
     }
 
     private func operationPanel(in geometry: GeometryProxy) -> some View {

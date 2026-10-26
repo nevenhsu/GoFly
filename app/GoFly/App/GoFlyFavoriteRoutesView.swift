@@ -159,12 +159,19 @@ struct GoFlyFavoriteRoutesView: View {
                 .accessibilityLabel(goFlyString("favorites.select"))
                 .accessibilityIdentifier("favoriteRoutes.checkbox.\(record.id.uuidString)")
             } else {
-                GoFlyStarIcon(size: 16, filled: true)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                    .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
-                    .frame(width: 44, height: 44)
-                    .accessibilityHidden(true)
+                // Same editor as ⋯ (2026-10-26).
+                Button { edit(record) } label: {
+                    GoFlyStarIcon(size: 16, filled: true)
+                        .foregroundStyle(GoFlyTextColor.primary)
+                        .frame(width: 36, height: 36)
+                        .background(GoFlyStyle.secondarySurface, in: Circle())
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!favorites.canMutate)
+                .accessibilityLabel(goFlyString("favoriteRoutes.editLabel"))
+                .accessibilityIdentifier("favoriteRoutes.star.\(record.id.uuidString)")
             }
 
             Button {
