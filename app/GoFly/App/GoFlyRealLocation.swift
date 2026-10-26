@@ -2,20 +2,23 @@ import Combine
 import CoreLocation
 import GoFlyCore
 
-/// Opt-in, one-shot GPS observation. Creating this object never requests permission.
+/// Opt-in, low-power real location. Fixes are one-shot requests at
+/// hundred-meter accuracy, refreshed by `RealLocationRefresher` only while
+/// they can be real. Creating this object never requests permission.
 @MainActor
-final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDelegate {
+final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDelegate, RealLocationFixRequesting {
     @Published private(set) var observation: RealLocationObservation?
     @Published private(set) var noticeKey: String?
 
     private let manager = CLLocationManager()
     private var awaitingPermission = false
     private var shownNoticeCauses: Set<String> = []
+    private lazy var refresher = RealLocationRefresher(source: self)
 
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         if CLLocationManager.locationServicesEnabled(),
            manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
             start()
@@ -29,7 +32,7 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
             if let loc = manager.location {
                 publish(loc)
             }
-            manager.startUpdatingLocation()
+            refresher.refreshNow()
         case .notDetermined, .denied, .restricted:
             break
         @unknown default:
@@ -50,12 +53,32 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
             if let loc = manager.location {
                 publish(loc)
             }
-            manager.startUpdatingLocation()
+            refresher.refreshNow()
         case .denied, .restricted:
             fail("location.permissionDenied")
         @unknown default:
             fail("location.noFix")
         }
+    }
+
+    /// The scene is active again: retry real GPS and keep it fresh.
+    func sceneDidBecomeActive() { refresher.sceneDidBecomeActive() }
+    func sceneDidBecomeInactive() { refresher.sceneDidBecomeInactive() }
+
+    /// A confirmed GPS clear: the next fix can be real again.
+    func refresh() {
+        guard isAuthorized else { return }
+        refresher.refreshNow()
+    }
+
+    func requestFix() {
+        guard isAuthorized else { return }
+        manager.requestLocation()
+    }
+
+    private var isAuthorized: Bool {
+        CLLocationManager.locationServicesEnabled()
+            && (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways)
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -75,6 +98,7 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.publish(location)
+            self.refresher.fixReceived(simulated: location.sourceInformation?.isSimulatedBySoftware == true)
         }
     }
 

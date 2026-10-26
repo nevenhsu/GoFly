@@ -299,6 +299,7 @@ struct GoFlyMapView: View {
                     }
                 }
                 if scenePhase == .active {
+                    location.sceneDidBecomeActive()
                     continuation.sceneDidBecomeActive()
                     movement.keepAlive.sceneDidBecomeActive()
                 }
@@ -387,11 +388,13 @@ struct GoFlyMapView: View {
                 }
                 if phase == .active {
                     checkpoints.sceneBecameActive()
+                    location.sceneDidBecomeActive()
                     continuation.sceneDidBecomeActive()
                     movement.keepAlive.sceneDidBecomeActive()
                     recovery.requestForegroundCheck()
                 } else {
                     wander.cancelUncommitted()
+                    location.sceneDidBecomeInactive()
                     continuation.releaseForInactiveScene()
                     movement.keepAlive.releaseForInactiveScene()
                     checkpoints.sceneLeftForeground(recovery.snapshot(mode: mode))
@@ -560,6 +563,10 @@ struct GoFlyMapView: View {
         }
         .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
         .onChange(of: joystick.error) { _, newError in notices.reopen(.joystickError, ifPresent: newError) }
+        .onChange(of: service.clearState) { _, state in
+            // Real GPS can be observed again once the simulated location is cleared.
+            if case .confirmed = state { location.refresh() }
+        }
         .onChange(of: route.draft) { _, _ in notices.clearFavoriteRouteFailure() }
         .onChange(of: route.error) { _, newError in notices.reopen(.routeError, ifPresent: newError) }
         .onChange(of: recovery.noticeKey) { _, newKey in notices.reopen(.recovery, ifPresent: newKey) }
