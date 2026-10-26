@@ -423,6 +423,7 @@ private struct PasteableSearchTextField: UIViewRepresentable {
         let pasteButton = UIView(frame: .zero)
         pasteButton.translatesAutoresizingMaskIntoConstraints = false
         addGoFlyPasteControl(to: pasteButton, target: textField,
+                             backgroundColor: UIColor(GoFlyStyle.fieldSurface),
                              accessibilityLabel: goFlyString("search.paste"),
                              accessibilityIdentifier: "search.paste")
         controls.addSubview(pasteButton)
@@ -534,12 +535,14 @@ private final class SearchTextFieldAccessoryView: UIView {
 struct GoFlyPasteControl: UIViewRepresentable {
     let accessibilityLabel: String
     let accessibilityIdentifier: String
+    var backgroundColor: UIColor = .secondarySystemGroupedBackground
     var symbolColor: UIColor = .secondaryLabel
     let onPaste: (String) -> Void
 
     func makeUIView(context: Context) -> PasteRecipient {
         let container = PasteRecipient(onPaste: onPaste)
-        addGoFlyPasteControl(to: container, target: container, symbolColor: symbolColor,
+        addGoFlyPasteControl(to: container, target: container, backgroundColor: backgroundColor,
+                             symbolColor: symbolColor,
                              accessibilityLabel: accessibilityLabel,
                              accessibilityIdentifier: accessibilityIdentifier)
         return container
@@ -585,6 +588,7 @@ private func trimmedPasteText(_ itemStrings: [NSAttributedString]) -> NSAttribut
 private func addGoFlyPasteControl(
     to host: UIView,
     target: any UIPasteConfigurationSupporting,
+    backgroundColor: UIColor,
     symbolColor: UIColor = UIColor(GoFlyGrayScale.pasteSymbol),
     accessibilityLabel: String,
     accessibilityIdentifier: String
@@ -593,17 +597,29 @@ private func addGoFlyPasteControl(
     configuration.displayMode = .iconOnly
     configuration.cornerStyle = .capsule
     configuration.baseForegroundColor = symbolColor
-    configuration.baseBackgroundColor = .clear
+    // A clear base color is drawn black by the system control; use the host's solid surface.
+    configuration.baseBackgroundColor = backgroundColor
     let pasteControl = UIPasteControl(configuration: configuration)
     pasteControl.target = target
     pasteControl.accessibilityLabel = accessibilityLabel
     pasteControl.accessibilityIdentifier = accessibilityIdentifier
-    pasteControl.layer.shadowOpacity = 0
     pasteControl.translatesAutoresizingMaskIntoConstraints = false
-    host.addSubview(pasteControl)
+    // The system capsule draws its own rim shadow; clip the host to the capsule so it is cut off.
+    let clip = UIView()
+    clip.translatesAutoresizingMaskIntoConstraints = false
+    clip.clipsToBounds = true
+    clip.layer.cornerRadius = 18
+    host.addSubview(clip)
+    clip.addSubview(pasteControl)
     NSLayoutConstraint.activate([
-        pasteControl.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-        pasteControl.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+        clip.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+        clip.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+        clip.widthAnchor.constraint(equalToConstant: 36),
+        clip.heightAnchor.constraint(equalToConstant: 36),
+        pasteControl.centerXAnchor.constraint(equalTo: clip.centerXAnchor),
+        pasteControl.centerYAnchor.constraint(equalTo: clip.centerYAnchor)
+    ])
+    NSLayoutConstraint.activate([
         pasteControl.widthAnchor.constraint(equalToConstant: 36),
         pasteControl.heightAnchor.constraint(equalToConstant: 36)
     ])

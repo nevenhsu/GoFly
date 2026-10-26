@@ -48,6 +48,7 @@ struct GoFlyMapSearchBar: View {
                 } else {
                     GoFlyPasteControl(accessibilityLabel: goFlyString("search.paste"),
                                       accessibilityIdentifier: "map.searchPaste",
+                                      backgroundColor: UIColor(GoFlyStyle.cardSurface),
                                       symbolColor: UIColor(GoFlyGrayScale.pasteSymbol),
                                       onPaste: onPaste)
                         .frame(width: 44, height: 44)
