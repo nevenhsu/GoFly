@@ -210,7 +210,6 @@ struct GoFlyFavoriteRoutesView: View {
                 .padding(.trailing, 4)
             }
         }
-        .background(favorites.selectedID == record.id ? GoFlyStyle.secondarySurface : .clear)
     }
 
     private func toggleSelection(_ id: UUID) {

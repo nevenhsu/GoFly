@@ -1,30 +1,61 @@
 import SwiftUI
 
-/// Vertical double arrow icon for direction toggle.
-///
-/// Design specification:
-/// - Forward: left arrow down lighter, right arrow up solid dark.
-/// - Reverse: right arrow up lighter, left arrow down solid dark.
-/// - Locked when round trip is off: both arrows in the disabled text color,
-///   still visible (Figma D6).
-struct GoFlyVerticalArrowsIcon: View {
-    let isReversed: Bool
-    let isEnabled: Bool
+/// Round trip icon (Figma `icon / repeat`, 20 pt grid): two opposing arrows,
+/// with a diagonal slash (`icon / repeat.slash`) when round trip is off.
+struct GoFlyRouteRepeatIcon: View {
+    let isOn: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: "arrow.down")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled : (isReversed ? GoFlyTextColor.primary : GoFlyTextColor.disabled))
-            Image(systemName: "arrow.up")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(!isEnabled ? GoFlyTextColor.disabled : (isReversed ? GoFlyTextColor.disabled : GoFlyTextColor.primary))
+        Canvas { context, _ in
+            let color = isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary
+            let stroke = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+            var path = Path()
+            path.move(to: CGPoint(x: 7.2, y: 5)); path.addLine(to: CGPoint(x: 17.5, y: 5))
+            path.move(to: CGPoint(x: 14.17, y: 1.67)); path.addLine(to: CGPoint(x: 17.5, y: 5))
+            path.addLine(to: CGPoint(x: 14.17, y: 8.33))
+            path.move(to: CGPoint(x: 12.8, y: 15)); path.addLine(to: CGPoint(x: 2.5, y: 15))
+            path.move(to: CGPoint(x: 5.83, y: 11.67)); path.addLine(to: CGPoint(x: 2.5, y: 15))
+            path.addLine(to: CGPoint(x: 5.83, y: 18.33))
+            context.stroke(path, with: .color(color), style: stroke)
+            if !isOn {
+                var slash = Path()
+                slash.move(to: CGPoint(x: 2.5, y: 2.5)); slash.addLine(to: CGPoint(x: 17.5, y: 17.5))
+                context.stroke(slash, with: .color(color), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+            }
         }
+        .frame(width: 20, height: 20)
         .accessibilityHidden(true)
     }
 }
 
-/// Compact speed chip button without "km/h" unit (width 68 pt).
+/// Direction icon (Figma `icon / direction.forward|reverse`, 20 pt grid): a
+/// down arrow on the left and an up arrow on the right; the active direction is dark.
+/// Forward: up arrow dark. Reverse: down arrow dark.
+struct GoFlyVerticalArrowsIcon: View {
+    let isReversed: Bool
+
+    var body: some View {
+        Canvas { context, _ in
+            let dark = GoFlyTextColor.primary
+            let light = Color(red: 199 / 255, green: 199 / 255, blue: 204 / 255)
+            let stroke = StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
+            var down = Path()
+            down.move(to: CGPoint(x: 5, y: 3)); down.addLine(to: CGPoint(x: 5, y: 17))
+            down.move(to: CGPoint(x: 2, y: 14)); down.addLine(to: CGPoint(x: 5, y: 17))
+            down.addLine(to: CGPoint(x: 8, y: 14))
+            var up = Path()
+            up.move(to: CGPoint(x: 15, y: 17)); up.addLine(to: CGPoint(x: 15, y: 3))
+            up.move(to: CGPoint(x: 12, y: 6)); up.addLine(to: CGPoint(x: 15, y: 3))
+            up.addLine(to: CGPoint(x: 18, y: 6))
+            context.stroke(down, with: .color(isReversed ? dark : light), style: stroke)
+            context.stroke(up, with: .color(isReversed ? light : dark), style: stroke)
+        }
+        .frame(width: 20, height: 20)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Compact speed chip button without "km/h" unit (min width 68 pt).
 struct GoFlySpeedChip: View {
     let speed: Int
     var action: () -> Void
@@ -49,7 +80,8 @@ struct GoFlySpeedChip: View {
                         .accessibilityHidden(true)
                 }
             }
-            .frame(width: 68, height: height)
+            .padding(.horizontal, 14)
+            .frame(minWidth: 68, minHeight: height, maxHeight: height)
             .background(GoFlyStyle.surface, in: Capsule())
             .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
             .goFlyShadow(.chip)
@@ -78,9 +110,7 @@ struct GoFlyRouteControlRow: View {
         HStack(spacing: 12) {
             // Round trip: Figma D6 ⇄, primary when on, the disabled text color when off.
             Button(action: onToggleRoundTrip) {
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isRoundTrip ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
+                GoFlyRouteRepeatIcon(isOn: isRoundTrip)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.surface, in: Circle())
                     .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
@@ -91,18 +121,20 @@ struct GoFlyRouteControlRow: View {
             .accessibilityLabel(goFlyString(isRoundTrip ? "route.roundTrip.on" : "route.roundTrip.off"))
             .accessibilityIdentifier("route.control.repeat")
 
-            // Direction button: vertical double arrows (active only when round trip enabled)
-            Button(action: onToggleDirection) {
-                GoFlyVerticalArrowsIcon(isReversed: isRoundTrip && isReversed, isEnabled: isRoundTrip && canToggleDirection)
-                    .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.surface, in: Circle())
-                    .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
-                    .contentShape(Circle())
+            // Direction button: only while round trip is on; single trip is always forward.
+            if isRoundTrip {
+                Button(action: onToggleDirection) {
+                    GoFlyVerticalArrowsIcon(isReversed: isReversed)
+                        .frame(width: 36, height: 36)
+                        .background(GoFlyStyle.surface, in: Circle())
+                        .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canToggleDirection)
+                .accessibilityLabel(goFlyString(isReversed ? "route.direction.reverse" : "route.direction.forward"))
+                .accessibilityIdentifier("route.control.direction")
             }
-            .buttonStyle(.plain)
-            .disabled(!isRoundTrip || !canToggleDirection)
-            .accessibilityLabel(goFlyString((isRoundTrip && isReversed) ? "route.direction.reverse" : "route.direction.forward"))
-            .accessibilityIdentifier("route.control.direction")
 
             Spacer(minLength: 0)
 

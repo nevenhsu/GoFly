@@ -15,7 +15,6 @@
 "service.start" = "Start";
 "service.stop" = "Stop";
 "service.reset" = "Reset";
-"service.resetTunnel" = "Reset";
 "service.stopped" = "Stopped";
 "service.stoppedGPSPending" = "Stopped · GPS unconfirmed";
 "service.preparing" = "Preparing service…";

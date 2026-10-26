@@ -24,7 +24,6 @@ struct ServiceControllerTests {
         #expect(controller.stop())
         #expect(!controller.start())
         #expect(!controller.restoreGPS())
-        #expect(!controller.resetTunnel())
         #expect(!controller.stop())
         #expect(controller.clearState == .pending)
         #expect(await device.operations == ["prepare"])
@@ -105,7 +104,6 @@ struct ServiceControllerTests {
         #expect(controller.nativeBusy)
         #expect(!controller.start())
         #expect(!controller.restoreGPS())
-        #expect(!controller.resetTunnel())
         #expect(controller.stop())
         await wait { clock.requests.count == 2 }
         clock.fireLatest()
@@ -133,21 +131,10 @@ struct ServiceControllerTests {
         #expect(controller.clearState == .unknown)
         #expect(controller.error == .tunnelUnavailable)
         #expect(controller.statusKey == "service.stoppedGPSPending")
-        #expect(controller.canStart && controller.canRestoreGPS && controller.canResetTunnel)
+        #expect(controller.canStart && controller.canRestoreGPS)
     }
 
-    @Test func resetDoesNotClearLocationOrPrepareService() async throws {
-        let device = TestDevice()
-        let controller = ServiceController(service: device)
-        #expect(controller.resetTunnel())
-        #expect(!controller.resetTunnel())
-        await settle(controller)
-        #expect(controller.phase == .stopped)
-        #expect(controller.clearState == .unknown)
-        #expect(await device.operations == ["reset"])
-    }
-
-    @Test(arguments: ["stop", "restore", "reset"])
+    @Test(arguments: ["stop", "restore"])
     func confirmedGPSMarkerSurvivesServiceRepairCommands(command: String) async throws {
         let now = Date(timeIntervalSince1970: 10_000)
         let controller = ServiceController(service: TestDevice(), now: { now })
@@ -160,17 +147,13 @@ struct ServiceControllerTests {
         controller.observeRealLocation(fix)
         #expect(controller.positionMarker?.coordinate == fix?.coordinate)
         #expect(controller.positionMarker?.freshness == .fresh)
-        switch command {
-        case "stop": #expect(controller.stop())
-        case "restore": #expect(controller.restoreGPS())
-        default: #expect(controller.resetTunnel())
-        }
+        if command == "stop" { #expect(controller.stop()) } else { #expect(controller.restoreGPS()) }
         #expect(controller.positionMarker?.coordinate == fix?.coordinate, "A service command must not remove the last confirmed map marker")
-        #expect(controller.positionMarker?.freshness == (command == "reset" ? .fresh : .waiting))
+        #expect(controller.positionMarker?.freshness == .waiting)
         await settle(controller)
         #expect(controller.positionMarker?.coordinate == fix?.coordinate)
-        #expect(controller.realLocation == (command == "reset" ? fix : nil))
-        #expect(controller.gpsStatusKey == (command == "reset" ? "gps.unknown" : "gps.clearedWaiting"))
+        #expect(controller.realLocation == nil)
+        #expect(controller.gpsStatusKey == "gps.clearedWaiting")
     }
 
     @Test func invalidGPSPreservesWaitingMarkerUntilNewValidObservation() async throws {
@@ -251,7 +234,6 @@ struct ServiceControllerTests {
         await wait { controller.phase == .repairRequired }
         #expect(!controller.stop())
         #expect(!controller.start())
-        #expect(!controller.resetTunnel())
         await device.finishClear()
         await settle(controller)
         #expect(await device.operations == ["clear"])
@@ -287,8 +269,6 @@ struct ServiceControllerTests {
         controller.observeRealLocation(RealLocationObservation(latitude: 25, longitude: 121,
             horizontalAccuracy: 5, observedAt: now))
         #expect(controller.gpsStatusKey == "gps.observed")
-        #expect(controller.resetTunnel())
-        await settle(controller)
         #expect(controller.clearState == .confirmed)
         #expect(controller.realLocation?.latitude == 25)
     }

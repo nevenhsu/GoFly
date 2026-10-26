@@ -15,7 +15,6 @@
 "service.start" = "啟動";
 "service.stop" = "停止";
 "service.reset" = "重置";
-"service.resetTunnel" = "重置 VPN 通道";
 "service.stopped" = "已停止";
 "service.stoppedGPSPending" = "已停止・GPS 待確認";
 "service.preparing" = "準備服務中…";

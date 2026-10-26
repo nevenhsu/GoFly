@@ -48,13 +48,6 @@ struct GoFlyRouteRunningControls: View {
                     .progressViewStyle(GoFlyProgressStyle())
                     .accessibilityLabel(title)
                     .accessibilityIdentifier("route.progress")
-                if isRoundTrip {
-                    HStack {
-                        Text(goFlyString("route.axis.origin")).font(GoFlyFont.caption).foregroundStyle(GoFlyTextColor.secondary)
-                        Spacer()
-                        Text(goFlyString("route.axis.destination")).font(GoFlyFont.caption).foregroundStyle(GoFlyTextColor.secondary)
-                    }
-                }
             }
 
             GoFlyRouteControlRow(

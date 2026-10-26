@@ -197,7 +197,6 @@ struct PointServiceControllerTests {
         #expect(!controller.teleport(to: candidate))
         #expect(controller.canStop)
         #expect(!controller.restoreGPS())
-        #expect(!controller.resetTunnel())
         #expect(controller.positionMarker?.freshness == .waiting)
         controller.observeRealLocation(RealLocationObservation(latitude: 26, longitude: 122, horizontalAccuracy: 5, observedAt: now))
         #expect(controller.positionMarker?.freshness == .fresh)

@@ -13,11 +13,14 @@ struct GoFlySaveFavoriteRouteView: View {
     @State private var localErrorKey: String?
     @State private var savedOmittingCurrent: FavoriteRouteRecord?
     @State private var saveTask: Task<Void, Never>?
+    @State private var headerHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { headerHeight = $0 }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if let saved = savedOmittingCurrent {
@@ -25,7 +28,7 @@ struct GoFlySaveFavoriteRouteView: View {
                                           identifier: "favoriteRoutes.save.omittedResult")
                         Text(goFlyFavoriteRouteEndpoints(saved)).font(GoFlyFont.body)
                     } else {
-                        GoFlyFavoriteRouteFailureNotice(localErrorKey: localErrorKey ?? eligibilityError)
+                        GoFlyFavoriteRouteFailureNotice(localErrorKey: localErrorKey)
 
                         if saving {
                             ProgressView(goFlyString("favoriteRoutes.saving"))
@@ -80,7 +83,7 @@ struct GoFlySaveFavoriteRouteView: View {
                         .accessibilityIdentifier("favoriteRoutes.save.source")
                     }
 
-                    // D20 / D7: 40 pt between the route info card and the Save button; the Home indicator sits 20 pt below it.
+                    // D20 / D7: 40 pt between the route info card and the Save button; the sheet ends 20 pt below it (height fits the content).
                     if savedOmittingCurrent != nil {
                         Button(goFlyString("favoriteRoutes.done"), action: onDismiss)
                             .buttonStyle(GoFlyActionStyle(primary: true))
@@ -99,13 +102,14 @@ struct GoFlySaveFavoriteRouteView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                .padding(.bottom, -1)
+                .padding(.bottom, 20)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favoriteRoutes.save.content")
         }
         .background(GoFlyStyle.cardSurface)
-        .presentationDetents([.height(367), .large])
+        .presentationDetents([.height(max(200, headerHeight + contentHeight)), .large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(saving)
         .task { focused = true }
@@ -128,8 +132,13 @@ struct GoFlySaveFavoriteRouteView: View {
     }
 
     private var eligibilityError: String? {
-        guard controller.draft.gpxSource == nil else { return nil }
-        let count = controller.draft.nodes.reduce(0) { count, node in
+        Self.eligibilityError(draft: controller.draft, currentLocationAvailable: currentLocationAvailable)
+    }
+
+    /// Fewer than two usable places cannot be saved; callers check this before opening the sheet.
+    static func eligibilityError(draft: RouteDraft, currentLocationAvailable: Bool?) -> String? {
+        guard draft.gpxSource == nil else { return nil }
+        let count = draft.nodes.reduce(0) { count, node in
             switch node.value {
             case .place: count + 1
             case .current: count + (currentLocationAvailable == true ? 1 : 0)

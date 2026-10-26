@@ -7,7 +7,6 @@ import Foundation
 public final class ConnectionRecoveryController: ObservableObject {
     @Published public private(set) var connectionState: VPNCheckState = .unknown
     @Published public private(set) var isChecking = false
-    @Published public private(set) var isResettingTunnel = false
     @Published public private(set) var checkpointRevision: UInt64 = 0
 
     private let service: ServiceController
@@ -36,11 +35,6 @@ public final class ConnectionRecoveryController: ObservableObject {
     private var recoveredNotice = false
     private var probeStartedFromFailure = false
     private var checkNoticeVisible = false
-    private var currentResetID: UUID?
-    private var resetConsentID: UUID?
-    private var physicalResetTaskID: UUID?
-    private var resetTask: Task<Void, Never>?
-    private var admittingOwnedReset = false
     private var revisionQueued = false
     private var subscriptions: [AnyCancellable] = []
 
@@ -63,9 +57,6 @@ public final class ConnectionRecoveryController: ObservableObject {
         self.lastObservedPhase = service.phase
 
         subscriptions = [
-            service.$tunnelResetState.sink { [weak self] state in
-                self?.receiveTunnelResetState(state)
-            },
             service.$phase.sink { [weak self] phase in
                 self?.receiveServicePhase(phase)
             },
@@ -93,7 +84,6 @@ public final class ConnectionRecoveryController: ObservableObject {
 
     deinit {
         checkTask?.cancel()
-        resetTask?.cancel()
         automaticRepairTask?.cancel()
     }
 
@@ -126,49 +116,6 @@ public final class ConnectionRecoveryController: ObservableObject {
         sceneActive && !isChecking && checkTask == nil && isManualProbeEligible
     }
 
-    public var canResetTunnel: Bool {
-        sceneActive && service.canResetTunnel && !isChecking &&
-            !isResettingTunnel && resetConsentID == nil && currentResetID == nil && resetTask == nil
-    }
-
-
-
-    @discardableResult
-    public func resetTunnel() -> Bool {
-        guard canResetTunnel else { return false }
-        diagnose("tunnel.reset.start", category: .tunnel, level: .notice,
-                 ["phase": .text(service.phase.rawValue), "busy": .flag(service.nativeBusy)])
-        let consentID = UUID()
-        let physicalID = UUID()
-        resetConsentID = consentID
-        physicalResetTaskID = physicalID
-        isResettingTunnel = true
-        invalidateProbeForReset()
-        let oldCheckTask = checkTask
-        resetTask = Task { @MainActor [weak self] in
-            if let oldCheckTask { await oldCheckTask.value }
-            guard let self else { return }
-            guard self.resetConsentID == consentID,
-                  !Task.isCancelled,
-                  self.sceneActive,
-                  self.service.canResetTunnel,
-                  self.currentResetID == nil else {
-                self.finishPhysicalResetTask(physicalID, consentID: consentID)
-                return
-            }
-            self.admittingOwnedReset = true
-            let accepted = self.service.resetTunnel()
-            self.admittingOwnedReset = false
-            guard accepted, self.currentResetID != nil else {
-                self.finishPhysicalResetTask(physicalID, consentID: consentID)
-                return
-            }
-            self.resetConsentID = nil
-            self.finishPhysicalResetTask(physicalID, consentID: consentID)
-        }
-        return true
-    }
-
     public func sceneDidBecomeActive() {
         guard !sceneActive else { return }
         sceneActive = true
@@ -189,7 +136,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     }
 
     public func releaseForInactiveScene(continuingLease: MovementTaskLease? = nil) {
-        retirePendingReset()
+        cancelAutomaticRepairTask()
         sceneActive = false
         foregroundCheckPending = false
         generation &+= 1
@@ -262,8 +209,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     /// Manual checks are allowed while stopped so an initial or cold session
     /// can explicitly establish connectivity. They never create movement.
     private var isManualProbeEligible: Bool {
-        guard !service.nativeBusy, resetConsentID == nil, currentResetID == nil,
-              resetTask == nil, !isResettingTunnel else { return false }
+        guard !service.nativeBusy else { return false }
         if service.phase == .ready { return true }
         return service.phase == .stopped || service.phase == .repairRequired
     }
@@ -272,8 +218,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     /// unavailable connection fence. A cold hold alone is display state, not
     /// evidence that a probe should run.
     private var isAutomaticProbeEligible: Bool {
-        guard !service.nativeBusy, resetConsentID == nil, currentResetID == nil,
-              resetTask == nil, !isResettingTunnel else { return false }
+        guard !service.nativeBusy else { return false }
         if service.phase == .ready { return true }
         guard service.phase == .stopped || service.phase == .repairRequired else { return false }
         return !service.movementConnectionAvailable
@@ -477,89 +422,13 @@ public final class ConnectionRecoveryController: ObservableObject {
         return true
     }
 
-    private func receiveTunnelResetState(_ state: TunnelResetState) {
-        switch state {
-        case .idle:
-            break
-        case .running(let id):
-            guard currentResetID != id else { return }
-            if !admittingOwnedReset { retirePendingReset() }
-            currentResetID = id
-            isResettingTunnel = true
-            generation &+= 1
-            checkTask?.cancel()
-            isChecking = false
-            connectionState = .unknown
-            recoveredNotice = false
-            checkNoticeVisible = false
-            if checkTask == nil {
-                route.recoveryProbeDidFinish()
-                joystick.recoveryProbeDidFinish()
-            }
-        case .succeeded(let id):
-            guard currentResetID == id else { return }
-            diagnose("tunnel.reset.end", category: .tunnel, level: .notice, ["result": .text("succeeded")])
-            currentResetID = nil
-            isResettingTunnel = false
-            finishConnectionRecovery(recovered: false)
-        case .failed(let id, let failure):
-            guard currentResetID == id else { return }
-            diagnose("tunnel.reset.end", category: .tunnel, level: .error,
-                     ["result": .text("failed"), "failure": .text(failure.rawValue)])
-            currentResetID = nil
-            isResettingTunnel = false
-            lastProbeFinishedAt = clock.now
-            recoveredNotice = false
-            checkNoticeVisible = false
-            switch failure {
-            case .operationCancelled:
-                connectionState = .unknown
-            case .operationTimedOut:
-                connectionState = .timedOut
-            default:
-                connectionState = .unavailable
-            }
-            if connectionState == .unknown {
-                service.setMovementConnectionAvailable(false)
-            } else {
-                service.setMovementConnectionAvailable(false)
-                route.connectionDidBecomeUnavailable()
-                joystick.connectionDidBecomeUnavailable()
-            }
-        }
-    }
-
     private func receiveServicePhase(_ phase: ServicePhase) {
         guard phase == .stopping || phase == .restoring else { return }
-        guard currentResetID == nil else { return }
-        retirePendingReset()
+        cancelAutomaticRepairTask()
     }
 
-    private func retirePendingReset() {
-        resetConsentID = nil
-        resetTask?.cancel()
+    private func cancelAutomaticRepairTask() {
         automaticRepairTask?.cancel()
-    }
-
-    private func finishPhysicalResetTask(_ physicalID: UUID, consentID: UUID) {
-        guard physicalResetTaskID == physicalID else { return }
-        physicalResetTaskID = nil
-        resetTask = nil
-        if resetConsentID == consentID { resetConsentID = nil }
-        if currentResetID == nil { isResettingTunnel = false }
-    }
-
-    private func invalidateProbeForReset() {
-        generation &+= 1
-        checkTask?.cancel()
-        isChecking = false
-        connectionState = .unknown
-        recoveredNotice = false
-        checkNoticeVisible = false
-        if checkTask == nil {
-            route.recoveryProbeDidFinish()
-            joystick.recoveryProbeDidFinish()
-        }
     }
 
     private func finishConnectionRecovery(recovered: Bool) {
@@ -575,7 +444,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     /// reopen movement admission.
     private func invalidateProbeForSafety() {
         foregroundCheckPending = false
-        retirePendingReset()
+        cancelAutomaticRepairTask()
         generation &+= 1
         checkTask?.cancel()
         isChecking = false
@@ -666,13 +535,6 @@ public final class ConnectionRecoveryController: ObservableObject {
 
         return nil
     }
-}
-
-public enum TunnelResetState: Equatable, Sendable {
-    case idle
-    case running(id: UUID)
-    case succeeded(id: UUID)
-    case failed(id: UUID, failure: DeviceServiceFailure)
 }
 
 private func diagnose(_ name: String, category: DiagnosticsCategory, level: DiagnosticsLevel = .debug,

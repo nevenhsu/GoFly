@@ -6,9 +6,11 @@ struct GoFlyRoutePanel: View {
     @ObservedObject var controller: RouteExecutionController
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
-    /// 結束 asks the owner to show the D6.a confirmation over the whole screen.
+    /// Ending asks the owner to cancel the active route and return to planning.
     var onRequestEnd: () -> Void = { }
     var onSettings: () -> Void = { }
+    /// A localization key for a floating error toast owned by the map screen.
+    var onNotice: (String) -> Void = { _ in }
     /// 重試 on an interrupted route: repair the connection, then the route continues.
     var onRetryInterrupted: () -> Void = { }
     var onFocusPoint: (GeoCoordinate) -> Void = { _ in }
@@ -137,7 +139,12 @@ struct GoFlyRoutePanel: View {
                     controller.setLoadedFavoriteRecordID(nil)
                 }
             } else {
-                showingSaveFavorite = true
+                if let key = GoFlySaveFavoriteRouteView.eligibilityError(
+                    draft: controller.draft, currentLocationAvailable: currentLocationAvailable) {
+                    onNotice(key)
+                } else {
+                    showingSaveFavorite = true
+                }
             }
         } label: {
             GoFlyStarIcon(size: 20, filled: isFavorite)

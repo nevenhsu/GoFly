@@ -220,6 +220,7 @@ struct GoFlyMapView: View {
     @State private var candidateHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
+    @State private var favoriteRouteNoticeKey: String?
     @State private var serviceNoticeDismissed = false
     @State private var recoveryNoticeDismissed = false
     @State private var continuationNoticeDismissed = false
@@ -232,7 +233,6 @@ struct GoFlyMapView: View {
     @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
     @State private var isMapPicking = false
-    @State private var confirmingEndRoute = false
     @State private var settingJoystickOrigin = false
     @State private var joystickOriginIntentID: UUID?
     @State private var wanderPlanningTask: Task<Void, Never>?
@@ -652,19 +652,7 @@ struct GoFlyMapView: View {
                 .zIndex(50)
             if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
             bottomChrome(in: geometry)
-            if confirmingEndRoute && route.canCancel {
-                GoFlyEndRouteDialog(
-                    onCancel: { confirmingEndRoute = false },
-                    onConfirm: {
-                        confirmingEndRoute = false
-                        _ = route.cancel()
-                    }
-                )
-                .zIndex(100)
-            }
         }
-        .animation(.easeOut(duration: 0.2), value: confirmingEndRoute)
-        .onChange(of: route.canCancel) { _, canCancel in if !canCancel { confirmingEndRoute = false } }
         .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
         .onChange(of: service.error) { _, newError in
             if newError != nil { serviceNoticeDismissed = false }
@@ -672,6 +660,7 @@ struct GoFlyMapView: View {
         .onChange(of: joystick.error) { _, newError in
             if newError != nil { joystickErrorDismissed = false }
         }
+        .onChange(of: route.draft) { _, _ in favoriteRouteNoticeKey = nil }
         .onChange(of: route.error) { _, newError in
             if newError != nil { routeErrorDismissed = false }
         }
@@ -1028,8 +1017,9 @@ struct GoFlyMapView: View {
                 GoFlyRoutePanel(
                     controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                     onEditNode: { _ = route.selectNode(id: $0) },
-                    onRequestEnd: { confirmingEndRoute = true },
+                    onRequestEnd: { _ = route.cancel() },
                     onSettings: { showingSettings = true },
+                    onNotice: { favoriteRouteNoticeKey = $0 },
                     onRetryInterrupted: { retryInterruptedRoute() },
                     onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
                     currentLocationAvailable: service.currentRouteOrigin != nil,
@@ -1667,13 +1657,10 @@ struct GoFlyMapView: View {
                 wanderRetryDestination = nil
                 selectedWanderPlace = nil
                 wanderSearch.resetSelection()
-                // A destination the person confirmed is a set location; a
-                // random or automatic segment leaves the camera alone. The
-                // arrow sits at 1/3 height so the joystick panel cannot cover it.
-                if confirmedByUser {
-                    cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start,
-                                                     verticalFraction: 1.0 / 3)
-                }
+                // Every wander segment puts the arrow at 1/3 of the screen height, so
+                // the joystick panel never covers it whether expanded or collapsed.
+                cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start,
+                                                 verticalFraction: 1.0 / 3)
             } catch is CancellationError {
                 return
             } catch {
@@ -1871,7 +1858,8 @@ struct GoFlyMapView: View {
 
     /// Route and wander simulation hide the tab bar; a paused wander keeps it for the resume row (E5).
     private var isWanderRunning: Bool {
-        isWanderMap && ![.paused, .suspended, .interrupted].contains(joystick.phase)
+        // Changing the place pauses the joystick while planning; keep the running layout (no tab bar).
+        isWanderMap && (isWanderReplanning || ![.paused, .suspended, .interrupted].contains(joystick.phase))
     }
 
     private func beginSearch() {
@@ -1895,7 +1883,7 @@ struct GoFlyMapView: View {
     }
 
     /// D6.a: while the end-route dialog is open the pill already reads 停止.
-    private var displayedPillStatus: GoFlySessionStatus { confirmingEndRoute ? .stopped : movement.status }
+    private var displayedPillStatus: GoFlySessionStatus { movement.status }
 
     private var pillText: String { goFlyString(displayedPillStatus.textKey) }
 
@@ -2159,13 +2147,12 @@ struct GoFlyMapView: View {
     private func retryInterruptedRoute() {
         guard route.phase == .interrupted else { return }
         if recovery.canRetryAutomaticRepair || recovery.canCheck { recovery.checkConnection() }
-        else if recovery.canResetTunnel { _ = recovery.resetTunnel() }
     }
 
-    /// Resets the tunnel when idle; during a task the recovery controller repairs
-    /// the connection and continues the original movement.
+    /// During a task the recovery controller repairs the connection and
+    /// continues the original movement.
     private func reconnectDevice() {
-        if recovery.canResetTunnel { _ = recovery.resetTunnel() } else { recovery.checkConnection() }
+        recovery.checkConnection()
     }
 
     @ViewBuilder
@@ -2179,6 +2166,14 @@ struct GoFlyMapView: View {
                 onAction: { network.recheck() },
                 onDismiss: { network.dismissNotice() },
                 identifier: "map.wifiError",
+                isFloating: true
+            )
+        } else if let key = favoriteRouteNoticeKey {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(key),
+                onDismiss: { favoriteRouteNoticeKey = nil },
+                identifier: "route.favoriteSaveError",
                 isFloating: true
             )
         } else if joystick.wanderError == .planningFailed, mode == .joystick {

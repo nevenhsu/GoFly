@@ -269,7 +269,7 @@ struct GoFlyVPNSettingsPage: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(!recovery.canCheck || recovery.isResettingTunnel)
+                .disabled(!recovery.canCheck)
                 .accessibilityIdentifier("settings.vpn.check")
                 Divider().padding(.leading, 16)
                 Button(action: status.openLocalDevVPN) {
@@ -285,17 +285,6 @@ struct GoFlyVPNSettingsPage: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settings.vpn.open")
-                Divider().padding(.leading, 16)
-                Button(action: { _ = recovery.resetTunnel() }) {
-                    GoFlySettingsRow {
-                        Text(goFlyString("service.resetTunnel"))
-                            .font(GoFlyFont.body)
-                        Spacer(minLength: 8)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(!recovery.canResetTunnel)
-                .accessibilityIdentifier("settings.vpn.reset")
             }
 
             GoFlySettingsGroup {
@@ -320,7 +309,7 @@ struct GoFlyVPNSettingsPage: View {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
             }
 
-            if recovery.isChecking || recovery.isResettingTunnel {
+            if recovery.isChecking {
                 ProgressView()
                     .frame(maxWidth: .infinity, alignment: .center)
                     .accessibilityIdentifier("settings.vpn.progress")
