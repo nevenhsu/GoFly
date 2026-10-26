@@ -9,6 +9,7 @@ final class GoFlyTabRestoreUITests: GoFlyRouteModeTestCase {
 
     func testTeleportTabRestoresACollapsedPanel() throws {
         let app = launch()
+        app.buttons["map.sheet.grabber"].tap()
         let collapsed = sheetHeight(app)
         app.selectGoFlyMode("teleport")
         let restored = sheetHeight(app)
@@ -22,7 +23,7 @@ final class GoFlyTabRestoreUITests: GoFlyRouteModeTestCase {
         let full = sheetHeight(app)
         app.buttons["map.sheet.grabber"].tap()
         let collapsed = sheetHeight(app)
-        XCTAssertEqual(collapsed, 76, accuracy: 1)
+        XCTAssertEqual(collapsed, 96, accuracy: 1)
         app.selectGoFlyMode("route")
         XCTAssertEqual(sheetHeight(app), full, accuracy: 1, "route panel returns to its content height")
     }

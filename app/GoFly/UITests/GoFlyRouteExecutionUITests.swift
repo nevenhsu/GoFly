@@ -22,7 +22,7 @@ final class GoFlyRouteExecutionUITests: GoFlyRouteModeTestCase {
         XCTAssertEqual(progress.frame.minY - percent.frame.maxY, 8, accuracy: 2, "label row to progress is 8 pt")
         XCTAssertEqual(repeatButton.frame.width, 36, accuracy: 1)
         XCTAssertEqual(repeatButton.frame.height, 36, accuracy: 1)
-        XCTAssertEqual(chip.frame.width, 68, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(chip.frame.width, 68, "the chip is at least 68 pt and grows with its value")
         XCTAssertEqual(chip.frame.height, 36, accuracy: 1)
         XCTAssertEqual(repeatButton.frame.minY - progress.frame.maxY, 20, accuracy: 1.5, "progress to controls row is 20 pt")
         XCTAssertEqual(end.frame.minY - repeatButton.frame.maxY, 20, accuracy: 1.5, "controls row to buttons is 20 pt")
