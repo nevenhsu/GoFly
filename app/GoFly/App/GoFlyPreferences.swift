@@ -54,10 +54,8 @@ final class GoFlyPreferences {
         language = (saved?["language"] as? String).flatMap(GoFlyLanguage.init(rawValue:)) ?? .system
         appearance = (saved?["appearance"] as? String).flatMap(GoFlyAppearance.init(rawValue:)) ?? .system
         movementSpeed = (saved?["movementSpeed"] as? Int).flatMap(RouteSpeed.init(kilometersPerHour:)) ?? .standard
-        let runSeconds = Int(BackgroundRunDuration.clamp(
-            TimeInterval((saved?["backgroundRunSeconds"] as? Int) ?? Int(BackgroundRunDuration.defaultSeconds))))
-        backgroundRunSeconds = runSeconds
-        BackgroundRunDuration.shared.seconds = TimeInterval(runSeconds)
+        backgroundRunSeconds = Self.applyBackgroundRunSeconds(
+            (saved?["backgroundRunSeconds"] as? Int) ?? Int(BackgroundRunDuration.defaultSeconds))
         systemLanguages = Locale.preferredLanguages
     }
 
@@ -96,11 +94,17 @@ final class GoFlyPreferences {
     }
 
     func setBackgroundRunSeconds(_ value: Int) {
-        let clamped = Int(BackgroundRunDuration.clamp(TimeInterval(value)))
+        let clamped = Self.applyBackgroundRunSeconds(value)
         guard backgroundRunSeconds != clamped else { return }
         backgroundRunSeconds = clamped
-        BackgroundRunDuration.shared.seconds = TimeInterval(clamped)
         save()
+    }
+
+    /// Clamps a run time and mirrors it to Core, which reads it off the main actor.
+    private static func applyBackgroundRunSeconds(_ value: Int) -> Int {
+        let clamped = Int(BackgroundRunDuration.clamp(TimeInterval(value)))
+        BackgroundRunDuration.shared.seconds = TimeInterval(clamped)
+        return clamped
     }
 
     /// Re-reads the one persisted preferences dictionary after Core activates
@@ -115,8 +119,7 @@ final class GoFlyPreferences {
         if let value = saved?["movementSpeed"] as? Int,
            let decoded = RouteSpeed(kilometersPerHour: value) { movementSpeed = decoded }
         if let value = saved?["backgroundRunSeconds"] as? Int {
-            backgroundRunSeconds = Int(BackgroundRunDuration.clamp(TimeInterval(value)))
-            BackgroundRunDuration.shared.seconds = TimeInterval(backgroundRunSeconds)
+            backgroundRunSeconds = Self.applyBackgroundRunSeconds(value)
         }
     }
 

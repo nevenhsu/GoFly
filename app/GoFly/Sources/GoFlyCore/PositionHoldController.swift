@@ -72,7 +72,10 @@ public final class PositionHoldController: ObservableObject {
                 maximumAcknowledgementGap: Duration = PositionHoldController.heartbeat * 3) {
         self.service = service
         self.clock = clock
-        self.intervalOverride = interval.map { min($0 > .zero ? $0 : .seconds(43_200), .seconds(89_940)) }
+        self.intervalOverride = interval.map {
+            min($0 > .zero ? $0 : .seconds(BackgroundRunDuration.defaultSeconds),
+                .seconds(BackgroundRunDuration.maximumSeconds))
+        }
         self.cadence = cadence > .zero ? cadence : Self.heartbeat
         self.maximumAcknowledgementGap = maximumAcknowledgementGap > .zero
             ? maximumAcknowledgementGap : Self.heartbeat * 3

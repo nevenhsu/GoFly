@@ -32,6 +32,7 @@ enum GoFlySymbols {
     static let exportFile = "square.and.arrow.up"
     static let externalLink = "arrow.up.right.square"
     static let retry = "arrow.clockwise"
+    static let reset = "arrow.counterclockwise"
     static let warning = "exclamationmark.triangle"
     static let success = "checkmark.circle"
     static let information = "info.circle"

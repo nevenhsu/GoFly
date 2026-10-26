@@ -14,48 +14,46 @@ struct ServiceSettingsView: View {
     @State private var serviceNoticeDismissed = false
 
     var body: some View {
-        GeometryReader { _ in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if network.shouldShowWiFiError {
-                        GoFlyStatusBanner(
-                            tone: .danger,
-                            title: goFlyString("wifi.error.title"),
-                            message: goFlyString("wifi.error.message"),
-                            actionTitle: goFlyString("wifi.error.action"),
-                            onAction: { network.openWiFiSettings() },
-                            onDismiss: { network.dismissNotice() },
-                            identifier: "settings.wifiError",
-                            isFloating: true
-                        )
-                    }
-                    if let failure = bannerFailure, !serviceNoticeDismissed {
-                        GoFlyStatusBanner(
-                            tone: .danger,
-                            title: goFlyString(failure.rawValue),
-                            message: goFlyString("settings.vpn.failureGuide"),
-                            actionTitle: goFlyString("operation.retry"),
-                            onAction: retryBannerFailure,
-                            onDismiss: { serviceNoticeDismissed = true },
-                            identifier: "service.error",
-                            actionEnabled: !service.nativeBusy,
-                            isFloating: true
-                        )
-                    }
-                    if let key = continuation.noticeKey {
-                        GoFlyStatusBanner(
-                            tone: .warning,
-                            title: goFlyString(key),
-                            message: goFlyString("background.systemDecidesRuntime"),
-                            identifier: "background.notice.compact",
-                            isFloating: true
-                        )
-                    }
-                    serviceCard
-                    settingsGroups
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if network.shouldShowWiFiError {
+                    GoFlyStatusBanner(
+                        tone: .danger,
+                        title: goFlyString("wifi.error.title"),
+                        message: goFlyString("wifi.error.message"),
+                        actionTitle: goFlyString("wifi.error.action"),
+                        onAction: { network.openWiFiSettings() },
+                        onDismiss: { network.dismissNotice() },
+                        identifier: "settings.wifiError",
+                        isFloating: true
+                    )
                 }
-                .padding(16)
+                if let failure = bannerFailure, !serviceNoticeDismissed {
+                    GoFlyStatusBanner(
+                        tone: .danger,
+                        title: goFlyString(failure.rawValue),
+                        message: goFlyString("settings.vpn.failureGuide"),
+                        actionTitle: goFlyString("operation.retry"),
+                        onAction: retryBannerFailure,
+                        onDismiss: { serviceNoticeDismissed = true },
+                        identifier: "service.error",
+                        actionEnabled: !service.nativeBusy,
+                        isFloating: true
+                    )
+                }
+                if let key = continuation.noticeKey {
+                    GoFlyStatusBanner(
+                        tone: .warning,
+                        title: goFlyString(key),
+                        message: goFlyString("background.systemDecidesRuntime"),
+                        identifier: "background.notice.compact",
+                        isFloating: true
+                    )
+                }
+                serviceCard
+                settingsGroups
             }
+            .padding(16)
         }
         .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("settings.title"))
@@ -258,7 +256,11 @@ struct ServiceSettingsView: View {
                 Button {
                     _ = service.forceReset()
                 } label: {
-                    Text(goFlyString("service.reset"))
+                    HStack(spacing: 8) {
+                        Image(systemName: GoFlySymbols.reset)
+                            .goFlyControlSymbol(size: 15, weight: .semibold)
+                        Text(goFlyString("service.reset"))
+                    }
                 }
                 .buttonStyle(GoFlyActionStyle())
                 .accessibilityHint(goFlyString("service.resetHint"))
