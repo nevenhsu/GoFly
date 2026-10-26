@@ -53,6 +53,7 @@ struct GoFlySearchPanel: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(GoFlyStyle.surface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.panel")
@@ -93,6 +94,7 @@ struct GoFlySearchPanel: View {
                     onFocusChange: { focused = $0 },
                     onSubmit: { focused = false }
                 )
+                .frame(maxWidth: .infinity, minHeight: 50)
                 .frame(height: 50)
             }
             .padding(.horizontal, 12)
@@ -102,6 +104,7 @@ struct GoFlySearchPanel: View {
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func roleChip(_ title: String) -> some View {
@@ -394,6 +397,8 @@ private struct PasteableSearchTextField: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
         textField.borderStyle = .none
+        textField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textField.font = .preferredFont(forTextStyle: .body)
         textField.adjustsFontForContentSizeCategory = true
         textField.textColor = .label
