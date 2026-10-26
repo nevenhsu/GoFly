@@ -25,6 +25,7 @@ struct MovementDurationIntegrationTests {
         #expect(route.setRoundTripEnabled(true))
         #expect(route.start())
         await waitUntil { route.phase == .running && acknowledgements >= 1 && clock.cadenceSleepingCount >= 1 }
+        await enterBackground(facade)
 
         for index in 0..<2_880 {
             clock.advance(by: .seconds(15))
@@ -51,7 +52,57 @@ struct MovementDurationIntegrationTests {
         #expect(driver.submitCount == 1)
     }
 
-    @Test func roundTripStopsAtTwelveHoursWithoutAnSDKGrant() async throws {
+    @Test func foregroundTimeNeverCountsAndReturnRestartsTheCountdown() async throws {
+        let clock = DurationIntegrationClock()
+        let device = DurationIntegrationDevice()
+        let service = ServiceController(service: device)
+        let origin = GeoCoordinate(latitude: 25, longitude: 121)!
+        service.observeRealLocation(location(origin))
+        let route = RouteExecutionController(draft: routeDraft(origin: origin),
+            planner: DurationIntegrationPlanner(), commands: service,
+            search: DurationIntegrationSearch(), clock: clock)
+        let joystick = JoystickMovementController(commands: service, clock: clock)
+        let driver = DurationIntegrationDriver()
+        let facade = makeFacade(service: service, route: route, joystick: joystick,
+            clock: clock, driver: driver)
+        var acknowledgements = 0
+        let subscription = route.movementAcknowledgements.sink { _ in acknowledgements += 1 }
+        defer { subscription.cancel() }
+
+        #expect(route.setRoundTripEnabled(true))
+        #expect(route.start())
+        await waitUntil { route.phase == .running && acknowledgements >= 1 && clock.cadenceSleepingCount >= 1 }
+        // More than the 12-hour run time in the foreground: nothing counts, nothing stops.
+        for index in 0..<2_881 {
+            clock.advance(by: .seconds(15))
+            let expected = index + 2
+            await waitUntil { acknowledgements >= expected && clock.cadenceSleepingCount >= 1 }
+        }
+        #expect(route.phase == .running)
+        #expect(driver.finishCount == 0)
+        #expect((driver.lastProgress?.cumulativeAcknowledgedDurationSeconds ?? 0) == 0)
+
+        await enterBackground(facade)
+        for index in 0..<4 {
+            clock.advance(by: .seconds(15))
+            let expected = 2_883 + index
+            await waitUntil { acknowledgements >= expected && clock.cadenceSleepingCount >= 1 }
+        }
+        #expect(driver.lastProgress?.cumulativeAcknowledgedDurationSeconds == 60)
+
+        // Back in the foreground: the countdown is cancelled and a fresh task
+        // waits for the next background trip; the route keeps moving.
+        facade.sceneDidBecomeActive()
+        await waitUntil { driver.submitCount == 2 && facade.hasRuntime }
+        #expect(route.phase == .running)
+        #expect(driver.requests.last?.goal == .finiteDuration(seconds: BackgroundRunDuration.shared.seconds))
+        clock.advance(by: .seconds(15))
+        await waitUntil { acknowledgements >= 2_887 && clock.cadenceSleepingCount >= 1 }
+        #expect((driver.lastProgress?.cumulativeAcknowledgedDurationSeconds ?? 0) == 0)
+        #expect(route.phase == .running)
+    }
+
+    @Test func roundTripWithoutAnSDKGrantKeepsRunningInTheForeground() async throws {
         for scenario in [DurationIntegrationDriver.Scenario.registrationRejected,
                          .submissionRejected] {
             let clock = DurationIntegrationClock()
@@ -72,24 +123,15 @@ struct MovementDurationIntegrationTests {
             #expect(route.setRoundTripEnabled(true))
             #expect(route.start())
             await waitUntil { route.phase == .running && acknowledgements >= 1 && clock.cadenceSleepingCount >= 1 }
-            for index in 0..<2_880 {
+            for index in 0..<2_881 {
                 clock.advance(by: .seconds(15))
                 let expected = index + 2
-                await waitUntil {
-                    guard route.phase == .running else { return index == 2_879 }
-                    return acknowledgements >= expected && clock.cadenceSleepingCount >= 1
-                }
-                #expect(route.phase == .running || index == 2_879)
+                await waitUntil { acknowledgements >= expected && clock.cadenceSleepingCount >= 1 }
             }
-            await waitUntil { route.phase == .paused || route.phase == .editing }
-            #expect(route.phase == .paused)
-            #expect(facade.state != .running)
+            #expect(route.phase == .running)
+            #expect(facade.state != .finished)
             #expect(driver.finishCount == 0)
             #expect(driver.submitCount == (scenario == .submissionRejected ? 1 : 0))
-
-            let writesAtTerminal = await device.moveCount
-            for _ in 0..<4 { clock.advance(by: .seconds(15)); await Task.yield() }
-            #expect(await device.moveCount == writesAtTerminal)
             subscription.cancel()
         }
     }
@@ -118,6 +160,7 @@ struct MovementDurationIntegrationTests {
         // epoch's timestamp without crediting elapsed time before execution.
         clock.advance(by: .seconds(15))
         await waitUntil { acknowledgements >= 1 && joystick.phase == .moving && clock.cadenceSleepingCount >= 1 }
+        await enterBackground(facade)
         for index in 0..<2_880 {
             clock.advance(by: .seconds(15))
             let expected = index + 2
@@ -164,6 +207,7 @@ struct MovementDurationIntegrationTests {
 
         #expect(service.teleport(to: TeleportCandidate(place: place(origin))))
         await waitUntil { positionHold.phase == .running && holdAcknowledgements == 1 && clock.holdSleepingCount >= 1 }
+        await enterBackground(facade)
         clock.advance(by: .seconds(5))
         await waitUntil {
             guard positionHold.phase == .running else { return false }
@@ -281,6 +325,12 @@ struct MovementDurationIntegrationTests {
             }
         facade.sceneDidBecomeActive()
         return facade
+    }
+
+    /// Only background time counts toward the run time.
+    private func enterBackground(_ facade: MovementContinuationController) async {
+        await waitUntil { facade.hasRuntime }
+        facade.releaseForInactiveScene()
     }
 
     private func routeDraft(origin: GeoCoordinate) -> RouteDraft {

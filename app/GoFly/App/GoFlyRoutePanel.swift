@@ -202,7 +202,8 @@ struct GoFlyRoutePanel: View {
                 .padding(.bottom, 16)
             } else {
                 GoFlyRouteRunningControls(
-                    title: goFlyString(controller.roundTripEnabled ? "route.position" : "route.progress"),
+                    title: controller.roundTripEnabled ? goFlyString("route.position")
+                        : GoFlyRouteRunningControls.remainingTitle(controller.progress?.estimatedRemaining),
                     fraction: controller.progress?.fraction ?? 0,
                     isRoundTrip: controller.roundTripEnabled,
                     isReversed: controller.heading == .reverse,
@@ -226,12 +227,12 @@ struct GoFlyRoutePanel: View {
             }
         }
         .padding(.horizontal, 20)
-        // Figma D6: the label row starts 22 pt below the panel top; the safe area supplies the bottom 34 pt.
-        .padding(.top, 24)
+        // The label row starts 20 pt below the grabber; the safe area supplies the bottom 34 pt.
+        .padding(.top, GoFlyGrabber.rowHeight)
         .frame(maxWidth: .infinity)
         .background(GoFlyStyle.cardSurface)
         .overlay(alignment: .top) {
-            Capsule().fill(GoFlyStyle.border).frame(width: 36, height: 5).padding(.top, 8)
+            Capsule().fill(GoFlyStyle.border).frame(width: 36, height: GoFlyGrabber.capsuleHeight).padding(.top, GoFlyGrabber.topInset)
                 .accessibilityHidden(true)
         }
         .accessibilityIdentifier("route.panel.content")

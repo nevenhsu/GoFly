@@ -22,6 +22,16 @@ struct GoFlyRouteRunningControls: View {
     var onPlayback: () -> Void = { }
     var onEnd: () -> Void = { }
 
+    /// D6 single-trip label: remaining time at the current speed, rounded up
+    /// to the minute. Round trip has no end, so it keeps the position label.
+    static func remainingTitle(_ remaining: Duration?) -> String {
+        guard let remaining else { return goFlyString("route.progress") }
+        let minutes = Int(ceil(Double(max(0, remaining.components.seconds)) / 60))
+        return minutes >= 60
+            ? goFlyLocalizedFormat(goFlyString("route.remaining.hours"), minutes / 60, minutes % 60)
+            : goFlyLocalizedFormat(goFlyString("route.remaining.minutes"), minutes)
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             VStack(spacing: 8) {

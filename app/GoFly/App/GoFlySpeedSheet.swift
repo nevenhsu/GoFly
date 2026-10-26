@@ -22,24 +22,6 @@ struct GoFlySpeedSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Same sheet frame as the favorite place editor: header 12 pt from the top, 20 pt sides.
-            GoFlySheetHeader(title: goFlyString("route.speedSetting")) {
-                EmptyView()
-            } trailing: {
-                Button(action: onDismiss) {
-                    Text(goFlyString("common.done"))
-                        .font(GoFlyFont.bodyEmphasis)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("route.speed.done")
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-
             VStack(spacing: 16) {
             // Current Speed Readout in a single row
             HStack(alignment: .firstTextBaseline) {
@@ -130,7 +112,9 @@ struct GoFlySpeedSheet: View {
             .padding(.top, 4)
 
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 28)
+            .padding(.bottom, 20)
 
             Spacer(minLength: 0)
 
@@ -145,7 +129,7 @@ struct GoFlySpeedSheet: View {
             .padding(.bottom, -1) // the Home indicator sits 20 pt below the button
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(373)])
+        .presentationDetents([.height(329)])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
     }

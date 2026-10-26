@@ -49,7 +49,7 @@ struct GoFlyResumePanel: View {
             .accessibilityIdentifier("\(identifier).action")
         }
         .padding(.horizontal, 20)
-        .frame(height: contentHeight - 12)
+        .frame(height: 44)
         .frame(height: contentHeight, alignment: .top)
         .background(GoFlyStyle.cardSurface)
         .accessibilityElement(children: .contain)

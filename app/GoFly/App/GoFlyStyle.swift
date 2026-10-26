@@ -263,6 +263,9 @@ extension GoFlyStyle {
     static let checkboxOffBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.557, 0.557, 0.576))
     static let checkboxOffFill = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
     static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
+    /// Figma F6.a `TimePicker / Wheel` (04 · iOS Redesign).
+    static let durationWheelSurface = adaptive(light: (0.976, 0.976, 0.984), dark: (0.141, 0.141, 0.149))
+    static let durationWheelBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.231))
     /// Figma `StatusPill` stroke: #C6C6C8 at 45 % (light), #545458 1 pt (dark).
     static let pillBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.329, 0.329, 0.345), lightAlpha: 0.45)
     /// Figma `StatusPill` dots for the neutral and paused states.
@@ -403,8 +406,16 @@ enum GoFlyTextColor {
 
 /// Page and sheet title row: the title stays centered on the page whatever the
 /// widths of the leading and trailing controls.
+/// Every sheet grabber: capsule 8 pt from the top, content starts 20 pt below it.
+enum GoFlyGrabber {
+    static let topInset: CGFloat = 8
+    static let capsuleHeight: CGFloat = 5
+    static let contentGap: CGFloat = 20
+    static let rowHeight: CGFloat = topInset + capsuleHeight + contentGap
+}
+
 struct GoFlySheetHeader<Leading: View, Trailing: View>: View {
-    let title: String
+    var title: String?
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
 
@@ -416,12 +427,14 @@ struct GoFlySheetHeader<Leading: View, Trailing: View>: View {
         }
         .frame(minHeight: 44)
         .overlay {
-            Text(title)
-                .font(GoFlyFont.headline)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 88)
-                .accessibilityAddTraits(.isHeader)
+            if let title {
+                Text(title)
+                    .font(GoFlyFont.headline)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 88)
+                    .accessibilityAddTraits(.isHeader)
+            }
         }
     }
 }

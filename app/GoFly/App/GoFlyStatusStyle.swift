@@ -77,7 +77,7 @@ extension SessionDisplayStatus {
         switch self {
         case .started, .stopped: .neutral
         case .simulating: .success
-        case .paused: .warning
+        case .paused, .connecting: .warning
         case .error: .danger
         }
     }

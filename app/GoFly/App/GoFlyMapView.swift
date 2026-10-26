@@ -70,7 +70,7 @@ final class GoFlyMovementModel: ObservableObject {
             driver: GoFlyContinuedProcessingDriver.shared,
             presentation: { kind, progress in
                 if kind != .finiteRoute {
-                    let percent = min(100, max(0, Int(progress.cumulativeAcknowledgedDurationSeconds / 43_200 * 100)))
+                    let percent = min(100, max(0, Int(progress.cumulativeAcknowledgedDurationSeconds / BackgroundRunDuration.shared.seconds * 100)))
                     return (title: goFlyString("background.activity.\(kind.rawValue)"),
                             subtitle: goFlyLocalizedFormat(goFlyString("background.activity.durationProgress"), percent))
                 }
@@ -109,9 +109,10 @@ final class GoFlyMovementModel: ObservableObject {
                 service: self.service.error, route: self.route.error, joystick: self.joystick.error,
                 wander: self.joystick.wanderError, wifiAvailable: self.network.isWiFiConnected,
                 dataErrors: self.dataErrorKeys())
-            let hasError = !errors.isEmpty || self.recovery.automaticRepairInProgress || !self.service.movementConnectionAvailable
+            let hasError = !errors.isEmpty
+            let connecting = self.recovery.isChecking || self.recovery.automaticRepairInProgress || !self.service.movementConnectionAvailable
             let next = GoFlyMovementPresentation(
-                status: GoFlySessionStatus(hasError: hasError, running: running, paused: paused,
+                status: GoFlySessionStatus(hasError: hasError, connecting: connecting, running: running, paused: paused,
                     hasSimulated: self.service.hasSimulated),
                 marker: self.service.displayPositionMarker, errorKeys: errors.keys,
                 route: self.route.intent?.route,
@@ -454,6 +455,9 @@ struct GoFlyMapView: View {
             }
             .onChange(of: service.movementConnectionAvailable) { _, available in
                 if available {
+                    // The movement permission (tunnel) just opened: a launch-time
+                    // origin that was waiting for it can now be established.
+                    ensureJoystickOrigin()
                     if scenePhase == .active && !recovery.isChecking { resumePendingWanderPlanning() }
                 } else {
                     cancelUncommittedWanderPlanning()
@@ -836,7 +840,6 @@ struct GoFlyMapView: View {
                         maximumHeight: sheetMaxHeight(in: geometry),
                         contentHeight: bottomContentHeight,
                         fitsContent: sheetFitsContent,
-                        grabberHeight: mode != .teleport && sheetFitsContent ? 12 : 24,
                         preferredHeight: sheetPreferredHeight,
                         onHeightChange: { sheetHeight = $0 }
                     ) {
@@ -980,9 +983,9 @@ struct GoFlyMapView: View {
     }
 
     private var currentCollapsedHeight: CGFloat {
-        // Minimum heights on the 4 pt grid: teleport 120 (B1), route 76 (D3), joystick 76 (E1.a).
+        // Minimum heights on the 4 pt grid: teleport 120 (B1), others 96 = 33 pt grabber row + content.
         if isWanderRunning { return 120 }
-        return mode == .teleport && !isResumeState ? 120 : 76
+        return mode == .teleport && !isResumeState ? 120 : 96
     }
 
     private func modePanel(in geometry: GeometryProxy) -> some View {
@@ -1161,7 +1164,7 @@ struct GoFlyMapView: View {
             if sheetDetent == .collapsed {
                 collapsedPositionSummary
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.bottom, 12)
             } else {
                 expandedTeleportContent
             }
@@ -1253,7 +1256,6 @@ struct GoFlyMapView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 4)
         .padding(.bottom, 12)
     }
 
@@ -1856,9 +1858,9 @@ struct GoFlyMapView: View {
     private var sheetPreferredHeight: CGFloat? {
         guard !dynamicTypeSize.isAccessibilitySize, !isResumeState else { return nil }
         switch mode {
-        case .teleport: return sheetDetent == .collapsed ? 120 : 300
+        case .teleport: return sheetDetent == .collapsed ? 120 : 305
         // Wander simulation has no tab bar, so its panel is content-sized plus the safe area (E2 / E2.a / E4).
-        case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 76 : 336)
+        case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 96 : 349)
         case .route: return nil
         }
     }
@@ -2205,7 +2207,8 @@ struct GoFlyMapView: View {
                 identifier: "map.serviceError",
                 isFloating: true
             )
-        } else if let failure = unconfirmedFailure, returnedFromUnconfirmed != unconfirmedID {
+        } else if let failure = unconfirmedFailure, SessionStatusErrors.reportsFailure(failure.rawValue),
+                  returnedFromUnconfirmed != unconfirmedID {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(failure.rawValue),
@@ -2216,7 +2219,8 @@ struct GoFlyMapView: View {
                 identifier: "map.unconfirmedFailure",
                 isFloating: true
             )
-        } else if case .failed(let failure)? = service.preparedOperation?.state {
+        } else if case .failed(let failure)? = service.preparedOperation?.state,
+                  SessionStatusErrors.reportsFailure(failure.rawValue) {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(failure.rawValue),

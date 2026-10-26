@@ -794,7 +794,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             : max(0, current)
         let kind: ContinuedProcessingKind = roundTripEnabled ? .roundTrip : .finiteRoute
         let goal: ContinuedProcessingGoal? = roundTripEnabled
-            ? .finiteDuration(seconds: 43_200)
+            ? .finiteDuration(seconds: BackgroundRunDuration.shared.seconds)
             : (remaining > 0 && remaining.isFinite ? .finiteDistance(meters: remaining) : nil)
         continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
         continuationControlSubject.send(.requested(MovementContinuationDemand(

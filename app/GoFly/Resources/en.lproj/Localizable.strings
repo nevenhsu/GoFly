@@ -14,7 +14,7 @@
 "service.title" = "Device service";
 "service.start" = "Start";
 "service.stop" = "Stop";
-"service.restoreGPS" = "Restore";
+"service.reset" = "Reset";
 "service.resetTunnel" = "Reset";
 "service.stopped" = "Stopped";
 "service.stoppedGPSPending" = "Stopped · GPS unconfirmed";
@@ -24,8 +24,7 @@
 "service.restoring" = "Restoring GPS…";
 "service.resetting" = "Resetting VPN tunnel…";
 "service.repairRequired" = "Stopped · Repair needed";
-"service.stopBeforeRepair" = "Stop the service before restoring GPS or resetting the VPN tunnel.";
-"service.repairHint" = "Available after the service stops. Wait for any other repair to finish.";
+"service.resetHint" = "Use when Stop failed. Ends every task in GoFly and tries to restore real GPS.";
 "gps.title" = "GPS recovery";
 "gps.unknown" = "GPS recovery has not been confirmed.";
 "gps.clearing" = "Requesting the device to clear simulated location…";
@@ -40,7 +39,7 @@
 "error.identityMismatch" = "The pairing information belongs to another device. Connect this iPhone to the Mac app to repair it.";
 "error.devicePreparationRequired" = "This iPhone needs device preparation. Connect it to the Mac app and complete preparation.";
 "error.serviceUnavailable" = "The device service could not be reached. Check the VPN tunnel; if it still fails, repair this iPhone in the Mac app.";
-"error.tunnelUnavailable" = "The VPN tunnel could not be reached. Make sure iPhone is connected to Wi‑Fi (cellular data alone does not work), reconnect LocalDevVPN, then reset the VPN tunnel in GoFly.";
+"error.tunnelUnavailable" = "The VPN tunnel could not be reached. Make sure iPhone is connected to Wi‑Fi (cellular data alone does not work), reconnect LocalDevVPN, then tap Start in GoFly again.";
 "error.operationTimedOut" = "The device did not confirm the operation in time. Check the connection and stop the service before trying again. GPS recovery has a separate confirmation below.";
 "error.deviceRequired" = "A prepared physical iPhone is required. The simulator cannot start the device service or confirm GPS recovery.";
 "error.storageUnavailable" = "Device setup information could not be read. Check available storage and repair this iPhone in the Mac app.";
@@ -607,6 +606,8 @@
 "route.zeroDistance" = "0 km";
 "route.zeroDuration" = "~0 min";
 "route.distance" = "%.1f km";
+"route.remaining.minutes" = "%d min left";
+"route.remaining.hours" = "%d h %d min left";
 "route.duration" = "%d min";
 "route.noRouteYet" = "Choose two places to see the distance";
 "route.speedUnit" = "km/h";
@@ -643,9 +644,9 @@
 "settings.wifi.connected" = "Connected";
 "settings.wifi.notConnected" = "Not connected";
 "background.activity.fixedPosition" = "GoFly position hold";
-"background.activity.durationProgress" = "%ld%% · 12-hour task";
+"background.activity.durationProgress" = "%ld%% · background task";
 "background.activity.routeProgress" = "%ld%% of route";
-"background.durationCompleted" = "12-hour task complete";
+"background.durationCompleted" = "Background task complete";
 "background.positionPaused" = "Position hold paused";
 "background.positionPaused.message" = "Retry to keep this location.";
 "background.positionRetry" = "Retry";
@@ -661,6 +662,7 @@
 "route.direction.reverse" = "Reverse";
 
 "status.pill.started" = "Standby";
+"status.pill.connecting" = "Connecting";
 "status.pill.simulating" = "Running";
 "status.pill.paused" = "Paused";
 "status.pill.stopped" = "Stopped";
@@ -681,3 +683,11 @@
 "issue.action.retry" = "Retry";
 "issue.action.settings" = "Settings";
 "issue.action.chooseFile" = "Choose File";
+
+"settings.background.duration" = "Background run time";
+"settings.background.duration.hours" = "Hours";
+"settings.background.duration.hr" = "hr";
+"settings.background.duration.min" = "min";
+"settings.background.duration.minutes" = "Minutes";
+"settings.background.systemTask" = "System background task";
+"common.cancel" = "Cancel";

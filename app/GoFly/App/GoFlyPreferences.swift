@@ -41,6 +41,8 @@ final class GoFlyPreferences {
     private(set) var appearance: GoFlyAppearance
     /// Shared by route, joystick and wander so a change in one shows in the others.
     private(set) var movementSpeed: RouteSpeed
+    /// Background run time for fixed position, round trip and wander (seconds).
+    private(set) var backgroundRunSeconds: Int
     private var systemLanguages: [String]
     @ObservationIgnored private let defaults: UserDefaults
     private static let storageKey = "gofly.preferences.v1"
@@ -52,6 +54,10 @@ final class GoFlyPreferences {
         language = (saved?["language"] as? String).flatMap(GoFlyLanguage.init(rawValue:)) ?? .system
         appearance = (saved?["appearance"] as? String).flatMap(GoFlyAppearance.init(rawValue:)) ?? .system
         movementSpeed = (saved?["movementSpeed"] as? Int).flatMap(RouteSpeed.init(kilometersPerHour:)) ?? .standard
+        let runSeconds = Int(BackgroundRunDuration.clamp(
+            TimeInterval((saved?["backgroundRunSeconds"] as? Int) ?? Int(BackgroundRunDuration.defaultSeconds))))
+        backgroundRunSeconds = runSeconds
+        BackgroundRunDuration.shared.seconds = TimeInterval(runSeconds)
         systemLanguages = Locale.preferredLanguages
     }
 
@@ -89,6 +95,14 @@ final class GoFlyPreferences {
         save()
     }
 
+    func setBackgroundRunSeconds(_ value: Int) {
+        let clamped = Int(BackgroundRunDuration.clamp(TimeInterval(value)))
+        guard backgroundRunSeconds != clamped else { return }
+        backgroundRunSeconds = clamped
+        BackgroundRunDuration.shared.seconds = TimeInterval(clamped)
+        save()
+    }
+
     /// Re-reads the one persisted preferences dictionary after Core activates
     /// a restore. Unknown keys and the restore marker stay in UserDefaults;
     /// this method only refreshes the presentation projection.
@@ -100,6 +114,10 @@ final class GoFlyPreferences {
            let decoded = GoFlyAppearance(rawValue: value) { appearance = decoded }
         if let value = saved?["movementSpeed"] as? Int,
            let decoded = RouteSpeed(kilometersPerHour: value) { movementSpeed = decoded }
+        if let value = saved?["backgroundRunSeconds"] as? Int {
+            backgroundRunSeconds = Int(BackgroundRunDuration.clamp(TimeInterval(value)))
+            BackgroundRunDuration.shared.seconds = TimeInterval(backgroundRunSeconds)
+        }
     }
 
     func refreshSystemPreferences() {
@@ -111,6 +129,7 @@ final class GoFlyPreferences {
         dictionary["language"] = language.rawValue
         dictionary["appearance"] = appearance.rawValue
         dictionary["movementSpeed"] = movementSpeed.kilometersPerHour
+        dictionary["backgroundRunSeconds"] = backgroundRunSeconds
         defaults.set(dictionary, forKey: Self.storageKey)
     }
 }

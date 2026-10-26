@@ -9,13 +9,12 @@ struct ServiceSettingsView: View {
     @ObservedObject var continuation: MovementContinuationController
     @ObservedObject var recovery: ConnectionRecoveryController
     let setupMetadata: GoFlySetupMetadata?
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var systemStatus = GoFlySystemStatus()
     @ObservedObject private var network = GoFlyNetworkMonitor.shared
     @State private var serviceNoticeDismissed = false
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if network.shouldShowWiFiError {
@@ -30,13 +29,16 @@ struct ServiceSettingsView: View {
                             isFloating: true
                         )
                     }
-                    if let error = service.error, service.preparedOperation == nil, !serviceNoticeDismissed {
+                    if let failure = bannerFailure, !serviceNoticeDismissed {
                         GoFlyStatusBanner(
                             tone: .danger,
-                            title: goFlyString(error.rawValue),
+                            title: goFlyString(failure.rawValue),
                             message: goFlyString("settings.vpn.failureGuide"),
+                            actionTitle: goFlyString("operation.retry"),
+                            onAction: retryBannerFailure,
                             onDismiss: { serviceNoticeDismissed = true },
                             identifier: "service.error",
+                            actionEnabled: !service.nativeBusy,
                             isFloating: true
                         )
                     }
@@ -54,20 +56,6 @@ struct ServiceSettingsView: View {
                 }
                 .padding(16)
             }
-            .safeAreaInset(edge: .bottom) {
-                if let operation = service.preparedOperation {
-                    GoFlyOperationPanel(
-                        operation: operation, unconfirmedFailure: nil,
-                        nativeBusy: service.nativeBusy, maximumHeight: geometry.size.height * 0.45,
-                        reasonIdentifier: "service.error",
-                        onCancel: { _ = service.cancelPreparation(id: $0) },
-                        onRetry: { _ = service.retryPreparedOperation(id: $0) },
-                        onReturn: { }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-                }
-            }
         }
         .background(GoFlyStyle.canvas)
         .navigationTitle(goFlyString("settings.title"))
@@ -78,12 +66,33 @@ struct ServiceSettingsView: View {
             systemStatus.refresh()
             recovery.requestForegroundCheck()
         }
-        .onChange(of: service.error) { _, newError in
-            if newError != nil { serviceNoticeDismissed = false }
+        .onChange(of: bannerFailure) { _, newFailure in
+            if newFailure != nil { serviceNoticeDismissed = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             systemStatus.refresh()
             recovery.requestForegroundCheck()
+        }
+    }
+
+    /// Settings only surfaces real connection failures; a cancelled operation is never an error here.
+    private var bannerFailure: DeviceServiceFailure? {
+        let failure: DeviceServiceFailure?
+        if case .failed(let preparedFailure)? = service.preparedOperation?.state {
+            failure = preparedFailure
+        } else if service.preparedOperation == nil {
+            failure = service.error
+        } else {
+            failure = nil
+        }
+        return failure == .operationCancelled ? nil : failure
+    }
+
+    private func retryBannerFailure() {
+        if let operation = service.preparedOperation {
+            _ = service.retryPreparedOperation(id: operation.id)
+        } else {
+            _ = service.start()
         }
     }
 
@@ -245,10 +254,15 @@ struct ServiceSettingsView: View {
             .disabled(offersStop ? !service.canStop : !service.canStart)
             .accessibilityIdentifier("service.primary")
 
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 12) { repairButtons }
-            } else {
-                HStack(spacing: 8) { repairButtons }
+            if service.canForceReset {
+                Button {
+                    _ = service.forceReset()
+                } label: {
+                    Text(goFlyString("service.reset"))
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityHint(goFlyString("service.resetHint"))
+                .accessibilityIdentifier("service.reset")
             }
 
             if service.phase == .repairRequired || service.clearConfirmedAt != nil {
@@ -280,29 +294,6 @@ struct ServiceSettingsView: View {
             .font(GoFlyFont.subheadline)
             .foregroundStyle(GoFlyTextColor.secondary)
             .accessibilityIdentifier("service.status")
-    }
-
-    @ViewBuilder
-    private var repairButtons: some View {
-        Button {
-            _ = service.restoreGPS()
-        } label: {
-            Text(goFlyString("service.restoreGPS"))
-        }
-        .buttonStyle(GoFlyActionStyle())
-        .disabled(!service.canRestoreGPS || recovery.isChecking || recovery.isResettingTunnel)
-        .accessibilityHint(goFlyString("service.repairHint"))
-        .accessibilityIdentifier("service.restoreGPS")
-
-        Button {
-            _ = recovery.resetTunnel()
-        } label: {
-            Text(goFlyString("service.resetTunnel"))
-        }
-        .buttonStyle(GoFlyActionStyle())
-        .disabled(!recovery.canResetTunnel)
-        .accessibilityHint(goFlyString("service.repairHint"))
-        .accessibilityIdentifier("service.resetTunnel")
     }
 
     private var offersStop: Bool {

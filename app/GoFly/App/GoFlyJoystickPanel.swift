@@ -21,7 +21,6 @@ struct GoFlyJoystickPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             wanderControls
-                .padding(.top, isCollapsed && !controller.wanderEnabled ? 4 : 8)
             if !isCollapsed {
                 if controller.requiresStop {
                     Button(goFlyString("operation.settings"), action: onSettings)

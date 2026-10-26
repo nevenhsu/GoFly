@@ -1,5 +1,7 @@
 # GoFly 總重構：執行順序與共同規則（先讀這份）
 
+> **2026-10-26**：Mac 部分（順序 5–9 與 03）已取代為 `04-mac-v1-codex.md`＋`.scratch/gofly-mac-v1/`；第一版不做備份／還原／重置，中斷只「重新開始」。
+
 你在 repo `/Users/neven/Documents/projects/ianygo` 工作。這份文件決定**做事的順序**與**何時才停下**。各任務的細節在同目錄的子 prompt：
 
 | 檔案 | 任務 |

@@ -50,11 +50,11 @@ public struct ContinuedProcessingRequest: Equatable, Sendable {
         case (.finiteRoute, .experimentalIndeterminate):
             return false
         case (.fixedPosition, .finiteDuration(let seconds)):
-            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+            return seconds.isFinite && seconds > 0 && seconds <= BackgroundRunDuration.maximumSeconds
         case (.roundTrip, .finiteDuration(let seconds)):
-            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+            return seconds.isFinite && seconds > 0 && seconds <= BackgroundRunDuration.maximumSeconds
         case (.wander, .finiteDuration(let seconds)):
-            return seconds.isFinite && seconds > 0 && seconds <= 43_200
+            return seconds.isFinite && seconds > 0 && seconds <= BackgroundRunDuration.maximumSeconds
         case (.fixedPosition, .finiteDistance), (.fixedPosition, .experimentalIndeterminate):
             return false
         case (.roundTrip, .experimentalIndeterminate), (.wander, .experimentalIndeterminate):
@@ -224,4 +224,29 @@ public protocol ContinuedProcessingDriving: AnyObject {
     func update(requestID: UUID, progress: ContinuedProcessingProgress, title: String, subtitle: String)
     func finish(requestID: UUID, success: Bool) -> ContinuedProcessingCompletionOutcome?
     func cancel(requestID: UUID)
+}
+
+/// How long a background-continued movement (fixed position, round trip, wander)
+/// may run. The user adjusts it in Settings; from 1 minute to 24 hours 59 minutes (default 12 hours).
+public final class BackgroundRunDuration: @unchecked Sendable {
+    public static let shared = BackgroundRunDuration()
+    public static let maximumSeconds: TimeInterval = 89_940
+    public static let minimumSeconds: TimeInterval = 60
+    public static let defaultSeconds: TimeInterval = 43_200
+
+    private let lock = NSLock()
+    private var stored = BackgroundRunDuration.defaultSeconds
+
+    public var seconds: TimeInterval {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set {
+            let clamped = Self.clamp(newValue)
+            lock.lock(); stored = clamped; lock.unlock()
+        }
+    }
+
+    public static func clamp(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite else { return defaultSeconds }
+        return min(maximumSeconds, max(minimumSeconds, value.rounded()))
+    }
 }

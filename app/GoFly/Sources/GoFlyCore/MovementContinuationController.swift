@@ -16,7 +16,13 @@ public final class MovementContinuationController: ObservableObject {
         var distance: Double = 0
         var duration: Duration = .zero
         var lastAcknowledgedAt: Duration?
+        /// Background entry time; duration only counts while this is set.
+        var countingSince: Duration?
 
+        /// Returning to the foreground cancels the countdown, not the movement.
+        mutating func stopCountdown() {
+            duration = .zero; lastAcknowledgedAt = nil; countingSince = nil
+        }
         func matches(_ id: UUID, _ lease: MovementTaskLease) -> Bool {
             demand.movementID == id && demand.lease == lease
         }
@@ -39,10 +45,12 @@ public final class MovementContinuationController: ObservableObject {
                     let nextDuration = Duration.seconds(ack.cumulativeAcknowledgedDurationSeconds)
                     guard nextDuration >= duration else { return false }
                     duration = nextDuration
-                } else if let lastAcknowledgedAt, now >= lastAcknowledgedAt {
+                } else if let since = countingSince, let lastAcknowledgedAt, now >= lastAcknowledgedAt {
                     let interval = now - lastAcknowledgedAt
                     // A gap without ACKs is not evidence of active execution.
-                    if interval <= .seconds(15) { duration = min(goal, duration + interval) }
+                    if interval <= .seconds(15), now > since {
+                        duration = min(goal, duration + (now - max(lastAcknowledgedAt, since)))
+                    }
                 }
                 lastAcknowledgedAt = now
             }
@@ -115,8 +123,18 @@ public final class MovementContinuationController: ObservableObject {
         }
         sceneActive = true
         service.setMovementSceneActive(true)
+        let countedInBackground = (candidate?.epoch.duration ?? .zero) > .zero
+        durationEpoch?.stopCountdown()
+        pending?.stopCountdown()
+        candidate?.epoch.stopCountdown()
         positionHold?.sceneDidBecomeActive()
         recovery.sceneDidBecomeActive()
+        restartDurationCountdown(force: countedInBackground)
+        synchronize()
+    }
+    /// The user changed the background run time in Settings (foreground).
+    public func backgroundDurationDidChange() {
+        restartDurationCountdown(force: false)
         synchronize()
     }
     public func releaseForInactiveScene() {
@@ -134,6 +152,11 @@ public final class MovementContinuationController: ObservableObject {
             ? candidate?.request.lease : nil
         if lease == nil, let current = ungrantedCandidate {
             pauseForRuntimeLoss(current, notice: "background.unavailable")
+        }
+        if lease != nil {
+            let now = clock.now
+            durationEpoch?.countingSince = now
+            candidate?.epoch.countingSince = now
         }
         recovery.releaseForInactiveScene(continuingLease: lease)
         positionHold?.releaseForInactiveScene(continuingLease: lease)
@@ -198,7 +221,21 @@ public final class MovementContinuationController: ObservableObject {
             synchronize()
         }
     }
-    private func requested(_ demand: MovementContinuationDemand) {
+    /// A fresh background task for the next trip: the countdown starts at
+    /// zero with the current run time. iOS only accepts submissions while the
+    /// app is in the foreground, so this runs on return and on a setting change.
+    private func restartDurationCountdown(force: Bool) {
+        guard sceneActive, let current = candidate, current.boundGrant?.isValid != false,
+              case .finiteDuration(let submitted) = current.request.goal else { return }
+        let goal = current.request.kind == .fixedPosition
+            ? positionHold?.durationGoalSeconds ?? BackgroundRunDuration.shared.seconds
+            : BackgroundRunDuration.shared.seconds
+        guard force || goal != submitted else { return }
+        requested(MovementContinuationDemand(movementID: current.request.movementID,
+            lease: current.request.lease, kind: current.request.kind,
+            goal: .finiteDuration(seconds: goal)), restart: true)
+    }
+    private func requested(_ demand: MovementContinuationDemand, restart: Bool = false) {
         guard sceneActive else { return }
         noticeKey = nil
         if let current = candidate, current.epoch.matches(demand.movementID, demand.lease) {
@@ -207,7 +244,7 @@ public final class MovementContinuationController: ObservableObject {
             if stillBound && current.boundGrant?.isValid != true {
                 pending = nil; pauseForRuntimeLoss(current, notice: "background.expired"); return
             }
-            if current.request.kind == demand.kind, current.request.goal == demand.goal,
+            if !restart, current.request.kind == demand.kind, current.request.goal == demand.goal,
                [.submitting, .accepted, .running].contains(runtime.state),
                current.boundGrant == nil || stillBound { return }
             // Successful explicit Resume has already retired its old binding.

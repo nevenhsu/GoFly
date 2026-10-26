@@ -10,7 +10,7 @@ struct EnglishButtonLabelTests {
         "operation.cancel", "onboarding.location.allow", "onboarding.location.openSettings",
         "onboarding.location.continue", "onboarding.vpn.open", "onboarding.vpn.help", "onboarding.vpn.check",
         "onboarding.vpn.help.openSettings", "onboarding.vpn.help.returnAndCheck", "settings.vpn.check",
-        "settings.vpn.openLocalDevVPN", "settings.diagnostics.export", "setup.retry", "service.restoreGPS",
+        "settings.vpn.openLocalDevVPN", "settings.diagnostics.export", "setup.retry", "service.reset",
         "service.resetTunnel", "imports.import", "imports.load", "imports.deleteAction", "search.clearHistory",
         "placeDetails.setStart", "placeDetails.setEnd", "joystick.startWander", "joystick.stopWander",
         "favorites.selectAll", "toast.restore", "operation.retry", "common.retry", "common.undo", "common.confirm", "route.pause", "route.resume"

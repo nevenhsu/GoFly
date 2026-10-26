@@ -18,7 +18,8 @@ struct PositionHoldProgressTests {
         #expect(makeRequest(.infinity) == nil)
         #expect(makeRequest(.nan) == nil)
         #expect(makeRequest(43_200) != nil)
-        #expect(makeRequest(43_200.1) == nil)
+        #expect(makeRequest(BackgroundRunDuration.maximumSeconds) != nil)
+        #expect(makeRequest(BackgroundRunDuration.maximumSeconds + 0.1) == nil)
 
         #expect(ContinuedProcessingProgress(acknowledgedWrites: 0,
             cumulativeAcknowledgedDistanceMeters: 0,
@@ -34,7 +35,8 @@ struct PositionHoldProgressTests {
     @Test func finiteDurationIsAcceptedForAllDurationKinds() {
         for kind in [ContinuedProcessingKind.fixedPosition, .roundTrip, .wander] {
             #expect(makeRequest(kind: kind, seconds: 43_200) != nil)
-            #expect(makeRequest(kind: kind, seconds: 43_200.1) == nil)
+            #expect(makeRequest(kind: kind, seconds: BackgroundRunDuration.maximumSeconds) != nil)
+            #expect(makeRequest(kind: kind, seconds: BackgroundRunDuration.maximumSeconds + 0.1) == nil)
         }
         #expect(makeRequest(kind: .finiteRoute, seconds: 43_200) == nil)
     }

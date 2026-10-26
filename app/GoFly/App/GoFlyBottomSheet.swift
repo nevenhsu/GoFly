@@ -21,8 +21,8 @@ struct GoFlyBottomSheet<Content: View>: View {
     var contentHeight: CGFloat = 0
     /// Fit the currently visible panel without imposing a scrolling container.
     var fitsContent: Bool = false
-    /// Height of the grabber row. The route editor uses 12 pt so its header sits 12 pt below the sheet top (Figma D1).
-    var grabberHeight: CGFloat = 24
+    /// Grabber row: capsule plus the 20 pt gap before the content, identical for every mode.
+    var grabberHeight: CGFloat = GoFlyGrabber.rowHeight
     /// Figma default panel height for the mode (teleport 298, joystick 350 …); content-fitted when nil.
     var preferredHeight: CGFloat? = nil
     var onHeightChange: (CGFloat) -> Void = { _ in }
@@ -97,8 +97,8 @@ struct GoFlyBottomSheet<Content: View>: View {
             .overlay(alignment: .top) {
                 Capsule()
                     .fill(GoFlyStyle.border)
-                    .frame(width: 36, height: 5)
-                    .padding(.top, grabberHeight < 24 ? 6 : (grabberHeight - 5) / 2)
+                    .frame(width: 36, height: GoFlyGrabber.capsuleHeight)
+                    .padding(.top, GoFlyGrabber.topInset)
             }
             .contentShape(Rectangle())
             .gesture(

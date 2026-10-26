@@ -37,7 +37,10 @@ public final class PositionHoldController: ObservableObject {
 
     private let service: ServiceController
     private let clock: any RouteClock
-    private let interval: Duration
+    private let intervalOverride: Duration?
+    private var interval: Duration {
+        intervalOverride ?? .seconds(BackgroundRunDuration.shared.seconds)
+    }
     private let cadence: Duration
     private let maximumAcknowledgementGap: Duration
     private let continuationSubject = PassthroughSubject<MovementContinuationControlEvent, Never>()
@@ -49,6 +52,8 @@ public final class PositionHoldController: ObservableObject {
     private var continuationIdentity: MovementContinuationIdentity?
     private var lastPlace: MapPlace?
     private var lastAcknowledgementAt: Duration?
+    /// Set while the scene is in the background; nil stops the countdown.
+    private var countingSince: Duration?
     private var acknowledgedDuration: Duration = .zero
     private var acknowledgedWholeSeconds: Int64 = 0
     private var nextSequence: UInt64 = 1
@@ -62,12 +67,12 @@ public final class PositionHoldController: ObservableObject {
 
     public init(service: ServiceController,
                 clock: any RouteClock = ContinuousRouteClock(),
-                interval: Duration = .seconds(43_200),
+                interval: Duration? = nil,
                 cadence: Duration = PositionHoldController.heartbeat,
                 maximumAcknowledgementGap: Duration = PositionHoldController.heartbeat * 3) {
         self.service = service
         self.clock = clock
-        self.interval = min(interval > .zero ? interval : .seconds(43_200), .seconds(43_200))
+        self.intervalOverride = interval.map { min($0 > .zero ? $0 : .seconds(43_200), .seconds(89_940)) }
         self.cadence = cadence > .zero ? cadence : Self.heartbeat
         self.maximumAcknowledgementGap = maximumAcknowledgementGap > .zero
             ? maximumAcknowledgementGap : Self.heartbeat * 3
@@ -86,10 +91,18 @@ public final class PositionHoldController: ObservableObject {
     }
 
     /// The facade calls this when the app enters the foreground. A paused
-    /// target remains paused; only retry starts a new point operation.
+    /// target remains paused; only retry starts a new point operation. The
+    /// background countdown is cancelled; the hold itself keeps running.
     public func sceneDidBecomeActive() {
         foreground = true
+        countingSince = nil
+        acknowledgedDuration = .zero
+        acknowledgedWholeSeconds = 0
+        elapsedSeconds = 0
     }
+
+    /// Countdown target: the user's background run time unless a test overrides it.
+    public var durationGoalSeconds: Double { goalIntervalSeconds }
 
     /// A valid continuation lease allows the current owner to keep dispatching
     /// while the scene is inactive. The lease must also be bound in the
@@ -103,6 +116,8 @@ public final class PositionHoldController: ObservableObject {
             if phase == .running || phase == .preparing { pause(reason: .userPaused) }
             return
         }
+        // Only time spent in the background counts toward the run time.
+        countingSince = clock.now
     }
 
     /// Runtime loss closes the eligibility window. Any open ACK interval is
@@ -340,9 +355,9 @@ public final class PositionHoldController: ObservableObject {
                 pause(reason: .userPaused)
                 return false
             }
-            if gap > .zero {
+            if gap > .zero, let since = countingSince, now > since {
                 let remaining = interval - acknowledgedDuration
-                let credited = min(gap, remaining)
+                let credited = min(now - max(previous, since), remaining)
                 acknowledgedDuration = addClamped(acknowledgedDuration, credited)
                 acknowledgedWholeSeconds = addClamped(acknowledgedWholeSeconds, credited.components.seconds)
                 completes = acknowledgedDuration >= interval

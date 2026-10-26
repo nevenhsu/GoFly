@@ -48,12 +48,23 @@ struct RouteRoundTripTests {
         #expect(controller.intent?.id == executionID)
         #expect(controller.intent?.speed == faster)
         #expect(controller.draft.speed == faster)
+        let route = try #require(controller.intent?.route)
+        // The single-trip remaining time follows the new speed at once.
+        #expect(controller.progress?.estimatedRemaining
+                == .seconds((route.totalDistanceMeters - before) / faster.metersPerSecond))
         clock.advance(by: .milliseconds(500))
         await wait { await device.waiting }
         await device.finish(.acknowledged)
-        let route = try #require(controller.intent?.route)
         let expected = min(route.totalDistanceMeters, before + faster.metersPerSecond * 0.5)
         await wait { controller.progress?.committedDistanceMeters == expected }
+
+        #expect(controller.pause())
+        await wait { controller.phase == .paused }
+        let slower = try #require(RouteSpeed(kilometersPerHour: 5))
+        #expect(controller.setSpeed(slower))
+        let pausedAt = try #require(controller.progress?.committedDistanceMeters)
+        #expect(controller.progress?.estimatedRemaining
+                == .seconds((route.totalDistanceMeters - pausedAt) / slower.metersPerSecond))
         #expect(controller.cancel())
         await wait { controller.phase == .editing }
     }

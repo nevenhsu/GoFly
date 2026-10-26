@@ -619,7 +619,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
         continuationControlSubject.send(.requested(MovementContinuationDemand(
             movementID: intent.id, lease: intent.lease, kind: .wander,
-            goal: .finiteDuration(seconds: 43_200))))
+            goal: .finiteDuration(seconds: BackgroundRunDuration.shared.seconds))))
     }
 
     private func withdrawContinuation(_ reason: MovementContinuationWithdrawalReason) {

@@ -40,6 +40,59 @@ struct ServiceControllerTests {
         #expect(await device.operations == ["prepare", "clear"])
     }
 
+    @Test func resetAppearsOnlyAfterStopFailsAndEndsWithoutAnError() async throws {
+        let device = SwitchableDevice()
+        let controller = ServiceController(service: device)
+        #expect(!controller.canForceReset)
+        #expect(controller.start())
+        await settle(controller)
+        #expect(!controller.canForceReset)
+        await device.setFailure(.tunnelUnavailable)
+        #expect(controller.stop())
+        await settle(controller)
+        #expect(controller.phase == .stopped)
+        #expect(controller.error == .tunnelUnavailable)
+        #expect(controller.canForceReset)
+
+        #expect(controller.forceReset())
+        #expect(!controller.canForceReset)
+        await settle(controller)
+        #expect(controller.phase == .stopped)
+        #expect(controller.error == nil)
+        #expect(controller.clearState == .unknown)
+        #expect(controller.canForceReset)
+
+        await device.setFailure(nil)
+        #expect(controller.forceReset())
+        await settle(controller)
+        #expect(controller.error == nil)
+        #expect(controller.clearState == .confirmed)
+        #expect(!controller.canForceReset)
+        #expect(await device.operations == ["prepare", "clear", "reset", "clear", "reset", "clear"])
+    }
+
+    @Test func startRebuildsTheConnectionOnlyAfterALeftoverOrFailedAttempt() async throws {
+        let device = SwitchableDevice()
+        let controller = ServiceController(service: device)
+        #expect(controller.start())
+        await settle(controller)
+        await device.setFailure(.tunnelUnavailable)
+        #expect(controller.stop())
+        await settle(controller)
+        await device.setFailure(nil)
+        #expect(controller.start())
+        await settle(controller)
+        #expect(controller.phase == .ready)
+        #expect(await device.operations == ["prepare", "clear", "reset", "prepare"])
+
+        #expect(controller.stop())
+        await settle(controller)
+        #expect(controller.clearState == .confirmed)
+        #expect(controller.start())
+        await settle(controller)
+        #expect(await device.operations.suffix(2) == ["clear", "prepare"])
+    }
+
     @Test func timeoutCannotUnlockNativeWorkOrSkipMandatoryClear() async throws {
         let device = ControlledDevice()
         let clock = ManualServiceWatchdog()
@@ -286,4 +339,15 @@ private actor ControlledDevice: DeviceService {
     func finishClear() { clearing?.resume(); clearing = nil }
     func waitForPrepare() async { while preparation == nil { await Task.yield() } }
     func waitForClear() async { while clearing == nil { await Task.yield() } }
+}
+
+private actor SwitchableDevice: DeviceService {
+    var operations: [String] = []
+    private var failure: DeviceServiceFailure?
+    func setFailure(_ failure: DeviceServiceFailure?) { self.failure = failure }
+    func prepare() async throws { operations.append("prepare"); try failIfNeeded() }
+    func clearLocation() async throws { operations.append("clear"); try failIfNeeded() }
+    func resetClientConnection() async throws { operations.append("reset"); try failIfNeeded() }
+    func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome { .notSent(.deviceRequired) }
+    private func failIfNeeded() throws { if let failure { throw failure } }
 }

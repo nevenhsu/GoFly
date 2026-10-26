@@ -162,6 +162,10 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     private var activeResetID: UUID?
     private var activeResetToken: UInt64?
     private var completedTickCount: UInt64 = 0
+    /// The lifecycle token of a forced Reset; its clear failure never leaves an error behind.
+    private var forcedResetToken: UInt64?
+    /// Start rebuilds the connection first when the last session ended badly.
+    private var startRebuildsConnection = false
 
     public init(
         service: any DeviceService, operationTimeout: Duration = .seconds(30),
@@ -197,6 +201,12 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     }
     public var canRestoreGPS: Bool { !nativeBusy && (phase == .stopped || (phase == .ready && movementAuthority.snapshot.lease == nil)) }
     public var canResetTunnel: Bool { !nativeBusy && phase == .stopped }
+    /// Reset is the manual way out after Stop failed or the service is stuck.
+    public var canForceReset: Bool {
+        guard forcedResetToken == nil else { return false }
+        if phase == .repairRequired { return true }
+        return phase == .stopped && !nativeBusy && clearAttempted && clearState == .unknown
+    }
     public var canTeleport: Bool {
         !nativeBusy && movementAdmissionAllowed && !pointUnconfirmed && !routeUnconfirmed && !joystickUnconfirmed && (phase == .stopped || phase == .ready)
     }
@@ -520,6 +530,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         guard canStart else { return false }
         if phase == .ready { hasSimulated = false; return true }
         admitExplicitOperation()
+        startRebuildsConnection = error != nil || deviceMayHoldSimulation
+            || (clearAttempted && clearState == .unknown)
         beginPreparation(.start)
         return true
     }
@@ -635,7 +647,14 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             switch context.source {
             case .start:
                 guard self.movementAdmissionAllowed else { return .failure(.operationCancelled) }
-                do { try await service.prepare(); return .success }
+                // Start owns tunnel repair: leftovers from the last session or a
+                // failed attempt discard the old connection before preparing.
+                let rebuild = attempt != .first || self.startRebuildsConnection
+                do {
+                    if rebuild { try await service.rebuildClientConnection() }
+                    try await service.prepare()
+                    return .success
+                }
                 catch { return .failure(error as? DeviceServiceFailure ?? .serviceUnavailable) }
             case .joystick:
                 guard self.movementAdmissionAllowed else { return .failure(.operationCancelled) }
@@ -693,6 +712,26 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// before dispatch but cannot cancel an FFI call that already owns handles.
     @discardableResult public func stop() -> Bool {
         guard canStop else { return false }
+        endMovementForClear()
+        enqueue(.stopping) { try await $0.clearLocation() }
+        return true
+    }
+
+    /// Forced Stop: ends every task locally at once, then tries a fresh
+    /// connection and a GPS clear. A failure there only leaves GPS unknown.
+    @discardableResult public func forceReset() -> Bool {
+        guard canForceReset else { return false }
+        diagnose("reset.forced", level: .notice, ["phase": .text(phase.rawValue)])
+        endMovementForClear()
+        enqueue(.stopping) { service in
+            try? await service.rebuildClientConnection()
+            try await service.clearLocation()
+        }
+        forcedResetToken = revision
+        return true
+    }
+
+    private func endMovementForClear() {
         cancelConnectionRecovery()
         if let id = activeResetID, case .running = tunnelResetState {
             tunnelResetState = .failed(id: id, failure: .operationCancelled)
@@ -714,8 +753,6 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         currentPoint?.dispatch.invalidate()
         currentPoint = nil
         pointState = .idle
-        enqueue(.stopping) { try await $0.clearLocation() }
-        return true
     }
 
     @discardableResult public func restoreGPS() -> Bool {
@@ -1083,7 +1120,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                     clearConfirmedAt = now()
                 }
             case .failure(let failure):
-                if operation == .stopping, coldClearAttempt {
+                if operation == .stopping, coldClearAttempt || forcedResetToken == token {
                     coldClearAttempt = false
                     phase = .stopped
                     error = nil
@@ -1109,6 +1146,8 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
                 }
             }
         }
+        if forcedResetToken == token { forcedResetToken = nil }
+        if preparation?.source == .start { startRebuildsConnection = false }
         if let preparation, currentPreparation?.id == preparation.id {
             currentPreparation = nil
             if preparedOperation?.state == .cancelled { preparedOperation = nil }

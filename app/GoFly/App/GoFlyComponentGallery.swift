@@ -75,7 +75,7 @@ struct GoFlyComponentGallery: View {
     private var pillSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("StatusPill")
-            let statuses: [GoFlySessionStatus] = [.started, .simulating, .paused, .stopped, .error]
+            let statuses: [GoFlySessionStatus] = [.started, .connecting, .simulating, .paused, .stopped, .error]
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading, spacing: 8) {
                 ForEach(statuses, id: \.textKey) { status in
                     GoFlyStatusPill(text: goFlyString(status.textKey), tone: status.tone,
@@ -165,7 +165,7 @@ struct GoFlyComponentGallery: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("RouteRunning")
             GoFlyRouteRunningControls(
-                title: goFlyString("route.position"), fraction: 0.26,
+                title: GoFlyRouteRunningControls.remainingTitle(.seconds(4_500)), fraction: 0.26,
                 isRoundTrip: false, isReversed: false, speed: 25,
                 onPlayback: { endResult = "playback" },
                 onEnd: { showingEndDialog = true })

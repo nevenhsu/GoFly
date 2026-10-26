@@ -142,12 +142,6 @@ struct GoFlyLocationSettingsPage: View {
                 .accessibilityIdentifier("settings.location.status")
             }
 
-            Text(goFlyString("settings.location.purpose"))
-                .font(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
-                .accessibilityIdentifier("settings.location.purpose")
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
             }
@@ -164,22 +158,44 @@ struct GoFlyLocationSettingsPage: View {
 struct GoFlyBackgroundSettingsPage: View {
     @ObservedObject var continuation: MovementContinuationController
     @StateObject private var status = GoFlySystemStatus()
+    @State private var showingDuration = false
+    private var preferences: GoFlyPreferences { GoFlyPreferences.shared }
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.background", rootIdentifier: "settings.background.page") {
             GoFlySettingsGroup {
                 GoFlySettingsRow {
-                    VStack(alignment: .leading, spacing: 4) {
+                    GoFlySettingsValueRow {
                         Text(goFlyString("settings.background.purposeTitle"))
                             .font(GoFlyFont.body)
-                        Text(goFlyString("background.systemDecidesRuntime"))
-                            .font(GoFlyFont.subheadline)
+                    } value: {
+                        Text(goFlyString("settings.background.systemTask"))
+                            .font(GoFlyFont.body)
                             .foregroundStyle(GoFlyTextColor.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Divider().padding(.leading, 16)
+                Button { showingDuration = true } label: {
+                    GoFlySettingsRow {
+                        GoFlySettingsValueRow {
+                            Text(goFlyString("settings.background.duration"))
+                                .font(GoFlyFont.body)
+                        } value: {
+                            Text(GoFlyBackgroundDuration.summary(seconds: preferences.backgroundRunSeconds))
+                                .font(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                        }
+                        Image(systemName: GoFlySymbols.disclosure)
+                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.background.duration")
+            }
+
+            GoFlySettingsGroup {
                 Button(action: status.openSystemSettings) {
                     GoFlySettingsRow {
                         GoFlySettingsValueRow {
@@ -200,13 +216,6 @@ struct GoFlyBackgroundSettingsPage: View {
                 .accessibilityIdentifier("settings.background.open")
             }
 
-            Text(goFlyString("settings.background.purpose"))
-                .font(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
-                .accessibilityIdentifier("background.description")
-
             if continuation.hasRuntime || continuation.noticeKey != nil {
                 GoFlyContinuationStatus(continuation: continuation)
             }
@@ -214,6 +223,12 @@ struct GoFlyBackgroundSettingsPage: View {
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
             }
+        }
+        .sheet(isPresented: $showingDuration, onDismiss: continuation.backgroundDurationDidChange) {
+            GoFlyBackgroundDurationSheet(
+                seconds: preferences.backgroundRunSeconds,
+                onChange: { preferences.setBackgroundRunSeconds($0) },
+                onDismiss: { showingDuration = false })
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -273,14 +288,8 @@ struct GoFlyVPNSettingsPage: View {
                 Divider().padding(.leading, 16)
                 Button(action: { _ = recovery.resetTunnel() }) {
                     GoFlySettingsRow {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(goFlyString("service.resetTunnel"))
-                                .font(GoFlyFont.body)
-                            Text(goFlyString("service.stopBeforeRepair"))
-                                .font(GoFlyFont.caption)
-                                .foregroundStyle(GoFlyTextColor.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text(goFlyString("service.resetTunnel"))
+                            .font(GoFlyFont.body)
                         Spacer(minLength: 8)
                     }
                 }
@@ -307,11 +316,6 @@ struct GoFlyVPNSettingsPage: View {
                 .accessibilityIdentifier("settings.vpn.help")
             }
 
-            Text(goFlyString("settings.vpn.steps"))
-                .font(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
             }
@@ -376,12 +380,6 @@ struct GoFlyDeviceSettingsPage: View {
                 Divider().padding(.leading, 16)
                 deviceField("settings.device.system", value: "\(snapshot.deviceName) · \(snapshot.deviceModel) · \(snapshot.systemName) \(snapshot.systemVersion)", identifier: "settings.device.system")
             }
-
-            Text(goFlyString("settings.device.pairingNote"))
-                .font(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 16)
 
             diagnosticsSection
         }

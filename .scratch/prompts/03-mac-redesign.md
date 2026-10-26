@@ -1,3 +1,5 @@
+> **已取代（2026-10-26）**：Mac 改版改以 `.scratch/prompts/04-mac-v1-codex.md` 與 `.scratch/gofly-mac-v1/` 的票為準；本文件的備份／還原／重置／接續流程第一版不做。
+
 # 任務：GoFly for Mac UI／UX 改版
 
 你在 repo `/Users/neven/Documents/projects/ianygo` 工作，對象是 macOS App `app/GoFlyMac`（SwiftUI，macOS 15+，Swift 6；後端是 Python bridge `app/GoFlyMac/Bridge/`）。請依新版設計重構 Mac App 的介面與流程。

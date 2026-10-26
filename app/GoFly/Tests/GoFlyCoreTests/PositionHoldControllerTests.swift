@@ -52,6 +52,11 @@ struct PositionHoldControllerTests {
         await wait { (await device.sent.count) == 2 }
         await device.finishNext(.acknowledged)
         await wait { acknowledgements.count == 1 && clock.sleepingCount > 0 }
+        let operation = try #require(controller.intent)
+        let grant = ContinuedProcessingGrant(requestID: UUID(), movementID: operation.id, lease: operation.lease)
+        #expect(service.bindMovementContinuation(grant))
+        service.setMovementSceneActive(false)
+        controller.releaseForInactiveScene(continuingLease: operation.lease)
 
         clock.advance(by: .seconds(5))
         await wait { await device.sent.count == 3 }
@@ -71,6 +76,50 @@ struct PositionHoldControllerTests {
         clock.advance(by: .seconds(30))
         #expect(await device.sent.count == 4)
         #expect(await device.sent.allSatisfy { $0 == coordinate })
+    }
+
+    @Test func onlyBackgroundTimeCountsAndForegroundReturnResetsWithoutStopping() async throws {
+        let device = PositionHoldDevice()
+        let service = ServiceController(service: device)
+        let clock = PositionHoldManualClock()
+        let controller = PositionHoldController(service: service, clock: clock,
+            interval: .seconds(10), cadence: .seconds(5))
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        #expect(service.teleport(to: TeleportCandidate(place: place(coordinate))))
+        await wait { await device.sent.count == 1 }
+        await device.finishNext(.acknowledged)
+        await wait { (await device.sent.count) == 2 }
+        await device.finishNext(.acknowledged)
+        await wait { controller.phase == .running && clock.sleepingCount > 0 }
+
+        // Foreground: the hold keeps writing but the countdown does not move.
+        clock.advance(by: .seconds(5))
+        await wait { (await device.sent.count) == 3 }
+        await device.finishNext(.acknowledged)
+        await wait { (await device.sent.count) == 3 && clock.sleepingCount > 0 }
+        #expect(controller.elapsedSeconds == 0)
+
+        let operation = try #require(controller.intent)
+        let grant = ContinuedProcessingGrant(requestID: UUID(), movementID: operation.id, lease: operation.lease)
+        #expect(service.bindMovementContinuation(grant))
+        service.setMovementSceneActive(false)
+        controller.releaseForInactiveScene(continuingLease: operation.lease)
+        clock.advance(by: .seconds(5))
+        await wait { (await device.sent.count) == 4 }
+        await device.finishNext(.acknowledged)
+        await wait { controller.elapsedSeconds == 5 && clock.sleepingCount > 0 }
+
+        service.setMovementSceneActive(true)
+        controller.sceneDidBecomeActive()
+        #expect(controller.elapsedSeconds == 0)
+        #expect(controller.phase == .running)
+        clock.advance(by: .seconds(5))
+        await wait { (await device.sent.count) == 5 }
+        await device.finishNext(.acknowledged)
+        await wait { (await device.sent.count) == 5 && clock.sleepingCount > 0 }
+        #expect(controller.elapsedSeconds == 0)
+        #expect(controller.phase == .running)
+        #expect(controller.completedCycles == 0)
     }
 
     @Test func timerCannotAdvanceProgressWithoutAnAcknowledgement() async throws {

@@ -93,7 +93,7 @@ struct GoFlyFavoriteEditorSheet: View {
     }
 
     private var header: some View {
-        GoFlySheetHeader(title: goFlyString("favorites.editLabel")) {
+        GoFlySheetHeader(title: nil) {
             Button(goFlyString("favorites.cancel")) {
                 favorites.clearError()
                 onDismiss()

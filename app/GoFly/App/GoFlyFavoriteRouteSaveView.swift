@@ -113,7 +113,7 @@ struct GoFlySaveFavoriteRouteView: View {
     }
 
     private var header: some View {
-        GoFlySheetHeader(title: goFlyString(savedOmittingCurrent == nil ? "favoriteRoutes.add" : "favoriteRoutes.savedTitle")) {
+        GoFlySheetHeader(title: nil) {
             Button(goFlyString("favoriteRoutes.cancel")) {
                 favorites.clearError()
                 onDismiss()
@@ -291,7 +291,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     }
 
     private var header: some View {
-        GoFlySheetHeader(title: goFlyString("favoriteRoutes.editLabel")) {
+        GoFlySheetHeader(title: nil) {
             Button(goFlyString("favoriteRoutes.cancel")) {
                 favorites.clearError()
                 onDismiss()

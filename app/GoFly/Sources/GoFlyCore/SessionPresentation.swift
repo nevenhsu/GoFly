@@ -3,10 +3,13 @@ import Foundation
 /// Shared by all movement modes and both session pills. Probe progress is
 /// deliberately independent of the last completed connectivity result.
 public enum SessionDisplayStatus: Equatable, Sendable {
-    case started, simulating, paused, stopped, error
+    case started, connecting, simulating, paused, stopped, error
 
-    public init(hasError: Bool, running: Bool, paused: Bool, hasSimulated: Bool) {
+    /// `connecting` is the movement permission (tunnel) still being
+    /// established; it yields to any real error.
+    public init(hasError: Bool, connecting: Bool = false, running: Bool, paused: Bool, hasSimulated: Bool) {
         if hasError { self = .error }
+        else if connecting { self = .connecting }
         else if running { self = .simulating }
         else if paused { self = .paused }
         else { self = hasSimulated ? .stopped : .started }
@@ -15,6 +18,7 @@ public enum SessionDisplayStatus: Equatable, Sendable {
     public var textKey: String {
         switch self {
         case .started: "status.pill.started"
+        case .connecting: "status.pill.connecting"
         case .simulating: "status.pill.simulating"
         case .paused: "status.pill.paused"
         case .stopped: "status.pill.stopped"

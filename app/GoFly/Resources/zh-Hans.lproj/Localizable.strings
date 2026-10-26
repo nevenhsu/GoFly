@@ -14,7 +14,7 @@
 "service.title" = "设备服务";
 "service.start" = "启动";
 "service.stop" = "停止";
-"service.restoreGPS" = "恢复 GPS";
+"service.reset" = "重置";
 "service.resetTunnel" = "重置 VPN 通道";
 "service.stopped" = "已停止";
 "service.stoppedGPSPending" = "已停止・GPS 待确认";
@@ -24,8 +24,7 @@
 "service.restoring" = "恢复 GPS 中…";
 "service.resetting" = "重置 VPN 通道中…";
 "service.repairRequired" = "已停止 · 需要修复";
-"service.stopBeforeRepair" = "请先停止服务，再恢复 GPS 或重置 VPN 通道。";
-"service.repairHint" = "服务停止后可用，请等其他修复操作完成。";
+"service.resetHint" = "停止失败时使用。会结束 GoFly 的所有任务，并尽量恢复真实 GPS。";
 "gps.title" = "GPS 恢复";
 "gps.unknown" = "GPS 恢复尚未确认。";
 "gps.clearing" = "正在要求设备清除模拟位置…";
@@ -40,7 +39,7 @@
 "error.identityMismatch" = "配对数据属于其他设备。请将这部 iPhone 连接 Mac App 修复。";
 "error.devicePreparationRequired" = "这部 iPhone 需要设备准备。请连接 Mac App 完成准备。";
 "error.serviceUnavailable" = "无法连接设备服务。请检查 VPN 通道；若仍无法连接，请在 Mac App 修复这部 iPhone。";
-"error.tunnelUnavailable" = "无法连接 VPN 通道。请确认 iPhone 已连上 Wi‑Fi（只用蜂窝网络无法使用），重新连接 LocalDevVPN，再在 GoFly 重置 VPN 通道。";
+"error.tunnelUnavailable" = "无法连接 VPN 通道。请确认 iPhone 已连上 Wi‑Fi（只用蜂窝网络无法使用），重新连接 LocalDevVPN，再在 GoFly 重新按“启动”。";
 "error.operationTimedOut" = "设备未在时限内确认操作。请检查连接并停止服务后重试；GPS 恢复确认状态另列于下方。";
 "error.deviceRequired" = "需要已完成准备的实体 iPhone；模拟器无法启动设备服务或确认 GPS 恢复。";
 "error.storageUnavailable" = "无法读取设备设置数据。请检查可用存储空间，并在 Mac App 修复这部 iPhone。";
@@ -607,6 +606,8 @@
 "route.zeroDistance" = "0 km";
 "route.zeroDuration" = "约 0 分";
 "route.distance" = "%.1f km";
+"route.remaining.minutes" = "剩余 %d 分";
+"route.remaining.hours" = "剩余 %d 小时 %d 分";
 "route.duration" = "约 %d 分";
 "route.noRouteYet" = "选择两个地点后显示距离";
 "route.speedUnit" = "km/h";
@@ -643,9 +644,9 @@
 "settings.wifi.connected" = "已连接";
 "settings.wifi.notConnected" = "未连接";
 "background.activity.fixedPosition" = "GoFly 固定位置";
-"background.activity.durationProgress" = "%ld%% · 12 小时任务";
+"background.activity.durationProgress" = "%ld%% · 后台任务";
 "background.activity.routeProgress" = "路线进度 %ld%%";
-"background.durationCompleted" = "12 小时任务已完成";
+"background.durationCompleted" = "后台任务已完成";
 "background.positionPaused" = "位置维持已暂停";
 "background.positionPaused.message" = "重试以维持此位置。";
 "background.positionRetry" = "重试";
@@ -661,6 +662,7 @@
 "route.direction.reverse" = "逆向";
 
 "status.pill.started" = "启动";
+"status.pill.connecting" = "连接中";
 "status.pill.simulating" = "模拟中";
 "status.pill.paused" = "暂停";
 "status.pill.stopped" = "停止";
@@ -681,3 +683,11 @@
 "issue.action.retry" = "重试";
 "issue.action.settings" = "设置";
 "issue.action.chooseFile" = "选档";
+
+"settings.background.duration" = "后台运行时间";
+"settings.background.duration.hours" = "小时";
+"settings.background.duration.hr" = "hr";
+"settings.background.duration.min" = "min";
+"settings.background.duration.minutes" = "分钟";
+"settings.background.systemTask" = "系统后台任务";
+"common.cancel" = "取消";

@@ -15,7 +15,7 @@ final class GoFlySpeedUITests: GoFlyRouteModeTestCase {
         evidence(app, task: "R1", name: "speed-sheet-light")
         app.buttons["route.speed.preset.50"].tap()
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "route.speed.value").firstMatch.label, "50")
-        app.buttons["route.speed.done"].tap()
+        app.buttons["route.speed.confirm"].tap()
         app.terminate()
 
         app = launch(preferencesStore: store)
