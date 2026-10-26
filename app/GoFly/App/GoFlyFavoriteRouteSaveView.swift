@@ -109,9 +109,11 @@ struct GoFlySaveFavoriteRouteView: View {
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favoriteRoutes.save.content")
         }
-        .background(GoFlyStyle.cardSurface)
         .presentationDetents([.height(max(200, headerHeight + contentHeight)), .large])
         .presentationDragIndicator(.visible)
+        // Same opaque sheet as the place editor: a view background over the system
+        // sheet material lets the Save button tint change with the detent.
+        .presentationBackground(GoFlyStyle.surface)
         .interactiveDismissDisabled(saving)
         .task { focused = true }
         .onDisappear { saveTask?.cancel() }
@@ -293,9 +295,11 @@ struct GoFlyFavoriteRouteLabelEditor: View {
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favoriteRoutes.editor.content")
         }
-        .background(GoFlyStyle.cardSurface)
         .presentationDetents([.height(367), .large])
         .presentationDragIndicator(.visible)
+        // Same opaque sheet as the place editor: a view background over the system
+        // sheet material lets the Save button tint change with the detent.
+        .presentationBackground(GoFlyStyle.surface)
         .interactiveDismissDisabled(saving)
         .task { focused = true }
         .onDisappear { saveTask?.cancel() }

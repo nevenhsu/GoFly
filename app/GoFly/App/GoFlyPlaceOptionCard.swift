@@ -38,7 +38,8 @@ struct GoFlyFavoriteStar: View {
             ? (favorites.isFavorite(place) ? "favorites.saved" : "favorites.notSaved") : "favorites.unavailable"))
         .accessibilityIdentifier(identifier)
         .sheet(isPresented: $showingEditor) {
-            GoFlyFavoriteEditorSheet(place: place, initialLabel: favorites.favorite(for: place)?.label, onDismiss: { showingEditor = false })
+            GoFlyFavoriteEditorSheet(place: place, initialLabel: favorites.favorite(for: place)?.label,
+                                     allowsDelete: false, onDismiss: { showingEditor = false })
         }
     }
 

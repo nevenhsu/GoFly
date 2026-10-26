@@ -140,7 +140,7 @@ struct GoFlyBackgroundDurationSheet: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .frame(width: 48, alignment: .leading)
-                .padding(.trailing, 36)
+                .padding(.trailing, 24)
         }
         .frame(width: columnWidth)
         .accessibilityIdentifier("settings.background.duration.\(identifier)")
