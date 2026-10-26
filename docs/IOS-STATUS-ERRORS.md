@@ -49,6 +49,8 @@
 | `joystick.error.originUnavailable` | 目前沒有已確認的可用位置。請設定起點後使用搖桿。 |
 | `joystick.error.noCandidate` | 找不到新的目的地。請在地圖選點或重試。 |
 
+搖桿／漫步起點（2026-10-26 修正）：依序採用已驗證的模擬位置、裝置仍保持的模擬位置（箭頭變灰、未經 Stop／Restore 清除），最後才是 15 秒內的真實 GPS。只有三者皆無時才顯示 `joystick.error.originUnavailable`；背景往返、保持位置暫停或單次未送出都不會使起點失效，第一個 ACK 會重新驗證箭頭。
+
 ## 最愛地點
 
 | 代碼 | 繁體中文文案 |

@@ -286,6 +286,12 @@ struct GoFlyMapView: View {
             GeometryReader { geometry in
                 mapContent(in: geometry)
                 .coordinateSpace(name: "mapRoot")
+                // An origin ACK can arrive while the position hold still
+                // prepares; the queued wander starts once native work drains.
+                .onChange(of: service.nativeBusy) { _, busy in
+                    if !busy, pendingWanderStart?.originAcknowledged == true,
+                       scenePhase == .active, !recovery.isChecking { resumePendingWanderPlanning() }
+                }
                 .accessibilityHidden(presentedSheet != nil || showingSearch || route.picker != nil)
             }
             .background(GoFlyStyle.canvas.ignoresSafeArea())
@@ -477,7 +483,11 @@ struct GoFlyMapView: View {
                     }
                     if let pending = pendingWanderStart, pending.teleportIntentID == intent.id,
                        pending.plannerID == wanderPlanningID {
-                        if scenePhase == .active && !recovery.isChecking {
+                        // The ACK also starts the position hold, whose native
+                        // preparation can still be busy; wait for it rather
+                        // than failing the first Start.
+                        if scenePhase == .active && !recovery.isChecking
+                            && joystick.canSetWanderEnabled && joystick.canStartWanderPlanning {
                             pendingWanderStart = nil
                             _ = installAndStartWander(target: pending.target, route: pending.route,
                                                       plannerID: pending.plannerID)
@@ -707,13 +717,18 @@ struct GoFlyMapView: View {
             marker: movement.presentation.marker, candidate: activeCandidate,
             viewport: cameraViewport, cameraIntent: cameraIntent,
             route: mode == .route ? route.plannedRoute : (isWanderMap ? joystick.wanderRoute : nil),
-            routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : nil,
+            // A wander segment has one destination and no intermediate stops.
+            routeWaypoints: mode == .route && route.draft.gpxSource == nil ? manualRouteWaypoints : (isWanderMap ? [] : nil),
             wanderTarget: isWanderMap ? joystick.wanderTarget?.place : nil,
             markerBearingDegrees: activeMarkerBearing,
             markerRoute: isWanderMap ? (joystick.wanderNeedsReplan ? nil : joystick.wanderRoute) : movement.presentation.route,
             markerRouteDistance: isWanderMap ? joystick.wanderProgressMeters : movement.presentation.routeDistance,
             adjustsFocusForViewportChanges: false,
             attributionBottomInset: attributionBottomInset,
+            onDestinationTap: isWanderMap && joystick.wanderTarget != nil ? {
+                dismissKeyboard()
+                selectedWanderPlace = joystick.wanderTarget?.place
+            } : nil,
             onMapTap: { coordinate in
                 if let picker = route.picker {
                     picker.candidates.selectMapCoordinate(coordinate, resolver: mapPlaces)
@@ -739,12 +754,8 @@ struct GoFlyMapView: View {
 
     @ViewBuilder
     private func mapPins(viewport: CGRect) -> some View {
-        if isWanderMap, let target = joystick.wanderTarget,
-           let point = projection?.wanderTargetPoint, viewport.contains(point) {
-            wanderPinOverlay(at: point, size: CGSize(width: 44, height: 44), viewport: viewport) {
-                wanderTargetPin(target.place)
-            }
-        }
+        // The wander destination is the route's destination dot on the map canvas;
+        // only a picked replacement draws a pin here.
         if let candidate = activeCandidate, let point = projection?.candidatePoint {
             if isWanderMap {
                 if viewport.contains(point) {
@@ -1655,7 +1666,9 @@ struct GoFlyMapView: View {
                 wanderRetryDestination = nil
                 selectedWanderPlace = nil
                 wanderSearch.resetSelection()
-                cameraIntent = GoFlyCameraIntent(route: planned)
+                // The arrow sits at 1/3 height so the joystick panel cannot cover it.
+                cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start,
+                                                 verticalFraction: 1.0 / 3)
             } catch is CancellationError {
                 return
             } catch {
@@ -1989,7 +2002,7 @@ struct GoFlyMapView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isGoButtonDisabled)
+        .goFlySteadyDisabled(isGoButtonDisabled)
         .accessibilityIdentifier("map.candidate.go")
     }
 
@@ -2018,7 +2031,7 @@ struct GoFlyMapView: View {
                 sheetDetent = .half
             }
         } label: {
-            GoFlyPlacePinIcon(kind: isWanderMap ? .destination : .candidate)
+            GoFlyPlacePinIcon()
                 .frame(width: 44, height: 44, alignment: .bottom)
                 .contentShape(Rectangle())
         }
@@ -2029,20 +2042,6 @@ struct GoFlyMapView: View {
         .accessibilityIdentifier("map.candidate.pin")
     }
 
-    private func wanderTargetPin(_ place: MapPlace) -> some View {
-        Button {
-            dismissKeyboard()
-            selectedWanderPlace = place
-        } label: {
-            GoFlyPlacePinIcon(kind: .destination)
-                .frame(width: 44, height: 44, alignment: .bottom)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(goFlyString("search.placeDetails"))
-        .accessibilityValue(goFlyLocalizedFormat(goFlyString("joystick.currentTarget"), place.title))
-        .accessibilityIdentifier("map.wander.target")
-    }
 
     /// Move only the callout within the unobscured map. Its leader keeps the exact coordinate visible.
     private func wanderPinOverlay<Content: View>(at anchor: CGPoint, size: CGSize, viewport: CGRect,

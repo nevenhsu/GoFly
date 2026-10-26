@@ -1577,10 +1577,13 @@ extension ServiceController {
         }
     }
 
+    /// A greyed (unverified) arrow is still where the device holds the
+    /// location, so the joystick starts from it; its first ACK re-verifies.
     public var currentJoystickOrigin: GeoCoordinate? {
         if let marker = displayPositionMarker, marker.source == .simulation, marker.freshness == .fresh {
             return marker.coordinate
         }
+        if let held = unclearedSimulatedCoordinate { return held }
         guard let realLocation, now().timeIntervalSince(realLocation.observedAt) <= 15 else { return nil }
         return realLocation.coordinate
     }

@@ -124,7 +124,7 @@ struct GoFlyRoutePanel: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
-            .disabled(!isRouteUsable)
+            .goFlySteadyDisabled(!isRouteUsable)
             .accessibilityIdentifier("route.start")
         }
     }

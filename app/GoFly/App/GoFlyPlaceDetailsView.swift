@@ -99,12 +99,9 @@ struct GoFlyPlaceDetailsView: View {
                         .font(GoFlyFont.subheadlineEmphasis)
                         .padding(.horizontal, 16)
                         .frame(height: 40)
-                        .background(canGo ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
-                        .foregroundStyle(canGo ? GoFlyStyle.surface : GoFlyTextColor.disabled)
-                        .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
-                .disabled(!canGo)
+                .buttonStyle(GoFlyCardPrimaryStyle())
+                .goFlySteadyDisabled(!canGo)
                 .accessibilityIdentifier("placeDetails.go")
             }
             GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite",

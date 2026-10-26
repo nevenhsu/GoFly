@@ -76,7 +76,7 @@ struct GoFlyRouteRunningControls: View {
                 .lineLimit(1)
         }
         .buttonStyle(GoFlyActionStyle(primary: true))
-        .disabled(!canPlayback)
+        .goFlySteadyDisabled(!canPlayback)
         .accessibilityIdentifier(isPaused ? "route.resume" : "route.pause")
     }
 }

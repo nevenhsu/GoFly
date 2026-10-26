@@ -158,6 +158,26 @@ struct PositionHoldServiceTests {
         #expect(await service.beginPositionHold(after: captured, intent: intent) == .cancelled)
     }
 
+    @Test func joystickStartsFromTheHeldPinAfterTheArrowGreys() async throws {
+        let device = PositionHoldServiceDevice()
+        let service = ServiceController(service: device)
+        let coordinate = try #require(GeoCoordinate(latitude: 25, longitude: 121))
+        #expect(service.teleport(to: TeleportCandidate(place: place(coordinate))))
+        await waitForPending(device)
+        #expect(await device.claimNext())
+        await device.finishNext(.acknowledged)
+        await waitUntilIdle(service)
+
+        service.setMovementSceneActive(false)
+        service.setMovementSceneActive(true)
+        #expect(service.displayPositionMarker?.freshness == .waiting)
+        #expect(service.currentJoystickOrigin == coordinate)
+
+        #expect(service.stop())
+        await waitUntilIdle(service)
+        #expect(service.currentJoystickOrigin == nil)
+    }
+
     @Test func staleTeleportAcknowledgementIsRejectedAfterNewExplicitPointOperation() async throws {
         let device = PositionHoldServiceDevice()
         let service = ServiceController(service: device)

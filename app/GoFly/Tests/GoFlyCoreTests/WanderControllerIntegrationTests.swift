@@ -196,11 +196,7 @@ struct WanderControllerIntegrationTests {
         await device.finish(.notSent(.pairingRequired))
         await wait { controller.phase == .neutral && !service.nativeBusy }
         #expect(controller.wanderEnabled && controller.wanderTarget == target)
-        if installed {
-            #expect(!controller.canRetryWander)
-            #expect(!controller.retryWander())
-            service.observeRealLocation(location())
-        }
+        // An installed wander retries from the ACK the device still holds.
         #expect(controller.canRetryWander)
         #expect(controller.error == .device(.pairingRequired) && !controller.requiresStop)
         #expect(service.confirmedSimulatedLocation == confirmed)

@@ -103,7 +103,7 @@ struct GoFlyJoystickPanel: View {
         } else {
             Button(action: onStartWander) { Text(goFlyString("joystick.startWander")) }
                 .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 52))
-                .disabled(!(canStartWander ?? controller.canSetWanderEnabled))
+                .goFlySteadyDisabled(!(canStartWander ?? controller.canSetWanderEnabled))
                 .accessibilityIdentifier("joystick.wander")
         }
     }
@@ -179,6 +179,7 @@ private struct GoFlyManualJoystickPad: View {
     @State private var admitted = false
     @State private var endedWhileHeld = false
     @State private var screenVector = CGPoint.zero
+    @State private var steadyEnabled = true
     private let diameter: CGFloat = 152
     private let thumbDiameter: CGFloat = 44
     private var radius: CGFloat { (diameter - thumbDiameter) / 2 - 8 }
@@ -206,15 +207,15 @@ private struct GoFlyManualJoystickPad: View {
                     .accessibilityHidden(true)
             }
             Circle()
-                .fill(isEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledSurface)
+                .fill(steadyEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledSurface)
                 .frame(width: thumbDiameter, height: thumbDiameter)
                 .overlay {
-                    Circle().strokeBorder(isEnabled ? GoFlyStyle.subtleBorder : GoFlyStyle.border, lineWidth: 1)
+                    Circle().strokeBorder(steadyEnabled ? GoFlyStyle.subtleBorder : GoFlyStyle.border, lineWidth: 1)
                     Circle()
-                        .fill(isEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
+                        .fill(steadyEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
                         .frame(width: 20, height: 20)
                 }
-                .shadow(color: .black.opacity(isEnabled ? 0.18 : 0), radius: 5, y: 3)
+                .shadow(color: .black.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
                 .offset(thumbOffset)
                 .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
         }
@@ -238,6 +239,14 @@ private struct GoFlyManualJoystickPad: View {
             if phase != .active { endHeldInput() }
         }
         .onDisappear { finishTouch() }
+        // A heartbeat briefly revokes admission; only a lasting change greys the thumb.
+        .task(id: isEnabled) {
+            if !isEnabled, steadyEnabled {
+                try? await Task.sleep(for: GoFlyStyle.admissionBlipDelay)
+                guard !Task.isCancelled else { return }
+            }
+            steadyEnabled = isEnabled
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(goFlyString("joystick.pad"))
         .accessibilityValue(accessibilityValue)

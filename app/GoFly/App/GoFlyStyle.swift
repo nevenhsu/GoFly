@@ -14,6 +14,8 @@ enum GoFlyStyle {
     static let border = Color(uiColor: .separator)
     static let subtleBorder = Color(uiColor: .opaqueSeparator).opacity(0.45)
     static let cornerRadius: CGFloat = 20
+    /// Longer than a heartbeat write; see `goFlySteadyDisabled`.
+    static let admissionBlipDelay: Duration = .seconds(1)
     static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 14
     static let inputRadius: CGFloat = 12
@@ -86,6 +88,39 @@ extension View {
     }
 }
 
+/// Each hold heartbeat marks native work busy for a moment, which briefly
+/// revokes admission. Show a disabled state only once it has lasted `delay`,
+/// so controls do not flicker; the action itself still checks admission.
+private struct GoFlySteadyDisabled: ViewModifier {
+    let disabled: Bool
+    let delay: Duration
+    @State private var shownDisabled: Bool
+
+    init(disabled: Bool, delay: Duration) {
+        self.disabled = disabled
+        self.delay = delay
+        _shownDisabled = State(initialValue: disabled)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .disabled(shownDisabled)
+            .task(id: disabled) {
+                if disabled, !shownDisabled {
+                    try? await Task.sleep(for: delay)
+                    guard !Task.isCancelled else { return }
+                }
+                shownDisabled = disabled
+            }
+    }
+}
+
+extension View {
+    func goFlySteadyDisabled(_ disabled: Bool, delay: Duration = GoFlyStyle.admissionBlipDelay) -> some View {
+        modifier(GoFlySteadyDisabled(disabled: disabled, delay: delay))
+    }
+}
+
 struct GoFlyEmptyState: View {
     var symbol: String
     var message: String
@@ -129,6 +164,20 @@ func goFlyLocalizedFormat(_ format: String, _ arguments: CVarArg...) -> String {
 
 /// Figma 0 board buttons: 56 pt black primary, 48 pt gray secondary,
 /// 40 pt action-row capsules and a filled red destructive variant.
+/// The solid capsule CTA of the location and place-details cards. Colours
+/// follow the environment so `goFlySteadyDisabled` also steadies them.
+struct GoFlyCardPrimaryStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? GoFlyStyle.surface : GoFlyTextColor.disabled)
+            .background(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.75 : 1)
+    }
+}
+
 struct GoFlyActionStyle: ButtonStyle {
     var primary = false
     var compactAtAccessibilitySizes = false

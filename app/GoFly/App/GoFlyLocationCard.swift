@@ -73,15 +73,12 @@ struct GoFlyLocationCard: View {
                             .font(GoFlyFont.subheadlineEmphasis)
                             .lineLimit(1)
                     }
-                    .foregroundStyle(primaryEnabled ? GoFlyStyle.surface : GoFlyTextColor.disabled)
                     .frame(minWidth: 77)
                     .frame(height: 40)
                     .padding(.horizontal, 16)
-                    .background(primaryEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
-                    .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
-                .disabled(!primaryEnabled)
+                .buttonStyle(GoFlyCardPrimaryStyle())
+                .goFlySteadyDisabled(!primaryEnabled)
                 .accessibilityIdentifier("\(identifier).primaryAction")
 
                 // Favorite button

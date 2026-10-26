@@ -9,11 +9,16 @@ struct GoFlyCameraIntent: Equatable {
     var routeCoordinates: [GeoCoordinate]? = nil
     var ensureVisibleOnly = false
     var headingDegrees: Double? = nil
+    /// Pan only, placing the coordinate at this fraction of the map height
+    /// from the top (e.g. 1/3 keeps it clear of a tall bottom panel).
+    var verticalFraction: CGFloat? = nil
 
-    init(coordinate: GeoCoordinate, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil) {
+    init(coordinate: GeoCoordinate, ensureVisibleOnly: Bool = false, headingDegrees: Double? = nil,
+         verticalFraction: CGFloat? = nil) {
         self.coordinate = coordinate
         self.ensureVisibleOnly = ensureVisibleOnly
         self.headingDegrees = headingDegrees
+        self.verticalFraction = verticalFraction
     }
     init(route: PlannedRoute) {
         coordinate = route.start
@@ -72,6 +77,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var adjustsFocusForViewportChanges = true
     /// Keeps the Apple Maps logo and Legal link above the bottom panel, tab bar and cards.
     var attributionBottomInset: CGFloat = 0
+    /// When set, tapping the route's destination node opens its card instead
+    /// of passing the tap to the map.
+    var onDestinationTap: (() -> Void)? = nil
     var onMapTap: (GeoCoordinate) -> Void
     var onProjection: (GoFlyMapProjection) -> Void
 
@@ -147,6 +155,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var appliedRouteColor: CGColor?
         private var routeWaypointsApplied: [GeoCoordinate]?
         private var routeNodeAnnotations: [RouteNodeAnnotation] = []
+        private var appliedNodeDark: Bool?
         private var annotationLocaleIdentifier = ""
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
@@ -165,6 +174,12 @@ struct GoFlyMapCanvas: UIViewRepresentable {
 
         func refreshAppearance(on map: MKMapView) {
             updateMarkerAppearance(on: map)
+            // Runs on every SwiftUI update; redraw nodes only when the appearance flips.
+            let dark = map.traitCollection.userInterfaceStyle == .dark
+            if appliedNodeDark != dark {
+                appliedNodeDark = dark
+                for node in routeNodeAnnotations { map.view(for: node)?.image = node.kind.image(dark: dark) }
+            }
             let color = UIColor.label.resolvedColor(with: map.traitCollection).cgColor
             if appliedRouteColor != color {
                 appliedRouteColor = color
@@ -183,6 +198,14 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             guard gesture.state == .ended, let map = gesture.view as? MKMapView else { return }
             let point = gesture.location(in: map)
             guard parent.viewport.contains(point) else { return }
+            if let onDestinationTap = parent.onDestinationTap,
+               let node = routeNodeAnnotations.last(where: { if case .destination = $0.kind { true } else { false } }),
+               let view = map.view(for: node) {
+                // At least a 44 pt hit target around the 22 pt node.
+                let frame = view.frame.insetBy(dx: min(0, (view.frame.width - 44) / 2),
+                                               dy: min(0, (view.frame.height - 44) / 2))
+                if frame.contains(point) { onDestinationTap(); return }
+            }
             let coordinate = map.convert(point, toCoordinateFrom: map)
             guard let valid = GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude) else { return }
             parent.onMapTap(valid)
@@ -361,6 +384,16 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 }
                 return
             }
+            if let fraction = intent.verticalFraction {
+                correctionsRemaining = 0
+                hasFocused = true
+                map.setCenter(intent.coordinate.clLocationCoordinate, animated: false)
+                let center = map.convert(map.centerCoordinate, toPointTo: map)
+                let desiredY = map.bounds.minY + map.bounds.height * min(max(fraction, 0), 1)
+                map.setCenter(map.convert(CGPoint(x: center.x, y: center.y + center.y - desiredY),
+                                          toCoordinateFrom: map), animated: false)
+                return
+            }
             let padding = UIEdgeInsets(
                 top: visible.minY, left: visible.minX,
                 bottom: map.bounds.maxY - visible.maxY, right: map.bounds.maxX - visible.maxX
@@ -449,10 +482,10 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: "routeNode")
                     ?? MKAnnotationView(annotation: node, reuseIdentifier: "routeNode")
                 view.annotation = node
-                view.image = node.kind.image
+                view.image = node.kind.image(dark: mapView.traitCollection.userInterfaceStyle == .dark)
                 view.centerOffset = node.kind.centerOffset
                 view.canShowCallout = false
-                view.isAccessibilityElement = false
+                configureAccessibility(view, kind: node.kind)
                 return view
             }
             guard annotation is PositionAnnotation, let marker = parent.marker else { return nil }
@@ -461,6 +494,22 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             view.annotation = annotation
             view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: mapView.camera.heading)
             return view
+        }
+
+        /// A tappable destination is a VoiceOver button; activation taps its
+        /// center, which reaches `mapTapped`.
+        private func configureAccessibility(_ view: MKAnnotationView, kind: RouteNodeAnnotation.Kind) {
+            guard case .destination = kind, parent.onDestinationTap != nil else {
+                view.isAccessibilityElement = false
+                return
+            }
+            view.isAccessibilityElement = true
+            view.accessibilityTraits = .button
+            view.accessibilityLabel = goFlyString("search.placeDetails")
+            view.accessibilityValue = parent.wanderTarget.map {
+                goFlyLocalizedFormat(goFlyString("joystick.currentTarget"), $0.title)
+            }
+            view.accessibilityIdentifier = "map.route.destination"
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
@@ -509,39 +558,36 @@ private final class RouteNodeAnnotation: NSObject, MKAnnotation {
     enum Kind {
         case start, waypoint(Int), destination
 
-        var centerOffset: CGPoint {
-            if case .destination = self { return CGPoint(x: 0, y: -11) }
-            return .zero
-        }
+        var centerOffset: CGPoint { .zero }
 
-        /// Figma D1/D6 route nodes: white ring start, numbered waypoints, black destination pin.
-        var image: UIImage {
+        /// Figma `MapNode /` components: white ring start, numbered waypoints,
+        /// and a thick destination dot without a stem, centred on the route end.
+        /// Dark mode inverts them like the `Dark · MapNode /` components.
+        func image(dark: Bool) -> UIImage {
+            let ink: UIColor = dark ? .white : .black
+            let paper: UIColor = dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : .white
             switch self {
             case .start:
                 return Self.render(CGSize(width: 22, height: 22)) { rect in
-                    UIColor.white.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+                    paper.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
                     let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 4.5, dy: 4.5))
-                    ring.lineWidth = 3; UIColor.black.setStroke(); ring.stroke()
+                    ring.lineWidth = 3; ink.setStroke(); ring.stroke()
                 }
             case .waypoint(let number):
                 return Self.render(CGSize(width: 24, height: 24)) { rect in
                     let circle = rect.insetBy(dx: 2, dy: 2)
-                    UIColor.white.setFill(); UIBezierPath(ovalIn: circle).fill()
+                    paper.setFill(); UIBezierPath(ovalIn: circle).fill()
                     let ring = UIBezierPath(ovalIn: circle.insetBy(dx: 1.25, dy: 1.25))
-                    ring.lineWidth = 2.5; UIColor.black.setStroke(); ring.stroke()
+                    ring.lineWidth = 2.5; ink.setStroke(); ring.stroke()
                     let text = NSAttributedString(string: "\(number)", attributes: [
-                        .font: UIFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: UIColor.black])
+                        .font: UIFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: ink])
                     let size = text.size()
                     text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
                 }
             case .destination:
-                return Self.render(CGSize(width: 26, height: 34)) { rect in
-                    UIColor.black.setFill()
-                    UIBezierPath(roundedRect: CGRect(x: rect.midX - 1.25, y: 20, width: 2.5, height: 10),
-                                 cornerRadius: 1.25).fill()
-                    UIBezierPath(ovalIn: CGRect(x: rect.midX - 11, y: 0, width: 22, height: 22)).fill()
-                    UIColor.white.setFill()
-                    UIBezierPath(ovalIn: CGRect(x: rect.midX - 3, y: 8, width: 6, height: 6)).fill()
+                return Self.render(CGSize(width: 22, height: 22)) { rect in
+                    ink.setFill(); UIBezierPath(ovalIn: rect).fill()
+                    paper.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 8, dy: 8)).fill()
                 }
             }
         }
