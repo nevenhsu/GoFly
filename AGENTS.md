@@ -57,6 +57,7 @@ and implementation specification have not been selected yet.
 ## iOS 實機測試安裝
 
 - 實機測試安裝／更新一律使用 `bash scripts/install-ios-test.sh`，或相同的正式 Mac setup producer；不可只執行 Xcode／`devicectl install` 後宣告完成。先核對 USB 裝置與 Xcode 登入帳號，再執行唯讀 `--action preflight`；取得使用者安裝授權後才執行 `--action apply`。
+- 此 producer 的固定 `pymobiledevice3` 版本需要讀取系統 `/var/run/usbmuxd`。受限命令列會因 `PermissionError` 把實際裝置誤報為 `device-disconnected`，即使 Xcode Device Hub 看得到手機。Codex 中從第一次唯讀 `preflight` 起，及後續 `apply`，都要用 `sandbox_permissions: "require_escalated"` 執行正式腳本；不要先在受限模式重試，也不要改用 `sudo` 或另一套安裝命令。若升權遭拒，停止並回報阻礙。
 - 本專案目前使用 Xcode Personal Team `48XD59469V`（2026-10-26 使用者指定並由 GoFly provisioning profile 核對）；舊 Team `NHW5EDBH4P` 已淘汰，禁止再用或自動 fallback。每次明確傳入 Personal Team ID；若 Xcode 帳號無法使用該 Team，停止並回報，不自行改用其他 Team。使用者授權 Apple 佈建更新時，`--allow-provisioning-updates` 必須同時帶在 `preflight` 與 `apply`。
 - 首次 `--mode install`；已有 App 使用 `--mode renew` 覆蓋更新並保留資料。兩者都須確認 App、這支手機的配對匯入與必要裝置支援；重新簽名／更新也不能略過配對。不卸載、不清除偏好設定／最愛／路線。只有 `complete=true` 且 `installationConfirmed`、`pairingImported`、`supportObserved` 全為 true 才算完成。
 - 寫入中斷**不接續**、不使用 `--action resume`：與 Mac App 一致，一律從頭重新執行 `--action preflight` → `--action apply`（已有 App 用 renew 覆蓋並保留資料，配對重新產生；見 `docs/MAC-INSTALLER-SPEC.md` §5.4）。producer 只有一筆全域現行交易；`apply` 遇到任何裝置留下的未完成交易會自動放棄（封存為 `journal.abandoned.json`，保留交易資料夾）並開新交易；重送相同 setupID 仍衝突。不手動刪除 journal、配對或 App。作廢舊的未使用配對尚未實作。操作範例與限制見 `docs/AI-INSTALL.md`；可直接交給 AI 的覆蓋安裝任務 prompt 位於該文件的 `iOS device-test prompt` 節。
