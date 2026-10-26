@@ -315,6 +315,7 @@
 "mode.joystick" = "Joystick";
 "operation.joystickSummary" = "Joystick movement";
 "joystick.setOrigin" = "Set starting point";
+"joystick.pinOriginHint" = "Pin a starting point on the map to use the joystick.";
 "joystick.pad" = "Manual joystick";
 "joystick.padHint" = "Touch and hold, then drag to move. Release or return to the center to stop this input.";
 "joystick.centered" = "Centered";
@@ -691,5 +692,7 @@
 "settings.background.duration.hr" = "hr";
 "settings.background.duration.min" = "min";
 "settings.background.duration.minutes" = "Minutes";
+"settings.background.duration.wheelUnit.hours" = "hr";
+"settings.background.duration.wheelUnit.minutes" = "min";
 "settings.background.systemTask" = "System background task";
 "common.cancel" = "Cancel";

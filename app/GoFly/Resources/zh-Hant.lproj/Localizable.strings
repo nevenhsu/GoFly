@@ -329,6 +329,7 @@
 "mode.joystick" = "搖桿";
 "operation.joystickSummary" = "搖桿移動";
 "joystick.setOrigin" = "設定起點";
+"joystick.pinOriginHint" = "請在地圖上標記一個起點後使用搖桿。";
 "joystick.pad" = "手動搖桿";
 "joystick.padHint" = "按住並拖動以移動。放開或回到中心，即停止這次輸入。";
 "joystick.centered" = "已回中心";
@@ -690,5 +691,7 @@
 "settings.background.duration.hr" = "hr";
 "settings.background.duration.min" = "min";
 "settings.background.duration.minutes" = "分鐘";
+"settings.background.duration.wheelUnit.hours" = "小時";
+"settings.background.duration.wheelUnit.minutes" = "分鐘";
 "settings.background.systemTask" = "系統背景任務";
 "common.cancel" = "取消";

@@ -92,13 +92,17 @@ struct GoFlyBackgroundDurationSheet: View {
     private var wheels: some View {
         HStack(spacing: 0) {
             wheel(selection: $hours, range: Array(0...24),
-                  unitKey: "settings.background.duration.hours", identifier: "hours", padded: false)
+                  unitKey: "settings.background.duration.hours",
+                  displayUnitKey: "settings.background.duration.wheelUnit.hours",
+                  identifier: "hours", padded: false)
             Text(":")
                 .font(GoFlyFont.title)
                 .foregroundStyle(GoFlyTextColor.disabled)
                 .accessibilityHidden(true)
             wheel(selection: $minutes, range: Array(0...59),
-                  unitKey: "settings.background.duration.minutes", identifier: "minutes", padded: true)
+                  unitKey: "settings.background.duration.minutes",
+                  displayUnitKey: "settings.background.duration.wheelUnit.minutes",
+                  identifier: "minutes", padded: true)
         }
         .padding(.horizontal, 8)
         .frame(height: 130)
@@ -110,14 +114,23 @@ struct GoFlyBackgroundDurationSheet: View {
     }
 
     private func wheel(selection: Binding<Int>, range: [Int], unitKey: String,
-                       identifier: String, padded: Bool) -> some View {
-        Picker(goFlyString(unitKey), selection: selection) {
-            ForEach(range, id: \.self) { value in
-                Text("\(padded ? String(format: "%02d", value) : String(value)) \(goFlyString(unitKey))")
-                    .tag(value)
+                       displayUnitKey: String, identifier: String, padded: Bool) -> some View {
+        ZStack(alignment: .trailing) {
+            Picker(goFlyString(unitKey), selection: selection) {
+                ForEach(range, id: \.self) { value in
+                    Text(padded ? String(format: "%02d", value) : String(value))
+                        .tag(value)
+                }
             }
+            .pickerStyle(.wheel)
+            .padding(.trailing, 34)
+
+            Text(goFlyString(displayUnitKey))
+                .font(GoFlyFont.title)
+                .foregroundStyle(GoFlyTextColor.primary)
+                .frame(width: 40, alignment: .leading)
+                .padding(.trailing, 36)
         }
-        .pickerStyle(.wheel)
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("settings.background.duration.\(identifier)")
     }

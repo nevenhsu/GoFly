@@ -234,6 +234,9 @@ struct GoFlyMapView: View {
     @State private var returnedFromUnconfirmed: UUID?
     @State private var isMapPicking = false
     @State private var settingJoystickOrigin = false
+    @State private var joystickOriginHintDismissed = false
+    /// Set only after fetching a real fix failed or came back stale.
+    @State private var joystickOriginFetchFailed = false
     @State private var joystickOriginIntentID: UUID?
     @State private var wanderPlanningTask: Task<Void, Never>?
     @State private var wanderPlanningID: UUID?
@@ -361,16 +364,19 @@ struct GoFlyMapView: View {
                 pendingGPSRecenter = false
                 service.observeRealLocation(observation)
                 guard observation != nil else {
+                    noteJoystickOriginFetchFailure()
                     if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
                         settingJoystickOrigin = false
                     }
                     return
                 }
                 guard let accepted = service.realLocation else {
+                    noteJoystickOriginFetchFailure()
                     location.rejectedFix()
                     return
                 }
                 location.acceptedFix()
+                joystickOriginFetchFailed = false
                 if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
                     guard let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else {
                         settingJoystickOrigin = false
@@ -464,6 +470,7 @@ struct GoFlyMapView: View {
                 }
             }
             .onChange(of: recovery.checkpointRevision) { _, _ in captureCheckpoint() }
+            .onReceive(service.joystickEvents, perform: retryJoystickOrigin)
             .onReceive(GoFlyPathMonitor.shared.changes) { _ in recovery.networkPathDidChange() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
@@ -1329,16 +1336,35 @@ struct GoFlyMapView: View {
         else if sheetDetent == .collapsed { sheetDetent = .half }
     }
 
+    /// A launch-time origin can be refused while the scene fence or tunnel is
+    /// still closed; retry once admission opens instead of leaving the joystick
+    /// disabled until the person taps Start.
+    private func retryJoystickOrigin(_ event: JoystickCommandEvent) {
+        guard case .availabilityChanged = event, mode == .joystick, !settingJoystickOrigin,
+              scenePhase == .active, joystick.requiresOrigin, service.canTeleport else { return }
+        ensureJoystickOrigin()
+    }
+
     /// Establish a joystick origin only from fresh GPS or a currently
     /// validated simulation marker. Warmup and retained display history are
     /// never accepted as position acknowledgement.
+    private func noteJoystickOriginFetchFailure() {
+        guard mode == .joystick, joystick.requiresOrigin, service.displayPositionMarker == nil else { return }
+        joystickOriginFetchFailed = true
+        joystickOriginHintDismissed = false
+    }
+
     private func ensureJoystickOrigin() {
-        guard mode == .joystick, !settingJoystickOrigin else { return }
+        // Only when there is no origin yet; an existing one is never replaced.
+        guard mode == .joystick, !settingJoystickOrigin, joystick.requiresOrigin else { return }
         if let marker = service.displayPositionMarker,
            marker.source == .simulation, marker.freshness == .fresh { return }
         settingJoystickOrigin = true
         if let marker = service.displayPositionMarker,
            marker.source == .gps, marker.freshness == .fresh {
+            submitJoystickOrigin(marker.coordinate)
+        } else if let marker = service.displayPositionMarker, marker.source == .simulation {
+            // The last simulated position (restored after a cold launch).
             submitJoystickOrigin(marker.coordinate)
         } else {
             location.requestRecenter()
@@ -2156,6 +2182,13 @@ struct GoFlyMapView: View {
         recovery.checkConnection()
     }
 
+    /// No real GPS and no last simulated position: the person must pin one.
+    private var needsJoystickOriginHint: Bool {
+        mode == .joystick && joystickOriginFetchFailed && !joystickOriginHintDismissed && sceneSettled && scenePhase == .active
+            && !settingJoystickOrigin && joystickOriginIntentID == nil
+            && joystick.requiresOrigin && service.displayPositionMarker == nil && service.canTeleport
+    }
+
     @ViewBuilder
     private var floatingSystemToast: some View {
         if network.shouldShowWiFiError {
@@ -2175,6 +2208,14 @@ struct GoFlyMapView: View {
                 title: goFlyString(key),
                 onDismiss: { favoriteRouteNoticeKey = nil },
                 identifier: "route.favoriteSaveError",
+                isFloating: true
+            )
+        } else if needsJoystickOriginHint {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString("joystick.pinOriginHint"),
+                onDismiss: { joystickOriginHintDismissed = true },
+                identifier: "joystick.pinOriginHint",
                 isFloating: true
             )
         } else if joystick.wanderError == .planningFailed, mode == .joystick {
