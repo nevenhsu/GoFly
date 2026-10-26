@@ -9,6 +9,7 @@ struct GoFlySaveFavoriteRouteView: View {
     var onDismiss: () -> Void
 
     @State private var label = ""
+    @State private var fallbackLabel = FavoriteLabelDefaults.defaultName()
     @State private var saving = false
     @State private var localErrorKey: String?
     @State private var savedOmittingCurrent: FavoriteRouteRecord?
@@ -48,7 +49,7 @@ struct GoFlySaveFavoriteRouteView: View {
                                 .font(GoFlyFont.footnote)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                             HStack {
-                                TextField(goFlyString("favoriteRoutes.label"), text: $label)
+                                TextField(goFlyString("favoriteRoutes.label"), text: $label, prompt: Text(fallbackLabel))
                                     .focused($focused)
                                     .submitLabel(.done)
                                     .onSubmit { focused = false }
@@ -174,7 +175,7 @@ struct GoFlySaveFavoriteRouteView: View {
         guard !saving, savedOmittingCurrent == nil, controller.canEdit, favorites.canMutate else { return }
         let draft = controller.draft
         let origin = currentRouteOrigin()
-        let capturedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : label
+        let capturedLabel = FavoriteLabelDefaults.resolved(label, fallback: fallbackLabel)
         let candidate: FavoriteRouteSaveCandidate
         do { candidate = try FavoriteRouteSaveBuilder.build(draft: draft, currentRouteOrigin: origin) }
         catch {
@@ -205,6 +206,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     var onDelete: (() -> Void)? = nil
 
     @State private var label: String
+    @State private var fallbackLabel = FavoriteLabelDefaults.defaultName()
     @State private var saving = false
     @State private var saveTask: Task<Void, Never>?
     @FocusState private var focused: Bool
@@ -233,7 +235,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                             .font(GoFlyFont.footnote)
                             .foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
-                            TextField(goFlyString("favoriteRoutes.label"), text: $label)
+                            TextField(goFlyString("favoriteRoutes.label"), text: $label, prompt: Text(fallbackLabel))
                                 .focused($focused)
                                 .submitLabel(.done)
                                 .onSubmit { focused = false }
@@ -269,7 +271,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
 
                     Button {
                         guard !saving, favorites.canMutate else { return }
-                        let capturedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : label
+                        let capturedLabel = FavoriteLabelDefaults.resolved(label, fallback: fallbackLabel)
                         saving = true
                         saveTask = Task {
                             defer { saving = false }

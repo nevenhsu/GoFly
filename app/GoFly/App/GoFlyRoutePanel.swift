@@ -25,6 +25,8 @@ struct GoFlyRoutePanel: View {
     @State private var showingImports = false
     @State private var showingAllPoints = false
     @State private var showingSaveFavorite = false
+    @State private var editingFavorite: FavoriteRouteRecord?
+    @State private var preparingFavoriteSave = false
     @State private var visibleScrollFrame: CGRect = .zero
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
 
@@ -71,8 +73,18 @@ struct GoFlyRoutePanel: View {
             GoFlySaveFavoriteRouteView(controller: controller, currentLocationAvailable: currentLocationAvailable,
                                       currentRouteOrigin: currentRouteOrigin) { showingSaveFavorite = false }
         }
+        .sheet(item: $editingFavorite) { record in
+            GoFlyFavoriteRouteLabelEditor(record: record, onDismiss: { editingFavorite = nil }) {
+                editingFavorite = nil
+                Task {
+                    await favoriteRoutes.delete(record.id)
+                    if controller.loadedFavoriteRecordID == record.id { controller.setLoadedFavoriteRecordID(nil) }
+                }
+            }
+        }
         .onChange(of: controller.canEdit) { _, canEdit in
             if !canEdit {
+                editingFavorite = nil
                 showingDetails = false
                 showingImports = false
                 showingAllPoints = false
@@ -131,28 +143,53 @@ struct GoFlyRoutePanel: View {
     private var favoriteStarButton: some View {
         Button {
             if let matching = matchingFavoriteRecord {
-                Task {
-                    await favoriteRoutes.delete(matching.id)
-                    controller.setLoadedFavoriteRecordID(nil)
-                }
+                editingFavorite = matching
             } else {
                 if let key = GoFlySaveFavoriteRouteView.eligibilityError(
                     draft: controller.draft, currentLocationAvailable: currentLocationAvailable) {
                     onNotice(key)
                 } else {
-                    showingSaveFavorite = true
+                    presentFavoriteSaveSheet()
                 }
             }
         } label: {
-            GoFlyStarIcon(size: 20, filled: isFavorite)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .frame(width: GoFlyStyle.primaryButtonHeight, height: GoFlyStyle.primaryButtonHeight)
-                .background(GoFlyStyle.startSecondarySurface, in: Circle())
+            Group {
+                if preparingFavoriteSave {
+                    ProgressView()
+                        .frame(width: 20, height: 20)
+                } else {
+                    GoFlyStarIcon(size: 20, filled: isFavorite)
+                }
+            }
+            .foregroundStyle(GoFlyTextColor.primary)
+            .frame(width: GoFlyStyle.primaryButtonHeight, height: GoFlyStyle.primaryButtonHeight)
+            .background(GoFlyStyle.startSecondarySurface, in: Circle())
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel(goFlyString(isFavorite ? "favoriteRoutes.remove" : "favoriteRoutes.add"))
+        .disabled(preparingFavoriteSave)
+        .accessibilityLabel(goFlyString(preparingFavoriteSave ? "favoriteRoutes.loading" : (isFavorite ? "favoriteRoutes.editLabel" : "favoriteRoutes.add")))
         .accessibilityIdentifier("route.favorite.toggle")
+    }
+
+    private func presentFavoriteSaveSheet() {
+        guard !preparingFavoriteSave else { return }
+        preparingFavoriteSave = true
+        Task {
+            await favoriteRoutes.load()
+            preparingFavoriteSave = false
+            guard controller.canEdit else { return }
+            if let key = GoFlySaveFavoriteRouteView.eligibilityError(
+                draft: controller.draft, currentLocationAvailable: currentLocationAvailable) {
+                onNotice(key)
+                return
+            }
+            guard favoriteRoutes.canMutate else {
+                onNotice(favoriteRoutes.error?.localizationKey ?? "favoriteRoutes.error.busy")
+                return
+            }
+            showingSaveFavorite = true
+        }
     }
 
     private var matchingFavoriteRecord: FavoriteRouteRecord? {

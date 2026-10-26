@@ -90,19 +90,25 @@ struct GoFlyBackgroundDurationSheet: View {
 
     /// Figma `TimePicker / Wheel`: hour and minute wheels split by a colon.
     private var wheels: some View {
-        HStack(spacing: 0) {
-            wheel(selection: $hours, range: Array(0...24),
-                  unitKey: "settings.background.duration.hours",
-                  displayUnitKey: "settings.background.duration.wheelUnit.hours",
-                  identifier: "hours", padded: false)
-            Text(":")
-                .font(GoFlyFont.title)
-                .foregroundStyle(GoFlyTextColor.disabled)
-                .accessibilityHidden(true)
-            wheel(selection: $minutes, range: Array(0...59),
-                  unitKey: "settings.background.duration.minutes",
-                  displayUnitKey: "settings.background.duration.wheelUnit.minutes",
-                  identifier: "minutes", padded: true)
+        GeometryReader { geometry in
+            let colonWidth: CGFloat = 20
+            let columnWidth = (geometry.size.width - colonWidth) / 2
+            HStack(spacing: 0) {
+                wheel(selection: $hours, range: Array(0...24),
+                      unitKey: "settings.background.duration.hours",
+                      displayUnitKey: "settings.background.duration.wheelUnit.hours",
+                      identifier: "hours", padded: false, columnWidth: columnWidth)
+                Text(":")
+                    .font(GoFlyFont.title)
+                    .foregroundStyle(GoFlyTextColor.disabled)
+                    .frame(width: colonWidth)
+                    .accessibilityHidden(true)
+                wheel(selection: $minutes, range: Array(0...59),
+                      unitKey: "settings.background.duration.minutes",
+                      displayUnitKey: "settings.background.duration.wheelUnit.minutes",
+                      identifier: "minutes", padded: true, columnWidth: columnWidth)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .padding(.horizontal, 8)
         .frame(height: 130)
@@ -114,24 +120,29 @@ struct GoFlyBackgroundDurationSheet: View {
     }
 
     private func wheel(selection: Binding<Int>, range: [Int], unitKey: String,
-                       displayUnitKey: String, identifier: String, padded: Bool) -> some View {
+                       displayUnitKey: String, identifier: String, padded: Bool,
+                       columnWidth: CGFloat) -> some View {
         ZStack(alignment: .trailing) {
             Picker(goFlyString(unitKey), selection: selection) {
                 ForEach(range, id: \.self) { value in
                     Text(padded ? String(format: "%02d", value) : String(value))
+                        .font(.title2)
+                        .offset(x: -17)
                         .tag(value)
                 }
             }
             .pickerStyle(.wheel)
-            .padding(.trailing, 34)
+            .frame(width: columnWidth)
 
             Text(goFlyString(displayUnitKey))
                 .font(GoFlyFont.title)
                 .foregroundStyle(GoFlyTextColor.primary)
-                .frame(width: 40, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 48, alignment: .leading)
                 .padding(.trailing, 36)
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: columnWidth)
         .accessibilityIdentifier("settings.background.duration.\(identifier)")
     }
 

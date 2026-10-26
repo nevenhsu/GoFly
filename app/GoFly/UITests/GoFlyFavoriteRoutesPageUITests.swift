@@ -16,20 +16,30 @@ final class GoFlyFavoriteRoutesPageUITests: GoFlyRouteModeTestCase {
         XCTAssertEqual(element(app, row).value as? String, coordinate)
     }
 
-    private func saveRoute(_ app: XCUIApplication) {
+    private func saveRoute(_ app: XCUIApplication) -> String {
         app.selectGoFlyMode("route")
         fill(app, row: "route.node.start", coordinate: "25.047800, 121.517000")
         fill(app, row: "route.node.destination", coordinate: "25.033000, 121.565400")
         element(app, "route.favorite.toggle").tap()
-        element(app, "favoriteRoutes.save.confirm").tap()
+        let label = app.textFields["favoriteRoutes.save.label"]
+        XCTAssertTrue(label.waitForExistence(timeout: 5))
+        let fallback = label.placeholderValue ?? ""
+        XCTAssertFalse(fallback.isEmpty, "the label field shows its generated fallback")
+        XCTAssertNotNil(fallback.range(of: #"^\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}$"#, options: .regularExpression), "empty labels show a date/time fallback")
+        let save = element(app, "favoriteRoutes.save.confirm")
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isEnabled, "Save is enabled without a typed label")
+        save.tap()
         XCTAssertTrue(app.buttons["route.favoriteRoutes"].waitForExistence(timeout: 8))
+        return fallback
     }
 
     func testPageLayoutDeleteButtonAndUndoSnackbar() throws {
         for appearance in ["light", "dark"] {
             let app = launch(appearance: appearance)
-            saveRoute(app)
+            let fallbackLabel = saveRoute(app)
             element(app, "route.favoriteRoutes").tap()
+            XCTAssertTrue(app.staticTexts[fallbackLabel].waitForExistence(timeout: 5), "the fallback label is persisted")
 
             let search = element(app, "favoriteRoutes.search")
             let back = element(app, "favoriteRoutes.dismiss")

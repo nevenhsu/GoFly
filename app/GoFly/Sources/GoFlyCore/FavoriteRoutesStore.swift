@@ -15,6 +15,7 @@ public final class FavoriteRoutesStore: ObservableObject {
     private let persistence: any FavoriteRoutesPersistence
     private var undo: [(record: FavoriteRouteRecord, payload: Data, index: Int)] = []
     private var selectionRevision: UInt64 = 0
+    private var loadTask: Task<Void, Never>?
     /// Retained until each entered persistence or detached parse call returns.
     private var physicalOperations: Set<UUID> = []
 
@@ -28,7 +29,22 @@ public final class FavoriteRoutesStore: ObservableObject {
 
     public func clearError() { guard transferAdmissionAllowed else { return }; error = nil }
     public func load() async {
-        guard transferAdmissionAllowed, !isBusy, loadState != .ready else { return }
+        guard transferAdmissionAllowed, loadState != .ready else { return }
+        if let loadTask {
+            await loadTask.value
+            return
+        }
+        guard !isBusy else { return }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadFromPersistence()
+        }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func loadFromPersistence() async {
         isBusy = true
         let operation = beginPhysicalOperation()
         defer { finishPhysicalOperation(operation) }

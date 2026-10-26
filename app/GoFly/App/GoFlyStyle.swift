@@ -210,8 +210,10 @@ struct GoFlyActionStyle: ButtonStyle {
                     Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false)
                 }
             }
-            .brightness(isEnabled && configuration.isPressed ? (primary || destructive ? 0.12 : -0.04) : 0)
-            .opacity(isEnabled && configuration.isPressed ? 0.82 : 1)
+            // Primary/destructive fills keep their color while pressed: a sheet drag also presses the button, and a lightened black fill reads as disabled.
+            .brightness(isEnabled && configuration.isPressed && !(primary || destructive) ? -0.04 : 0)
+            .opacity(isEnabled && configuration.isPressed && !(primary || destructive) ? 0.82 : 1)
+            .scaleEffect(isEnabled && configuration.isPressed && (primary || destructive) ? 0.98 : 1)
             .frame(minHeight: small ? GoFlyStyle.smallButtonHeight : 44)
             .contentShape(Capsule())
     }

@@ -2,6 +2,17 @@ import Foundation
 import Testing
 @testable import GoFlyCore
 @Suite @MainActor struct PersistenceTests {
+    @Test func favoriteLabelFallbackUsesReadableDateAnd24HourTime() throws {
+        let timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 15, minute: 22)))
+        let fallback = FavoriteLabelDefaults.defaultName(at: date, timeZone: timeZone)
+        #expect(fallback == "10 Oct 2026 15:22")
+        #expect(FavoriteLabelDefaults.resolved(" \n\t", fallback: fallback) == fallback)
+        #expect(FavoriteLabelDefaults.resolved("Weekend route", fallback: fallback) == "Weekend route")
+    }
+
     private func directory() throws -> URL {
         let url = URL(fileURLWithPath: "/private/tmp/gofly-c3-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

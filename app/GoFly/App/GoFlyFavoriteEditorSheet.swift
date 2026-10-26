@@ -10,6 +10,7 @@ struct GoFlyFavoriteEditorSheet: View {
     var onDismiss: () -> Void
     var onDelete: (() -> Void)? = nil
     @State private var draft: String
+    @State private var fallbackLabel = FavoriteLabelDefaults.defaultName()
     @FocusState private var focused: Bool
 
     init(place: MapPlace, initialLabel: String? = nil, onDismiss: @escaping () -> Void, onDelete: (() -> Void)? = nil) {
@@ -31,7 +32,7 @@ struct GoFlyFavoriteEditorSheet: View {
                         Text(goFlyString("favorites.label"))
                             .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
-                            TextField(goFlyString("favorites.label"), text: $draft)
+                            TextField(goFlyString("favorites.label"), text: $draft, prompt: Text(fallbackLabel))
                                 .focused($focused).submitLabel(.done)
                                 .onSubmit { focused = false }
                                 .accessibilityIdentifier("favorites.editor.label")
@@ -59,7 +60,7 @@ struct GoFlyFavoriteEditorSheet: View {
 
                     // C2 / D7: 40 pt between the place card and the Save button; the Home indicator sits 20 pt below it.
                     Button {
-                        if favorites.save(place: place, label: draft) {
+                        if favorites.save(place: place, label: FavoriteLabelDefaults.resolved(draft, fallback: fallbackLabel)) {
                             onDismiss()
                         }
                     } label: {
