@@ -225,7 +225,7 @@ struct GoFlyFavoriteRoutesView: View {
                     controller.setLoadedFavoriteRecordID(nil)
                 }
                 selected.subtract(ids)
-                if selected.isEmpty { selecting = false }
+                selecting = false
                 snackbar = GoFlySnackbarMessage(
                     text: goFlyLocalizedFormat(goFlyString("favoriteRoutes.deletedCount"), count),
                     actionTitle: goFlyString("common.undo"),

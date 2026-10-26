@@ -51,7 +51,7 @@ struct GoFlyFavoritesView: View {
                     deleteTitle: selecting ? goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count) : nil,
                     deleteEnabled: !selected.isEmpty && favorites.canMutate,
                     deleteIdentifier: "favorites.deleteSelected",
-                    onDelete: { delete(selected) })
+                    onDelete: { delete(selected); selecting = false })
             }
         }
         .background(GoFlyStyle.surface)

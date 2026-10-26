@@ -53,7 +53,7 @@ public final class FavoritePlacesStore: ObservableObject {
             } else {
                 try FavoritePlacesArchive.validate(place)
                 removed = nil
-                proposed.append(FavoritePlace(key: key, place: place, label: rememberedLabels[key]))
+                proposed.insert(FavoritePlace(key: key, place: place, label: rememberedLabels[key]), at: 0)
             }
             guard persist(proposed) else { return false }
             if let removed { rememberedLabels[removed.key] = removed.label }
@@ -93,7 +93,8 @@ public final class FavoritePlacesStore: ObservableObject {
         }
         let label = FavoritePlacesArchive.normalizedLabel(draft)
         var proposed = favorites
-        proposed[index] = FavoritePlace(key: key, place: favorites[index].place, label: label)
+        proposed.remove(at: index)
+        proposed.insert(FavoritePlace(key: key, place: favorites[index].place, label: label), at: 0)
         guard persist(proposed) else { return false }
         rememberedLabels[key] = label
         return true
@@ -112,10 +113,9 @@ public final class FavoritePlacesStore: ObservableObject {
             let normalized = FavoritePlacesArchive.normalizedLabel(trimmed)
             var proposed = favorites
             if let index = proposed.firstIndex(where: { $0.key == key }) {
-                proposed[index] = FavoritePlace(key: key, place: place, label: normalized)
-            } else {
-                proposed.append(FavoritePlace(key: key, place: place, label: normalized))
+                proposed.remove(at: index)
             }
+            proposed.insert(FavoritePlace(key: key, place: place, label: normalized), at: 0)
             guard persist(proposed) else { return false }
             rememberedLabels[key] = normalized
             return true
