@@ -176,11 +176,7 @@ struct GoFlyMapView: View {
         get { movement.presentationMode }
         nonmutating set { movement.setPresentationMode(newValue) }
     }
-    @State private var lastCapturedSnapshot: SessionRecoverySnapshot
-    @State private var checkpointWindowStarted = false
-    @State private var checkpointWindowID: UUID?
-    @State private var checkpointBackgroundTask: UIBackgroundTaskIdentifier = .invalid
-    @State private var checkpointFlushTask: Task<Void, Never>?
+    @StateObject private var checkpoints: SessionCheckpointSaver
     @StateObject private var location = GoFlyRealLocation()
     @StateObject private var search = CandidateController(search: MapKitPlaceSearch())
     @StateObject private var wanderSearch = CandidateController(search: MapKitPlaceSearch())
@@ -218,11 +214,7 @@ struct GoFlyMapView: View {
     @State private var routeErrorDismissed = false
     @State private var returnedFromUnconfirmed: UUID?
     @State private var isMapPicking = false
-    @State private var settingJoystickOrigin = false
-    @State private var joystickOriginHintDismissed = false
-    /// Set only after fetching a real fix failed or came back stale.
-    @State private var joystickOriginFetchFailed = false
-    @State private var joystickOriginIntentID: UUID?
+    @StateObject private var joystickOrigin: JoystickOriginController
     @StateObject private var wander: WanderPlanningCoordinator
     @State private var selectedWanderPlace: MapPlace? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -234,7 +226,6 @@ struct GoFlyMapView: View {
         movement: GoFlyMovementModel,
         setupMetadata: GoFlySetupMetadata? = nil
     ) {
-        let snapshot = recoveryStore.initialSnapshot
         self.movement = movement
         _service = ObservedObject(wrappedValue: service)
         _recoveryStore = ObservedObject(wrappedValue: recoveryStore)
@@ -244,10 +235,13 @@ struct GoFlyMapView: View {
         _recovery = ObservedObject(wrappedValue: movement.recovery)
         _continuation = ObservedObject(wrappedValue: movement.continuation)
         _positionHold = ObservedObject(wrappedValue: movement.positionHold)
+        let origin = JoystickOriginController(service: service, joystick: movement.joystick)
+        _joystickOrigin = StateObject(wrappedValue: origin)
         _wander = StateObject(wrappedValue: WanderPlanningCoordinator(
-            service: service, joystick: movement.joystick,
+            service: service, joystick: movement.joystick, origin: origin,
             planSegment: { [route = movement.route] in try await route.planWanderSegment(from: $0, to: $1) }))
-        _lastCapturedSnapshot = State(initialValue: snapshot)
+        _checkpoints = StateObject(wrappedValue: SessionCheckpointSaver(
+            store: recoveryStore, backgroundTasks: UIKitBackgroundSaveTasks()))
     }
 
     private var isWanderMap: Bool { mode == .joystick && joystick.wanderEnabled && route.picker == nil }
@@ -293,12 +287,16 @@ struct GoFlyMapView: View {
                 )
             }
             .onAppear {
+                joystickOrigin.attach(JoystickOriginHost(
+                    isJoystickMode: { mode == .joystick },
+                    isSceneActive: { scenePhase == .active },
+                    requestLocationFix: { location.requestRecenter() }))
                 wander.attach(wanderPlanningHost)
                 movement.attachMapAdmission {
                     !showingSettings && !showingSearch && presentedSheet == nil && route.picker == nil
                 }
                 location.start()
-                if mode == .joystick { ensureJoystickOrigin() }
+                if mode == .joystick { joystickOrigin.ensure() }
                 if cameraIntent == nil {
                     if mode == .route, let planned = route.plannedRoute {
                         cameraIntent = GoFlyCameraIntent(route: planned)
@@ -335,26 +333,16 @@ struct GoFlyMapView: View {
                 pendingGPSRecenter = false
                 service.observeRealLocation(observation)
                 guard observation != nil else {
-                    noteJoystickOriginFetchFailure()
-                    if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
-                        settingJoystickOrigin = false
-                    }
+                    joystickOrigin.fixUnavailable()
                     return
                 }
                 guard let accepted = service.realLocation else {
-                    noteJoystickOriginFetchFailure()
+                    joystickOrigin.fixRejected()
                     location.rejectedFix()
                     return
                 }
                 location.acceptedFix()
-                joystickOriginFetchFailed = false
-                if settingJoystickOrigin, mode == .joystick, joystickOriginIntentID == nil {
-                    guard let coordinate = GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude) else {
-                        settingJoystickOrigin = false
-                        return
-                    }
-                    submitJoystickOrigin(coordinate)
-                }
+                joystickOrigin.fixAccepted(GeoCoordinate(latitude: accepted.latitude, longitude: accepted.longitude))
                 // GPS fixes move the camera only for Recenter or the first
                 // camera of the session; later fixes never pan or zoom it.
                 guard explicitlyRequested || (cameraIntent == nil && service.confirmedSimulatedLocation == nil),
@@ -379,11 +367,11 @@ struct GoFlyMapView: View {
                 if mode != .joystick { wander.cancelAll() }
                 if mode == .joystick {
                     service.warmupSession()
-                    ensureJoystickOrigin()
+                    joystickOrigin.ensure()
                     if !recovery.isChecking { wander.resumePending() }
                 }
                 dismissKeyboard()
-                captureCheckpoint()
+                checkpoints.capture(recovery.snapshot(mode: mode))
             }
             .onChange(of: scenePhase) { _, phase in
                 Diagnostics.shared.record("movement.scene", category: .movement, level: .notice, [
@@ -404,8 +392,7 @@ struct GoFlyMapView: View {
                     sceneSettled = false
                 }
                 if phase == .active {
-                    checkpointWindowStarted = false
-                    finishCheckpointWindow(id: checkpointWindowID)
+                    checkpoints.sceneBecameActive()
                     continuation.sceneDidBecomeActive()
                     movement.keepAlive.sceneDidBecomeActive()
                     recovery.requestForegroundCheck()
@@ -413,8 +400,7 @@ struct GoFlyMapView: View {
                     wander.cancelUncommitted()
                     continuation.releaseForInactiveScene()
                     movement.keepAlive.releaseForInactiveScene()
-                    captureCheckpoint()
-                    beginCheckpointFlush()
+                    checkpoints.sceneLeftForeground(recovery.snapshot(mode: mode))
                 }
             }
             .onChange(of: recovery.isChecking) { _, checking in
@@ -424,14 +410,14 @@ struct GoFlyMapView: View {
                 if available {
                     // The movement permission (tunnel) just opened: a launch-time
                     // origin that was waiting for it can now be established.
-                    ensureJoystickOrigin()
+                    joystickOrigin.ensure()
                     if scenePhase == .active && !recovery.isChecking { wander.resumePending() }
                 } else {
                     wander.cancelUncommitted()
                 }
             }
-            .onChange(of: recovery.checkpointRevision) { _, _ in captureCheckpoint() }
-            .onReceive(service.joystickEvents, perform: retryJoystickOrigin)
+            .onChange(of: recovery.checkpointRevision) { _, _ in checkpoints.capture(recovery.snapshot(mode: mode)) }
+            .onReceive(service.joystickEvents) { joystickOrigin.receive($0) }
             .onReceive(GoFlyPathMonitor.shared.changes) { _ in recovery.networkPathDidChange() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
@@ -452,29 +438,18 @@ struct GoFlyMapView: View {
                     search.clearCandidate(ifMatching: intent.candidate.id)
                     // Only a teleport the person confirmed moves the camera; a
                     // joystick or wander origin is set without touching it.
-                    let automaticOrigin = (settingJoystickOrigin && joystickOriginIntentID == intent.id)
-                        || wander.isStartOrigin(intent.id)
+                    let automaticOrigin = joystickOrigin.isOrigin(intent.id) || wander.isStartOrigin(intent.id)
                     if search.candidate == nil, !automaticOrigin {
                         cameraIntent = GoFlyCameraIntent(coordinate: intent.candidate.place.coordinate)
                     }
                     dismissKeyboard()
-                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
-                        joystickOriginIntentID = nil
-                        settingJoystickOrigin = false
-                        if mode == .teleport && search.candidate == nil { mode = .joystick }
-                    }
+                    if joystickOrigin.settle(intent.id), mode == .teleport && search.candidate == nil { mode = .joystick }
                     wander.originAcknowledged(intent.id)
                 case .notSent(let intent, _):
-                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
-                        joystickOriginIntentID = nil
-                        settingJoystickOrigin = false
-                    }
+                    joystickOrigin.settle(intent.id)
                     wander.originNotSent(intent.id)
                 case .unconfirmed(let intent, _):
-                    if settingJoystickOrigin, joystickOriginIntentID == intent.id {
-                        joystickOriginIntentID = nil
-                        settingJoystickOrigin = false
-                    }
+                    joystickOrigin.settle(intent.id)
                     wander.originUnconfirmed(intent.id)
                 default:
                     break
@@ -710,39 +685,6 @@ struct GoFlyMapView: View {
                     .position(x: point.x, y: point.y - candidateHeight / 2)
             }
         }
-    }
-
-    private func captureCheckpoint() {
-        let snapshot = recovery.snapshot(mode: mode)
-        guard snapshot != lastCapturedSnapshot else { return }
-        lastCapturedSnapshot = snapshot
-        _ = recoveryStore.capture(snapshot)
-    }
-
-    /// A finite save window, independent of movement runtime and native cleanup.
-    private func beginCheckpointFlush() {
-        guard !checkpointWindowStarted else { return }
-        checkpointWindowStarted = true
-        guard recoveryStore.isSaving || recoveryStore.hasUnsavedChanges else { return }
-        let id = UUID()
-        checkpointWindowID = id
-        checkpointBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save GoFly session") {
-            Task { @MainActor in finishCheckpointWindow(id: id) }
-        }
-        checkpointFlushTask = Task { @MainActor in
-            _ = await recoveryStore.flush()
-            finishCheckpointWindow(id: id)
-        }
-    }
-
-    private func finishCheckpointWindow(id: UUID?) {
-        guard let id, checkpointWindowID == id else { return }
-        checkpointWindowID = nil
-        checkpointFlushTask?.cancel()
-        checkpointFlushTask = nil
-        let task = checkpointBackgroundTask
-        checkpointBackgroundTask = .invalid
-        if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
     }
 
     private func bottomChrome(in geometry: GeometryProxy) -> some View {
@@ -1053,17 +995,7 @@ struct GoFlyMapView: View {
 
     private func performGo(_ candidate: TeleportCandidate) {
         dismissKeyboard()
-        if mode == .joystick {
-            let wasEstablishingOrigin = settingJoystickOrigin && joystickOriginIntentID == nil
-            settingJoystickOrigin = false
-            if service.teleport(to: candidate), wasEstablishingOrigin,
-               case .preparing(let intent) = service.pointState {
-                joystickOriginIntentID = intent.id
-            }
-        } else if service.teleport(to: candidate), settingJoystickOrigin,
-                  case .preparing(let intent) = service.pointState {
-            joystickOriginIntentID = intent.id
-        }
+        joystickOrigin.go(to: candidate)
     }
 
     private func confirmWanderDestination(_ place: MapPlace) {
@@ -1256,58 +1188,11 @@ struct GoFlyMapView: View {
     }
 
     private func selectMode(_ value: GoFlyMapMode) {
-        settingJoystickOrigin = false
-        joystickOriginIntentID = nil
+        joystickOrigin.cancel()
         mode = value
         // Tapping any tab restores a panel that is at its minimum height.
         if value != .teleport { sheetDetent = .expanded }
         else if sheetDetent == .collapsed { sheetDetent = .half }
-    }
-
-    /// A launch-time origin can be refused while the scene fence or tunnel is
-    /// still closed; retry once admission opens instead of leaving the joystick
-    /// disabled until the person taps Start.
-    private func retryJoystickOrigin(_ event: JoystickCommandEvent) {
-        guard case .availabilityChanged = event, mode == .joystick, !settingJoystickOrigin,
-              scenePhase == .active, joystick.requiresOrigin, service.canTeleport else { return }
-        ensureJoystickOrigin()
-    }
-
-    /// Establish a joystick origin only from fresh GPS or a currently
-    /// validated simulation marker. Warmup and retained display history are
-    /// never accepted as position acknowledgement.
-    private func noteJoystickOriginFetchFailure() {
-        guard mode == .joystick, joystick.requiresOrigin, service.displayPositionMarker == nil else { return }
-        joystickOriginFetchFailed = true
-        joystickOriginHintDismissed = false
-    }
-
-    private func ensureJoystickOrigin() {
-        // Only when there is no origin yet; an existing one is never replaced.
-        guard mode == .joystick, !settingJoystickOrigin, joystick.requiresOrigin else { return }
-        if let marker = service.displayPositionMarker,
-           marker.source == .simulation, marker.freshness == .fresh { return }
-        settingJoystickOrigin = true
-        if let marker = service.displayPositionMarker,
-           marker.source == .gps, marker.freshness == .fresh {
-            submitJoystickOrigin(marker.coordinate)
-        } else if let marker = service.displayPositionMarker, marker.source == .simulation {
-            // The last simulated position (restored after a cold launch).
-            submitJoystickOrigin(marker.coordinate)
-        } else {
-            location.requestRecenter()
-        }
-    }
-
-    private func submitJoystickOrigin(_ coordinate: GeoCoordinate) {
-        guard mode == .joystick, settingJoystickOrigin, joystickOriginIntentID == nil else { return }
-        let place = MapPlace(id: .coordinate(coordinate), title: coordinate.displayText, coordinate: coordinate)
-        guard service.teleport(to: TeleportCandidate(place: place)),
-              case .preparing(let intent) = service.pointState else {
-            settingJoystickOrigin = false
-            return
-        }
-        joystickOriginIntentID = intent.id
     }
 
     /// Fallback wander planning origins around the visible map center.
@@ -1325,11 +1210,6 @@ struct GoFlyMapView: View {
             isJoystickMode: { mode == .joystick },
             isSceneActive: { scenePhase == .active },
             isRecoveryChecking: { recovery.isChecking },
-            joystickOrigin: { JoystickOriginRequest(isSetting: settingJoystickOrigin, intentID: joystickOriginIntentID) },
-            setJoystickOrigin: { request in
-                settingJoystickOrigin = request.isSetting
-                joystickOriginIntentID = request.intentID
-            },
             mapOriginCandidates: { mapWanderOriginCandidates() },
             wanderStarted: { planned in
                 cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start)
@@ -1469,8 +1349,7 @@ struct GoFlyMapView: View {
     }
 
     private func clearSearchBar() {
-        settingJoystickOrigin = false
-        joystickOriginIntentID = nil
+        joystickOrigin.cancel()
         activeSearch.resetSelection()
     }
 
@@ -1828,9 +1707,7 @@ struct GoFlyMapView: View {
 
     /// No real GPS and no last simulated position: the person must pin one.
     private var needsJoystickOriginHint: Bool {
-        mode == .joystick && joystickOriginFetchFailed && !joystickOriginHintDismissed && sceneSettled && scenePhase == .active
-            && !settingJoystickOrigin && joystickOriginIntentID == nil
-            && joystick.requiresOrigin && service.displayPositionMarker == nil && service.canTeleport
+        sceneSettled && scenePhase == .active && joystickOrigin.needsPinHint
     }
 
     @ViewBuilder
@@ -1858,7 +1735,7 @@ struct GoFlyMapView: View {
             GoFlyStatusBanner(
                 tone: .warning,
                 title: goFlyString("joystick.pinOriginHint"),
-                onDismiss: { joystickOriginHintDismissed = true },
+                onDismiss: { joystickOrigin.dismissHint() },
                 identifier: "joystick.pinOriginHint",
                 isFloating: true
             )
@@ -2039,4 +1916,16 @@ struct GoFlyContinuationNotice: View {
                 identifier: "background.notice", actionIdentifier: "background.settings")
         }
     }
+}
+
+/// UIKit background time for the session checkpoint save window.
+@MainActor
+private struct UIKitBackgroundSaveTasks: BackgroundSaveTasks {
+    func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int? {
+        let task = UIApplication.shared.beginBackgroundTask(withName: name) {
+            Task { @MainActor in expiration() }
+        }
+        return task == .invalid ? nil : task.rawValue
+    }
+    func end(_ task: Int) { UIApplication.shared.endBackgroundTask(UIBackgroundTaskIdentifier(rawValue: task)) }
 }

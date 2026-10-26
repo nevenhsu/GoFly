@@ -1,15 +1,5 @@
 import Foundation
 
-/// The joystick origin request the map screen owns: whether it is setting an
-/// origin, and the teleport intent sent for it once one is.
-public struct JoystickOriginRequest: Equatable, Sendable {
-    public var isSetting: Bool
-    public var intentID: UUID?
-    public init(isSetting: Bool = false, intentID: UUID? = nil) {
-        self.isSetting = isSetting; self.intentID = intentID
-    }
-}
-
 /// Screen state wander planning reads and the effects it hands back. The map
 /// screen attaches one on appear; until then planning sees an inactive scene.
 @MainActor
@@ -17,8 +7,6 @@ public struct WanderPlanningHost {
     public var isJoystickMode: @MainActor () -> Bool
     public var isSceneActive: @MainActor () -> Bool
     public var isRecoveryChecking: @MainActor () -> Bool
-    public var joystickOrigin: @MainActor () -> JoystickOriginRequest
-    public var setJoystickOrigin: @MainActor (JoystickOriginRequest) -> Void
     /// Fallback planning origins near the visible map when no origin is known.
     public var mapOriginCandidates: @MainActor () -> [GeoCoordinate]
     public var wanderStarted: @MainActor (PlannedRoute) -> Void
@@ -28,22 +16,19 @@ public struct WanderPlanningHost {
     public init(isJoystickMode: @escaping @MainActor () -> Bool,
                 isSceneActive: @escaping @MainActor () -> Bool,
                 isRecoveryChecking: @escaping @MainActor () -> Bool,
-                joystickOrigin: @escaping @MainActor () -> JoystickOriginRequest,
-                setJoystickOrigin: @escaping @MainActor (JoystickOriginRequest) -> Void,
                 mapOriginCandidates: @escaping @MainActor () -> [GeoCoordinate],
                 wanderStarted: @escaping @MainActor (PlannedRoute) -> Void = { _ in },
                 segmentReplaced: @escaping @MainActor (PlannedRoute) -> Void = { _ in },
                 destinationCleared: @escaping @MainActor () -> Void = {}) {
         self.isJoystickMode = isJoystickMode; self.isSceneActive = isSceneActive
-        self.isRecoveryChecking = isRecoveryChecking; self.joystickOrigin = joystickOrigin
-        self.setJoystickOrigin = setJoystickOrigin; self.mapOriginCandidates = mapOriginCandidates
+        self.isRecoveryChecking = isRecoveryChecking; self.mapOriginCandidates = mapOriginCandidates
         self.wanderStarted = wanderStarted; self.segmentReplaced = segmentReplaced
         self.destinationCleared = destinationCleared
     }
 
     static let detached = WanderPlanningHost(
         isJoystickMode: { false }, isSceneActive: { false }, isRecoveryChecking: { false },
-        joystickOrigin: { JoystickOriginRequest() }, setJoystickOrigin: { _ in }, mapOriginCandidates: { [] })
+        mapOriginCandidates: { [] })
 }
 
 /// Plans road segments for wander and hands them to the joystick movement
@@ -75,6 +60,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
 
     private let service: ServiceController
     private let joystick: JoystickMovementController
+    private let joystickOrigin: JoystickOriginController
     private let planSegment: SegmentPlanner
     private var host = WanderPlanningHost.detached
 
@@ -90,14 +76,15 @@ public final class WanderPlanningCoordinator: ObservableObject {
     private var deferredStart = WanderStartRequestGate()
 
     public init(service: ServiceController, joystick: JoystickMovementController,
-                planSegment: @escaping SegmentPlanner) {
-        self.service = service; self.joystick = joystick; self.planSegment = planSegment
+                origin: JoystickOriginController, planSegment: @escaping SegmentPlanner) {
+        self.service = service; self.joystick = joystick; self.joystickOrigin = origin
+        self.planSegment = planSegment
     }
 
     public func attach(_ host: WanderPlanningHost) { self.host = host }
 
     public var canRequestStart: Bool {
-        let origin = host.joystickOrigin()
+        let origin = joystickOrigin.request
         return joystick.canStartWanderPlanning || (origin.isSetting && origin.intentID != nil
             && host.isJoystickMode() && !joystick.wanderEnabled && !joystick.requiresStop)
     }
@@ -113,12 +100,12 @@ public final class WanderPlanningCoordinator: ObservableObject {
     public func start(preselectedOrigin: GeoCoordinate? = nil, preselectedTarget: WanderTarget? = nil) {
         guard host.isJoystickMode(), !joystick.wanderEnabled, canRequestStart else { return }
         guard pendingStart == nil else { return }
-        let originRequest = host.joystickOrigin()
+        let originRequest = joystickOrigin.request
         if originRequest.isSetting, let originIntentID = originRequest.intentID {
             deferredStart.waitForOriginAcknowledgement(originIntentID)
             return
         }
-        if originRequest.isSetting { host.setJoystickOrigin(JoystickOriginRequest()) }
+        if originRequest.isSetting { joystickOrigin.cancel() }
         planningTask?.cancel()
         let planningID = UUID()
         self.planningID = planningID
@@ -153,14 +140,14 @@ public final class WanderPlanningCoordinator: ObservableObject {
                     if hasLiveSimulation {
                         installAndStart(target: target, route: planned, plannerID: planningID)
                     } else {
-                        guard host.joystickOrigin().isSetting == false,
+                        guard joystickOrigin.request.isSetting == false,
                               service.teleport(to: TeleportCandidate(place: MapPlace(
                                 id: .coordinate(planned.start), title: planned.start.displayText,
                                 coordinate: planned.start))),
                               case .preparing(let intent) = service.pointState else {
                             failPlanning(planningID); return
                         }
-                        host.setJoystickOrigin(JoystickOriginRequest(isSetting: true, intentID: intent.id))
+                        joystickOrigin.request = JoystickOriginRequest(isSetting: true, intentID: intent.id)
                         pendingStart = PendingStart(plannerID: planningID,
                             target: target, route: planned, teleportIntentID: intent.id)
                         activeCheckpoint = nil

@@ -161,6 +161,7 @@ struct WanderPlanningCoordinatorTests {
         let service = ServiceController(service: JoystickControlledDevice())
         let joystick = JoystickMovementController(commands: service)
         let wander = WanderPlanningCoordinator(service: service, joystick: joystick,
+                                               origin: JoystickOriginController(service: service, joystick: joystick),
                                                planSegment: { _, _ in throw CancellationError() })
         wander.start()
         #expect(!wander.isReplanning && !wander.hasAcknowledgedPendingStart)
@@ -171,7 +172,8 @@ struct WanderPlanningCoordinatorTests {
 
     private func coordinator(_ service: ServiceController, _ joystick: JoystickMovementController,
                              _ planner: ScriptedWanderPlanner, _ host: RecordingWanderHost) -> WanderPlanningCoordinator {
-        let wander = WanderPlanningCoordinator(service: service, joystick: joystick,
+        host.originController = JoystickOriginController(service: service, joystick: joystick)
+        let wander = WanderPlanningCoordinator(service: service, joystick: joystick, origin: host.originController,
                                                planSegment: { try await planner.plan(from: $0, to: $1) })
         wander.attach(host.host)
         return wander
@@ -216,15 +218,17 @@ private final class RecordingWanderHost {
     var joystickMode = true
     var sceneActive = true
     var recoveryChecking = false
-    var origin = JoystickOriginRequest()
+    var originController: JoystickOriginController!
+    var origin: JoystickOriginRequest {
+        get { originController.request }
+        set { originController.request = newValue }
+    }
     var started: [PlannedRoute] = []
     var host: WanderPlanningHost {
         WanderPlanningHost(
             isJoystickMode: { [weak self] in self?.joystickMode ?? false },
             isSceneActive: { [weak self] in self?.sceneActive ?? false },
             isRecoveryChecking: { [weak self] in self?.recoveryChecking ?? false },
-            joystickOrigin: { [weak self] in self?.origin ?? JoystickOriginRequest() },
-            setJoystickOrigin: { [weak self] in self?.origin = $0 },
             mapOriginCandidates: { [] },
             wanderStarted: { [weak self] in self?.started.append($0) })
     }
