@@ -452,6 +452,9 @@
 "setup.preparing.message" = "GoFly is checking the app and device setup.";
 "setup.waiting.title" = "Continue setup on Mac";
 "setup.waiting.message" = "Finish setup in the GoFly Mac app, then return to this iPhone.";
+"setup.mac.title" = "Connect to Mac to finish pairing";
+"setup.mac.message" = "After installing the app, connect this iPhone to your Mac with a USB cable. Complete device pairing and signing in GoFly on Mac.";
+"setup.mac.unpaired" = "Not paired";
 "setup.completed.title" = "Setup complete";
 "setup.completed.message" = "GoFly is ready.";
 "setup.blocked.title" = "Setup is required";

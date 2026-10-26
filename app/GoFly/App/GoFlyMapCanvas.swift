@@ -458,7 +458,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             guard correctionsRemaining > 0, let intent = parent.cameraIntent,
                   intent.id == appliedIntent else { return }
             let target = map.convert(intent.coordinate.clLocationCoordinate, toPointTo: map)
-            let delta = CGPoint(x: target.x - appliedViewport.midX, y: target.y - appliedViewport.midY)
+            // A point focus lands at 1/3 of the map height in every mode, clear of the bottom panel.
+            let delta = CGPoint(x: target.x - appliedViewport.midX,
+                                y: target.y - (appliedBounds.minY + appliedBounds.height / 3))
             guard abs(delta.x) > 0.5 || abs(delta.y) > 0.5 else {
                 correctionsRemaining = 0
                 return

@@ -467,6 +467,9 @@
 "setup.preparing.message" = "GoFly 正在檢查 App 與裝置設定。";
 "setup.waiting.title" = "在 Mac 上繼續設定";
 "setup.waiting.message" = "請在 GoFly Mac App 完成設定，再返回這部 iPhone。";
+"setup.mac.title" = "連接 Mac 完成配對";
+"setup.mac.message" = "安裝 App 後，請使用 USB 傳輸線連接 Mac，並於 Mac 端 GoFly 完成裝置配對與簽名授權。";
+"setup.mac.unpaired" = "尚未配對";
 "setup.completed.title" = "設定完成";
 "setup.completed.message" = "GoFly 已準備就緒。";
 "setup.blocked.title" = "需要完成設定";

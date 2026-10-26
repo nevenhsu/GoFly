@@ -10,8 +10,6 @@ final class GoFlyPanelHeightUITests: GoFlyRouteModeTestCase {
 
     func testTeleportDefaultAndMinimum() throws {
         let app = launch()
-        XCTAssertEqual(visibleHeight(app), 120, accuracy: 1, "B1 minimum")
-        app.selectGoFlyMode("teleport")
         XCTAssertEqual(visibleHeight(app), 300, accuracy: 1, "B2 default")
         evidence(app, task: "H", name: "teleport-default-light")
         app.buttons["map.sheet.grabber"].tap()

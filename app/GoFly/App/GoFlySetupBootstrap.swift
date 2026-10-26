@@ -46,6 +46,15 @@ final class GoFlySetupBootstrap: ObservableObject {
         start()
     }
 
+    func refreshPendingMacSetup() {
+        switch phase {
+        case .awaitingMacInstall, .waitingForMac:
+            start()
+        default:
+            break
+        }
+    }
+
     private func start() {
         startupTask?.cancel()
         if case .blocked = phase {
@@ -54,7 +63,11 @@ final class GoFlySetupBootstrap: ObservableObject {
         }
         phase = .preparing
 
+        #if targetEnvironment(simulator)
         let requiresMacSetup = false
+        #else
+        let requiresMacSetup = (Bundle.main.object(forInfoDictionaryKey: "GoFlyRequiresMacSetup") as? Bool) == true
+        #endif
 
         startupTask = Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
@@ -501,6 +514,56 @@ struct GoFlySetupLockView: View {
         case .awaitingMacInstall, .waitingForMac: return "setup.waiting"
         case .blocked: return "setup.blocked"
         }
+    }
+}
+
+/// R07 is the formal first-install handoff screen. The Mac completes pairing
+/// and setup while GoFly is inactive; returning to the app refreshes bootstrap.
+struct GoFlyMacSetupOnboardingView: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Image(systemName: "laptopcomputer")
+                    .font(.system(size: 48, weight: .medium))
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .frame(width: 120, height: 120)
+                    .background(
+                        GoFlyStyle.secondarySurface,
+                        in: RoundedRectangle(cornerRadius: 36, style: .continuous)
+                    )
+                    .accessibilityHidden(true)
+
+                Text(goFlyString("setup.mac.title"))
+                    .font(GoFlyFont.display)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 32)
+
+                Text(goFlyString("setup.mac.message"))
+                    .font(GoFlyFont.body)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+
+                GoFlyStatusPill(
+                    text: goFlyString("setup.mac.unpaired"),
+                    tone: .neutral,
+                    identifier: "setup.mac.status"
+                )
+                .padding(.top, 28)
+            }
+            .frame(maxWidth: 345)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+            .padding(.top, 136)
+            .padding(.bottom, 24)
+        }
+        .background(GoFlyStyle.surface.ignoresSafeArea())
+        .accessibilityIdentifier("setup.mac")
     }
 }
 

@@ -38,7 +38,10 @@ private struct GoFlySceneContent: View {
                     "phase": .text(Self.label(phase)),
                     "onboarding": .flag(onboardingComplete)
                 ])
-                if phase == .active { preferences.refreshSystemPreferences() }
+                if phase == .active {
+                    preferences.refreshSystemPreferences()
+                    bootstrap.refreshPendingMacSetup()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
                 preferences.refreshSystemPreferences()
@@ -64,10 +67,17 @@ private struct GoFlySceneContent: View {
     private var startupContent: some View {
         if let runtime = bootstrap.runtime {
             normalRuntimeView(runtime)
-        } else if bootstrap.phase == .preparing {
-            GoFlyStartupView()
         } else {
-            GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
+            switch bootstrap.phase {
+            case .preparing:
+                GoFlyStartupView()
+            case .awaitingMacInstall, .waitingForMac:
+                GoFlyMacSetupOnboardingView()
+            case .ordinaryStartup, .completed:
+                GoFlyStartupView()
+            case .blocked:
+                GoFlySetupLockView(phase: bootstrap.phase, onRetry: bootstrap.retry)
+            }
         }
     }
 

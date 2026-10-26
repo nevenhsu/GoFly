@@ -208,7 +208,7 @@ struct GoFlyMapView: View {
     @State private var teleportCardFrame = CGRect.zero
     @State private var bottomCardFrame = CGRect.zero
     @State private var bottomContentHeight: CGFloat = 260
-    @State private var sheetDetent: GoFlySheetDetent = .collapsed
+    @State private var sheetDetent: GoFlySheetDetent = .expanded
     @State private var sheetHeight: CGFloat = 320
     @State private var presentedSheet: GoFlyMapSheet?
     @State private var searchFocusRequest: UUID?
@@ -1451,6 +1451,7 @@ struct GoFlyMapView: View {
             return false
         }
         joystick.clearWanderError()
+        cameraIntent = GoFlyCameraIntent(coordinate: service.displayPositionMarker?.coordinate ?? planned.start)
         wanderPlanningID = nil
         activeWanderPlanningCheckpoint = nil
         interruptedWanderPlanningCheckpoint = nil
