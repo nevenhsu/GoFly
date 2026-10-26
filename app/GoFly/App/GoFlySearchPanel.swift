@@ -604,22 +604,10 @@ private func addGoFlyPasteControl(
     pasteControl.accessibilityLabel = accessibilityLabel
     pasteControl.accessibilityIdentifier = accessibilityIdentifier
     pasteControl.translatesAutoresizingMaskIntoConstraints = false
-    // The system capsule draws its own rim shadow; clip the host to the capsule so it is cut off.
-    let clip = UIView()
-    clip.translatesAutoresizingMaskIntoConstraints = false
-    clip.clipsToBounds = true
-    clip.layer.cornerRadius = 18
-    host.addSubview(clip)
-    clip.addSubview(pasteControl)
+    host.addSubview(pasteControl)
     NSLayoutConstraint.activate([
-        clip.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-        clip.centerYAnchor.constraint(equalTo: host.centerYAnchor),
-        clip.widthAnchor.constraint(equalToConstant: 36),
-        clip.heightAnchor.constraint(equalToConstant: 36),
-        pasteControl.centerXAnchor.constraint(equalTo: clip.centerXAnchor),
-        pasteControl.centerYAnchor.constraint(equalTo: clip.centerYAnchor)
-    ])
-    NSLayoutConstraint.activate([
+        pasteControl.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+        pasteControl.centerYAnchor.constraint(equalTo: host.centerYAnchor),
         pasteControl.widthAnchor.constraint(equalToConstant: 36),
         pasteControl.heightAnchor.constraint(equalToConstant: 36)
     ])
