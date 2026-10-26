@@ -194,6 +194,7 @@ struct GoFlyMapView: View {
     @State private var sheetHeight: CGFloat = 320
     @State private var presentedSheet: GoFlyMapSheet?
     @State private var searchFocusRequest: UUID?
+    @State private var emptyRouteLocationHintID: UUID?
     @State private var showingSearch = false
     @State private var searchFavorites = false
     @State private var showingFavoriteRoutes = false
@@ -215,6 +216,9 @@ struct GoFlyMapView: View {
     @State private var selectedWanderPlace: MapPlace? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    /// Planning hosts outlive the body copy they were attached from; an
+    /// environment value captured there would stay at its onAppear phase.
+    @State private var sceneActivity = GoFlySceneActivity()
 
     init(
         service: ServiceController,
@@ -283,9 +287,10 @@ struct GoFlyMapView: View {
                 )
             }
             .onAppear {
+                sceneActivity.isActive = scenePhase == .active
                 joystickOrigin.attach(JoystickOriginHost(
                     isJoystickMode: { mode == .joystick },
-                    isSceneActive: { scenePhase == .active },
+                    isSceneActive: { sceneActivity.isActive },
                     requestLocationFix: { location.requestRecenter() }))
                 wander.attach(wanderPlanningHost)
                 movement.attachMapAdmission {
@@ -370,6 +375,7 @@ struct GoFlyMapView: View {
                 checkpoints.capture(recovery.snapshot(mode: mode))
             }
             .onChange(of: scenePhase) { _, phase in
+                sceneActivity.isActive = phase == .active
                 Diagnostics.shared.record("movement.scene", category: .movement, level: .notice, [
                     "phase": .text(String(describing: phase)),
                     "route": .text(String(describing: route.phase)),
@@ -561,29 +567,8 @@ struct GoFlyMapView: View {
             mapCanvas(viewport: viewport, size: geometry.size,
                       attributionBottomInset: attributionBottomInset(in: geometry))
             mapPins(viewport: viewport)
-            if isExecutionMode || isWanderMap {
-                VStack(alignment: .leading, spacing: 12) {
-                    GoFlyExecutionHeader(
-                        title: executionTitle,
-                        detail: executionDetail,
-                        symbol: executionSymbol,
-                        onTrailingAction: nil
-                    )
-                    GoFlyStatusPill(text: pillText, tone: pillTone, identifier: "map.statusPill")
-                        .accessibilityValue(goFlyString(movement.status.textKey))
-                }
-                    .padding(.horizontal, 16).padding(.top, 8)
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
-            } else { topBar }
-            GoFlyMapToastStack(
-                service: service, route: route, joystick: joystick, recovery: recovery,
-                continuation: continuation, positionHold: positionHold, joystickOrigin: joystickOrigin,
-                wander: wander, notices: $notices, showingSettings: $showingSettings,
-                mode: mode, sceneSettled: sceneSettled, isResumeState: isResumeState)
-                .padding(.horizontal, 16)
-                .padding(.top, (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
-                .frame(maxWidth: .infinity)
-                .zIndex(50)
+            topChrome
+            toastStack(topInset: (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
             if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
             bottomChrome(in: geometry)
         }
@@ -599,11 +584,46 @@ struct GoFlyMapView: View {
         .onChange(of: continuation.noticeKey) { _, newKey in notices.reopen(.continuation, ifPresent: newKey) }
     }
 
+    private func toastStack(topInset: CGFloat) -> some View {
+        GoFlyMapToastStack(
+            service: service, route: route, joystick: joystick, recovery: recovery,
+            continuation: continuation, positionHold: positionHold, joystickOrigin: joystickOrigin,
+            wander: wander, notices: $notices, emptyRouteLocationHintID: $emptyRouteLocationHintID,
+            showingSettings: $showingSettings,
+            mode: mode, sceneSettled: sceneSettled, isResumeState: isResumeState)
+            .padding(.horizontal, 16)
+            .padding(.top, topInset)
+            .frame(maxWidth: .infinity)
+            .zIndex(50)
+    }
+
+    @ViewBuilder
+    private var topChrome: some View {
+        if isExecutionMode || isWanderMap {
+            VStack(alignment: .leading, spacing: 12) {
+                GoFlyExecutionHeader(
+                    title: executionTitle,
+                    detail: executionDetail,
+                    symbol: executionSymbol,
+                    onTrailingAction: nil
+                )
+                GoFlyStatusPill(text: pillText, tone: pillTone, identifier: "map.statusPill")
+                    .accessibilityValue(goFlyString(movement.status.textKey))
+            }
+            .padding(.horizontal, 16).padding(.top, 8)
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
+        } else {
+            topBar
+        }
+    }
+
     private func snackbarBottomOffset(in geometry: GeometryProxy) -> CGFloat {
+        if activeCandidate != nil, mode == .teleport || mode == .joystick {
+            // Location card: fixed 188 pt tall; the snackbar floats a fixed 20 pt above its top edge.
+            return geometry.safeAreaInsets.bottom + 12 + 188 + 20
+        }
         if mode == .teleport {
-            let top = activeCandidate != nil && teleportCardFrame.height > 0
-                ? teleportCardFrame.minY : panelFrame.minY
-            return max(0, geometry.size.height - top) + 6
+            return max(0, geometry.size.height - panelFrame.minY) + 6
         }
         if mode == .route, route.canEdit, route.picker == nil, activeCandidate == nil, showsBottomBar {
             // Route editing: a snackbar covers the Start row,
@@ -614,7 +634,7 @@ struct GoFlyMapView: View {
         if activeCandidate != nil || wanderCardPlace != nil {
             let cardBottom = geometry.safeAreaInsets.bottom + 12
             let cardTop = cardBottom + 188
-            return cardTop + 12
+            return cardTop + 20
         } else {
             let panelTop = (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + max(currentCollapsedHeight, sheetHeight)
             // The snackbar overlay ends at the safe-area bottom, which the bar and panel already include.
@@ -906,7 +926,7 @@ struct GoFlyMapView: View {
                 // D10 / D10.a: a paused or interrupted route keeps the running panel; only the button turns into 繼續.
                 GoFlyRoutePanel(
                     controller: route, showingFavoriteRoutes: $showingFavoriteRoutes, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
-                    onEditNode: { _ = route.selectNode(id: $0) },
+                    onEditNode: selectRouteNode,
                     onRequestEnd: { _ = route.cancel() },
                     onSettings: { showingSettings = true },
                     onNotice: { notices.showFavoriteRouteFailure($0) },
@@ -1212,7 +1232,7 @@ struct GoFlyMapView: View {
     private var wanderPlanningHost: WanderPlanningHost {
         WanderPlanningHost(
             isJoystickMode: { mode == .joystick },
-            isSceneActive: { scenePhase == .active },
+            isSceneActive: { sceneActivity.isActive },
             isRecoveryChecking: { recovery.isChecking },
             mapOriginCandidates: { mapWanderOriginCandidates() },
             wanderStarted: { planned in
@@ -1427,6 +1447,12 @@ struct GoFlyMapView: View {
         if !isWanderMap, canSwitchMode, mode == .route { selectMode(.teleport) }
         showingSearch = true
         searchFocusRequest = UUID()
+    }
+
+    private func selectRouteNode(_ id: RouteNodeID) {
+        _ = route.selectNode(id: id)
+        guard route.draft.nodes.first(where: { $0.id == id })?.value == .empty else { return }
+        emptyRouteLocationHintID = UUID()
     }
 
     private func expandSheet() {
@@ -1662,12 +1688,6 @@ struct GoFlyMapView: View {
                 }
             )
         }
-        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
-        }
-        .goFlyShadow(.card)
         .accessibilityIdentifier("map.wander.locationCard")
     }
 
@@ -1750,4 +1770,10 @@ private struct GoFlyMapSheetsModifier<Details: View, Places: View, Routes: View>
             .navigationDestination(isPresented: placesBinding) { places().goFlyPushedFullScreen() }
             .navigationDestination(isPresented: routesBinding) { routes().goFlyPushedFullScreen() }
     }
+}
+
+/// The live scene phase for closures that outlive a view body.
+@MainActor
+private final class GoFlySceneActivity {
+    var isActive = false
 }

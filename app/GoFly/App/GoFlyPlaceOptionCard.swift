@@ -5,26 +5,20 @@ struct GoFlyFavoriteStar: View {
     @EnvironmentObject private var favorites: FavoritePlacesStore
     let place: MapPlace
     var identifier: String
-    /// The place sheet shows the Figma labeled pill; lists and pins keep the icon.
-    var labelTitle: String? = nil
+    /// Place and location cards draw the star as a 40pt icon-only capsule button.
+    var isCardAction = false
     /// List rows draw the icon inside a filled circle (Figma B2 favorite row).
     var circleDiameter: CGFloat? = nil
     @State private var showingEditor = false
 
     var body: some View {
         Button { showingEditor = true } label: {
-            if let labelTitle {
-                HStack(spacing: 8) {
-                    GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
-                    Text(labelTitle)
-                        .font(GoFlyFont.subheadlineEmphasis)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 40)
-                .background(GoFlyStyle.secondarySurface, in: Capsule())
-                .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                .contentShape(Capsule())
+            if isCardAction {
+                GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
+                    .frame(width: 40, height: 40)
+                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                    .contentShape(Circle())
             } else if let circleDiameter {
                 GoFlyStarIcon(size: 15, filled: favorites.isFavorite(place))
                     .frame(width: circleDiameter, height: circleDiameter)

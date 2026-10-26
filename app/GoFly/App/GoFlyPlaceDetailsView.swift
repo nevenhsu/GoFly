@@ -1,8 +1,7 @@
-import CoreLocation
 import GoFlyCore
 import SwiftUI
-import UIKit
 
+/// Place details: the shared `GoFlyLocationCard`; only the primary button title differs.
 struct GoFlyPlaceDetailsView: View {
     let place: MapPlace
     var onDismiss: () -> Void
@@ -17,126 +16,34 @@ struct GoFlyPlaceDetailsView: View {
 
     var body: some View {
         if embedded {
-            content
+            card
         } else {
             NavigationStack {
-                ScrollView { content }
-                    .background(GoFlyStyle.surface)
-                    .navigationTitle(goFlyString("search.placeDetails"))
-                    .navigationBarTitleDisplayMode(.inline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        GoFlyFavoriteFailureNotice()
+                        card.padding(.horizontal, 16)
+                    }
+                }
+                .background(GoFlyStyle.surface)
+                .navigationTitle(goFlyString("search.placeDetails"))
+                .navigationBarTitleDisplayMode(.inline)
             }
             .presentationDetents([.medium, .large])
         }
     }
 
-    private var content: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            GoFlyFavoriteFailureNotice()
-            HStack {
-                Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: GoFlySymbols.close)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(GoFlyTextColor.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(goFlyString("common.dismiss"))
-                .accessibilityIdentifier("placeDetails.dismiss")
-            }
-            Text(place.title)
-                .font(GoFlyFont.title)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("placeDetails.title")
-            if place.address != nil || place.title != place.coordinate.displayText {
-                Text(place.address ?? goFlyString("placeDetails.addressUnavailable"))
-                    .font(GoFlyFont.subheadline).foregroundStyle(GoFlyTextColor.secondary)
-                    .accessibilityIdentifier("placeDetails.address")
-            }
-            Text(coordinateLine)
-                .font(GoFlyFont.footnote.monospacedDigit())
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .textSelection(.enabled)
-                .accessibilityIdentifier("placeDetails.coordinates")
-            ScrollView(.horizontal, showsIndicators: false) {
-                actions.padding(.horizontal, 20).padding(.vertical, 4)
-            }
-            .padding(.horizontal, -20)
-            .padding(.top, 20)
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 20)
-    }
-
-    private var coordinateLine: String {
-        guard let distance = distanceMeters else { return place.coordinate.shortDisplayText }
-        let formatted: String
-        if distance < 1_000 {
-            formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceMeters"), Int(distance.rounded()))
-        } else {
-            formatted = goFlyLocalizedFormat(goFlyString("placeDetails.distanceKilometers"),
-                                             String(format: "%.1f", arguments: [distance / 1_000]))
-        }
-        return "\(place.coordinate.shortDisplayText) · \(formatted)"
-    }
-
-    private var distanceMeters: Double? {
-        guard let distanceFrom else { return nil }
-        let from = CLLocation(latitude: distanceFrom.latitude, longitude: distanceFrom.longitude)
-        let to = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
-        let value = from.distance(from: to)
-        return value.isFinite ? value : nil
-    }
-
-    private var actions: some View {
-        HStack(spacing: 8) {
-            if let onGo {
-                Button(action: onGo) {
-                    Text(goFlyString(primaryTitleKey))
-                        .font(GoFlyFont.subheadlineEmphasis)
-                        .padding(.horizontal, 16)
-                        .frame(height: 40)
-                }
-                .buttonStyle(GoFlyCardPrimaryStyle())
-                .goFlySteadyDisabled(!canGo)
-                .accessibilityIdentifier("placeDetails.go")
-            }
-            GoFlyFavoriteStar(place: place, identifier: "placeDetails.favorite",
-                              labelTitle: goFlyString("placeDetails.favorite"))
-            if onRouteStart != nil || onRouteEnd != nil {
-                Menu {
-                    if let onRouteStart { Button(goFlyString("placeDetails.setStart"), action: onRouteStart) }
-                    if let onRouteEnd { Button(goFlyString("placeDetails.setEnd"), action: onRouteEnd) }
-                } label: {
-                    Label(goFlyString("placeDetails.setEnd"), systemImage: GoFlySymbols.flag)
-                        .font(GoFlyFont.subheadlineEmphasis)
-                        .padding(.horizontal, 16)
-                        .frame(height: 40)
-                        .background(GoFlyStyle.secondarySurface, in: Capsule())
-                        .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                        .contentShape(Capsule())
-                }
-                .accessibilityLabel(goFlyString("placeDetails.setEnd"))
-                .accessibilityIdentifier("placeDetails.route")
-            }
-            Button {
-                UIPasteboard.general.string = place.coordinate.displayText
-            } label: {
-                Label(goFlyString("placeDetails.copy"), systemImage: "doc.on.doc")
-                    .font(GoFlyFont.subheadlineEmphasis)
-                    .padding(.horizontal, 16)
-                    .frame(height: 40)
-                    .background(GoFlyStyle.secondarySurface, in: Capsule())
-                    .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(goFlyString("placeDetails.copy"))
-            .accessibilityIdentifier("placeDetails.copy")
-        }
-        .buttonStyle(.plain)
+    private var card: some View {
+        GoFlyLocationCard(
+            place: place,
+            primaryActionType: .custom(primaryTitleKey),
+            primaryActionTitle: goFlyString(primaryTitleKey),
+            primaryEnabled: canGo,
+            onPrimaryAction: onGo,
+            onRouteStart: onRouteStart,
+            onRouteEnd: onRouteEnd,
+            onDismiss: onDismiss,
+            distanceFrom: distanceFrom,
+            identifier: "placeDetails")
     }
 }

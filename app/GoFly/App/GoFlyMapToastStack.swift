@@ -14,6 +14,7 @@ struct GoFlyMapToastStack: View {
     @ObservedObject var joystickOrigin: JoystickOriginController
     let wander: WanderPlanningCoordinator
     @Binding var notices: NoticeState
+    @Binding var emptyRouteLocationHintID: UUID?
     @Binding var showingSettings: Bool
     let mode: SessionMapMode
     let sceneSettled: Bool
@@ -225,6 +226,20 @@ struct GoFlyMapToastStack: View {
                 actionEnabled: routePaused ? (route.phase == .interrupted || route.canResume) : (holdPaused ? positionHold.canRetry : true),
                 isFloating: true
             )
+        } else if mode == .route, route.canEdit, route.picker == nil,
+                  let hintID = emptyRouteLocationHintID {
+            GoFlyStatusBanner(
+                tone: .neutral,
+                title: goFlyString("route.emptyLocationHint"),
+                onDismiss: { emptyRouteLocationHintID = nil },
+                identifier: "route.emptyLocationHint",
+                isFloating: true
+            )
+            .task(id: hintID) {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled, emptyRouteLocationHintID == hintID else { return }
+                emptyRouteLocationHintID = nil
+            }
         }
     }
 }

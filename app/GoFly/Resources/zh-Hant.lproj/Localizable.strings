@@ -588,6 +588,7 @@
 "route.chooseOrigin" = "選擇起點";
 "route.chooseDestination" = "選擇終點";
 "route.chooseWaypoint" = "選擇停靠點 %ld";
+"route.emptyLocationHint" = "使用地圖圖釘或搜尋地點來設定";
 "sheet.currentPosition" = "目前模擬位置";
 "sheet.realPosition" = "目前位置";
 "sheet.lastSimulatedPosition" = "最後模擬位置";

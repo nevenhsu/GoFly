@@ -573,6 +573,7 @@
 "route.chooseOrigin" = "Choose origin";
 "route.chooseDestination" = "Choose destination";
 "route.chooseWaypoint" = "Choose stop %ld";
+"route.emptyLocationHint" = "Use Map Pin or Search location to set a place.";
 "sheet.currentPosition" = "Current simulated position";
 "sheet.realPosition" = "Current location";
 "sheet.lastSimulatedPosition" = "Last simulated position";

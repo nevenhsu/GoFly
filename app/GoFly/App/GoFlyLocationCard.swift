@@ -30,7 +30,10 @@ struct GoFlyLocationCard: View {
     var primaryActionType: LocationCardPrimaryAction = .confirm
     var primaryActionTitle: String? = nil
     var primaryEnabled: Bool = true
-    var onPrimaryAction: () -> Void
+    /// Nil hides the primary button (place details opened without a Go action).
+    var onPrimaryAction: (() -> Void)?
+    var onRouteStart: (() -> Void)? = nil
+    var onRouteEnd: (() -> Void)? = nil
     var onDismiss: () -> Void
     var onCopy: (() -> Void)? = nil
     var distanceFrom: GeoCoordinate? = nil
@@ -63,6 +66,7 @@ struct GoFlyLocationCard: View {
             // Bottom action row matching B5 (Go 77pt, Favorite 86pt, Copy 86pt, height 40pt)
             HStack(spacing: 8) {
                 // Primary CTA (black solid)
+                if let onPrimaryAction {
                 Button(action: onPrimaryAction) {
                     HStack(spacing: 4) {
                         if primaryActionType == .teleport {
@@ -80,33 +84,30 @@ struct GoFlyLocationCard: View {
                 .buttonStyle(GoFlyCardPrimaryStyle())
                 .goFlySteadyDisabled(!primaryEnabled)
                 .accessibilityIdentifier("\(identifier).primaryAction")
+                }
+
+                Spacer(minLength: 0)
+
+                if onRouteStart != nil || onRouteEnd != nil {
+                    Menu {
+                        if let onRouteStart { Button(goFlyString("placeDetails.setStart"), action: onRouteStart) }
+                        if let onRouteEnd { Button(goFlyString("placeDetails.setEnd"), action: onRouteEnd) }
+                    } label: {
+                        Image(systemName: GoFlySymbols.flag)
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(width: 40, height: 40)
+                            .background(GoFlyStyle.secondarySurface, in: Circle())
+                            .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                            .contentShape(Circle())
+                    }
+                    .accessibilityLabel(goFlyString("placeDetails.setEnd"))
+                    .accessibilityIdentifier("\(identifier).route")
+                }
 
                 // Favorite button
-                GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite",
-                                  labelTitle: goFlyString("placeDetails.favorite"))
+                GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", isCardAction: true)
 
-                // Copy button
-                Button {
-                    UIPasteboard.general.string = place.coordinate.displayText
-                    onCopy?()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 14, weight: .medium))
-                        Text(goFlyString("placeDetails.copy"))
-                            .font(GoFlyFont.subheadlineEmphasis)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(minWidth: 86)
-                    .frame(height: 40)
-                    .background(GoFlyStyle.secondarySurface, in: Capsule())
-                    .overlay { Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(goFlyString("placeDetails.copy"))
-                .accessibilityIdentifier("\(identifier).copy")
+                GoFlyCopyIconButton(coordinate: place.coordinate, identifier: "\(identifier).copy", onCopy: onCopy)
             }
         }
         .padding(.horizontal, 20)
@@ -166,5 +167,29 @@ struct GoFlyLocationCard: View {
         let to = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
         let value = from.distance(from: to)
         return value.isFinite ? value : nil
+    }
+}
+
+/// Icon-only copy-coordinates button shared by the location card and the collapsed position summary.
+struct GoFlyCopyIconButton: View {
+    let coordinate: GeoCoordinate
+    var identifier: String
+    var onCopy: (() -> Void)? = nil
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = coordinate.displayText
+            onCopy?()
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 40, height: 40)
+                .background(GoFlyStyle.secondarySurface, in: Circle())
+                .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(goFlyString("placeDetails.copy"))
+        .accessibilityIdentifier(identifier)
     }
 }

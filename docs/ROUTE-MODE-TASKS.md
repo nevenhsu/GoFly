@@ -10,6 +10,7 @@
 - 預設選中「起點」（依 Figma D1）。點欄位只切換選中欄位；由地圖 Pin（D4）或頂部搜尋列（D5）設定選中欄位。
 - 自動收合只由候選 Pin 觸發，拖曳地圖不收合。
 - 起點與終點常駐 ✕（空值時停用），清除後保留空欄位；停靠點 ✕ 刪除整列；皆不顯示 toast／snackbar（2026-10-26 使用者指示，取代 D9 可復原 snackbar；Figma D9 未同步）。
+- 點擊空的路線地點欄位並使其成為選中欄位時，於畫面上方 toast 區顯示中性提示「使用地圖圖釘或搜尋地點來設定」（英文 “Use Map Pin or Search location to set a place.”）；位於頂部搜尋列與狀態 pill 下方，不遮住搜尋列；3 秒自動消失且可關閉。此為新增互動，Figma D1 尚無對應 variant。
 - 路線與搖桿／漫步共用並保存同一速度偏好：5／25／50／100，預設 25。
 - D1 不顯示速度膠囊；只有 D1 右上星號開 D19，底部星號開 D20；undo 文案「復原」。
 - D1b（Pin「新增」為目的地）已廢止。
@@ -49,6 +50,7 @@
 - 做法：新增選中欄位狀態，預設起點；點列只切換選中；路線 tab 頂部搜尋列開 D5（chip 與 placeholder 依選中欄位）；D4 Pin「確認」與 LocationCard「確認」回填選中欄位並回到 D1。
 - 驗收：進入路線 tab 不彈出 D5 或鍵盤；點終點列再點搜尋列，chip 顯示「正在選：終點」；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（加 `.isSelected` trait）。
 - **狀態：已實作，待審查。** Core：`RouteExecutionController.selectedNodeID`（預設起點，列消失時回退起點）、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App：列點擊只選取（`.isSelected`、`goFlySearchField(isFocused: true)`）；路線 tab 搜尋列開 D5（chip「正在選：%@」）；路線 tab 點地圖放 Pin（收合 76 pt）；Pin 與卡片「確認」只改選中欄位並回 D1；D5 選取後回 D1 展開。`RouteEndpointTests`（selection）、`GoFlyRouteSelectionUITests`。舊的 `GoFlyRouteUITests`（點列即開 D5）依使用者確認隨舊 UI 刪除。D1 選中列的藍色游標不實作（依已確認決定）。
+- **2026-10-26 新增：** 點擊空的路線欄位時顯示中性提示 toast，提示使用 Map Pin 或 Search location 設定地點；於頂部搜尋列與狀態 pill 下方顯示，不覆蓋搜尋列，3 秒後自動消失並可關閉。App 已實作；Figma D1 尚未同步此 variant，未實機驗證。
 
 ### R4 D9 清除復原
 - 現況：`removeNode` 無復原。
