@@ -201,18 +201,12 @@ struct GoFlyMapView: View {
     @State private var candidateHeight: CGFloat = 96
     @ScaledMetric(relativeTo: .body) private var goWidth: CGFloat = 68
     @State private var showingSettings = false
-    @State private var favoriteRouteNoticeKey: String?
-    @State private var serviceNoticeDismissed = false
-    @State private var recoveryNoticeDismissed = false
-    @State private var continuationNoticeDismissed = false
+    @State private var notices = NoticeState()
     /// False while the scene is leaving or returning: the iOS app snapshot and
     /// the first frames back must not show a paused-state toast that the
     /// returning scene is about to resolve.
     @State private var sceneSettled = true
     @State private var sceneSettleTask: Task<Void, Never>?
-    @State private var joystickErrorDismissed = false
-    @State private var routeErrorDismissed = false
-    @State private var returnedFromUnconfirmed: UUID?
     @State private var isMapPicking = false
     @StateObject private var joystickOrigin: JoystickOriginController
     @StateObject private var wander: WanderPlanningCoordinator
@@ -320,7 +314,7 @@ struct GoFlyMapView: View {
                 wander.cancelAll()
             }
             .onReceive(service.$error) { error in
-                serviceNoticeDismissed = false
+                notices.reopen(.serviceError)
                 if let error {
                     UIAccessibility.post(notification: .announcement, argument: goFlyString(error.rawValue))
                 }
@@ -565,22 +559,11 @@ struct GoFlyMapView: View {
             bottomChrome(in: geometry)
         }
         .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
-        .onChange(of: service.error) { _, newError in
-            if newError != nil { serviceNoticeDismissed = false }
-        }
-        .onChange(of: joystick.error) { _, newError in
-            if newError != nil { joystickErrorDismissed = false }
-        }
-        .onChange(of: route.draft) { _, _ in favoriteRouteNoticeKey = nil }
-        .onChange(of: route.error) { _, newError in
-            if newError != nil { routeErrorDismissed = false }
-        }
-        .onChange(of: recovery.noticeKey) { _, newKey in
-            if newKey != nil { recoveryNoticeDismissed = false }
-        }
-        .onChange(of: continuation.noticeKey) { _, newKey in
-            if newKey != nil { continuationNoticeDismissed = false }
-        }
+        .onChange(of: joystick.error) { _, newError in notices.reopen(.joystickError, ifPresent: newError) }
+        .onChange(of: route.draft) { _, _ in notices.clearFavoriteRouteFailure() }
+        .onChange(of: route.error) { _, newError in notices.reopen(.routeError, ifPresent: newError) }
+        .onChange(of: recovery.noticeKey) { _, newKey in notices.reopen(.recovery, ifPresent: newKey) }
+        .onChange(of: continuation.noticeKey) { _, newKey in notices.reopen(.continuation, ifPresent: newKey) }
     }
 
     private func snackbarBottomOffset(in geometry: GeometryProxy) -> CGFloat {
@@ -836,7 +819,7 @@ struct GoFlyMapView: View {
     }
 
     private var isResumeState: Bool {
-        if continuation.noticeKey != nil && !continuationNoticeDismissed { return true }
+        if continuation.noticeKey != nil && !notices.isDismissed(.continuation) { return true }
         if !route.canEdit, route.phase == .paused || route.phase == .interrupted { return true }
         if mode == .joystick, joystick.wanderEnabled, !joystick.wanderNeedsReplan,
            [.paused, .suspended, .interrupted].contains(joystick.phase) { return true }
@@ -897,7 +880,7 @@ struct GoFlyMapView: View {
                     onEditNode: { _ = route.selectNode(id: $0) },
                     onRequestEnd: { _ = route.cancel() },
                     onSettings: { showingSettings = true },
-                    onNotice: { favoriteRouteNoticeKey = $0 },
+                    onNotice: { notices.showFavoriteRouteFailure($0) },
                     onRetryInterrupted: { retryInterruptedRoute() },
                     onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
                     currentLocationAvailable: service.currentRouteOrigin != nil,
@@ -1183,7 +1166,7 @@ struct GoFlyMapView: View {
             onCancel: cancelPreparation,
             onRetry: { _ = service.retryPreparedOperation(id: $0) },
             onSettings: { showingSettings = true },
-            onReturn: { returnedFromUnconfirmed = unconfirmedID }
+            onReturn: { notices.leaveUnconfirmed(unconfirmedID) }
         )
     }
 
@@ -1525,7 +1508,7 @@ struct GoFlyMapView: View {
     }
 
     private func cancelPreparation(_ id: UUID) {
-        if service.cancelPreparation(id: id) { serviceNoticeDismissed = true }
+        if service.cancelPreparation(id: id) { notices.dismiss(.serviceError) }
     }
 
     private func candidatePin(_ candidate: TeleportCandidate) -> some View {
@@ -1723,11 +1706,11 @@ struct GoFlyMapView: View {
                 identifier: "map.wifiError",
                 isFloating: true
             )
-        } else if let key = favoriteRouteNoticeKey {
+        } else if let key = notices.favoriteRouteKey {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(key),
-                onDismiss: { favoriteRouteNoticeKey = nil },
+                onDismiss: { notices.clearFavoriteRouteFailure() },
                 identifier: "route.favoriteSaveError",
                 isFloating: true
             )
@@ -1751,26 +1734,26 @@ struct GoFlyMapView: View {
                 identifier: "joystick.wanderPlanningError",
                 isFloating: true
             )
-        } else if let error = service.error, SessionStatusErrors.reportsFailure(error.rawValue), !serviceNoticeDismissed {
+        } else if let error = service.error, SessionStatusErrors.reportsFailure(error.rawValue), !notices.isDismissed(.serviceError) {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(error.rawValue),
                 message: goFlyString("status.repairGuidance"),
                 actionTitle: issueButton(for: error.rawValue).title,
                 onAction: issueButton(for: error.rawValue).action,
-                onDismiss: { serviceNoticeDismissed = true },
+                onDismiss: { notices.dismiss(.serviceError) },
                 identifier: "map.serviceError",
                 isFloating: true
             )
         } else if let failure = unconfirmedFailure, SessionStatusErrors.reportsFailure(failure.rawValue),
-                  returnedFromUnconfirmed != unconfirmedID {
+                  notices.showsUnconfirmed(unconfirmedID) {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(failure.rawValue),
                 message: goFlyString("teleport.positionUnconfirmed") + " " + goFlyString("operation.failureGuidance"),
                 actionTitle: goFlyString("operation.settings"),
                 onAction: { showingSettings = true },
-                onDismiss: { returnedFromUnconfirmed = unconfirmedID },
+                onDismiss: { notices.leaveUnconfirmed(unconfirmedID) },
                 identifier: "map.unconfirmedFailure",
                 isFloating: true
             )
@@ -1791,14 +1774,14 @@ struct GoFlyMapView: View {
                 isFloating: true
             )
         } else if let error = joystick.error, SessionStatusErrors.reportsFailure(error.localizationKey),
-                  mode == .joystick, !joystickErrorDismissed {
+                  mode == .joystick, !notices.isDismissed(.joystickError) {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(error.localizationKey),
                 message: goFlyString("status.repairGuidance"),
                 actionTitle: issueButton(for: error.localizationKey).title,
                 onAction: issueButton(for: error.localizationKey).action,
-                onDismiss: { joystickErrorDismissed = true },
+                onDismiss: { notices.dismiss(.joystickError) },
                 identifier: "joystick.error",
                 isFloating: true
             )
@@ -1814,18 +1797,18 @@ struct GoFlyMapView: View {
                 isFloating: true
             )
         } else if let error = route.error, SessionStatusErrors.reportsFailure(error.localizationKey),
-                  mode == .route, !routeErrorDismissed {
+                  mode == .route, !notices.isDismissed(.routeError) {
             GoFlyStatusBanner(
                 tone: .warning,
                 title: goFlyString("route.error.shortTitle"),
                 message: goFlyString(error.localizationKey),
                 actionTitle: issueButton(for: error.localizationKey).title,
                 onAction: issueButton(for: error.localizationKey, retry: { _ = route.retryPlanning() }).action,
-                onDismiss: { routeErrorDismissed = true },
+                onDismiss: { notices.dismiss(.routeError) },
                 identifier: "route.error",
                 isFloating: true
             )
-        } else if let key = recovery.noticeKey, !recoveryNoticeDismissed {
+        } else if let key = recovery.noticeKey, !notices.isDismissed(.recovery) {
             let cold = recovery.requiresColdConfirmation
             let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .danger
             GoFlyStatusBanner(
@@ -1837,7 +1820,7 @@ struct GoFlyMapView: View {
                     if cold { _ = service.restoreGPS() }
                     else { recovery.checkConnection() }
                 },
-                onDismiss: { recoveryNoticeDismissed = true },
+                onDismiss: { notices.dismiss(.recovery) },
                 identifier: "recovery.connectionBanner",
                 actionEnabled: cold ? service.canRestoreGPS : recovery.canCheck,
                 actionIdentifier: cold ? "recovery.restoreGPS" : "recovery.checkConnection",
@@ -1845,7 +1828,7 @@ struct GoFlyMapView: View {
                 isFloating: true
             )
         } else if sceneSettled,
-                  !isUserPausedRoute, (continuation.noticeKey != nil && !continuationNoticeDismissed) || isResumeState {
+                  !isUserPausedRoute, (continuation.noticeKey != nil && !notices.isDismissed(.continuation)) || isResumeState {
             let routePaused = mode == .route && (route.phase == .paused || route.phase == .interrupted)
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
             let wanderPaused = mode == .joystick && joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase)
@@ -1868,7 +1851,7 @@ struct GoFlyMapView: View {
                     else if wanderPaused { _ = joystick.resume() }
                     else { showingSettings = true }
                 },
-                onDismiss: { continuationNoticeDismissed = true },
+                onDismiss: { notices.dismiss(.continuation) },
                 identifier: "map.continuationNotice",
                 actionEnabled: routePaused ? (route.phase == .interrupted || route.canResume) : (holdPaused ? positionHold.canRetry : true),
                 isFloating: true
