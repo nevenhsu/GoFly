@@ -41,6 +41,12 @@ public struct SessionStatusErrors: Equatable, Sendable {
     public let keys: [String]
     public var isEmpty: Bool { keys.isEmpty }
 
+    /// A cancellation is the app ending its own superseded work, not a fault:
+    /// neither the pill nor a toast reports it.
+    public static func reportsFailure(_ key: String) -> Bool {
+        key != DeviceServiceFailure.operationCancelled.rawValue
+    }
+
     public init(connection: VPNCheckState, service: DeviceServiceFailure? = nil,
                 route: RouteExecutionFailure? = nil, joystick: JoystickFailure? = nil,
                 wander: WanderSelectionFailure? = nil, wifiAvailable: Bool = true,
@@ -57,7 +63,7 @@ public struct SessionStatusErrors: Equatable, Sendable {
         messages += dataErrors
         var seen: Set<String> = []
         keys = messages.filter {
-            $0 != DeviceServiceFailure.operationCancelled.rawValue && !IssueCatalog.isValidation($0)
+            Self.reportsFailure($0) && !IssueCatalog.isValidation($0)
                 && seen.insert($0).inserted
         }
     }

@@ -195,7 +195,6 @@
 "route.dragHint" = "Hold the handle to move the whole place. Move up, move down, and delete actions are also available.";
 "route.moveUp" = "Move up";
 "route.moveDown" = "Move down";
-"route.removed" = "Route stop cleared";
 "route.clearNode" = "Clear %@";
 "route.deleteNode" = "Delete %@";
 "route.nodeLimit" = "A route can contain up to 27 places. Remove a place to add another.";

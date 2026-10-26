@@ -686,7 +686,7 @@ struct GoFlyMapView: View {
             return max(0, geometry.size.height - top) + 6
         }
         if mode == .route, route.canEdit, route.picker == nil, activeCandidate == nil, showsBottomBar {
-            // Route editing: the clear / remove snackbar covers the Start row,
+            // Route editing: a snackbar covers the Start row,
             // which sits 36 pt above the tab bar.
             let startCenter = bottomBarHeight - geometry.safeAreaInsets.bottom + 36 + GoFlyStyle.primaryButtonHeight / 2
             return max(0, startCenter - 28)
@@ -1026,12 +1026,6 @@ struct GoFlyMapView: View {
                     controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                     onEditNode: { _ = route.selectNode(id: $0) },
                     onRequestEnd: { confirmingEndRoute = true },
-                    onNodeRemoved: {
-                        snackbar = GoFlySnackbarMessage(
-                            text: goFlyString("route.removed"),
-                            actionTitle: goFlyString("common.undo"),
-                            action: { _ = route.undoRemoval() })
-                    },
                     onSettings: { showingSettings = true },
                     onRetryInterrupted: { retryInterruptedRoute() },
                     onFocusPoint: { cameraIntent = GoFlyCameraIntent(coordinate: $0) },
@@ -2200,7 +2194,7 @@ struct GoFlyMapView: View {
                 identifier: "joystick.wanderPlanningError",
                 isFloating: true
             )
-        } else if let error = service.error, !serviceNoticeDismissed {
+        } else if let error = service.error, SessionStatusErrors.reportsFailure(error.rawValue), !serviceNoticeDismissed {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(error.rawValue),
@@ -2237,7 +2231,8 @@ struct GoFlyMapView: View {
                 identifier: "map.operationFailure",
                 isFloating: true
             )
-        } else if let error = joystick.error, mode == .joystick, !joystickErrorDismissed {
+        } else if let error = joystick.error, SessionStatusErrors.reportsFailure(error.localizationKey),
+                  mode == .joystick, !joystickErrorDismissed {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString(error.localizationKey),
@@ -2259,7 +2254,8 @@ struct GoFlyMapView: View {
                 identifier: "joystick.wanderError",
                 isFloating: true
             )
-        } else if let error = route.error, mode == .route, !routeErrorDismissed {
+        } else if let error = route.error, SessionStatusErrors.reportsFailure(error.localizationKey),
+                  mode == .route, !routeErrorDismissed {
             GoFlyStatusBanner(
                 tone: .warning,
                 title: goFlyString("route.error.shortTitle"),

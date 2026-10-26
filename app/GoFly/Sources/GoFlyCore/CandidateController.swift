@@ -38,6 +38,9 @@ public final class CandidateController: ObservableObject {
     public var canGo: Bool { candidate != nil && !blockedByInvalidInput && !blockedByUnselectedNameQuery }
     var editingRevision: UInt64 { revision }
     public func updateQuery(_ text: String) {
+        // A text field re-sends its unchanged text when it loses focus or
+        // commits marked text; that is not an edit and must keep the selection.
+        guard text != query else { return }
         cancelSearch()
         query = text
         inputError = nil

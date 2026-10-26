@@ -209,7 +209,6 @@
 "route.dragHint" = "按住把手拖動整筆地點，也可使用上移、下移或刪除動作。";
 "route.moveUp" = "上移";
 "route.moveDown" = "下移";
-"route.removed" = "已清空路線地點";
 "route.clearNode" = "清除%@";
 "route.deleteNode" = "刪除%@";
 "route.nodeLimit" = "一條路線最多 27 個地點。可先刪除地點再新增。";

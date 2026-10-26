@@ -9,7 +9,7 @@
 - 進入路線 tab：D1 完整面板，不自動開 D5／鍵盤。起點預設目前位置，無最後模擬位置與真實 GPS 時留空。
 - 預設選中「起點」（依 Figma D1）。點欄位只切換選中欄位；由地圖 Pin（D4）或頂部搜尋列（D5）設定選中欄位。
 - 自動收合只由候選 Pin 觸發，拖曳地圖不收合。
-- 起點與終點常駐 ✕（空值時停用），清除後保留空欄位；停靠點 ✕ 刪除整列；皆顯示 D9 黑底「復原」snackbar。
+- 起點與終點常駐 ✕（空值時停用），清除後保留空欄位；停靠點 ✕ 刪除整列；皆不顯示 toast／snackbar（2026-10-26 使用者指示，取代 D9 可復原 snackbar；Figma D9 未同步）。
 - 路線與搖桿／漫步共用並保存同一速度偏好：5／25／50／100，預設 25。
 - D1 不顯示速度膠囊；只有 D1 右上星號開 D19，底部星號開 D20；undo 文案「復原」。
 - D1b（Pin「新增」為目的地）已廢止。
@@ -54,7 +54,8 @@
 - 現況：`removeNode` 無復原。
 - Figma D9：C2 `Snackbar / 可復原`「已清空路線地點」＋「復原」，位於 bottom sheet 上方約 12 pt。
 - 驗收：5 秒內復原原值與原位置；逾時消失；連續刪除只復原最近一次；三語；深色 Dark D9。
-- **狀態：已實作，待審查。** Core：`removeNode` 記錄 `(before, after, selection)`，`canUndoRemoval`／`undoRemoval()`（只復原最近一次；之後路線有任何其他變動即失效）；App：起訖清除與停靠點刪除皆顯示「已清空路線地點」＋「復原」（5 秒，於 sheet 上方 12 pt，已修正 snackbar 位置多算 safe area 的偏移）。`RouteEndpointTests`（undo 三項）、`GoFlyRouteUndoUITests`。訊息文字依 D9 渲染畫面統一為「已清空路線地點」（停靠點刪除與起訖清除相同）。
+- **2026-10-26 取代：** 使用者指示清空或刪除路線地點不顯示 success toast；App 已移除「已清空路線地點」＋「復原」snackbar 與 `route.removed` 字串，`GoFlyRouteUndoUITests` 改驗證清除後沒有 snackbar。Core 的 `undoRemoval()` 保留但 App 不再呼叫。驗收：清除起點／終點、刪除停靠點後畫面沒有任何 toast／snackbar。尚未實機驗證。
+- 原狀態（已取代）：Core：`removeNode` 記錄 `(before, after, selection)`，`canUndoRemoval`／`undoRemoval()`（只復原最近一次；之後路線有任何其他變動即失效）；App：起訖清除與停靠點刪除皆顯示「已清空路線地點」＋「復原」（5 秒，於 sheet 上方 12 pt，已修正 snackbar 位置多算 safe area 的偏移）。`RouteEndpointTests`（undo 三項）、`GoFlyRouteUndoUITests`。訊息文字依 D9 渲染畫面統一為「已清空路線地點」（停靠點刪除與起訖清除相同）。
 
 ### R5 D1／D2 面板版面
 - 現況：`GoFlyRoutePanel.editingView` 將標題、清單、新增、反轉放在同一 `ScrollView`；底部星號 50 pt 有邊框。

@@ -411,9 +411,23 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                                               dy: -max(0, minimumSize - bounds.height) / 2)
                 correctionsRemaining = 0
                 hasFocused = true
-                let routePadding = UIEdgeInsets(top: padding.top + 16, left: padding.left + 16,
-                                                bottom: padding.bottom + 16, right: padding.right + 16)
+                // MapKit fits inside the layout margins (the attribution inset
+                // already covers the panel), so pad only what they leave out.
+                let margins = map.layoutMargins
+                let routePadding = UIEdgeInsets(top: max(0, padding.top + 16 - margins.top),
+                                                left: max(0, padding.left + 16 - margins.left),
+                                                bottom: max(0, padding.bottom + 16 - margins.bottom),
+                                                right: max(0, padding.right + 16 - margins.right))
                 map.setVisibleMapRect(routeRect, edgePadding: routePadding, animated: false)
+                // Pan the route's centre onto the viewport centre in case MapKit
+                // still offsets the fitted rect.
+                let routeCenter = MKMapPoint(x: routeRect.midX, y: routeRect.midY).coordinate
+                let landed = map.convert(routeCenter, toPointTo: map)
+                let center = map.convert(map.centerCoordinate, toPointTo: map)
+                if abs(landed.x - visible.midX) > 0.5 || abs(landed.y - visible.midY) > 0.5 {
+                    map.setCenter(map.convert(CGPoint(x: center.x + landed.x - visible.midX,
+                        y: center.y + landed.y - visible.midY), toCoordinateFrom: map), animated: false)
+                }
                 return
             }
             if hasFocused && !intent.resetsZoom {

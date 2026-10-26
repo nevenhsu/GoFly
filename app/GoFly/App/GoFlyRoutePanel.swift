@@ -8,8 +8,6 @@ struct GoFlyRoutePanel: View {
     var onEditNode: (RouteNodeID) -> Void
     /// 結束 asks the owner to show the D6.a confirmation over the whole screen.
     var onRequestEnd: () -> Void = { }
-    /// Called after a row was cleared or deleted, so the owner can offer the D9 undo snackbar.
-    var onNodeRemoved: () -> Void = { }
     var onSettings: () -> Void = { }
     /// 重試 on an interrupted route: repair the connection, then the route continues.
     var onRetryInterrupted: () -> Void = { }
@@ -327,7 +325,7 @@ struct GoFlyRoutePanel: View {
                     draft: controller.draft, selectedID: controller.selectedNodeID,
                     isEditable: controller.canEdit, viewport: visibleScrollFrame,
                     onEdit: onEditNode,
-                    onDelete: { if controller.removeNode(id: $0) { onNodeRemoved() } },
+                    onDelete: { _ = controller.removeNode(id: $0) },
                     onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
                     onScroll: { id, anchor in
                         withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
