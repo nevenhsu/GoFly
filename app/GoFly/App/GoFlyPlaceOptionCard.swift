@@ -9,6 +9,8 @@ struct GoFlyFavoriteStar: View {
     var isCardAction = false
     /// List rows draw the icon inside a filled circle (Figma B2 favorite row).
     var circleDiameter: CGFloat? = nil
+    /// Show the editor's Delete action for existing favorites opened from this star.
+    var allowsDelete = false
     @State private var showingEditor = false
 
     var body: some View {
@@ -41,7 +43,7 @@ struct GoFlyFavoriteStar: View {
         .accessibilityIdentifier(identifier)
         .sheet(isPresented: $showingEditor) {
             GoFlyFavoriteEditorSheet(place: place, initialLabel: favorites.favorite(for: place)?.label,
-                                     allowsDelete: false, onDismiss: { showingEditor = false })
+                                     allowsDelete: allowsDelete, onDismiss: { showingEditor = false })
         }
     }
 

@@ -4,7 +4,7 @@ import SwiftUI
 /// C2 sheet: modal for adding or editing a favorite place (plan C2).
 /// Displays a dismiss/cancel button, title "編輯最愛", optional red "刪除" button,
 /// editable label field, place address/coordinates box, and bottom primary "儲存" button.
-/// The star opens it with `allowsDelete: false`: tapping a star only edits the label.
+/// Star entry points may enable Delete for an existing favorite; tapping a star only opens this sheet.
 struct GoFlyFavoriteEditorSheet: View {
     @EnvironmentObject private var favorites: FavoritePlacesStore
     let place: MapPlace

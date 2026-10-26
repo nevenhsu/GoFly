@@ -619,11 +619,12 @@ struct GoFlyMapView: View {
 
     private func snackbarBottomOffset(in geometry: GeometryProxy) -> CGFloat {
         if activeCandidate != nil, mode == .teleport || mode == .joystick {
-            // Location card: fixed 188 pt tall; the snackbar floats a fixed 20 pt above its top edge.
-            return geometry.safeAreaInsets.bottom + 12 + 188 + 20
+            // Location card: fixed 188 pt tall; keep the copy snackbar 8 pt above its top edge.
+            return geometry.safeAreaInsets.bottom + 12 + 188 + 8
         }
         if mode == .teleport {
-            return max(0, geometry.size.height - panelFrame.minY) + 6
+            // The collapsed teleport panel's copy snackbar sits 8 pt above its top edge.
+            return max(0, geometry.size.height - panelFrame.minY) + 8
         }
         if mode == .route, route.canEdit, route.picker == nil, activeCandidate == nil, showsBottomBar {
             // Route editing: a snackbar covers the Start row,
@@ -634,7 +635,7 @@ struct GoFlyMapView: View {
         if activeCandidate != nil || wanderCardPlace != nil {
             let cardBottom = geometry.safeAreaInsets.bottom + 12
             let cardTop = cardBottom + 188
-            return cardTop + 20
+            return cardTop + 8
         } else {
             let panelTop = (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + max(currentCollapsedHeight, sheetHeight)
             // The snackbar overlay ends at the safe-area bottom, which the bar and panel already include.
@@ -1084,7 +1085,7 @@ struct GoFlyMapView: View {
                 if let coordinate = service.positionMarker?.coordinate {
                     let place = currentPositionPlace ?? MapPlace(id: .coordinate(coordinate), title: coordinate.displayText,
                                          coordinate: coordinate)
-                    GoFlyFavoriteStar(place: place, identifier: "map.position.favorite")
+                    GoFlyFavoriteStar(place: place, identifier: "map.position.favorite", allowsDelete: true)
                         .background(GoFlyStyle.secondarySurface, in: Circle())
                         .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
                     Button {
@@ -1158,10 +1159,11 @@ struct GoFlyMapView: View {
         }
     }
 
-    /// The star opens the label editor (C2, no delete); the rest of the row selects the place.
+    /// The star opens the label editor (C2); the rest of the row selects the place.
     private func teleportPlaceRow(_ place: MapPlace, title: String, identifier: String) -> some View {
         HStack(spacing: 8) {
-            GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", circleDiameter: 36)
+            GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", circleDiameter: 36,
+                              allowsDelete: true)
                 .padding(.leading, -4)
             Button { selectSearchPlace(place) } label: {
                 HStack(spacing: 12) {
