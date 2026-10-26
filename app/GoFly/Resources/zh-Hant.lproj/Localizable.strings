@@ -133,6 +133,7 @@
 "operation.destination" = "目的地：%@";
 "operation.startSummary" = "準備定位服務，不變更位置。";
 "favorites.title" = "最愛地點";
+"favorites.shortTitle" = "Favorite";
 "favorites.add" = "加入最愛地點";
 "favorites.remove" = "移除最愛地點";
 "favorites.saved" = "已收藏";

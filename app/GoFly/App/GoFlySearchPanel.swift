@@ -121,13 +121,17 @@ struct GoFlySearchPanel: View {
             .background(GoFlyStyle.secondarySurface, in: Capsule())
             Spacer()
             Button(action: onFavorites) {
-                Text(goFlyString("favorites.title"))
-                    .font(GoFlyFont.subheadlineEmphasis)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+                HStack(spacing: 8) {
+                    GoFlyStarIcon(size: 22, filled: false)
+                    Text(goFlyString("favorites.shortTitle"))
+                        .font(GoFlyFont.subheadlineEmphasis)
+                }
+                .foregroundStyle(GoFlyTextColor.primary)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(goFlyString("favorites.shortTitle"))
             .accessibilityIdentifier("search.favorites")
         }
         .padding(.horizontal, 20)
@@ -413,16 +417,21 @@ private struct PasteableSearchTextField: UIViewRepresentable {
         textField.pasteDelegate = context.coordinator
         textField.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
 
+        let controls = SearchTextFieldAccessoryView()
+        controls.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         let pasteButton = UIView(frame: .zero)
         pasteButton.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            pasteButton.widthAnchor.constraint(equalToConstant: 44),
-            pasteButton.heightAnchor.constraint(equalToConstant: 44)
-        ])
         addGoFlyPasteControl(to: pasteButton, target: textField,
-                             backgroundColor: UIColor(GoFlyStyle.fieldSurface),
                              accessibilityLabel: goFlyString("search.paste"),
                              accessibilityIdentifier: "search.paste")
+        controls.addSubview(pasteButton)
+        NSLayoutConstraint.activate([
+            pasteButton.leadingAnchor.constraint(equalTo: controls.leadingAnchor),
+            pasteButton.trailingAnchor.constraint(equalTo: controls.trailingAnchor),
+            pasteButton.topAnchor.constraint(equalTo: controls.topAnchor),
+            pasteButton.bottomAnchor.constraint(equalTo: controls.bottomAnchor)
+        ])
 
         let clearButton = UIButton(type: .system)
         clearButton.setImage(UIImage(systemName: GoFlySymbols.clearSearch), for: .normal)
@@ -439,12 +448,13 @@ private struct PasteableSearchTextField: UIViewRepresentable {
             textField?.sendActions(for: .editingChanged)
             textField?.becomeFirstResponder()
         }, for: .touchUpInside)
-
-        let controls = UIStackView(arrangedSubviews: [clearButton, pasteButton])
-        controls.axis = .horizontal
-        controls.spacing = 0
-        controls.alignment = .center
-        controls.distribution = .fill
+        controls.addSubview(clearButton)
+        NSLayoutConstraint.activate([
+            clearButton.leadingAnchor.constraint(equalTo: controls.leadingAnchor),
+            clearButton.trailingAnchor.constraint(equalTo: controls.trailingAnchor),
+            clearButton.topAnchor.constraint(equalTo: controls.topAnchor),
+            clearButton.bottomAnchor.constraint(equalTo: controls.bottomAnchor)
+        ])
         textField.rightView = controls
         textField.rightViewMode = .always
         textField.text = text
@@ -515,19 +525,22 @@ private struct PasteableSearchTextField: UIViewRepresentable {
     }
 }
 
+private final class SearchTextFieldAccessoryView: UIView {
+    override var intrinsicContentSize: CGSize { CGSize(width: 44, height: 44) }
+}
+
 /// A standalone native paste button used where a paste action must not activate
 /// the surrounding search-entry button.
 struct GoFlyPasteControl: UIViewRepresentable {
     let accessibilityLabel: String
     let accessibilityIdentifier: String
-    var backgroundColor: UIColor = UIColor.secondarySystemGroupedBackground
     var symbolColor: UIColor = .secondaryLabel
     let onPaste: (String) -> Void
 
     func makeUIView(context: Context) -> PasteRecipient {
         let container = PasteRecipient(onPaste: onPaste)
-        addGoFlyPasteControl(to: container, target: container, backgroundColor: backgroundColor,
-                             symbolColor: symbolColor, accessibilityLabel: accessibilityLabel,
+        addGoFlyPasteControl(to: container, target: container, symbolColor: symbolColor,
+                             accessibilityLabel: accessibilityLabel,
                              accessibilityIdentifier: accessibilityIdentifier)
         return container
     }
@@ -572,7 +585,6 @@ private func trimmedPasteText(_ itemStrings: [NSAttributedString]) -> NSAttribut
 private func addGoFlyPasteControl(
     to host: UIView,
     target: any UIPasteConfigurationSupporting,
-    backgroundColor: UIColor,
     symbolColor: UIColor = UIColor(GoFlyGrayScale.pasteSymbol),
     accessibilityLabel: String,
     accessibilityIdentifier: String
@@ -581,11 +593,12 @@ private func addGoFlyPasteControl(
     configuration.displayMode = .iconOnly
     configuration.cornerStyle = .capsule
     configuration.baseForegroundColor = symbolColor
-    configuration.baseBackgroundColor = backgroundColor
+    configuration.baseBackgroundColor = .clear
     let pasteControl = UIPasteControl(configuration: configuration)
     pasteControl.target = target
     pasteControl.accessibilityLabel = accessibilityLabel
     pasteControl.accessibilityIdentifier = accessibilityIdentifier
+    pasteControl.layer.shadowOpacity = 0
     pasteControl.translatesAutoresizingMaskIntoConstraints = false
     host.addSubview(pasteControl)
     NSLayoutConstraint.activate([

@@ -119,6 +119,7 @@
 "operation.destination" = "Destination: %@";
 "operation.startSummary" = "Prepares the service without changing location.";
 "favorites.title" = "Favorite places";
+"favorites.shortTitle" = "Favorite";
 "favorites.add" = "Add favorite place";
 "favorites.remove" = "Remove favorite place";
 "favorites.saved" = "Favorite";

@@ -46,10 +46,10 @@
 
 ### R3 選中欄位與再次點擊搜尋（D1、D4、D5）
 - 現況：頂部搜尋列已直接開 D5；點擊清單列只選取欄位。
-- Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側「最愛地點」，「最近搜尋」＋「清空記錄」。
+- Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側 22 pt 空心星號＋文字 `Favorite`（15 pt Medium），44 pt 高命中區，圖示與文字使用主文字色（Light `#000000`、Dark `#FFFFFF`），VoiceOver 名稱 `Favorite`，「最近搜尋」＋「清空記錄」。
 - 做法：維持選中欄位狀態與 D1 樣式；第一次點欄位選取，第二次點同一欄位透過 `openSelectedPicker()` 開 D5 並聚焦搜尋欄；點其他欄位會選取並重新開始兩次點擊流程。路線頂部搜尋列仍可立即開 D5；D4 Pin 與 LocationCard 的「確認」仍回填選中欄位並返回 D1。
-- 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；點空欄位不顯示 toast。
-- **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。Figma D1 維持目前選中列渲染，D5 維持 focused 搜尋頁；靜態 Figma 未定義再次點擊互動 variant，待設計稿同步。
+- 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；`Favorite` 入口顯示空心星號與文字、使用主文字色，命中區高 44 pt 且 VoiceOver 名稱為 `Favorite`；點空欄位不顯示 toast。
+- **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。D5 最愛入口使用 22 pt 空心星號＋15 pt `Favorite` 文字、主文字色與 44 pt 高命中區，VoiceOver 名稱沿用 `favorites.shortTitle`。Figma D1 維持目前選中列渲染，D5 已同步 focused 搜尋頁與星號＋`Favorite` 文字入口；靜態 Figma 未定義再次點擊互動 variant，本次同步畫面與規格。
 
 ### R4 D9 清除復原
 - 現況：`removeNode` 無復原。
@@ -69,8 +69,8 @@
 - 頁面：導航式全螢幕頁；隱藏地圖、頂部搜尋列、路線面板星號／開始按鈕與 TabBar。頂列為「返回」＋「全部點位」，下方使用高度隨列數自適應增加、填滿後才捲動的清單卡片（可見捲動指示器；拖曳中卡片保持當下高度並停止使用者捲動（避免捲動手勢與拖曳列衝突），手指接近清單上／下緣時自動捲動以便跨越可視範圍改變順序；拖曳列中心跟隨手指位置。面板與清單頁共用 `GoFlyRouteNodeCard`。），底部固定與 D1 操作列相同樣式的小型無外框文字按鈕：左「＋ 新增停靠點」、右「⇅ 反轉順序」（無「關閉檢視」）。原生向右返回手勢或「返回」關閉。拖曳排序後被移動列成為選中欄位。
 - 清單：重用 `GoFlyRouteNodeList`，因此左側排序圖示可拖曳調整順序；欄位首次點擊只選取，再次點擊同一欄位推入 D5；右側 ✕ 對起訖點清空、對停靠點刪除整列。新增停靠點後捲至新列。
 - Figma 狀態：D13 是匯入 GPX 的唯讀點位清單；本頁僅參照其版面層級，拖曳、欄位編輯、固定操作列與關閉手勢是新增 App 行為，04 頁尚無對應 wireframe。不可記為 Figma 已設計。
-- 驗收：在清單頁逐一確認首次選取／再次開 D5、結果回填後回到清單、清空起訖／刪除停靠點、拖曳重排、新增後自動捲動、關閉按鈕與右滑返回；確認頁面隱藏地圖與 TabBar。
-- **狀態：程式已實作；Swift parser、三語 strings lint 與 `git diff --check` 通過；尚未模擬器／實機驗收。**
+- 驗收：在清單頁逐一確認首次選取／再次開 D5、結果回填後回到清單、清空起訖／刪除停靠點、拖曳重排（首／末列越過可視範圍上／下緣一列高度內放開仍提交，超出容差才取消）、新增後自動捲動、關閉按鈕與右滑返回；確認頁面隱藏地圖與 TabBar。
+- **狀態：程式已實作；2026-10-26 修正拖曳首／末列的邊界投放容差；尚未模擬器／實機驗收。**
 
 ### R6 D6／D6.a 執行面板與結束確認
 - 現況：`App/GoFlyRoutePanel.swift:81` 使用系統 `confirmationDialog`，文案「取消這次路線？」。

@@ -203,6 +203,13 @@ struct GoFlyRouteNodeList: View {
         if next != previewOrder { previewOrder = next }
     }
 
+    private func acceptsDrop(at point: CGPoint) -> Bool {
+        guard viewport.width > 0, viewport.height > 0 else { return false }
+        // Keep the first and last preview slots reachable when the finger crosses the clipped
+        // card edge. The preview order still determines the destination; distant drops cancel.
+        viewport.insetBy(dx: 0, dy: -max(16, dragHeight)).contains(point)
+    }
+
     private func scrollAtEdge() {
         guard viewport.height > 0, let id = draggingID else { return }
         let remaining = previewOrder.filter { $0 != id }
@@ -220,8 +227,9 @@ struct GoFlyRouteNodeList: View {
 
     private func finishDrag() {
         guard let id = draggingID else { return }
+        updateProjection()
         let target = previewOrder.firstIndex(of: id)
-        let canCommit = isEditable && originalOrder == order && viewport.contains(pointer)
+        let canCommit = isEditable && originalOrder == order && acceptsDrop(at: pointer)
         cancelDrag()
         if canCommit, let target {
             withAnimation(.easeInOut(duration: 0.2)) { onMove(id, target) }

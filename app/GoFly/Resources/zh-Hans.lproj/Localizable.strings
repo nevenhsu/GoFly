@@ -119,6 +119,7 @@
 "operation.destination" = "目的地：%@";
 "operation.startSummary" = "准备定位服务，不更改位置。";
 "favorites.title" = "最爱地点";
+"favorites.shortTitle" = "Favorite";
 "favorites.add" = "加入最爱地点";
 "favorites.remove" = "移除最爱地点";
 "favorites.saved" = "已收藏";
