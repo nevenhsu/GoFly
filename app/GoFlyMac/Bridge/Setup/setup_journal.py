@@ -761,13 +761,20 @@ class JournalStore:
         """Archive while the caller already owns ``operation.lock``."""
         return self._archive_completed(setup_id, device_id, lock_held=True)
 
-    def _archive_completed(self, setup_id: str, device_id: str, *, lock_held: bool) -> Path:
-        """Archive a fully proven current transaction under the same lock.
+    def abandon_unfinished_locked(self, setup_id: str, device_id: str) -> Path:
+        """Archive an unfinished current record as abandoned (evidence kept).
 
-        The current journal is the only continuation pointer.  We publish a
-        durable transaction archive first, then remove that pointer, allowing a
-        later explicit setup on another absent device to begin.  Any unresolved
-        or receipt-less record stays current and therefore blocks replacement.
+        Caller owns ``operation.lock``. Nothing else is deleted: the
+        transaction directory, pairing candidate and installed app stay.
+        """
+        return self._archive_completed(setup_id, device_id, lock_held=True, abandoned=True)
+
+    def _archive_completed(self, setup_id: str, device_id: str, *, lock_held: bool, abandoned: bool = False) -> Path:
+        """Archive the current transaction under the same lock.
+
+        Completed archives require full proof. Abandoned archives retain the
+        current record as evidence without claiming completion. In both cases
+        the archive is made durable before removing the sole current pointer.
         """
 
         setup_id = _validate_setup_id(setup_id)
@@ -779,11 +786,10 @@ class JournalStore:
                 raise SetupBridgeError("transaction-unknown")
             if journal.get("setupID") != setup_id or journal.get("deviceID") != device_id:
                 raise SetupBridgeError("transaction-conflict")
-            if not self._completed_eligible(journal):
+            if not abandoned and not self._completed_eligible(journal):
                 raise SetupBridgeError("transaction-unknown")
-            receipt = journal["receiptSHA256"]
             transaction = self.transaction_root(setup_id)
-            archive = transaction / "journal.completed.json"
+            archive = transaction / ("journal.abandoned.json" if abandoned else "journal.completed.json")
             _regular(archive, allow_missing=True)
             data = _json_bytes(journal)
             if archive.exists():
@@ -796,7 +802,8 @@ class JournalStore:
                 temporary: Path | None = None
                 fd: int | None = None
                 try:
-                    fd, name = tempfile.mkstemp(prefix=".completed-", dir=transaction)
+                    prefix = ".abandoned-" if abandoned else ".completed-"
+                    fd, name = tempfile.mkstemp(prefix=prefix, dir=transaction)
                     temporary = Path(name)
                     os.fchmod(fd, 0o600)
                     offset = 0

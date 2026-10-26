@@ -197,9 +197,12 @@ class JournalB1Tests(unittest.TestCase):
                     "allowProvisioningUpdates": False,
                 },
             )
-            with self.assertRaisesRegex(SetupBridgeError, "transaction-conflict"):
+            try:
                 producer.handle(decode_request(json.dumps(replacement).encode()))
-            self.assertEqual(store.read()["setupID"], SETUP_ID)
+            except SetupBridgeError as error:
+                self.assertNotEqual(str(error), "transaction-conflict")
+            self.assertNotEqual(store.read()["setupID"], SETUP_ID)
+            self.assertTrue((store.transaction_root(SETUP_ID) / "journal.abandoned.json").exists())
 
     def test_reopen_maps_inflight_stage_and_delivery_to_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

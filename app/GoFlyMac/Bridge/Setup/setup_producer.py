@@ -177,15 +177,13 @@ class SetupProducer:
             if existing is not None:
                 if existing.get("setupID") == request.setup_id and existing.get("deviceID") == request.device_id:
                     raise SetupBridgeError("transaction-conflict")
-                if mode == "install" and existing.get("deviceID") == request.device_id:
-                    raise SetupBridgeError("transaction-conflict")
-                # A proven completed transaction is the only record eligible
-                # for replacement. Install only replaces it for another
-                # device; renew may replace the same device's completed record.
+                # A proven completed record is archived as completed; any
+                # unfinished record is abandoned (archived, nothing deleted)
+                # and setup restarts from scratch with a fresh transaction.
                 if self._journal_is_completed(existing):
                     self.store.archive_completed_locked(existing["setupID"], existing["deviceID"])
                 else:
-                    raise SetupBridgeError("transaction-conflict")
+                    self.store.abandon_unfinished_locked(existing["setupID"], existing["deviceID"])
             journal = self.store.create(
                 request.setup_id,
                 request.device_id,

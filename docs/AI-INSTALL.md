@@ -15,11 +15,11 @@ bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team <EXISTING_TEAM_ID
 # Interrupted? Do not resume; start over with preflight → apply / 中斷時不接續，從頭重新 preflight → apply
 ```
 
-First installation adds `--mode install`; default `--mode renew` requires an installed app. Provisioning network access is off by default; use `--allow-provisioning-updates` only within the user's authorization. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall, data reset or fallback to a different phone/team. After an interruption, never use `--action resume`; start over with preflight → apply (2026-10-26 design, matching the Mac app). Until the restart path is implemented, the producer returns `transaction-conflict` for the same phone's unfinished transaction: stop and report it; do not delete the journal, pairing or app by hand.
+First installation adds `--mode install`; default `--mode renew` requires an installed app. Provisioning network access is off by default; use `--allow-provisioning-updates` only within the user's authorization. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall, data reset or fallback to a different phone/team. After an interruption, never use `--action resume`; start over with preflight → apply (2026-10-26 design, matching the Mac app). The producer has one global current transaction: `apply` abandons any unfinished transaction, regardless of its device (archived as `journal.abandoned.json`; transaction data is retained), then starts fresh. Repeating the identical setupID still returns `transaction-conflict`. Revoking an old unused pairing is not implemented yet.
 
-首次安裝加 `--mode install`，預設 `renew` 要求已有 App。預設不連 Apple 更新佈建資料；僅在授權範圍內加 `--allow-provisioning-updates`。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。舊版只有簽署的 renew 回報不代表配對已備妥。中斷後不使用 `--action resume`，一律從頭重新 preflight → apply（2026-10-26 設計，與 Mac App 一致）；「從頭重來」實作前，producer 對同機未完成交易回 `transaction-conflict`，此時停止回報，不手動刪除 journal、配對或 App。
+首次安裝加 `--mode install`，預設 `renew` 要求已有 App。預設不連 Apple 更新佈建資料；僅在授權範圍內加 `--allow-provisioning-updates`。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。舊版只有簽署的 renew 回報不代表配對已備妥。中斷後不使用 `--action resume`，一律從頭重新 preflight → apply（2026-10-26 設計，與 Mac App 一致）；producer 只有一筆全域現行交易，`apply` 會放棄任何裝置的未完成交易（封存為 `journal.abandoned.json`，保留交易資料）並開新交易；相同 setupID 重送仍回 `transaction-conflict`。作廢舊的未使用配對尚未實作。
 
-AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后不接续、不用 `--action resume`，从头重新 preflight → apply；遇到 `transaction-conflict` 时停止并报告，不手动删除 journal、配对或 App。不卸载、不清数据。只有完整安装、配对、设备准备回报全部通过才算完成。
+AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后不接续、不用 `--action resume`，从头重新 preflight → apply；全局唯一的未完成交易会在 apply 时自动放弃（封存，保留交易资料），并开新交易。不卸载、不清数据。只有完整安装、配对、设备准备回报全部通过才算完成。
 
 ## iOS device-test prompt
 
@@ -40,7 +40,7 @@ AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路�
 - 先執行 --action preflight，再執行 --action apply。
 - 不得以單獨 Xcode 或 devicectl 安裝取代共用流程。
 - 必須確認 complete=true，且 installationConfirmed、pairingImported、supportObserved 全部為 true，才算完成。
-- 中斷時不接續、不用 --action resume：從頭重新 preflight → apply；遇到 transaction-conflict 時停止並回報，不手動刪除 journal、配對或 App。
+- 中斷時不接續、不用 --action resume：從頭重新 preflight → apply；全域唯一未完成交易會在 apply 時自動放棄（封存、保留交易資料）並重新開始，不限該交易的裝置；重送相同 setupID 仍衝突。仍不手動刪除 journal、配對或 App。舊的未使用配對作廢尚未實作。
 - 比對更新前後既有偏好與資料，確認保留。
 - 配對資料、憑證與原始日誌只保留在私密／忽略目錄，不貼聊天、不提交。
 - 完成後回報手機上的版本/build、配對與裝置準備結果，以及資料保留核對結果。安裝成功與外部地圖定位成功分開說明。

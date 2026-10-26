@@ -58,4 +58,4 @@ and implementation specification have not been selected yet.
 
 - 實機測試安裝／更新一律使用 `bash scripts/install-ios-test.sh`，或相同的正式 Mac setup producer；不可只執行 Xcode／`devicectl install` 後宣告完成。先指定並核對 USB 裝置與既有簽署 Team，`--action preflight` 唯讀檢查後，已有使用者安裝授權才執行 `--action apply`。
 - 首次 `--mode install`；已有 App 使用預設 `--mode renew`。兩者都須確認 App、這支手機的配對匯入與必要裝置支援；重新簽名／更新也不能略過配對。不卸載、不清除偏好設定／最愛／路線，不為了成功更換 Team。
-- 寫入中斷**不接續**、不使用 `--action resume`：與 Mac App 一致，一律從頭重新執行 `--action preflight` → `--action apply`（已有 App 用 renew 覆蓋並保留資料，配對重新產生；見 `docs/MAC-INSTALLER-SPEC.md` §5.4）。目前 producer 遇到同一支手機的未完成交易會回 `transaction-conflict`；在「從頭重來」的作廢流程實作前，遇到時停止並回報，不手動刪除 journal、配對或 App。操作範例與限制見 `docs/AI-INSTALL.md`；可直接交給 AI 的覆蓋安裝任務 prompt 位於該文件的 `iOS device-test prompt` 節。
+- 寫入中斷**不接續**、不使用 `--action resume`：與 Mac App 一致，一律從頭重新執行 `--action preflight` → `--action apply`（已有 App 用 renew 覆蓋並保留資料，配對重新產生；見 `docs/MAC-INSTALLER-SPEC.md` §5.4）。producer 只有一筆全域現行交易；`apply` 遇到任何裝置留下的未完成交易會自動放棄（封存為 `journal.abandoned.json`，保留交易資料夾）並開新交易；重送相同 setupID 仍衝突。不手動刪除 journal、配對或 App。作廢舊的未使用配對尚未實作。操作範例與限制見 `docs/AI-INSTALL.md`；可直接交給 AI 的覆蓋安裝任務 prompt 位於該文件的 `iOS device-test prompt` 節。
