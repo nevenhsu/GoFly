@@ -727,6 +727,18 @@ class PinnedXcodeProcessAdapter:
         self.config = config
         self.timeout = timeout
 
+    @staticmethod
+    def _record_build_errors(transaction_root: Path, output: bytes) -> None:
+        """Keep only xcodebuild ``error:`` lines in a private file for diagnosis."""
+        try:
+            lines = [line for line in output.decode("utf-8", "replace").splitlines() if "error:" in line]
+            data = "\n".join(lines[:20])[:8000].encode("utf-8")
+            fd = os.open(transaction_root / "xcodebuild-error.txt", os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+        except OSError:
+            pass
+
     def build(self, setup_id: str, team_id: str, allow_provisioning_updates: bool = False) -> Path:
         try:
             transaction = Path(self.config.state_root) / "transactions" / setup_id / "build"
@@ -764,6 +776,7 @@ class PinnedXcodeProcessAdapter:
             except OSError:
                 raise SetupBridgeError("operation-failed") from None
             if result.returncode != 0:
+                self._record_build_errors(transaction.parent, result.stdout + result.stderr)
                 raise SetupBridgeError("operation-failed")
             output = transaction / f"{TARGET_NAME}.app"
             if output.is_symlink() or not output.is_dir():
