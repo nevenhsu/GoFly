@@ -279,29 +279,30 @@ struct GoFlyMapView: View {
                     }
                     .accessibilityHidden(presentedSheet != nil || showingSearch || route.picker != nil)
             }
+            // Destinations must sit inside the stack; on the stack itself SwiftUI ignores them.
+            .navigationDestination(isPresented: $showingSettings) {
+                ServiceSettingsView(
+                    service: service,
+                    movement: movement,
+                    continuation: continuation,
+                    recovery: recovery,
+                    setupMetadata: setupMetadata
+                )
+            }
+            .navigationDestination(isPresented: $showingRouteList) {
+                GoFlyRouteListView(
+                    controller: route,
+                    onEditNode: selectRouteNode,
+                    onDismiss: { showingRouteList = false }
+                )
+                .navigationDestination(isPresented: routePickerNavigationBinding) {
+                    searchScreen
+                }
+            }
         }
         .background(GoFlyStyle.canvas.ignoresSafeArea())
         .goFlyNativeBackTitle()
         .toolbar(.hidden, for: .navigationBar)
-        .navigationDestination(isPresented: $showingSettings) {
-            ServiceSettingsView(
-                service: service,
-                movement: movement,
-                continuation: continuation,
-                recovery: recovery,
-                setupMetadata: setupMetadata
-            )
-        }
-        .navigationDestination(isPresented: $showingRouteList) {
-            GoFlyRouteListView(
-                controller: route,
-                onEditNode: selectRouteNode,
-                onDismiss: { showingRouteList = false }
-            )
-            .navigationDestination(isPresented: routePickerNavigationBinding) {
-                searchScreen
-            }
-        }
         .onChange(of: showingRouteList) { _, isShowing in
             if !isShowing { pendingRouteNodeTapID = nil }
         }

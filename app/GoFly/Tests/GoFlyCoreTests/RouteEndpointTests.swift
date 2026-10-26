@@ -26,6 +26,26 @@ struct RouteEndpointTests {
         #expect(route.draft.nodes.map(\.id) == [ids[0], ids[2]])
     }
 
+    @Test func movedRowBecomesTheSelectedField() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let route = fixture(draft: draft)
+        let ids = draft.nodes.map(\.id)
+        #expect(route.selectedNodeID == ids[0])
+
+        #expect(route.moveNode(id: ids[0], toIndex: 2))
+        #expect(route.draft.nodes.map(\.id) == [ids[1], ids[2], ids[0]])
+        #expect(route.selectedNodeID == ids[0], "selection follows the moved row, not the first position")
+    }
+
+    @Test func emptyDestinationCanMoveAboveCurrentStart() async throws {
+        let route = fixture(draft: RouteDraft())
+        let ids = route.draft.nodes.map(\.id)
+        #expect(route.moveNode(id: ids[1], toIndex: 0))
+        #expect(route.draft.nodes.map(\.id) == [ids[1], ids[0]])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(route.draft.nodes.map(\.id) == [ids[1], ids[0]], "no later normalization reverts the move")
+    }
+
     @Test func emptyEndpointDisablesStartAndNeverPlans() async throws {
         let planner = CountingPlanner()
         let draft = try #require(RouteDraft(start: .place(place(1)), destination: .place(place(2))))

@@ -8,43 +8,28 @@ struct GoFlyRouteListView: View {
     var onEditNode: (RouteNodeID) -> Void
     var onDismiss: () -> Void
 
-    @State private var visibleScrollFrame: CGRect = .zero
+    @State private var contentHeight: CGFloat = 120
+    @State private var footerHeight: CGFloat = 56
 
     var body: some View {
         VStack(spacing: 0) {
             header
 
-            ScrollViewReader { proxy in
-                VStack(spacing: 0) {
-                    ScrollView {
-                        GoFlyRouteNodeList(
-                            draft: controller.draft,
-                            selectedID: controller.selectedNodeID,
-                            isEditable: controller.canEdit,
-                            viewport: visibleScrollFrame,
-                            onEdit: onEditNode,
-                            onDelete: { _ = controller.removeNode(id: $0) },
-                            onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
-                            onScroll: { id, anchor in
-                                withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
-                            }
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .scrollIndicators(.visible)
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
-                    .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("route.list.nodes")
+            // The card grows with its rows and only scrolls once it fills the page.
+            GeometryReader { geometry in
+                ScrollViewReader { proxy in
+                    VStack(spacing: 0) {
+                        GoFlyRouteNodeCard(controller: controller, proxy: proxy,
+                                           height: min(contentHeight, max(60, geometry.size.height - footerHeight)),
+                                           onEditNode: onEditNode,
+                                           onContentHeightChange: { contentHeight = $0 })
+                            .padding(.horizontal, 16)
+                            .accessibilityIdentifier("route.list.nodes")
 
-                    footer(using: proxy)
+                        footer(using: proxy)
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { footerHeight = $0 }
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
@@ -64,7 +49,7 @@ struct GoFlyRouteListView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(GoFlyStyle.primary)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .accessibilityIdentifier("route.list.back")
                 Spacer(minLength: 0)
                 Color.clear.frame(width: 64, height: 44)
@@ -79,30 +64,33 @@ struct GoFlyRouteListView: View {
         .frame(height: 56)
     }
 
+    /// Same small text buttons as the planning panel's action row: add on the left, reverse on the right.
     private func footer(using proxy: ScrollViewProxy) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
             Button {
                 addWaypoint(using: proxy)
             } label: {
                 Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
-                    .lineLimit(1)
             }
-            .buttonStyle(GoFlyActionStyle(primary: true))
+            .buttonStyle(GoFlyRouteTextButtonStyle())
             .disabled(!controller.canAddNode)
             .accessibilityIdentifier("route.list.addWaypoint")
             .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount
                 ? goFlyString("route.nodeLimit") : "")
 
-            Button(action: onDismiss) {
-                Label(goFlyString("route.closeInspection"), systemImage: GoFlySymbols.close)
-                    .lineLimit(1)
+            Spacer(minLength: 0)
+
+            Button {
+                _ = controller.reverseNodes()
+            } label: {
+                Label(goFlyString("route.exchange"), systemImage: GoFlySymbols.swap)
             }
-            .buttonStyle(GoFlyActionStyle())
-            .accessibilityIdentifier("route.list.close")
+            .buttonStyle(GoFlyRouteTextButtonStyle())
+            .disabled(!controller.canEdit || controller.draft.nodes.count < 2)
+            .accessibilityIdentifier("route.list.reverse")
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
     }
 
     private func addWaypoint(using proxy: ScrollViewProxy) {

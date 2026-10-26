@@ -126,7 +126,7 @@ struct GoFlyBackgroundDurationSheet: View {
             Picker(goFlyString(unitKey), selection: selection) {
                 ForEach(range, id: \.self) { value in
                     Text(padded ? String(format: "%02d", value) : String(value))
-                        .font(.title2)
+                        .font(GoFlyFont.wheel)
                         .offset(x: -17)
                         .tag(value)
                 }

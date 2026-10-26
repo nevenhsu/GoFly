@@ -295,9 +295,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         removalUndo = nil
         return true
     }
+    /// The moved row becomes the selected field, so the highlight travels with it.
     @discardableResult public func moveNode(id: RouteNodeID, toIndex: Int) -> Bool {
         guard canEdit, let changed = draft.moving(nodeID: id, toIndex: toIndex) else { return false }
         applyDraft(changed)
+        if picker == nil { selection = id }
         return true
     }
     @discardableResult public func reverseNodes() -> Bool {

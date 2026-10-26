@@ -48,7 +48,8 @@ enum GoFlySymbols {
     static let storage = "externaldrive"
     static let locked = "lock.shield"
     static let route = "point.topleft.down.to.point.bottomright.curvepath"
-    static let routeList = "list.and.chevron"
+    /// Asset-catalog template image (Figma `View List Icon: list.and.chevron`); not an SF Symbol.
+    static let routeList = "RouteList"
     static let importEmpty = "doc.badge.plus"
     static let manualMovement = "hand.draw"
     static let walking = "figure.walk"

@@ -8,6 +8,7 @@ App 內所有文字只用 `GoFlyFont`（字級，13 個 token）與 `GoFlyTextCo
 | :-- | :-- | :-- | :-- | :-- |
 | `display` | `.title` | 28 | Semibold | 首次引導、設定準備頁的主標題 |
 | `title` | `.title3` | 20 | Semibold | 所有 mode panel 標題（瞬移位置、路線、搖桿／漫步、恢復列）、導航卡標題、地點卡標題 |
+| `wheel` | `.title2` | 22 | Regular | 背景運行時間滾輪數字（F6.a `TimePicker / Wheel`） |
 | `headline` | `.headline` | 17 | Semibold | 頁面標題（導覽列）、dialog 標題、區段標題 |
 | `body` | `.body` | 17 | Regular | 清單列、輸入欄、一般內文 |
 | `bodyEmphasis` | `.body` | 17 | Semibold | 主要按鈕（開始、完成設定） |
@@ -65,7 +66,7 @@ App 的中性灰集中定義於 `GoFlyGrayScale`。元件依語意選 token，�
 | `snackbarActionBorder` | `#C6C6C8`（45%） | `#FFFFFF`（18%） | Snackbar action 邊線 |
 | `snackbarBorder` | 透明 | `#FFFFFF`（12%） | Snackbar 外框 |
 
-透明度只用於表內標記的邊線 token。icon-only disabled variant 尚未出現在 Figma 04；App 以 `iconButtonSurface` 表示一般啟用按鈕，停用改用 `disabledSurface`、`disabledLabel` 並移除邊線。Figma 明確指定無邊線 `#EEEEF0` 的最愛路線星號會保留其啟用底色，停用時仍以停用圖示色區分；依本文件的 App 狀態規格驗收。
+透明度只用於表內標記的邊線 token。2026-10-26 已將一般 icon button 與 D6 路線 icon button 的啟用／停用狀態同步到 Figma 04 淺、深色共用元件板。一般啟用使用 `iconButtonSurface` 與 `iconButtonBorder`；停用使用 `disabledSurface`、`disabledLabel` 並移除邊線。Figma 明確指定無邊線 `#EEEEF0` 的最愛路線星號會保留其啟用底色，停用時仍以停用圖示色區分；依本文件的 App 狀態規格驗收。
 
 ## 文字顏色
 

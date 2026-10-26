@@ -637,7 +637,7 @@
 
 "route.list.title" = "全部点位";
 
-"route.closeInspection" = "关闭视图";
+"route.exchange" = "反转顺序";
 "route.speedShort" = "%ld km/h";
 "imports.pointsFormat" = "%@ 点";
 "imports.footnote" = "点一下打开操作菜单：载入、查看全部点位、导出、删除。导入路线不可编辑；需要调整请修改源文件后重新导入。";

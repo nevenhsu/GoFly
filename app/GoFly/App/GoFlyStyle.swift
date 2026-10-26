@@ -280,6 +280,20 @@ struct GoFlyActionStyle: ButtonStyle {
     }
 }
 
+/// Small icon + text route action (新增停靠點 / 檢視路線 / 反轉順序); gray when disabled.
+struct GoFlyRouteTextButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(GoFlyFont.subheadlineEmphasis)
+            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
+            .frame(minHeight: 40)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.65 : 1)
+    }
+}
+
 struct GoFlyIconStyle: ButtonStyle {
     var floating = false
     @Environment(\.isEnabled) private var isEnabled
@@ -455,6 +469,8 @@ enum GoFlyFont {
     static let display = Font.title.weight(.semibold)
     /// 20 — panel, card and navigation-card titles.
     static let title = Font.title3.weight(.semibold)
+    /// 22 — duration picker wheel digits (Figma F6.a `TimePicker / Wheel`).
+    static let wheel = Font.title2
     /// 17 semibold — page titles, dialog titles, section titles.
     static let headline = Font.headline
     /// 17 — list rows and text fields.

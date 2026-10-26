@@ -637,7 +637,7 @@
 
 "route.list.title" = "All Points";
 
-"route.closeInspection" = "Close";
+"route.exchange" = "Reverse";
 "route.speedShort" = "%ld km/h";
 "imports.pointsFormat" = "%@ points";
 "imports.footnote" = "Tap a route for actions: load, view all points, export, delete. Imported routes cannot be edited; change the source file and import again.";

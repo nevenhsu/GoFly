@@ -28,8 +28,8 @@ struct GoFlyRoutePanel: View {
     @State private var showingSaveFavorite = false
     @State private var editingFavorite: FavoriteRouteRecord?
     @State private var preparingFavoriteSave = false
-    @State private var visibleScrollFrame: CGRect = .zero
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline) private var listIconSize: CGFloat = 20
 
     var body: some View {
         Group {
@@ -362,27 +362,10 @@ struct GoFlyRoutePanel: View {
 
     private var routeListCard: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                GoFlyRouteNodeList(
-                    draft: controller.draft, selectedID: controller.selectedNodeID,
-                    isEditable: controller.canEdit, viewport: visibleScrollFrame,
-                    onEdit: onEditNode,
-                    onDelete: { _ = controller.removeNode(id: $0) },
-                    onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
-                    onScroll: { id, anchor in
-                        withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
-                    }
-                )
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { listContentHeight = $0 }
-            }
-            .scrollIndicators(.visible)
-            .frame(height: listHeight)
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+            GoFlyRouteNodeCard(controller: controller, proxy: proxy, height: listHeight,
+                               onEditNode: onEditNode,
+                               onContentHeightChange: { listContentHeight = $0 })
         }
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
-        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.nodes.card")
     }
 
@@ -390,23 +373,23 @@ struct GoFlyRoutePanel: View {
         HStack(spacing: 16) {
             Button { _ = controller.addEmptyWaypoint() } label: {
                 Label(goFlyString("route.addStop"), systemImage: GoFlySymbols.add)
-                    .font(GoFlyFont.subheadlineEmphasis)
-                    .frame(minHeight: 40, alignment: .leading)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(controller.canAddNode ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
+            .buttonStyle(GoFlyRouteTextButtonStyle())
             .disabled(!controller.canAddNode)
             .accessibilityIdentifier("route.addNode")
             .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             Spacer(minLength: 0)
             Button(action: onInspectRoute) {
-                Label(goFlyString("route.viewList"), systemImage: GoFlySymbols.routeList)
-                    .font(GoFlyFont.subheadlineEmphasis)
-                    .frame(minHeight: 40)
-                    .contentShape(Rectangle())
+                Label {
+                    Text(goFlyString("route.viewList"))
+                } icon: {
+                    Image(GoFlySymbols.routeList)
+                        .renderingMode(.template)
+                        .resizable()
+                        .frame(width: listIconSize, height: listIconSize)
+                }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GoFlyRouteTextButtonStyle())
             .disabled(!controller.canEdit)
             .accessibilityIdentifier("route.viewList")
         }

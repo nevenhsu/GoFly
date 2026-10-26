@@ -160,12 +160,7 @@ struct GoFlySearchPanel: View {
                 row(place, symbol: GoFlySymbols.recent, identifier: place)
             }
         }
-        if recentPlaces.isEmpty {
-            GoFlyEmptyState(symbol: GoFlySymbols.search,
-                            message: goFlyString("search.noResults"))
-                .padding(.top, 24)
-                .accessibilityIdentifier("search.emptyResults")
-        }
+        // An empty query has not searched anything, so it never reports "no results" (B3).
     }
 
     @ViewBuilder
@@ -413,26 +408,16 @@ private struct PasteableSearchTextField: UIViewRepresentable {
         textField.pasteDelegate = context.coordinator
         textField.addTarget(context.coordinator, action: #selector(Coordinator.textDidChange(_:)), for: .editingChanged)
 
-        let (pasteControl, pasteSymbol) = makeGoFlyPasteViews(backgroundColor: UIColor(GoFlyStyle.fieldSurface))
-        pasteControl.target = textField
-        pasteControl.accessibilityLabel = goFlyString("search.paste")
-        pasteControl.accessibilityIdentifier = "search.paste"
         let pasteButton = UIView(frame: .zero)
         pasteButton.translatesAutoresizingMaskIntoConstraints = false
-        pasteButton.addSubview(pasteControl)
-        pasteButton.addSubview(pasteSymbol)
         NSLayoutConstraint.activate([
             pasteButton.widthAnchor.constraint(equalToConstant: 44),
-            pasteButton.heightAnchor.constraint(equalToConstant: 44),
-            pasteControl.leadingAnchor.constraint(equalTo: pasteButton.leadingAnchor),
-            pasteControl.trailingAnchor.constraint(equalTo: pasteButton.trailingAnchor),
-            pasteControl.topAnchor.constraint(equalTo: pasteButton.topAnchor),
-            pasteControl.bottomAnchor.constraint(equalTo: pasteButton.bottomAnchor),
-            pasteSymbol.centerXAnchor.constraint(equalTo: pasteButton.centerXAnchor),
-            pasteSymbol.centerYAnchor.constraint(equalTo: pasteButton.centerYAnchor),
-            pasteSymbol.widthAnchor.constraint(equalToConstant: 20),
-            pasteSymbol.heightAnchor.constraint(equalToConstant: 20)
+            pasteButton.heightAnchor.constraint(equalToConstant: 44)
         ])
+        addGoFlyPasteControl(to: pasteButton, target: textField,
+                             backgroundColor: UIColor(GoFlyStyle.fieldSurface),
+                             accessibilityLabel: goFlyString("search.paste"),
+                             accessibilityIdentifier: "search.paste")
 
         let clearButton = UIButton(type: .system)
         clearButton.setImage(UIImage(systemName: GoFlySymbols.clearSearch), for: .normal)
@@ -460,7 +445,6 @@ private struct PasteableSearchTextField: UIViewRepresentable {
         textField.text = text
         textField.placeholder = placeholder
         context.coordinator.clearButton = clearButton
-        context.coordinator.pasteControl = pasteControl
         context.coordinator.pasteButton = pasteButton
         context.coordinator.onTextChange = onTextChange
         context.coordinator.onFocusChange = onFocusChange
@@ -491,7 +475,6 @@ private struct PasteableSearchTextField: UIViewRepresentable {
         var onFocusChange: (Bool) -> Void
         var onSubmit: () -> Void
         weak var clearButton: UIButton?
-        weak var pasteControl: UIPasteControl?
         weak var pasteButton: UIView?
 
         init(onTextChange: @escaping (String) -> Void,
@@ -533,77 +516,41 @@ struct GoFlyPasteControl: UIViewRepresentable {
     let accessibilityLabel: String
     let accessibilityIdentifier: String
     var backgroundColor: UIColor = UIColor.secondarySystemGroupedBackground
-    var symbolPointSize: CGFloat = 18
     var symbolColor: UIColor = .secondaryLabel
     let onPaste: (String) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onPaste: onPaste) }
-
-    func makeUIView(context: Context) -> UIView {
-        let container = UIView(frame: .zero)
-        let recipient = UITextField(frame: .zero)
-        recipient.pasteConfiguration = UIPasteConfiguration(forAccepting: String.self)
-        recipient.pasteDelegate = context.coordinator
-        recipient.addTarget(context.coordinator, action: #selector(Coordinator.didPaste(_:)), for: .editingChanged)
-        recipient.isHidden = true
-        recipient.accessibilityElementsHidden = true
-        context.coordinator.recipient = recipient
-
-        let (pasteControl, pasteSymbol) = makeGoFlyPasteViews(
-            backgroundColor: backgroundColor,
-            symbolPointSize: symbolPointSize,
-            symbolColor: symbolColor
-        )
-        pasteControl.target = recipient
-        pasteControl.accessibilityLabel = accessibilityLabel
-        pasteControl.accessibilityIdentifier = accessibilityIdentifier
-        context.coordinator.pasteControl = pasteControl
-        context.coordinator.pasteSymbol = pasteSymbol
-
-        container.addSubview(recipient)
-        container.addSubview(pasteControl)
-        container.addSubview(pasteSymbol)
-        NSLayoutConstraint.activate([
-            pasteControl.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            pasteControl.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            pasteControl.topAnchor.constraint(equalTo: container.topAnchor),
-            pasteControl.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            pasteSymbol.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            pasteSymbol.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            pasteSymbol.widthAnchor.constraint(equalToConstant: 20),
-            pasteSymbol.heightAnchor.constraint(equalToConstant: 20)
-        ])
+    func makeUIView(context: Context) -> PasteRecipient {
+        let container = PasteRecipient(onPaste: onPaste)
+        addGoFlyPasteControl(to: container, target: container, backgroundColor: backgroundColor,
+                             symbolColor: symbolColor, accessibilityLabel: accessibilityLabel,
+                             accessibilityIdentifier: accessibilityIdentifier)
         return container
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.onPaste = onPaste
-        context.coordinator.pasteControl?.accessibilityLabel = accessibilityLabel
-        context.coordinator.pasteControl?.accessibilityIdentifier = accessibilityIdentifier
-        context.coordinator.pasteSymbol?.tintColor = symbolColor
+    func updateUIView(_ container: PasteRecipient, context: Context) {
+        container.onPaste = onPaste
     }
 
-    final class Coordinator: NSObject, UITextPasteDelegate {
+    /// Receives `UIPasteControl` items directly. A hidden text field never
+    /// reports `.editingChanged` for a programmatic paste, so it cannot relay.
+    final class PasteRecipient: UIView {
         var onPaste: (String) -> Void
-        var recipient: UITextField?
-        weak var pasteControl: UIPasteControl?
-        weak var pasteSymbol: UIImageView?
 
-        init(onPaste: @escaping (String) -> Void) { self.onPaste = onPaste }
-
-        @objc func didPaste(_ textField: UITextField) {
-            let pastedText = textField.text ?? ""
-            guard !pastedText.isEmpty else { return }
-            onPaste(pastedText)
-            textField.text = ""
+        init(onPaste: @escaping (String) -> Void) {
+            self.onPaste = onPaste
+            super.init(frame: .zero)
+            pasteConfiguration = UIPasteConfiguration(forAccepting: String.self)
         }
 
-        func textPasteConfigurationSupporting(
-            _ textPasteConfigurationSupporting: any UITextPasteConfigurationSupporting,
-            combineItemAttributedStrings itemStrings: [NSAttributedString],
-            for textRange: UITextRange
-        ) -> NSAttributedString {
-            trimmedPasteText(itemStrings)
+        required init?(coder: NSCoder) { nil }
+
+        override func paste(itemProviders: [NSItemProvider]) {
+            guard let provider = itemProviders.first(where: { $0.canLoadObject(ofClass: String.self) }) else { return }
+            _ = provider.loadObject(ofClass: String.self) { [weak self] value, _ in
+                let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !text.isEmpty else { return }
+                Task { @MainActor in self?.onPaste(text) }
+            }
         }
     }
 }
@@ -613,29 +560,34 @@ private func trimmedPasteText(_ itemStrings: [NSAttributedString]) -> NSAttribut
     return NSAttributedString(string: pastedText)
 }
 
-@MainActor
-private func makeGoFlyPasteViews(
+/// Centers a 36 pt system paste control in `host`. The system draws the glyph:
+/// UIPasteControl is a secure control and ignores taps when it is hidden,
+/// transparent, or covered by another view.
+@MainActor @discardableResult
+private func addGoFlyPasteControl(
+    to host: UIView,
+    target: any UIPasteConfigurationSupporting,
     backgroundColor: UIColor,
-    symbolPointSize: CGFloat = 18,
-    symbolColor: UIColor = .secondaryLabel
-) -> (UIPasteControl, UIImageView) {
+    symbolColor: UIColor = UIColor(GoFlyGrayScale.pasteSymbol),
+    accessibilityLabel: String,
+    accessibilityIdentifier: String
+) -> UIPasteControl {
     let configuration = UIPasteControl.Configuration()
     configuration.displayMode = .iconOnly
-    // Keep UIKit's paste permission handling, but let the app draw a plain SF icon.
-    configuration.baseForegroundColor = backgroundColor
+    configuration.cornerStyle = .capsule
+    configuration.baseForegroundColor = symbolColor
     configuration.baseBackgroundColor = backgroundColor
     let pasteControl = UIPasteControl(configuration: configuration)
-    pasteControl.backgroundColor = backgroundColor
-    pasteControl.alpha = 0.01
+    pasteControl.target = target
+    pasteControl.accessibilityLabel = accessibilityLabel
+    pasteControl.accessibilityIdentifier = accessibilityIdentifier
     pasteControl.translatesAutoresizingMaskIntoConstraints = false
-
-    let symbol = UIImageView(image: UIImage(
-        systemName: GoFlySymbols.paste,
-        withConfiguration: UIImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .medium)
-    ))
-    symbol.tintColor = symbolColor
-    symbol.contentMode = .scaleAspectFit
-    symbol.isUserInteractionEnabled = false
-    symbol.translatesAutoresizingMaskIntoConstraints = false
-    return (pasteControl, symbol)
+    host.addSubview(pasteControl)
+    NSLayoutConstraint.activate([
+        pasteControl.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+        pasteControl.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+        pasteControl.widthAnchor.constraint(equalToConstant: 36),
+        pasteControl.heightAnchor.constraint(equalToConstant: 36)
+    ])
+    return pasteControl
 }

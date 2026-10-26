@@ -12,7 +12,7 @@
 - 起點與終點常駐 ✕（空值時停用），清除後保留空欄位；停靠點 ✕ 刪除整列；皆不顯示 toast／snackbar（2026-10-26 使用者指示，取代 D9 可復原 snackbar；Figma D9 未同步）。
 - 路線與搖桿／漫步共用並保存同一速度偏好：5／25／50／100，預設 25。
 - D1 不顯示速度膠囊；只有 D1 右上星號開 D19，底部星號開 D20；undo 文案「復原」。
-- 路線面板移除反轉按鈕，改為帶 SF Symbol `list.and.chevron`、無外框的「檢視路線」（英文 View）；開啟全螢幕可編輯「全部點位」清單。清單列與首頁共用同一 row 元件／互動，右滑返回或「關閉檢視」退出；D13 僅作版面參考，Figma 尚未設計此可編輯 variant。
+- D1 路線面板移除反轉按鈕，改為帶 Figma `View List Icon: list.and.chevron` 自訂向量（App asset `RouteList`，template 著色；`list.and.chevron` 不是 SF Symbol，`Image(systemName:)` 無法顯示）、無外框的「檢視路線」（英文 View；Light／Dark D1 已同步）。點擊開啟全螢幕可編輯「全部點位」清單；清單列與首頁共用同一 row 元件／互動，「返回」或右滑返回退出；清單頁底部為小型文字按鈕「＋ 新增停靠點」（左）與「⇅ 反轉順序」（右）。D2 多停靠點狀態保留反轉順序；D13 僅作版面參考，Figma 尚未設計可編輯清單頁。
 - D1b（Pin「新增」為目的地）已廢止。
 
 ## 共用元件（先做，路線頁面依賴）
@@ -60,13 +60,13 @@
 
 ### R5 D1／D2 面板版面
 - 現況：`GoFlyRoutePanel.editingView` 顯示標題、清單、新增與「檢視路線」入口；底部星號 50 pt 有邊框。
-- Figma：sheet 高 369 pt（D1）；標題 20 pt Semibold；右上 44 pt 圓鈕（`#F2F2F7`、0.5 pt 邊）；「＋ 新增停靠點」與「⇅ 反轉順序」15 pt Semibold；底部 56 pt 星號（`#EEEEF0`、無邊）＋56 pt「開始」capsule。D2 只有清單捲動（最多 4 列可視、顯示捲動指示器），其餘固定。
-- 驗收：D1、D2 截圖並排對齊；5 個以上地點時捲動清單不拖動 sheet；最大字級時可重排。
-- **狀態：已實作，待審查。** 路線規劃 sheet 改為依內容定高（`sheetFitsContent`、`grabberHeight: 12`）。依 Figma D1 量測：header 距 sheet 頂 12、清單距 header 12、清單（2 列 × 60 = 120）→ 新增／反轉列 4 → 星號／開始列 16 → 距 TabBar 35（sheet 共 339 pt）；D3 收合 76 pt（標題＋兩圓鈕，header 距頂 12、距底 20）；星號 56 pt（`#EEEEF0`、無邊）。清單卡 14 圓角、0.5 pt 邊、最多 4 列後捲動（`.scrollIndicators(.visible)`），其餘區塊固定。`GoFlyRoutePanelLayoutUITests` 量測 D1／D3 間距。Figma 差異：D2 渲染為 55 pt 列、11／15 pt 字、sheet 高 414 與 D1 的 60 pt 列不一致，依文件決定（D1／D2 皆 60 pt 列，4 列＝240 pt）實作，故 4 列時 sheet 約 459 pt，與 D2 的 414 pt 不同；D2 與 D1 的底部間距（16 vs 35）也不一致，採 D1 的 35 pt。D2（5 個以上地點）的捲動未以 UI test 量測。
+- Figma：sheet 高 369 pt（D1）；標題 20 pt Semibold；右上 44 pt 圓鈕（`#F2F2F7`、0.5 pt 邊）；「＋ 新增停靠點」與「檢視路線」＋ 22 pt `list.and.chevron` icon（15 pt Semibold、無外框）；底部 56 pt 星號（`#EEEEF0`、無邊）＋56 pt「開始」capsule。D2 多停靠點畫面保留「⇅ 反轉順序」；清單捲動（最多 4 列可視、顯示捲動指示器），其餘固定。
+- 驗收：Light／Dark D1 均顯示「檢視路線」與 `list.and.chevron`，D2 保留「反轉順序」；D1、D2 截圖並排對齊；5 個以上地點時捲動清單不拖動 sheet；最大字級時可重排。
+- **狀態：已實作，待審查。** 路線規劃 sheet 改為依內容定高（`sheetFitsContent`、`grabberHeight: 12`）。依 Figma D1 量測：header 距 sheet 頂 12、清單距 header 12、清單（2 列 × 60 = 120）→ 新增／檢視路線列 4 → 星號／開始列 16 → 距 TabBar 35（sheet 共 339 pt）；D3 收合 76 pt（標題＋兩圓鈕，header 距頂 12、距底 20）；星號 56 pt（`#EEEEF0`、無邊）。清單卡 14 圓角、0.5 pt 邊、最多 4 列後捲動（`.scrollIndicators(.visible)`），其餘區塊固定。`GoFlyRoutePanelLayoutUITests` 量測 D1／D3 間距。Figma 差異：D2 渲染為 55 pt 列、11／15 pt 字、sheet 高 414 與 D1 的 60 pt 列不一致，依文件決定（D1／D2 皆 60 pt 列，4 列＝240 pt）實作，故 4 列時 sheet 約 459 pt，與 D2 的 414 pt 不同；D2 與 D1 的底部間距（16 vs 35）也不一致，採 D1 的 35 pt。D2（5 個以上地點）的捲動未以 UI test 量測。
 
 ### R5.1 全螢幕可編輯路線清單（D13 版面參考）
-- 入口：D1 路線操作列以「檢視路線」＋ SF Symbol `list.and.chevron`（無邊框）（英文 View）取代反轉按鈕。
-- 頁面：導航式全螢幕頁；隱藏地圖、頂部搜尋列、路線面板星號／開始按鈕與 TabBar。頂列為「返回」＋「全部點位」，下方使用全高可捲動清單及可見捲動指示器，底部固定「新增停靠點」與「關閉檢視」。原生向右返回手勢可關閉。
+- 入口：D1 路線操作列以「檢視路線」＋ Figma `View List Icon: list.and.chevron` 自訂向量（App asset `RouteList`，template 著色；`list.and.chevron` 不是 SF Symbol，`Image(systemName:)` 無法顯示）（無邊框）（英文 View）取代反轉按鈕。
+- 頁面：導航式全螢幕頁；隱藏地圖、頂部搜尋列、路線面板星號／開始按鈕與 TabBar。頂列為「返回」＋「全部點位」，下方使用高度隨列數自適應增加、填滿後才捲動的清單卡片（可見捲動指示器；拖曳中卡片保持當下高度並停止使用者捲動（避免捲動手勢與拖曳列衝突），手指接近清單上／下緣時自動捲動以便跨越可視範圍改變順序；拖曳列中心跟隨手指位置。面板與清單頁共用 `GoFlyRouteNodeCard`。），底部固定與 D1 操作列相同樣式的小型無外框文字按鈕：左「＋ 新增停靠點」、右「⇅ 反轉順序」（無「關閉檢視」）。原生向右返回手勢或「返回」關閉。拖曳排序後被移動列成為選中欄位。
 - 清單：重用 `GoFlyRouteNodeList`，因此左側排序圖示可拖曳調整順序；欄位首次點擊只選取，再次點擊同一欄位推入 D5；右側 ✕ 對起訖點清空、對停靠點刪除整列。新增停靠點後捲至新列。
 - Figma 狀態：D13 是匯入 GPX 的唯讀點位清單；本頁僅參照其版面層級，拖曳、欄位編輯、固定操作列與關閉手勢是新增 App 行為，04 頁尚無對應 wireframe。不可記為 Figma 已設計。
 - 驗收：在清單頁逐一確認首次選取／再次開 D5、結果回填後回到清單、清空起訖／刪除停靠點、拖曳重排、新增後自動捲動、關閉按鈕與右滑返回；確認頁面隱藏地圖與 TabBar。

@@ -29,6 +29,8 @@ struct GoFlyRouteNodeList: View {
     var onDelete: (RouteNodeID) -> Void
     var onMove: (RouteNodeID, Int) -> Void
     var onScroll: (RouteNodeID, UnitPoint) -> Void
+    /// Reports when a row drag starts and ends so the container can stop user scrolling.
+    var onDraggingChange: (Bool) -> Void = { _ in }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @GestureState private var gestureIsActive = false
     @State private var draggingID: RouteNodeID?
@@ -38,7 +40,6 @@ struct GoFlyRouteNodeList: View {
     @State private var listFrame: CGRect = .zero
     @State private var dragHeight: CGFloat = 60
     @State private var pointer = CGPoint.zero
-    @State private var touchOffset: CGFloat = 0
     @State private var autoscroll: Task<Void, Never>?
 
     private var order: [RouteNodeID] { draft.nodes.map(\.id) }
@@ -78,7 +79,7 @@ struct GoFlyRouteNodeList: View {
                     .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
                     .scaleEffect(1.02)
-                    .position(x: listFrame.width / 2, y: pointer.y - touchOffset - listFrame.minY)
+                    .position(x: listFrame.width / 2, y: pointer.y - listFrame.minY)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -86,6 +87,7 @@ struct GoFlyRouteNodeList: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.nodes.list")
         .onChange(of: rowFrames) { _, _ in updateProjection() }
+        .onChange(of: draggingID != nil) { _, dragging in onDraggingChange(dragging) }
         .onChange(of: gestureIsActive) { _, active in if !active { cancelDrag() } }
         .onChange(of: draft.nodes) { _, _ in cancelDrag() }
         .onChange(of: isEditable) { _, editable in if !editable { cancelDrag() } }
@@ -177,7 +179,6 @@ struct GoFlyRouteNodeList: View {
         originalOrder = order
         previewOrder = order
         dragHeight = frame.height
-        touchOffset = point.y - frame.midY
         pointer = point
         draggingID = id
         autoscroll?.cancel()
@@ -192,7 +193,9 @@ struct GoFlyRouteNodeList: View {
 
     private func updateProjection() {
         guard let id = draggingID, originalOrder == order else { return }
-        let center = pointer.y - touchOffset
+        // The grip is centered in its row, so the row center follows the finger. Measuring an
+        // offset from the drag's start would lose the movement made before the drag phase began.
+        let center = pointer.y
         let remaining = previewOrder.filter { $0 != id }
         let target = remaining.filter { other in rowFrames[other].map { $0.midY < center } ?? false }.count
         var next = remaining
@@ -220,7 +223,9 @@ struct GoFlyRouteNodeList: View {
         let target = previewOrder.firstIndex(of: id)
         let canCommit = isEditable && originalOrder == order && viewport.contains(pointer)
         cancelDrag()
-        if canCommit, let target { onMove(id, target) }
+        if canCommit, let target {
+            withAnimation(.easeInOut(duration: 0.2)) { onMove(id, target) }
+        }
     }
 
     private func cancelDrag() {
@@ -261,5 +266,57 @@ struct GoFlyRouteNodeList: View {
     }
     private func editIdentifier(_ role: RouteNodeRole) -> String {
         switch role { case .start: "route.node.start"; case .destination: "route.node.destination"; case .waypoint(let n): "route.node.waypoint.\(n)" }
+    }
+}
+
+/// The bordered, scrollable route node card shared by the planning panel (D1/D2)
+/// and the full-screen route list, so rows, dragging and edge autoscroll stay identical.
+/// The caller owns the `ScrollViewReader` so its own controls can scroll the list too.
+struct GoFlyRouteNodeCard: View {
+    @ObservedObject var controller: RouteExecutionController
+    let proxy: ScrollViewProxy
+    /// Scroll height: the rows' height up to the space available, then the list scrolls.
+    let height: CGFloat
+    var onEditNode: (RouteNodeID) -> Void
+    var onContentHeightChange: (CGFloat) -> Void = { _ in }
+
+    @State private var visibleScrollFrame: CGRect = .zero
+    @State private var draggingHeight: CGFloat?
+
+    var body: some View {
+        ScrollView {
+            GoFlyRouteNodeList(
+                draft: controller.draft,
+                selectedID: controller.selectedNodeID,
+                isEditable: controller.canEdit,
+                viewport: visibleScrollFrame,
+                onEdit: onEditNode,
+                onDelete: { _ = controller.removeNode(id: $0) },
+                onMove: { _ = controller.moveNode(id: $0, toIndex: $1) },
+                onScroll: { id, anchor in
+                    withAnimation(.linear(duration: 0.12)) { proxy.scrollTo(id, anchor: anchor) }
+                },
+                onDraggingChange: { dragging in
+                    draggingHeight = dragging ? height : nil
+                }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { onContentHeightChange($0) }
+        }
+        .scrollIndicators(.visible)
+        // A short list never rubber-bands; while a row is dragged the card keeps its height
+        // and stops user scrolling so the pan cannot shift rows under the finger.
+        // Edge autoscroll still runs through `proxy.scrollTo`.
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDisabled(draggingHeight != nil)
+        .frame(height: draggingHeight ?? height)
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
+        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
