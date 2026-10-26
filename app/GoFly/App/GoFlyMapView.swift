@@ -299,6 +299,11 @@ struct GoFlyMapView: View {
                     searchScreen
                 }
             }
+            .modifier(GoFlyMapSheetsModifier(
+                details: detailsCoverBinding, detailsView: { detailsView($0) },
+                placesShown: favoritesShown, onDismissPlaces: { presentedSheet = nil }, places: { favoritesView },
+                routesShown: showingFavoriteRoutes, onDismissRoutes: { showingFavoriteRoutes = false },
+                routes: { GoFlyFavoriteRoutesView(controller: route) { showingFavoriteRoutes = false } }))
         }
         .background(GoFlyStyle.canvas.ignoresSafeArea())
         .goFlyNativeBackTitle()
@@ -306,11 +311,6 @@ struct GoFlyMapView: View {
         .onChange(of: showingRouteList) { _, isShowing in
             if !isShowing { pendingRouteNodeTapID = nil }
         }
-        .modifier(GoFlyMapSheetsModifier(
-            details: detailsCoverBinding, detailsView: { detailsView($0) },
-            placesShown: favoritesShown, onDismissPlaces: { presentedSheet = nil }, places: { favoritesView },
-            routesShown: showingFavoriteRoutes, onDismissRoutes: { showingFavoriteRoutes = false },
-            routes: { GoFlyFavoriteRoutesView(controller: route) { showingFavoriteRoutes = false } }))
 
         let lifecycle = observeMapLifecycle(root)
         let inputs = observeMapInputs(lifecycle)

@@ -164,7 +164,7 @@ struct GoFlySearchPanel: View {
                           actionIdentifier: "search.clearHistory",
                           action: onClearRecentPlaces)
             ForEach(recentPlaces) { place in
-                row(place, symbol: GoFlySymbols.recent, identifier: place)
+                row(place, title: favorites.favorite(for: place)?.label, symbol: GoFlySymbols.recent, identifier: place)
             }
         }
         // An empty query has not searched anything, so it never reports "no results" (B3).
