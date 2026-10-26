@@ -385,6 +385,7 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 以下為使用者確認的設計更新，已實作並通過 core 測試與模擬器 build；尚未在實機逐項驗收。
 
 - 有標題的 sheet／全螢幕清單頁（最愛地點、最愛路線、匯入路線、編輯最愛、新增／編輯最愛路線、時速設定）標題一律水平置中於頁面，不受左右按鈕寬度影響（共用 `GoFlySheetHeader`）。
+- 最愛地點、最愛路線清單頁以 `NavigationStack` 原生 push 呈現；畫面自繪標題時隱藏系統導覽列，但保留左緣滑動返回。Figma 04 規範畫面結構，沒有指定轉場動畫；此原生 push／edge-swipe 行為屬 App 導覽實作。
 - 最愛清單頁（地點與路線）：搜尋欄 focused 時，點清單、空白處或標題列即取消 focus 並收起鍵盤；捲動清單亦收起鍵盤。
 - 路線執行控制列（D6）：來回鈕使用 Figma ⇄ 圖示（開為 primary、關為 secondary），方向鈕 ↓↑ 鎖定時兩箭頭用 disabled 文字色但仍可見；時速 chip 在執行中與暫停時可點，改速度從下一步起生效，不重開任務。
 - 使用者按「暫停」的路線不顯示 warn toast（D10 面板已說明）；系統中斷（背景、連線等）仍顯示 D10 warn toast。
@@ -404,7 +405,7 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 - 設定移動速度 sheet 版面對齊最愛地點 sheet（C2，2026-10-26 使用者指示）：Grabber 距頂 6 pt、無標題、無右上「完成」（2026-10-26 使用者指示，只靠「完成設定」按鈕關閉），內容區上緣縮小（速度列距頂 32 pt）、內容左右 20 pt、區塊間距 16 pt、「完成設定」按鈕左右 20 pt 並距底部安全區上方 12 pt；sheet 高度 412 → 329 pt；滑桿區 48 pt、與「完成設定」相距 40 pt；所有間距與元件高度採 4 pt 倍數（快選膠囊高 38 → 40 pt）。Figma D7、E3、Dark D7、Dark E3 與 App（`GoFlySpeedSheet`）已同步；尚未裝置驗證。
 - 按鈕與 Home indicator 間距（2026-10-26 使用者指示）：Figma 04 頁所有緊鄰 Home indicator 上方的 Button（R02–R06、C2、D6／D6.a／D7／D10／D10.a、D11–D18、D20、E2、E3、F6.a 與深色版）統一為按鈕下緣到 indicator 上緣 20 pt（原多為 21 pt；E2 為 53、F6.a 為 22／27、E3 為 33）。App 目前只有設定移動速度 sheet 以 `padding(.bottom, -1)` 對齊；其他畫面（onboarding、最愛、GPX、背景運行時間等）尚未逐一檢查，未裝置驗證。
 - 按鈕與 TabBar 間距（2026-10-26 使用者指示）：緊鄰 TabBar 上方的 Button（D1／D2／D8／D9／D15 的「開始」、E1／E3 的「自動漫步」、E5 的「恢復漫步」與深色版）統一為按鈕下緣到 TabBar 上緣 20 pt（原 35／16／36／18）；面板上緣與地圖 Recenter／FitRoute 隨之移動。App 已將路線與搖桿面板底部內距由 36 改為 20（路線面板容量與搖桿預設高 352 → 336 同步調整）；E5 恢復面板為固定高度膠囊，尚未調整；未裝置驗證。
-- 面板高度實作值（2026-10-26 與 UI test 對齊；Figma 04 尚未同步，以實作為準）：所有面板頂部為 33 pt grabber 列（距頂 8 pt、膠囊 5 pt、到內容 20 pt，`GoFlyGrabber`），內容在其下依 4 pt 網格排列，底部按鈕距 TabBar 20 pt。瞬移預設／最小 305／120 pt（B2／B1）；路線依內容約 345 pt，收合 96 pt（D1／D3，Pin 收合同為 96 pt）；搖桿預設 349 pt、收合 96 pt（E1／E1.a；取代上列「352 → 336」）。路線執行時速 chip 最小寬 68 pt、隨數值變寬。Figma 中的 76 pt 收合高度、12 pt header 間距與 36 pt 底距為舊值。
+- 面板高度實作值（2026-10-26 與 UI test 對齊）：所有面板頂部為 33 pt grabber 列（距頂 8 pt、膠囊 5 pt、到內容 20 pt，`GoFlyGrabber`），內容在其下依 4 pt 網格排列，底部按鈕距 TabBar 20 pt。瞬移半開面板依目前內容自適應，最多 305 pt、最小 120 pt（B2／B1）；Figma 04 的 B2 靜態稿展示兩筆最愛的滿高狀態，少於兩筆時的高度變體尚未設計。路線依內容約 345 pt，收合 96 pt（D1／D3，Pin 收合同為 96 pt）；搖桿預設 349 pt、收合 96 pt（E1／E1.a；取代上列「352 → 336」）。路線執行時速 chip 最小寬 68 pt、隨數值變寬。Figma 中的 76 pt 收合高度、12 pt header 間距與 36 pt 底距為舊值。
 - C2「編輯最愛」與 D20「新增最愛路線」sheet 比照 D7（2026-10-26 使用者指示）：Grabber 距頂 6 pt、標題列 y22、標籤 y76、輸入欄與資訊卡間距 16 pt、資訊卡到主按鈕 40 pt、主按鈕高 56 pt、按鈕到 Home indicator 20 pt，sheet 高度 367 pt（原 462）；sheet 內自帶 Home indicator，淺深色同步。App：`GoFlyFavoriteEditorSheet`、`GoFlySaveFavoriteRouteView` 改為按鈕在內容內（上方 40 pt）、detent 367；最愛路線標籤編輯（`GoFlyFavoriteRouteLabelEditor`）尚未同步；未裝置驗證。
 
 ## 2026-10-26 裝置服務卡：Start/Stop 與失敗後 Reset（使用者確認，App 已實作，未裝置驗證）

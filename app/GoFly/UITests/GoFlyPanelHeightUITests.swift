@@ -1,7 +1,7 @@
 import XCTest
 
 /// Each mode panel has a default and a minimum height (points above the tab bar), as implemented
-/// (2026-10-26; Figma 04 not yet synced): teleport 305 / 120 (B2 / B1), route content-sized 345 / 96
+/// (2026-10-26): teleport content-sized up to 305 / 120 (B2 / B1; Figma B2 shows two favorite rows), route content-sized 345 / 96
 /// (D1 / D3), joystick 349 / 96 (E1 / E1.a). Content sits on the 4 pt grid below the 33 pt grabber row
 /// (8 pt inset + 5 pt capsule + 20 pt gap) and ends 20 pt above the tab bar.
 final class GoFlyPanelHeightUITests: GoFlyRouteModeTestCase {
@@ -14,7 +14,10 @@ final class GoFlyPanelHeightUITests: GoFlyRouteModeTestCase {
 
     func testTeleportDefaultAndMinimum() throws {
         let app = launch()
-        XCTAssertEqual(visibleHeight(app), 305, accuracy: 1, "B2 default")
+        // Content-sized: summary plus at most two favorites, so never taller than 305.
+        let height = visibleHeight(app)
+        XCTAssertLessThanOrEqual(height, 305 + 1, "B2 default")
+        XCTAssertGreaterThanOrEqual(height, 120, "B2 default")
         evidence(app, task: "H", name: "teleport-default-light")
         app.buttons["map.sheet.grabber"].tap()
         XCTAssertEqual(visibleHeight(app), 120, accuracy: 1)

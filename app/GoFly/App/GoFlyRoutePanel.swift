@@ -4,6 +4,7 @@ import SwiftUI
 struct GoFlyRoutePanel: View {
     @EnvironmentObject private var favoriteRoutes: FavoriteRoutesStore
     @ObservedObject var controller: RouteExecutionController
+    @Binding var showingFavoriteRoutes: Bool
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
     /// Ending asks the owner to cancel the active route and return to planning.
@@ -23,7 +24,6 @@ struct GoFlyRoutePanel: View {
     @State private var showingDetails = false
     @State private var showingImports = false
     @State private var showingAllPoints = false
-    @State private var showingFavoriteRoutes = false
     @State private var showingSaveFavorite = false
     @State private var visibleScrollFrame: CGRect = .zero
     @ScaledMetric(relativeTo: .footnote) private var addFontSize: CGFloat = 14
@@ -66,9 +66,6 @@ struct GoFlyRoutePanel: View {
                 onSpeedChanged: { _ = controller.setSpeed($0) },
                 onDismiss: { showingDetails = false }
             )
-        }
-        .fullScreenCover(isPresented: $showingFavoriteRoutes) {
-            GoFlyFavoriteRoutesView(controller: controller) { showingFavoriteRoutes = false }
         }
         .sheet(isPresented: $showingSaveFavorite) {
             GoFlySaveFavoriteRouteView(controller: controller, currentLocationAvailable: currentLocationAvailable,

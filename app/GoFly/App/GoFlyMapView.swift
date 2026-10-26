@@ -196,6 +196,7 @@ struct GoFlyMapView: View {
     @State private var searchFocusRequest: UUID?
     @State private var showingSearch = false
     @State private var searchFavorites = false
+    @State private var showingFavoriteRoutes = false
     @State private var recentPlaces: [MapPlace] = []
     @State private var snackbar: GoFlySnackbarMessage?
     @State private var bottomBarHeight: CGFloat = 83
@@ -452,19 +453,11 @@ struct GoFlyMapView: View {
                     break
                 }
             }
-            .fullScreenCover(item: $presentedSheet) { sheet in
-                switch sheet.content {
-                case .favorites:
-                    GoFlyFavoritesView(
-                        candidate: activeSearch.candidate?.place,
-                        onSelect: { selectSearchPlace($0); presentedSheet = nil },
-                        onSearch: { showingSearch = true; presentedSheet = nil },
-                        onDismiss: { presentedSheet = nil }
-                    )
-                case .details(let place):
-                    GoFlyPlaceDetailsView(place: place, onDismiss: { presentedSheet = nil })
-                }
-            }
+            .modifier(GoFlyMapSheetsModifier(
+                details: detailsCoverBinding, detailsView: { detailsView($0) },
+                placesShown: favoritesShown, onDismissPlaces: { presentedSheet = nil }, places: { favoritesView },
+                routesShown: showingFavoriteRoutes, onDismissRoutes: { showingFavoriteRoutes = false },
+                routes: { GoFlyFavoriteRoutesView(controller: route) { showingFavoriteRoutes = false } }))
         }
         .fullScreenCover(isPresented: Binding(
             get: { (showingSearch || route.picker != nil) && !isMapPicking },
@@ -474,8 +467,35 @@ struct GoFlyMapView: View {
                     if isMapPicking { isMapPicking = false }
                 }
             }
-        )) { searchScreen.interactiveDismissDisabled() }
+        )) { NavigationStack { searchScreen }.interactiveDismissDisabled() }
         .tint(GoFlyStyle.primary)
+    }
+
+    private var favoritesView: some View {
+        GoFlyFavoritesView(
+            candidate: activeSearch.candidate?.place,
+            onSelect: { selectSearchPlace($0); presentedSheet = nil },
+            onSearch: { showingSearch = true; presentedSheet = nil },
+            onDismiss: { presentedSheet = nil }
+        )
+    }
+
+    private func detailsView(_ place: MapPlace) -> some View {
+        GoFlyPlaceDetailsView(place: place, onDismiss: { presentedSheet = nil })
+    }
+
+    private var favoritesShown: Bool {
+        if case .favorites = presentedSheet?.content { return true }
+        return false
+    }
+
+    private var detailsCoverBinding: Binding<MapPlace?> {
+        Binding(
+            get: {
+                if case .details(let place) = presentedSheet?.content { return place }
+                return nil
+            },
+            set: { if $0 == nil, case .details = presentedSheet?.content { presentedSheet = nil } })
     }
 
     private var searchScreen: some View {
@@ -511,7 +531,8 @@ struct GoFlyMapView: View {
             }
         }
         .background(GoFlyStyle.surface)
-        .fullScreenCover(isPresented: $searchFavorites) {
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $searchFavorites) {
             GoFlyFavoritesView(candidate: activeSearch.candidate?.place,
                 onSelect: { place in
                     activeSearch.select(place)
@@ -520,6 +541,7 @@ struct GoFlyMapView: View {
                         _ = route.confirmPicker(id: picker.id)
                     } else { selectSearchPlace(place) }
                 }, onSearch: { searchFavorites = false }, onDismiss: { searchFavorites = false })
+            .goFlyPushedFullScreen()
         }
     }
 
@@ -883,7 +905,7 @@ struct GoFlyMapView: View {
             } else if mode == .route || !route.canEdit {
                 // D10 / D10.a: a paused or interrupted route keeps the running panel; only the button turns into 繼續.
                 GoFlyRoutePanel(
-                    controller: route, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                    controller: route, showingFavoriteRoutes: $showingFavoriteRoutes, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                     onEditNode: { _ = route.selectNode(id: $0) },
                     onRequestEnd: { _ = route.cancel() },
                     onSettings: { showingSettings = true },
@@ -1379,7 +1401,8 @@ struct GoFlyMapView: View {
     private var sheetPreferredHeight: CGFloat? {
         guard !dynamicTypeSize.isAccessibilitySize, !isResumeState else { return nil }
         switch mode {
-        case .teleport: return sheetDetent == .collapsed ? 120 : 305
+        // Expanded teleport is content-sized like the route panel: summary plus at most two favorites.
+        case .teleport: return sheetDetent == .collapsed ? 120 : nil
         // Wander simulation has no tab bar, so its panel is content-sized plus the safe area (E2 / E2.a / E4).
         case .joystick: return isWanderRunning ? nil : (sheetDetent == .collapsed ? 96 : 349)
         case .route: return nil
@@ -1705,4 +1728,28 @@ private struct UIKitBackgroundSaveTasks: BackgroundSaveTasks {
         return task == .invalid ? nil : task.rawValue
     }
     func end(_ task: Int) { UIApplication.shared.endBackgroundTask(UIBackgroundTaskIdentifier(rawValue: task)) }
+}
+
+private struct GoFlyMapSheetsModifier<Details: View, Places: View, Routes: View>: ViewModifier {
+    let details: Binding<MapPlace?>
+    @ViewBuilder let detailsView: (MapPlace) -> Details
+    let placesShown: Bool
+    let onDismissPlaces: () -> Void
+    private var placesBinding: Binding<Bool> {
+        Binding(get: { placesShown }, set: { if !$0 { onDismissPlaces() } })
+    }
+    private var routesBinding: Binding<Bool> {
+        Binding(get: { routesShown }, set: { if !$0 { onDismissRoutes() } })
+    }
+    @ViewBuilder let places: () -> Places
+    let routesShown: Bool
+    let onDismissRoutes: () -> Void
+    @ViewBuilder let routes: () -> Routes
+
+    func body(content: Content) -> some View {
+        content
+            .fullScreenCover(item: details) { detailsView($0) }
+            .navigationDestination(isPresented: placesBinding) { places().goFlyPushedFullScreen() }
+            .navigationDestination(isPresented: routesBinding) { routes().goFlyPushedFullScreen() }
+    }
 }

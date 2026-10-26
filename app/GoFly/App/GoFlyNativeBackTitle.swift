@@ -56,3 +56,31 @@ private struct GoFlyNativeBackTitle: UIViewControllerRepresentable {
         }
     }
 }
+
+extension View {
+    /// For pushed full-screen pages that draw their own header: hide the system bar but keep UIKit's
+    /// slide push/pop and the left-edge swipe back that Settings gets.
+    func goFlyPushedFullScreen() -> some View {
+        toolbar(.hidden, for: .navigationBar)
+            .background(GoFlyEdgeSwipeBack().frame(width: 0, height: 0))
+    }
+}
+
+/// A hidden navigation bar disables `interactivePopGestureRecognizer`; re-enable it for pushed pages.
+private struct GoFlyEdgeSwipeBack: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) {}
+
+    final class Controller: UIViewController, UIGestureRecognizerDelegate {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard let pop = navigationController?.interactivePopGestureRecognizer else { return }
+            pop.delegate = self
+            pop.isEnabled = true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            (navigationController?.viewControllers.count ?? 0) > 1
+        }
+    }
+}
