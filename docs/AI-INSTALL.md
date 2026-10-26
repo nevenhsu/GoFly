@@ -2,24 +2,24 @@
 
 [English](#english) · [繁體中文](#繁體中文) · [简体中文](#简体中文)
 
-## Device-test install/update / 實機測試安裝更新（2026-10-22）
+## Device-test install/update / 實機測試安裝更新（2026-10-26）
 
-Use the shared entry below for every AI-assisted device test; do not use an install-only Xcode/devicectl command. Existing apps use `renew`, which now includes pairing and device preparation. This is an implemented USB development workflow; device success must be recorded separately from offline checks.
+Use the shared entry below for every AI-assisted device test; do not use an install-only Xcode/devicectl command. Existing apps use `renew`, which includes pairing and device preparation. This is an implemented USB development workflow; device success must be recorded separately from offline checks.
 
-AI 實機測試固定用以下腳本，與 Mac App 共用正式 producer。`renew` 覆蓋同一 App 並保留偏好、最愛及路線，同時核對並交付該手機的配對資料、準備必要支援；不是移除 App 後重裝。不要以單獨 Xcode／devicectl 安裝取代。既有 Team 不任意更換，裝置身分不符立即停止。目前這條完整交接限 USB。每次都須明確指定並核對既有簽署 Team，不根據 profile 自動猜測，也不改用其他 Team。
+AI 實機測試固定用以下腳本，與 Mac App 共用正式 producer。`renew` 覆蓋同一 App 並保留偏好、最愛及路線，同時核對並交付該手機的配對資料、準備必要支援；不是移除 App 後重裝。不要以單獨 Xcode／devicectl 安裝取代。目前使用者指定的 Xcode Personal Team 是 `48XD59469V`；舊 Team `NHW5EDBH4P` 已淘汰，不得使用或自動 fallback。每次核對登入帳號並明確指定 Personal Team ID；裝置或 Team 身分不符立即停止。目前這條完整交接限 USB。
 
 ```sh
-bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team <EXISTING_TEAM_ID> --action preflight
-# With the user's installation authorization / 已取得使用者安裝授權：
-bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team <EXISTING_TEAM_ID> --action apply
+# After the user authorizes installation and Apple provisioning updates / 使用者授權安裝與 Apple 佈建更新後：
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team 48XD59469V --mode renew --action preflight --allow-provisioning-updates
+bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team 48XD59469V --mode renew --action apply --setup-id <PREFLIGHT_SETUP_ID> --allow-provisioning-updates
 # Interrupted? Do not resume; start over with preflight → apply / 中斷時不接續，從頭重新 preflight → apply
 ```
 
-Always pass the existing 10-character signing Team ID explicitly; never infer or change the Team. First installation adds `--mode install`; default `--mode renew` requires an installed app. Provisioning network access is off by default; use `--allow-provisioning-updates` only within the user's authorization. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall, data reset or fallback to a different phone/team. After an interruption, never use `--action resume`; start over with preflight → apply (2026-10-26 design, matching the Mac app). The producer has one global current transaction: `apply` abandons any unfinished transaction, regardless of its device (archived as `journal.abandoned.json`; transaction data is retained), then starts fresh. Repeating the identical setupID still returns `transaction-conflict`. Revoking an old unused pairing is not implemented yet.
+Always pass the verified 10-character Team ID explicitly. For this project use Personal Team `48XD59469V`; `NHW5EDBH4P` is obsolete. First installation uses `--mode install`; an existing app uses `--mode renew`. Provisioning updates are off by default; when the user authorizes them, include `--allow-provisioning-updates` on both preflight and apply. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall or data reset. After an interruption, never use `--action resume`; start over with preflight → apply (2026-10-26 design, matching the Mac app). The producer has one global current transaction: `apply` abandons any unfinished transaction, regardless of its device (archived as `journal.abandoned.json`; transaction data is retained), then starts fresh. Repeating the identical setupID still returns `transaction-conflict`. Revoking an old unused pairing is not implemented yet.
 
-首次安裝加 `--mode install`，預設 `renew` 要求已有 App。預設不連 Apple 更新佈建資料；僅在授權範圍內加 `--allow-provisioning-updates`。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。舊版只有簽署的 renew 回報不代表配對已備妥。中斷後不使用 `--action resume`，一律從頭重新 preflight → apply（2026-10-26 設計，與 Mac App 一致）；producer 只有一筆全域現行交易，`apply` 會放棄任何裝置的未完成交易（封存為 `journal.abandoned.json`，保留交易資料）並開新交易；相同 setupID 重送仍回 `transaction-conflict`。作廢舊的未使用配對尚未實作。
+首次安裝加 `--mode install`，已有 App 使用 `--mode renew`。本專案目前使用 Xcode Personal Team `48XD59469V`；舊 Team `NHW5EDBH4P` 不得再使用。預設不連 Apple 更新佈建資料；使用者授權後，`--allow-provisioning-updates` 須同時帶在 preflight 與 apply。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。中斷後不使用 `--action resume`，一律從頭重新 preflight → apply（2026-10-26 設計，與 Mac App 一致）；producer 只有一筆全域現行交易，`apply` 會放棄任何裝置的未完成交易（封存為 `journal.abandoned.json`，保留交易資料）並開新交易；相同 setupID 重送仍回 `transaction-conflict`。作廢舊的未使用配對尚未實作。
 
-AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后不接续、不用 `--action resume`，从头重新 preflight → apply；全局唯一的未完成交易会在 apply 时自动放弃（封存，保留交易资料），并开新交易。不卸载、不清数据。每次都须明确指定并核对既有签名 Team，不根据 profile 自动猜测，也不更换 Team。只有完整安装、配对、设备准备回报全部通过才算完成。
+AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后不接续、不用 `--action resume`，从头重新 preflight → apply；全局唯一的未完成交易会在 apply 时自动放弃（封存，保留交易资料），并开新交易。不卸载、不清数据。本项目目前使用 Xcode Personal Team `48XD59469V`，旧 Team `NHW5EDBH4P` 已淘汰；用户授权 Apple provisioning 更新后，preflight 和 apply 都带 `--allow-provisioning-updates`。只有完整安装、配对、设备准备回报全部通过才算完成。
 
 ## iOS device-test prompt
 
@@ -30,14 +30,15 @@ AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路�
 ```text
 請在目前這個 GoFly 專案工作目錄中，使用已驗證的共用安裝流程，將最新 GoFly 覆蓋安裝到我的 iPhone，並完成配對交接。
 
-這次已授權建置、簽署、覆蓋安裝、配對交付及必要裝置準備。請直接執行，不要只提供步驟。
+這次已授權建置、簽署、Apple 佈建資料更新、覆蓋安裝、配對交付及必要裝置準備。請直接執行，不要只提供步驟。
 
 要求：
 - 先讀 AGENTS.md 與 docs/AI-INSTALL.md。
 - 使用 scripts/install-ios-test.sh；已有 App 使用 --mode renew。
 - 不卸載 App、不清除偏好設定、最愛或路線。
-- 核對目前連接的實體 iPhone；若只有一台，直接使用。沿用既有簽署 Team，不任意更換。
+- 核對目前連接的實體 iPhone；若只有一台，直接使用。使用 Xcode Personal Team `48XD59469V`；舊 Team `NHW5EDBH4P` 已淘汰，不得使用或 fallback。
 - 先執行 --action preflight，再執行 --action apply。
+- preflight 與 apply 都帶 --allow-provisioning-updates，並將 preflight 回傳的同一 setupID 傳給 apply。
 - 不得以單獨 Xcode 或 devicectl 安裝取代共用流程。
 - 必須確認 complete=true，且 installationConfirmed、pairingImported、supportObserved 全部為 true，才算完成。
 - 中斷時不接續、不用 --action resume：從頭重新 preflight → apply；全域唯一未完成交易會在 apply 時自動放棄（封存、保留交易資料）並重新開始，不限該交易的裝置；重送相同 setupID 仍衝突。仍不手動刪除 journal、配對或 App。舊的未使用配對作廢尚未實作。
