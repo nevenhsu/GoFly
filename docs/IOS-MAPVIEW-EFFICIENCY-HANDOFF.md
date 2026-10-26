@@ -11,6 +11,25 @@
 - GPS 省電：`GoFlyRealLocation` 改百公尺精度、單次 `requestLocation()`，由 `RealLocationRefresher` 在前景每 8 秒補取，
   裝置被模擬時暫停（見 `app/GoFly/ARCHITECTURE.md` 第 7 點下的說明）。
 
+## 第二輪結果（2026-10-26，同日完成）
+
+| 項目 | 狀態 |
+|---|---|
+| 1. 可用性改變才送 `availabilityChanged` | 已完成，新增 `RealLocationAvailabilityEventsTests` |
+| 2. 不觀察 `recoveryStore`、`location` | 已完成；`GoFlyRealLocation` 改由 `GoFlyMovementModel` 持有 |
+| 3. 箭頭補間上限 30fps | 已完成 |
+| 4. 移除 `noticeKey` | 已完成；`acceptedFix()` 一併移除 |
+| 5. 拆成子 View | 部分完成：浮動通知抽成 `App/GoFlyMapToastStack.swift`（只收被觀察物件、binding 與值，SwiftUI 可略過重算）。見下方說明 |
+| 6. `PositionKeepAlive` 按需計時 | 不做，原因見下方 |
+
+**第 5 項為何停在通知**：`topBar`、`mapControls`、各面板都要靠 closure 回呼父 View（搜尋、Recenter、展開面板等），
+closure 會讓 SwiftUI 無法判斷輸入沒變，拆出去只改善可讀性、不省重算。而且父 View 仍觀察所有 controller，
+每次變更仍會重算父 body。要真正減少重算，下一步應是 `@Observable` 遷移（見文末），之後再拆其餘部分才有效益。
+
+**第 6 項為何不做**：`keepAliveTarget` 取決於 native busy、模擬是否已清除、顯示位置、movement authority、
+搖桿 owner 五個未發布的狀態。要按需啟動，就得在其中任何一個改變時發事件檢查，成本比它省下的
+「前景每 15 秒一次、無事可做就結束」的喚醒更高，也會改變 ADR 0001 定義的心跳時點。
+
 ## 工作方式（必讀）
 
 - 先讀 repo 根目錄 `AGENTS.md`。不要執行 Prettier。

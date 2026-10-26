@@ -8,11 +8,9 @@ import GoFlyCore
 @MainActor
 final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDelegate, RealLocationFixRequesting {
     @Published private(set) var observation: RealLocationObservation?
-    @Published private(set) var noticeKey: String?
 
     private let manager = CLLocationManager()
     private var awaitingPermission = false
-    private var shownNoticeCauses: Set<String> = []
     private lazy var refresher = RealLocationRefresher(source: self)
 
     override init() {
@@ -42,7 +40,7 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
 
     func requestRecenter() {
         guard CLLocationManager.locationServicesEnabled() else {
-            fail("location.disabled")
+            fail()
             return
         }
         switch manager.authorizationStatus {
@@ -55,9 +53,9 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
             }
             refresher.refreshNow()
         case .denied, .restricted:
-            fail("location.permissionDenied")
+            fail()
         @unknown default:
-            fail("location.noFix")
+            fail()
         }
     }
 
@@ -114,26 +112,16 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
-        Task { @MainActor [weak self] in self?.fail("location.noFix") }
+        Task { @MainActor [weak self] in self?.fail() }
     }
 
-    private func fail(_ key: String) {
+    /// A missing fix never shows a banner: indoor lack of GPS is normal in
+    /// simulation, and the joystick origin hint covers the case that matters.
+    private func fail() {
         observation = nil
-        // Indoor lack of GPS is normal in simulation; never surface a warning banner or block operation.
-        guard key != "location.noFix" else { return }
-        guard shownNoticeCauses.insert(key).inserted else { return }
-        noticeKey = key
-    }
-
-    func dismissNotice() {
-        noticeKey = nil
-    }
-
-    func acceptedFix() {
-        noticeKey = nil
     }
 
     func rejectedFix() {
-        fail("location.noFix")
+        fail()
     }
 }

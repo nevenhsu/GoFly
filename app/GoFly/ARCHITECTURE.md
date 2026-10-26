@@ -47,7 +47,9 @@
    真實定位不需高精度：`GoFlyRealLocation` 以百公尺精度（`kCLLocationAccuracyHundredMeters`）單次 `requestLocation()`
    取得，不持續 `startUpdatingLocation()`。`RealLocationRefresher` 只在前景每 8 秒補取一次，使搖桿與路線起點所需的
    「15 秒內真實定位」維持有效；收到軟體模擬的定位（裝置正被模擬）即停止補取，直到 Recenter、建立搖桿起點、
-   GPS clear 確認或回到前景時重新嘗試（2026-10-26）。
+   GPS clear 確認或回到前景時重新嘗試（2026-10-26）。`observeRealLocation` 只在路線或搖桿起點的可用性改變
+   （含過期定位被新定位取代）或該筆定位讓已派送的瞬移進入 sending 時，才送 `availabilityChanged`；
+   只是更新已可用起點的定位不喚醒 route／joystick 的觀察者（2026-10-26）。
 8. 背景由 `GoFlyContinuedProcessingDriver` 管理：Info.plist 宣告 `processing` 背景模式；瞬移維持、路線及漫步共用一個
    `com.neven.gofly.movement` 任務；採 `.queue` 等待系統可用的繼續執行名額。單程路線回報 ACK 距離比例，目的地終點 ACK
    呼叫 `finishFiniteArrival` 正常完成；瞬移維持、來回路線及漫步使用 `finiteDuration(43_200)` 的 12 小時百分比，

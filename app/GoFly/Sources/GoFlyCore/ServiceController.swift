@@ -924,8 +924,11 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
 
     /// GPS remains independent evidence; active simulation takes display priority.
     public func observeRealLocation(_ observation: RealLocationObservation?) {
+        let originsBefore = originAvailability
+        var pointDispatched = false
         if let point = currentPoint, point.dispatch.hasDispatched {
             pointDidDispatch(point.intent.id)
+            pointDispatched = true
         }
         guard let observation,
               observation.observedAt <= now(),
@@ -934,11 +937,19 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             return
         }
         realLocation = observation
-        routeSubject.send(.availabilityChanged)
-        joystickSubject.send(.availabilityChanged)
+        // A fix that only refreshes an origin already available changes nothing
+        // route or joystick can act on, so it does not wake their observers.
+        if pointDispatched || originAvailability != originsBefore {
+            routeSubject.send(.availabilityChanged)
+            joystickSubject.send(.availabilityChanged)
+        }
         if confirmedSimulatedLocation == nil {
             lastDisplayedPosition = DisplayedPosition(coordinate: observation.coordinate, source: .gps)
         }
+    }
+
+    private var originAvailability: (route: Bool, joystick: Bool) {
+        (currentRouteOrigin != nil, currentJoystickOrigin != nil)
     }
 
     private func pointDidDispatch(_ id: UUID) {

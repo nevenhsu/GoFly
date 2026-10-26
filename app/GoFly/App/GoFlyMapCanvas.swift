@@ -285,6 +285,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             // jumping between points. It still never runs ahead of an ACK.
             coordinateAnimationDuration = min(1.1, max(0.25, interval))
             let displayLink = CADisplayLink(target: self, selector: #selector(advanceCoordinateAnimation(_:)))
+            // The glide runs for most of every second while moving; 30 fps keeps
+            // it smooth without driving a ProMotion display at 120 Hz.
+            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
             coordinateDisplayLink = displayLink
             displayLink.add(to: .main, forMode: .common)
         }
