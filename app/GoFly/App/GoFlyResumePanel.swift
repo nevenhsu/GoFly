@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// 76 pt narrowest bottom panel for task interruption recovery (Resume UI - B8, D4, E3).
+/// Compact bottom panel for route and joystick-wander recovery (D10, E5).
 ///
 /// Features:
 /// - Maximum map and location visibility (76 pt visible height).
 /// - Shows interrupted state title on the left.
-/// - Single primary "Resume" action button on the right (e.g., "恢復瞬移", "繼續路線", "恢復漫步").
+/// - Single primary "Resume" action button on the right (e.g., "繼續路線", "恢復漫步").
 struct GoFlyResumePanel: View {
     let title: String
     var subtitle: String? = nil

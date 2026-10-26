@@ -6,7 +6,7 @@ struct EnglishButtonLabelTests {
     private static let buttonKeys = [
         "route.resumeShort", "teleport.resumeShort", "wander.resumeShort", "route.cancelConfirmation.confirm",
         "route.cancelConfirmation.return", "route.start", "route.startShort", "route.cancel", "route.addStop",
-        "route.exchange", "route.clearRoute", "wifi.error.action", "operation.settings", "operation.return",
+        "route.viewList", "route.closeInspection", "route.clearRoute", "wifi.error.action", "operation.settings", "operation.return",
         "operation.cancel", "onboarding.location.allow", "onboarding.location.openSettings",
         "onboarding.location.continue", "onboarding.vpn.open", "onboarding.vpn.help", "onboarding.vpn.check",
         "onboarding.vpn.help.openSettings", "onboarding.vpn.help.returnAndCheck", "settings.vpn.check",

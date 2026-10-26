@@ -4,10 +4,13 @@ import SwiftUI
 /// with a diagonal slash (`icon / repeat.slash`) when round trip is off.
 struct GoFlyRouteRepeatIcon: View {
     let isOn: Bool
+    var isEnabled = true
 
     var body: some View {
         Canvas { context, _ in
-            let color = isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary
+            let color = isEnabled
+                ? (isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
+                : GoFlyTextColor.disabled
             let stroke = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
             var path = Path()
             path.move(to: CGPoint(x: 7.2, y: 5)); path.addLine(to: CGPoint(x: 17.5, y: 5))
@@ -33,11 +36,13 @@ struct GoFlyRouteRepeatIcon: View {
 /// Forward: up arrow dark. Reverse: down arrow dark.
 struct GoFlyVerticalArrowsIcon: View {
     let isReversed: Bool
+    var isEnabled = true
 
     var body: some View {
         Canvas { context, _ in
-            let dark = GoFlyTextColor.primary
-            let light = Color(red: 199 / 255, green: 199 / 255, blue: 204 / 255)
+            let dark = isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled
+            let light = isEnabled ? GoFlyGrayScale.directionInactive
+                : GoFlyTextColor.disabled
             let stroke = StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
             var down = Path()
             down.move(to: CGPoint(x: 5, y: 3)); down.addLine(to: CGPoint(x: 5, y: 17))
@@ -108,12 +113,17 @@ struct GoFlyRouteControlRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Round trip: Figma D6 ⇄, primary when on, the disabled text color when off.
+            // Round trip: Figma D6 ⇄, primary when on, secondary when off.
             Button(action: onToggleRoundTrip) {
-                GoFlyRouteRepeatIcon(isOn: isRoundTrip)
+                GoFlyRouteRepeatIcon(isOn: isRoundTrip, isEnabled: canToggleRoundTrip)
                     .frame(width: 36, height: 36)
-                    .background(GoFlyStyle.surface, in: Circle())
-                    .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
+                    .background(canToggleRoundTrip ? GoFlyGrayScale.routeControlSurface : GoFlyGrayScale.disabledSurface,
+                                in: Circle())
+                    .overlay {
+                        if canToggleRoundTrip {
+                            Circle().strokeBorder(GoFlyGrayScale.routeControlBorder, lineWidth: 0.5)
+                        }
+                    }
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -124,10 +134,15 @@ struct GoFlyRouteControlRow: View {
             // Direction button: only while round trip is on; single trip is always forward.
             if isRoundTrip {
                 Button(action: onToggleDirection) {
-                    GoFlyVerticalArrowsIcon(isReversed: isReversed)
+                    GoFlyVerticalArrowsIcon(isReversed: isReversed, isEnabled: canToggleDirection)
                         .frame(width: 36, height: 36)
-                        .background(GoFlyStyle.surface, in: Circle())
-                        .overlay { Circle().strokeBorder(GoFlyStyle.hairline, lineWidth: 0.5) }
+                        .background(canToggleDirection ? GoFlyGrayScale.routeControlSurface : GoFlyGrayScale.disabledSurface,
+                                    in: Circle())
+                        .overlay {
+                            if canToggleDirection {
+                                Circle().strokeBorder(GoFlyGrayScale.routeControlBorder, lineWidth: 0.5)
+                            }
+                        }
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)

@@ -89,6 +89,10 @@
 "map.simulatedLocationWaiting" = "Last simulated location. Waiting for a confirmed location.";
 "search.placeholder" = "Search places, addresses or coordinates";
 "search.clear" = "Clear search";
+"search.paste" = "Paste";
+"search.pasteInvalidCoordinate" = "Invalid coordinates";
+"search.pastePlaceNotFound" = "Place not found";
+"search.pasteSearchFailed" = "Search failed";
 "search.searching" = "Searching…";
 "search.coordinateFormat" = "Enter latitude, longitude.";
 "search.latitudeRange" = "Latitude must be between −90° and 90°.";
@@ -152,6 +156,7 @@
 "route.chooseDestination" = "Choose destination";
 "route.editOrigin" = "Edit origin";
 "route.editDestination" = "Edit destination";
+"route.fieldSearchHint" = "Tap again to open location search.";
 "route.start" = "Start";
 "route.pause" = "Pause";
 "route.resume" = "Resume";
@@ -524,8 +529,6 @@
 
 "settings.languageAndAppearance" = "Language & appearance";
 
-"route.exchange" = "Reverse";
-
 "route.summary" = "%.1f km · %d min · %d km/h";
 
 "imports.points.middle" = "%d intermediate points";
@@ -573,7 +576,6 @@
 "route.chooseOrigin" = "Choose origin";
 "route.chooseDestination" = "Choose destination";
 "route.chooseWaypoint" = "Choose stop %ld";
-"route.emptyLocationHint" = "Use Map Pin or Search location to set a place.";
 "sheet.currentPosition" = "Current simulated position";
 "sheet.realPosition" = "Current location";
 "sheet.lastSimulatedPosition" = "Last simulated position";
@@ -630,6 +632,12 @@
 "onboarding.location.statusFormat" = "Current permission: %@";
 "onboarding.vpn.subtitle" = "GoFly talks to the device service through LocalDevVPN.";
 "route.addStop" = "Add";
+
+"route.viewList" = "View";
+
+"route.list.title" = "All Points";
+
+"route.closeInspection" = "Close";
 "route.speedShort" = "%ld km/h";
 "imports.pointsFormat" = "%@ points";
 "imports.footnote" = "Tap a route for actions: load, view all points, export, delete. Imported routes cannot be edited; change the source file and import again.";

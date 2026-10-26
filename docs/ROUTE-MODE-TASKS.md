@@ -1,4 +1,4 @@
-# Route Mode 開發任務清單（2026-10-24）
+# Route Mode 開發任務清單（2026-10-26）
 
 視覺準據：Figma `04 · iOS Redesign（Google Maps 參考）`，`D · 路線：規劃、選點、執行模式`（D1–D22、D6.a 與 Dark 對應）。D section 已大幅更新，頁面一律對照渲染畫面開發，並使用 `0 · 共用元件（正式版 token）` 的元件。
 行為與元件規格：[iOS UI 設計與驗收規格](IOS-UI-DESIGN.md)，其中「2026-10-24 共用元件規格」一節列出數值。
@@ -7,12 +7,12 @@
 ## 已確認決定
 
 - 進入路線 tab：D1 完整面板，不自動開 D5／鍵盤。起點預設目前位置，無最後模擬位置與真實 GPS 時留空。
-- 預設選中「起點」（依 Figma D1）。點欄位只切換選中欄位；由地圖 Pin（D4）或頂部搜尋列（D5）設定選中欄位。
+- 預設選中「起點」（依 Figma D1）。路線地點欄位第一次點擊選取欄位；再次點擊同一欄位開啟 D5 並聚焦搜尋輸入。點另一欄位會先選取該欄位，再次點擊才開啟 D5。頂部搜尋列仍可直接開啟 D5；地圖 Pin（D4）也回填目前選中欄位。
 - 自動收合只由候選 Pin 觸發，拖曳地圖不收合。
 - 起點與終點常駐 ✕（空值時停用），清除後保留空欄位；停靠點 ✕ 刪除整列；皆不顯示 toast／snackbar（2026-10-26 使用者指示，取代 D9 可復原 snackbar；Figma D9 未同步）。
-- 點擊空的路線地點欄位並使其成為選中欄位時，於畫面上方 toast 區顯示中性提示「使用地圖圖釘或搜尋地點來設定」（英文 “Use Map Pin or Search location to set a place.”）；位於頂部搜尋列與狀態 pill 下方，不遮住搜尋列；3 秒自動消失且可關閉。此為新增互動，Figma D1 尚無對應 variant。
 - 路線與搖桿／漫步共用並保存同一速度偏好：5／25／50／100，預設 25。
 - D1 不顯示速度膠囊；只有 D1 右上星號開 D19，底部星號開 D20；undo 文案「復原」。
+- 路線面板移除反轉按鈕，改為帶 SF Symbol `list.and.chevron`、無外框的「檢視路線」（英文 View）；開啟全螢幕可編輯「全部點位」清單。清單列與首頁共用同一 row 元件／互動，右滑返回或「關閉檢視」退出；D13 僅作版面參考，Figma 尚未設計此可編輯 variant。
 - D1b（Pin「新增」為目的地）已廢止。
 
 ## 共用元件（先做，路線頁面依賴）
@@ -44,13 +44,12 @@
 - 驗收：任一端點為空時 Start 停用且不規劃；反轉順序同時交換空值；GPX 唯讀不顯示 ✕；VoiceOver 區分「清除起點」「刪除停靠點 N」。
 - **狀態：已實作，待審查。** Core 新增 `RouteNodeValue.empty`、預設 draft 為〔目前位置、空〕、`removeNode` 對端點改為清除（停靠點仍刪列）、`hasEmptyEndpoint` 阻止規劃與 Start；recovery codec 支援 `empty` 並把舊的單節點快照補成空終點。UI：端點 ✕ 常駐（空值停用）、停靠點 ✕ 刪列、占位列移除、角色名稱統一「停靠點 N」（zh-Hant／zh-Hans／en 同步）。`RouteEndpointTests`、`GoFlyRouteEndpointUITests`。Figma 衝突：D8 的停靠點列畫紅色垃圾桶，D2 與已確認決定為中性灰 ✕，依後者實作。D1 列卡片樣式（353 pt、圓角 14）與 grip 顏色隨 R5。
 
-### R3 選中欄位模型（D1、D4、D5）
-- 現況：`App/GoFlyMapView.swift:826` `onEditNode` 直接開 D5；頂部搜尋列在路線 tab 開一般搜尋。
+### R3 選中欄位與再次點擊搜尋（D1、D4、D5）
+- 現況：頂部搜尋列已直接開 D5；點擊清單列只選取欄位。
 - Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側「最愛地點」，「最近搜尋」＋「清空記錄」。
-- 做法：新增選中欄位狀態，預設起點；點列只切換選中；路線 tab 頂部搜尋列開 D5（chip 與 placeholder 依選中欄位）；D4 Pin「確認」與 LocationCard「確認」回填選中欄位並回到 D1。
-- 驗收：進入路線 tab 不彈出 D5 或鍵盤；點終點列再點搜尋列，chip 顯示「正在選：終點」；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（加 `.isSelected` trait）。
-- **狀態：已實作，待審查。** Core：`RouteExecutionController.selectedNodeID`（預設起點，列消失時回退起點）、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App：列點擊只選取（`.isSelected`、`goFlySearchField(isFocused: true)`）；路線 tab 搜尋列開 D5（chip「正在選：%@」）；路線 tab 點地圖放 Pin（收合 76 pt）；Pin 與卡片「確認」只改選中欄位並回 D1；D5 選取後回 D1 展開。`RouteEndpointTests`（selection）、`GoFlyRouteSelectionUITests`。舊的 `GoFlyRouteUITests`（點列即開 D5）依使用者確認隨舊 UI 刪除。D1 選中列的藍色游標不實作（依已確認決定）。
-- **2026-10-26 新增：** 點擊空的路線欄位時顯示中性提示 toast，提示使用 Map Pin 或 Search location 設定地點；於頂部搜尋列與狀態 pill 下方顯示，不覆蓋搜尋列，3 秒後自動消失並可關閉。App 已實作；Figma D1 尚未同步此 variant，未實機驗證。
+- 做法：維持選中欄位狀態與 D1 樣式；第一次點欄位選取，第二次點同一欄位透過 `openSelectedPicker()` 開 D5 並聚焦搜尋欄；點其他欄位會選取並重新開始兩次點擊流程。路線頂部搜尋列仍可立即開 D5；D4 Pin 與 LocationCard 的「確認」仍回填選中欄位並返回 D1。
+- 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；點空欄位不顯示 toast。
+- **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。Figma D1 維持目前選中列渲染，D5 維持 focused 搜尋頁；靜態 Figma 未定義再次點擊互動 variant，待設計稿同步。
 
 ### R4 D9 清除復原
 - 現況：`removeNode` 無復原。
@@ -60,10 +59,18 @@
 - 原狀態（已取代）：Core：`removeNode` 記錄 `(before, after, selection)`，`canUndoRemoval`／`undoRemoval()`（只復原最近一次；之後路線有任何其他變動即失效）；App：起訖清除與停靠點刪除皆顯示「已清空路線地點」＋「復原」（5 秒，於 sheet 上方 12 pt，已修正 snackbar 位置多算 safe area 的偏移）。`RouteEndpointTests`（undo 三項）、`GoFlyRouteUndoUITests`。訊息文字依 D9 渲染畫面統一為「已清空路線地點」（停靠點刪除與起訖清除相同）。
 
 ### R5 D1／D2 面板版面
-- 現況：`GoFlyRoutePanel.editingView` 將標題、清單、新增、反轉放在同一 `ScrollView`；底部星號 50 pt 有邊框。
+- 現況：`GoFlyRoutePanel.editingView` 顯示標題、清單、新增與「檢視路線」入口；底部星號 50 pt 有邊框。
 - Figma：sheet 高 369 pt（D1）；標題 20 pt Semibold；右上 44 pt 圓鈕（`#F2F2F7`、0.5 pt 邊）；「＋ 新增停靠點」與「⇅ 反轉順序」15 pt Semibold；底部 56 pt 星號（`#EEEEF0`、無邊）＋56 pt「開始」capsule。D2 只有清單捲動（最多 4 列可視、顯示捲動指示器），其餘固定。
 - 驗收：D1、D2 截圖並排對齊；5 個以上地點時捲動清單不拖動 sheet；最大字級時可重排。
 - **狀態：已實作，待審查。** 路線規劃 sheet 改為依內容定高（`sheetFitsContent`、`grabberHeight: 12`）。依 Figma D1 量測：header 距 sheet 頂 12、清單距 header 12、清單（2 列 × 60 = 120）→ 新增／反轉列 4 → 星號／開始列 16 → 距 TabBar 35（sheet 共 339 pt）；D3 收合 76 pt（標題＋兩圓鈕，header 距頂 12、距底 20）；星號 56 pt（`#EEEEF0`、無邊）。清單卡 14 圓角、0.5 pt 邊、最多 4 列後捲動（`.scrollIndicators(.visible)`），其餘區塊固定。`GoFlyRoutePanelLayoutUITests` 量測 D1／D3 間距。Figma 差異：D2 渲染為 55 pt 列、11／15 pt 字、sheet 高 414 與 D1 的 60 pt 列不一致，依文件決定（D1／D2 皆 60 pt 列，4 列＝240 pt）實作，故 4 列時 sheet 約 459 pt，與 D2 的 414 pt 不同；D2 與 D1 的底部間距（16 vs 35）也不一致，採 D1 的 35 pt。D2（5 個以上地點）的捲動未以 UI test 量測。
+
+### R5.1 全螢幕可編輯路線清單（D13 版面參考）
+- 入口：D1 路線操作列以「檢視路線」＋ SF Symbol `list.and.chevron`（無邊框）（英文 View）取代反轉按鈕。
+- 頁面：導航式全螢幕頁；隱藏地圖、頂部搜尋列、路線面板星號／開始按鈕與 TabBar。頂列為「返回」＋「全部點位」，下方使用全高可捲動清單及可見捲動指示器，底部固定「新增停靠點」與「關閉檢視」。原生向右返回手勢可關閉。
+- 清單：重用 `GoFlyRouteNodeList`，因此左側排序圖示可拖曳調整順序；欄位首次點擊只選取，再次點擊同一欄位推入 D5；右側 ✕ 對起訖點清空、對停靠點刪除整列。新增停靠點後捲至新列。
+- Figma 狀態：D13 是匯入 GPX 的唯讀點位清單；本頁僅參照其版面層級，拖曳、欄位編輯、固定操作列與關閉手勢是新增 App 行為，04 頁尚無對應 wireframe。不可記為 Figma 已設計。
+- 驗收：在清單頁逐一確認首次選取／再次開 D5、結果回填後回到清單、清空起訖／刪除停靠點、拖曳重排、新增後自動捲動、關閉按鈕與右滑返回；確認頁面隱藏地圖與 TabBar。
+- **狀態：程式已實作；Swift parser、三語 strings lint 與 `git diff --check` 通過；尚未模擬器／實機驗收。**
 
 ### R6 D6／D6.a 執行面板與結束確認
 - 現況：`App/GoFlyRoutePanel.swift:81` 使用系統 `confirmationDialog`，文案「取消這次路線？」。
@@ -110,10 +117,10 @@
 
 | Mode | 預設高度（Figma） | 最小高度（Figma） | 實作 |
 | :-- | :-- | :-- | :-- |
-| 瞬移 | 300（B2 半開 298） | 120（B1 收合 118） | `sheetPreferredHeight`；恢復列 B8 同為 120 |
+| 瞬移 | 300（B2 半開 298） | 120（B1 收合 118） | `sheetPreferredHeight`；B8/B9 沿用標準瞬移收合面板與位置摘要 |
 | 路線 | 340（D1 339，2 列）；3 列 400；上限 416（D2 414，只有清單捲動） | 76（D3） | 內容定高（`GoFlyRoutePanel`），清單上限＝404 − 208 |
 | 搖桿 | 352（E1 350：列 20、搖桿 88×152、按鈕 264×52、距底 36） | 76（E1.a：標題「搖桿」＋時速 chip） | `GoFlyJoystickPanel` 重排，`isCollapsed` 為最小態 |
-| 執行／恢復 | D6 218；D10 122（88＋34）；E5 76 | — | `GoFlyResumePanel.contentHeight`（sheet 內 64＋12 grabber、D10 88、B8 94＋24） |
+| 執行／恢復（路線／漫步） | D6 218；D10 122（88＋34）；E5 76 | — | `GoFlyResumePanel.contentHeight`（D10 88，E5 76） |
 
 狀態：已實作，待審查（`GoFlyBottomSheet.preferredHeight`／`grabberHeight`；輔助字級與恢復態改回內容定高；`GoFlyPanelHeightUITests` 量測三個 mode 的預設／最小高度與搖桿內部間距）。尚未對齊：漫步執行 E2（380）、E2.a／E4（122，皆無 TabBar；App 仍顯示 TabBar）、搖桿標題字級（E1 約 17 pt，現為 20 pt）。D2 的列高（55 pt）與 D1（60 pt）不一致，依 60 pt 並以 414 pt 為上限。
 

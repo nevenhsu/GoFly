@@ -150,8 +150,7 @@ struct GoFlyFavoritesView: View {
                 // Same editor as ⋯ (2026-10-26).
                 Button { editing = favorite } label: {
                     GoFlyStarIcon(size: 16, filled: true)
-                        .frame(width: 36, height: 36)
-                        .background(GoFlyStyle.secondarySurface, in: Circle())
+                        .goFlyIconButtonChrome(diameter: 36, showsBorder: false)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }

@@ -24,7 +24,7 @@ struct GoFlyRouteNodeList: View {
     var selectedID: RouteNodeID? = nil
     let isEditable: Bool
     let viewport: CGRect
-    /// Selecting a row only chooses which field D5, the map Pin and the Location Card fill.
+    /// The first tap selects a field; tapping it again opens D5 for the selected field.
     var onEdit: (RouteNodeID) -> Void
     var onDelete: (RouteNodeID) -> Void
     var onMove: (RouteNodeID, Int) -> Void
@@ -128,19 +128,19 @@ struct GoFlyRouteNodeList: View {
             .disabled(!isEditable || draggingID != nil)
             .accessibilityLabel(goFlyRouteEditTitle(role))
             .accessibilityValue(title(node.value, role: role))
+            .accessibilityHint(goFlyString("route.fieldSearchHint"))
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier(editIdentifier(role))
             if isEditable {
                 Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
                     Image(systemName: GoFlySymbols.close)
                         .goFlyControlSymbol(size: 15, weight: .medium)
-                        .foregroundStyle(GoFlyTextColor.secondary)
+                        .goFlyIconForeground(enabledColor: GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!canRemove(node, role: role) || draggingID != nil)
-                .opacity(canRemove(node, role: role) ? 1 : 0.35)
                 .accessibilityLabel(removeTitle(role))
                 .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
             } else {

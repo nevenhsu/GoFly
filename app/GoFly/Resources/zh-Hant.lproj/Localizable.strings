@@ -103,6 +103,10 @@
 "map.simulatedLocationWaiting" = "最後模擬位置，等待位置確認。";
 "search.placeholder" = "搜尋地點、地址或座標";
 "search.clear" = "清除搜尋";
+"search.paste" = "貼上";
+"search.pasteInvalidCoordinate" = "無效經緯度";
+"search.pastePlaceNotFound" = "找不到位置";
+"search.pasteSearchFailed" = "搜尋失敗";
 "search.searching" = "搜尋中…";
 "search.coordinateFormat" = "請輸入緯度, 經度。";
 "search.latitudeRange" = "緯度須介於 −90° 與 90°。";
@@ -166,6 +170,7 @@
 "route.chooseDestination" = "選擇終點";
 "route.editOrigin" = "編輯起點";
 "route.editDestination" = "編輯終點";
+"route.fieldSearchHint" = "再次點擊即可開啟地點搜尋。";
 "route.start" = "開始路線";
 "route.pause" = "暫停";
 "route.resume" = "繼續";
@@ -539,8 +544,6 @@
 
 "settings.languageAndAppearance" = "語言與外觀";
 
-"route.exchange" = "反轉順序";
-
 "route.summary" = "%.1f 公里・%d 分鐘・%d 公里／小時";
 
 "imports.points.middle" = "中間 %d 點";
@@ -588,7 +591,6 @@
 "route.chooseOrigin" = "選擇起點";
 "route.chooseDestination" = "選擇終點";
 "route.chooseWaypoint" = "選擇停靠點 %ld";
-"route.emptyLocationHint" = "使用地圖圖釘或搜尋地點來設定";
 "sheet.currentPosition" = "目前模擬位置";
 "sheet.realPosition" = "目前位置";
 "sheet.lastSimulatedPosition" = "最後模擬位置";
@@ -629,6 +631,12 @@
 "onboarding.location.statusFormat" = "目前權限：%@";
 "onboarding.vpn.subtitle" = "GoFly 透過 LocalDevVPN 與裝置服務通訊。";
 "route.addStop" = "新增停靠點";
+
+"route.viewList" = "檢視路線";
+
+"route.list.title" = "全部點位";
+
+"route.closeInspection" = "關閉檢視";
 "route.speedShort" = "%ld km/h";
 "imports.pointsFormat" = "%@ 點";
 "imports.footnote" = "點一下開啟動作選單：載入、查看全部點位、匯出、刪除。匯入路線不可編輯；需要調整請修改來源檔案後重新匯入。";

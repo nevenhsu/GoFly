@@ -17,20 +17,15 @@ struct GoFlyFavoriteStar: View {
         Button { showingEditor = true } label: {
             if isCardAction {
                 GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
-                    .frame(width: 40, height: 40)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
-                    .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                    .contentShape(Circle())
+                    .goFlyIconButtonChrome(diameter: 40)
             } else if let circleDiameter {
                 GoFlyStarIcon(size: 15, filled: favorites.isFavorite(place))
-                    .frame(width: circleDiameter, height: circleDiameter)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .goFlyIconButtonChrome(diameter: circleDiameter, showsBorder: false)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             } else {
                 GoFlyStarIcon(size: 18, filled: favorites.isFavorite(place))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+                    .goFlyIconButtonChrome(diameter: 44)
             }
         }
         .buttonStyle(.plain)

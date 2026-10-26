@@ -1,6 +1,11 @@
 import GoFlyCore
 import SwiftUI
 
+struct GoFlySearchPasteWarning: Identifiable {
+    let id = UUID()
+    let localizationKey: String
+}
+
 /// The one floating notice above the map, in priority order. It is its own
 /// view, built only from observed owners, bindings and values, so SwiftUI can
 /// skip it when nothing it reads has changed.
@@ -14,7 +19,7 @@ struct GoFlyMapToastStack: View {
     @ObservedObject var joystickOrigin: JoystickOriginController
     let wander: WanderPlanningCoordinator
     @Binding var notices: NoticeState
-    @Binding var emptyRouteLocationHintID: UUID?
+    @Binding var searchPasteWarning: GoFlySearchPasteWarning?
     @Binding var showingSettings: Bool
     let mode: SessionMapMode
     let sceneSettled: Bool
@@ -65,7 +70,19 @@ struct GoFlyMapToastStack: View {
     }
 
     var body: some View {
-        if network.shouldShowWiFiError {
+        if let searchPasteWarning {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString(searchPasteWarning.localizationKey),
+                identifier: "map.searchPasteWarning",
+                isFloating: false
+            )
+            .task(id: searchPasteWarning.id) {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                guard self.searchPasteWarning?.id == searchPasteWarning.id else { return }
+                self.searchPasteWarning = nil
+            }
+        } else if network.shouldShowWiFiError {
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString("wifi.error.title"),
@@ -226,20 +243,6 @@ struct GoFlyMapToastStack: View {
                 actionEnabled: routePaused ? (route.phase == .interrupted || route.canResume) : (holdPaused ? positionHold.canRetry : true),
                 isFloating: true
             )
-        } else if mode == .route, route.canEdit, route.picker == nil,
-                  let hintID = emptyRouteLocationHintID {
-            GoFlyStatusBanner(
-                tone: .neutral,
-                title: goFlyString("route.emptyLocationHint"),
-                onDismiss: { emptyRouteLocationHintID = nil },
-                identifier: "route.emptyLocationHint",
-                isFloating: true
-            )
-            .task(id: hintID) {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled, emptyRouteLocationHintID == hintID else { return }
-                emptyRouteLocationHintID = nil
-            }
         }
     }
 }

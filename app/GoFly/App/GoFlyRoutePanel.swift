@@ -7,6 +7,7 @@ struct GoFlyRoutePanel: View {
     @Binding var showingFavoriteRoutes: Bool
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
+    var onInspectRoute: () -> Void = { }
     /// Ending asks the owner to cancel the active route and return to planning.
     var onRequestEnd: () -> Void = { }
     var onSettings: () -> Void = { }
@@ -94,7 +95,7 @@ struct GoFlyRoutePanel: View {
         }
     }
 
-    /// Figma D1/D2: header 12 pt below the sheet top, list card, add / reverse row,
+    /// Figma D1/D2: header 12 pt below the sheet top, list card, add / inspect row,
     /// star + Start row, 35 pt above the tab bar. Only the list scrolls (D2: up to 4 rows).
     private var editingView: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -161,9 +162,8 @@ struct GoFlyRoutePanel: View {
                     GoFlyStarIcon(size: 20, filled: isFavorite)
                 }
             }
-            .foregroundStyle(GoFlyTextColor.primary)
-            .frame(width: GoFlyStyle.primaryButtonHeight, height: GoFlyStyle.primaryButtonHeight)
-            .background(GoFlyStyle.startSecondarySurface, in: Circle())
+            .goFlyIconButtonChrome(diameter: GoFlyStyle.primaryButtonHeight, showsBorder: false,
+                                   enabledSurface: GoFlyStyle.startSecondarySurface)
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
@@ -400,15 +400,15 @@ struct GoFlyRoutePanel: View {
             .accessibilityIdentifier("route.addNode")
             .accessibilityHint(controller.draft.nodes.count == RouteDraft.maximumNodeCount ? goFlyString("route.nodeLimit") : "")
             Spacer(minLength: 0)
-            Button(action: { _ = controller.reverseNodes() }) {
-                Label(goFlyString("route.exchange"), systemImage: "arrow.up.arrow.down")
+            Button(action: onInspectRoute) {
+                Label(goFlyString("route.viewList"), systemImage: GoFlySymbols.routeList)
                     .font(GoFlyFont.subheadlineEmphasis)
                     .frame(minHeight: 40)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!controller.canEdit || controller.draft.nodes.count < 2)
-            .accessibilityIdentifier("route.exchange")
+            .disabled(!controller.canEdit)
+            .accessibilityIdentifier("route.viewList")
         }
     }
 
@@ -417,10 +417,7 @@ struct GoFlyRoutePanel: View {
                               @ViewBuilder icon: () -> Icon) -> some View {
         Button(action: action) {
             icon()
-                .frame(width: 44, height: 44)
-                .background(GoFlyStyle.secondarySurface, in: Circle())
-                .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                .contentShape(Circle())
+                .goFlyIconButtonChrome(diameter: 44)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)

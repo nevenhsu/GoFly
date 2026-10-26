@@ -142,8 +142,7 @@ struct GoFlyWanderDestinationRow: View {
             Button(action: onRandomDestination) {
                 Image(systemName: "shuffle")
                     .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 34, height: 34)
-                    .background(GoFlyStyle.secondarySurface, in: Circle())
+                    .goFlyIconButtonChrome(diameter: 34, showsBorder: false)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }

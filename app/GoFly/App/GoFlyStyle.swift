@@ -1,18 +1,68 @@
 import SwiftUI
 
+/// Shared neutral palette for text, icons, surfaces, and borders.
+/// The light/dark pairs follow the iOS 04 redesign; component styles alias
+/// these values instead of defining their own near-identical gray literals.
+enum GoFlyGrayScale {
+    static let iconButtonSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.173, 0.173, 0.180))
+    static let iconButtonBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.227))
+    static let routeControlSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
+    static let routeControlBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.220, 0.220, 0.227))
+    static let directionInactive = Color(red: 0.780, green: 0.780, blue: 0.800)
+    static let disabledSurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
+    static let secondaryLabel = adaptive(light: (0.541, 0.541, 0.557), dark: (0.596, 0.596, 0.624))
+    static let messageLabel = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
+    static let disabledLabel = adaptive(light: (0.600, 0.600, 0.627), dark: (0.420, 0.420, 0.447))
+    static let pasteSymbol = adaptive(light: (0.420, 0.420, 0.420), dark: (1, 1, 1))
+
+    static let fieldSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
+    static let fieldBorder = Color(red: 0.557, green: 0.557, blue: 0.576)
+    static let tabBarSurface = adaptive(light: (0.976, 0.976, 0.976), dark: (0.110, 0.110, 0.118))
+    static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
+    static let startSecondarySurface = disabledSurface
+    static let dialogMessage = adaptive(light: (0.420, 0.420, 0.451), dark: (0.820, 0.820, 0.839))
+    static let checkboxOffBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.557, 0.557, 0.576))
+    static let checkboxOffFill = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
+    static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
+    static let durationWheelSurface = adaptive(light: (0.976, 0.976, 0.984), dark: (0.141, 0.141, 0.149))
+    static let durationWheelBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.231))
+    static let pillBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.329, 0.329, 0.345), lightAlpha: 0.45)
+    static let hairline = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
+
+    static let toastDismiss = adaptive(light: (0.549, 0.549, 0.580), dark: (0.600, 0.600, 0.620))
+    static let toastActionSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
+    static let toastActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.282, 0.282, 0.290))
+    static let snackbarSurface = adaptive(light: (0.110, 0.110, 0.118), dark: (0.173, 0.173, 0.180))
+    static let snackbarActionSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
+    static let snackbarActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (1, 1, 1),
+                                               lightAlpha: 0.45, darkAlpha: 0.18)
+    static let snackbarBorder = adaptive(light: (1, 1, 1), dark: (1, 1, 1), lightAlpha: 0, darkAlpha: 0.12)
+
+    private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
+                                 dark: (CGFloat, CGFloat, CGFloat),
+                                 lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
+        Color(uiColor: UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            let value = isDark ? dark : light
+            return UIColor(red: value.0, green: value.1, blue: value.2,
+                           alpha: isDark ? darkAlpha : lightAlpha)
+        })
+    }
+}
+
 enum GoFlyStyle {
     static let surface = Color(uiColor: .systemBackground)
     static let cardSurface = Color(uiColor: .secondarySystemGroupedBackground)
     static let canvas = Color(uiColor: .systemGroupedBackground)
-    static let secondarySurface = Color(uiColor: .tertiarySystemGroupedBackground)
+    static let secondarySurface = GoFlyGrayScale.iconButtonSurface
     static let primary = Color.primary
     static let secondary = Color.secondary
-    static let disabledForeground = Color(uiColor: .secondaryLabel)
-    static let disabledSurface = Color(uiColor: .tertiarySystemFill)
+    static let disabledForeground = GoFlyGrayScale.disabledLabel
+    static let disabledSurface = GoFlyGrayScale.disabledSurface
     static let errorForeground = Color(uiColor: .label)
     static let errorSurface = Color(uiColor: .secondarySystemBackground)
-    static let border = Color(uiColor: .separator)
-    static let subtleBorder = Color(uiColor: .opaqueSeparator).opacity(0.45)
+    static let border = GoFlyGrayScale.hairline
+    static let subtleBorder = GoFlyGrayScale.hairline.opacity(0.45)
     static let cornerRadius: CGFloat = 20
     /// Longer than a heartbeat write; see `goFlySteadyDisabled`.
     static let admissionBlipDelay: Duration = .seconds(1)
@@ -38,12 +88,11 @@ enum GoFlyStyle {
     static let toastDangerSurface = adaptive(light: (1.000, 0.941, 0.933), dark: (0.302, 0.153, 0.165))
     static let toastWarningSurface = adaptive(light: (1.000, 0.965, 0.902), dark: (0.322, 0.243, 0.106))
     static let toastSuccessSurface = adaptive(light: (0.941, 0.980, 0.949), dark: (0.141, 0.294, 0.176))
-    static let toastMessage = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
-    static let toastDismiss = adaptive(light: (0.549, 0.549, 0.580), dark: (0.600, 0.600, 0.620))
-    static let toastActionSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
-    static let toastActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.282, 0.282, 0.290))
-    static let snackbarSurface = adaptive(
-        light: (0.110, 0.110, 0.118), dark: (0.173, 0.173, 0.180))
+    static let toastMessage = GoFlyGrayScale.messageLabel
+    static let toastDismiss = GoFlyGrayScale.toastDismiss
+    static let toastActionSurface = GoFlyGrayScale.toastActionSurface
+    static let toastActionBorder = GoFlyGrayScale.toastActionBorder
+    static let snackbarSurface = GoFlyGrayScale.snackbarSurface
     static let snackbarForeground = Color.white
     /// Execution-mode instruction card: dark in both appearances, per the
     /// redesign spec (light #1C1C1E, dark #2C2C2E) with white text.
@@ -242,44 +291,96 @@ struct GoFlyIconStyle: ButtonStyle {
             .frame(minWidth: 44, minHeight: 44)
             .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
             .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-            .background(isEnabled ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.secondarySurface) : GoFlyStyle.disabledSurface, in: Circle())
-            .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false) }
+            .background(isEnabled
+                        ? (floating ? GoFlyStyle.cardSurface : GoFlyGrayScale.iconButtonSurface)
+                        : GoFlyGrayScale.disabledSurface, in: Circle())
+            .overlay {
+                if isEnabled {
+                    Circle().strokeBorder(floating ? GoFlyStyle.subtleBorder : GoFlyGrayScale.iconButtonBorder,
+                                          lineWidth: 0.5).allowsHitTesting(false)
+                }
+            }
             .goFlyShadow(floating ? .floating : nil)
             .contentShape(Circle())
             .opacity(isEnabled && configuration.isPressed ? 0.65 : 1)
     }
 }
 
+/// Gray icon-button chrome that reflects the Button's enabled state.
+struct GoFlyIconButtonChrome: ViewModifier {
+    let diameter: CGFloat
+    let showsBorder: Bool
+    let enabledSurface: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .frame(width: diameter, height: diameter)
+            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
+            .background(isEnabled ? enabledSurface : GoFlyGrayScale.disabledSurface,
+                        in: Circle())
+            .overlay {
+                if isEnabled && showsBorder {
+                    Circle().strokeBorder(GoFlyGrayScale.iconButtonBorder, lineWidth: 0.5)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Circle())
+    }
+}
+
+extension View {
+    func goFlyIconButtonChrome(diameter: CGFloat, showsBorder: Bool = true,
+                               enabledSurface: Color = GoFlyGrayScale.iconButtonSurface) -> some View {
+        modifier(GoFlyIconButtonChrome(diameter: diameter, showsBorder: showsBorder,
+                                       enabledSurface: enabledSurface))
+    }
+}
+
+private struct GoFlyIconForeground: ViewModifier {
+    let enabledColor: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(isEnabled ? enabledColor : GoFlyTextColor.disabled)
+    }
+}
+
+extension View {
+    func goFlyIconForeground(enabledColor: Color = GoFlyTextColor.primary) -> some View {
+        modifier(GoFlyIconForeground(enabledColor: enabledColor))
+    }
+}
+
 // Figma `SearchField / focused｜normal` and `Progress` (0 · 共用元件).
 extension GoFlyStyle {
-    static let fieldSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
-    static let fieldBorder = Color(red: 0.557, green: 0.557, blue: 0.576)
+    static let fieldSurface = GoFlyGrayScale.fieldSurface
+    static let fieldBorder = GoFlyGrayScale.fieldBorder
     static let fieldFocus = adaptive(light: (0.000, 0.478, 1.000), dark: (0.039, 0.518, 1.000))
-    static let tabBarSurface = adaptive(light: (0.976, 0.976, 0.976), dark: (0.110, 0.110, 0.118)).opacity(0.96)
+    static let tabBarSurface = GoFlyGrayScale.tabBarSurface.opacity(0.96)
     static let tabSeparator = hairline
-    static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
-    static let startSecondarySurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
-    static let dialogMessage = adaptive(light: (0.420, 0.420, 0.451), dark: (0.820, 0.820, 0.839))
-    static let dialogCancelSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
+    static let tabInactive = GoFlyGrayScale.tabInactive
+    static let startSecondarySurface = GoFlyGrayScale.startSecondarySurface
+    static let dialogMessage = GoFlyGrayScale.dialogMessage
+    static let dialogCancelSurface = GoFlyGrayScale.fieldSurface
     static let pillSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
-    static let checkboxOffBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.557, 0.557, 0.576))
-    static let checkboxOffFill = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
-    static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
+    static let checkboxOffBorder = GoFlyGrayScale.checkboxOffBorder
+    static let checkboxOffFill = GoFlyGrayScale.checkboxOffFill
+    static let progressTrack = GoFlyGrayScale.progressTrack
     /// Figma F6.a `TimePicker / Wheel` (04 · iOS Redesign).
-    static let durationWheelSurface = adaptive(light: (0.976, 0.976, 0.984), dark: (0.141, 0.141, 0.149))
-    static let durationWheelBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.231))
+    static let durationWheelSurface = GoFlyGrayScale.durationWheelSurface
+    static let durationWheelBorder = GoFlyGrayScale.durationWheelBorder
     /// Figma `StatusPill` stroke: #C6C6C8 at 45 % (light), #545458 1 pt (dark).
-    static let pillBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.329, 0.329, 0.345), lightAlpha: 0.45)
+    static let pillBorder = GoFlyGrayScale.pillBorder
     /// Figma `StatusPill` dots for the neutral and paused states.
     static let pillDotNeutral = Color(uiColor: .systemGray)
     static let pillDotWarning = Color(red: 1.000, green: 0.624, blue: 0.039)
     /// Opaque hairline (#C6C6C8 / #38383A): tab bar separator and small round controls.
-    static let hairline = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
+    static let hairline = GoFlyGrayScale.hairline
     /// Figma `Snackbar / 可復原` action button.
-    static let snackbarActionSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
-    static let snackbarActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (1, 1, 1),
-                                               lightAlpha: 0.45, darkAlpha: 0.18)
-    static let snackbarBorder = adaptive(light: (1, 1, 1), dark: (1, 1, 1), lightAlpha: 0, darkAlpha: 0.12)
+    static let snackbarActionSurface = GoFlyGrayScale.snackbarActionSurface
+    static let snackbarActionBorder = GoFlyGrayScale.snackbarActionBorder
+    static let snackbarBorder = GoFlyGrayScale.snackbarBorder
 }
 
 /// Figma 04 drop shadows. `floating`: search bar, status pill, map controls, panels,
@@ -381,9 +482,9 @@ enum GoFlyFont {
 
 // MARK: - Text colors (docs/IOS-TYPOGRAPHY.md)
 extension GoFlyStyle {
-    fileprivate static let textSecondary = adaptive(light: (0.541, 0.541, 0.557), dark: (0.596, 0.596, 0.624))
-    fileprivate static let textMessage = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
-    fileprivate static let textDisabled = adaptive(light: (0.600, 0.600, 0.627), dark: (0.420, 0.420, 0.447))
+    fileprivate static let textSecondary = GoFlyGrayScale.secondaryLabel
+    fileprivate static let textMessage = GoFlyGrayScale.messageLabel
+    fileprivate static let textDisabled = GoFlyGrayScale.disabledLabel
 }
 
 /// The app's one text color set. Text and text-like icons use these roles, never raw colors.

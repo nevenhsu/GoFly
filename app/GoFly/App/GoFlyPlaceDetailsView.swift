@@ -4,6 +4,7 @@ import SwiftUI
 /// Place details: the shared `GoFlyLocationCard`; only the primary button title differs.
 struct GoFlyPlaceDetailsView: View {
     let place: MapPlace
+    var titleLabel: String? = nil
     var onDismiss: () -> Void
     var embedded = false
     /// Current simulated position, used only to show the Figma distance line.
@@ -36,6 +37,7 @@ struct GoFlyPlaceDetailsView: View {
     private var card: some View {
         GoFlyLocationCard(
             place: place,
+            titleLabel: titleLabel,
             primaryActionType: .custom(primaryTitleKey),
             primaryActionTitle: goFlyString(primaryTitleKey),
             primaryEnabled: canGo,

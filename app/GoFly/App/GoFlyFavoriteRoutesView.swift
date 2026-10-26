@@ -162,9 +162,7 @@ struct GoFlyFavoriteRoutesView: View {
                 // Same editor as ⋯ (2026-10-26).
                 Button { edit(record) } label: {
                     GoFlyStarIcon(size: 16, filled: true)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .frame(width: 36, height: 36)
-                        .background(GoFlyStyle.secondarySurface, in: Circle())
+                        .goFlyIconButtonChrome(diameter: 36, showsBorder: false)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -206,7 +204,7 @@ struct GoFlyFavoriteRoutesView: View {
                 Button { edit(record) } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 20))
-                        .foregroundStyle(GoFlyTextColor.secondary)
+                        .goFlyIconForeground(enabledColor: GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }

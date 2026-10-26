@@ -27,6 +27,7 @@ public enum LocationCardPrimaryAction: Equatable, Sendable {
 /// - Dismiss (✕) button in top right.
 struct GoFlyLocationCard: View {
     let place: MapPlace
+    var titleLabel: String? = nil
     var primaryActionType: LocationCardPrimaryAction = .confirm
     var primaryActionTitle: String? = nil
     var primaryEnabled: Bool = true
@@ -42,7 +43,7 @@ struct GoFlyLocationCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Title
-            Text(place.title)
+            Text(GoFlyLocationTitle.resolve(label: titleLabel, for: place))
                 .font(GoFlyFont.title)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .lineLimit(1)
@@ -95,10 +96,7 @@ struct GoFlyLocationCard: View {
                     } label: {
                         Image(systemName: GoFlySymbols.flag)
                             .font(.system(size: 15, weight: .medium))
-                            .frame(width: 40, height: 40)
-                            .background(GoFlyStyle.secondarySurface, in: Circle())
-                            .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                            .contentShape(Circle())
+                            .goFlyIconButtonChrome(diameter: 40)
                     }
                     .accessibilityLabel(goFlyString("placeDetails.setEnd"))
                     .accessibilityIdentifier("\(identifier).route")
@@ -170,6 +168,24 @@ struct GoFlyLocationCard: View {
     }
 }
 
+/// Resolves the shared location title for cards and the collapsed Teleport position summary.
+enum GoFlyLocationTitle {
+    static func resolve(label: String? = nil, for place: MapPlace) -> String {
+        if let label = nonEmpty(label) { return label }
+
+        let name = nonEmpty(place.title)
+        let address = nonEmpty(place.address)
+        if let name, name != address, name != place.coordinate.displayText { return name }
+        if let address { return address }
+        return place.coordinate.displayText
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
+}
+
 /// Icon-only copy-coordinates button shared by the location card and the collapsed position summary.
 struct GoFlyCopyIconButton: View {
     let coordinate: GeoCoordinate
@@ -183,10 +199,7 @@ struct GoFlyCopyIconButton: View {
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.system(size: 15, weight: .medium))
-                .frame(width: 40, height: 40)
-                .background(GoFlyStyle.secondarySurface, in: Circle())
-                .overlay { Circle().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5) }
-                .contentShape(Circle())
+                .goFlyIconButtonChrome(diameter: 40)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(goFlyString("placeDetails.copy"))
