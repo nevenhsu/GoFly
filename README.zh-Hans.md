@@ -1,10 +1,10 @@
-# GoFly — 开发中
+# GoFly for Mac — DMG 安装
 
 [English](README.md) · [繁體中文](README.zh-Hant.md) · **简体中文**
 
 用于研究 iOS 模拟定位、设备连接与原生 App 操作流程的 Mac／iPhone 项目。预定使用方式：获取 Mac App、打开 GoFly、通过 USB 连接 iPhone，再由 Mac 安装手机 App。
 
-**状态：** 尚无公开 DMG。Mac App 可完成 USB 首次安装，并可重新签名已安装的 App；手机完整验收与可移植 DMG 仍待完成。预览数据不代表设备实际执行过操作。
+**发布状态：** 尚未公开 DMG。已完成本地 DMG 构建器与安装脚本；手机验收及干净 Mac 下载测试仍待完成。预览数据不代表设备实际执行过操作。
 
 ## 目录
 
@@ -34,26 +34,34 @@ GoFly 以免费使用为目标，Apple 签名限制仍适用：免费 Personal T
 
 ## 安装
 
-首次安装由 Mac App 通过 USB 执行：
+安装前，请使用符合 Xcode 要求的 Mac，安装完整 Xcode 与 iOS 平台，并在 Xcode → Settings → Apple Accounts 登录自己的 Apple 账号。支持免费 Personal Team。iPhone 需要 iOS 26 以上、开启开发者模式，并信任这台 Mac。GoFly 不会要求或处理 Apple 账号凭证。
 
-1. 打开 GoFly，完成环境检查及签名账号设置。
-2. 通过 USB 连接 iPhone，解锁并在手机完成信任、开发者模式确认；在 GoFly 选择并核对目标设备。
-3. 开始首次安装。Mac 负责签名与安装手机 App、私密交付配对，以及自动准备并验证实际需要的设备支持项目；已就绪的复用。
-4. 等待“安装完成”。必须同时验证 App 部署、配对导入及必要设备准备，不能仅凭手机出现图标判定成功。完成后可拔除 USB。
-5. 在 iPhone 安装／打开 LocalDevVPN、启用 VPN 通道，再打开 GoFly。首次引导须通过实际 VPN 通道检查才能继续。
+1. 从正式发布页下载 DMG 及对应的 `.sha256` 文件。
+2. 打开 DMG 前，在“终端”核对下载文件名：
 
-在设备管理选择已核对的设备可重新签名同一个已安装的 App；手动重新签名入口仍保留。两者都保留 App 数据，不是重新安装。公开 DMG 尚未提供，请先使用下方开发版。
+   ```sh
+   shasum -a 256 -c GoFly-1.0.0-arm64.dmg.sha256
+   ```
 
-## 开发版构建
+   结果必须显示 `OK`。校验码不符时不要运行安装脚本。
+3. 打开 DMG，在“终端”运行 `bash /Volumes/GoFly/install.sh`（如果挂载名称不同，请使用 `/Volumes` 中显示的名称）。
+4. 如果 `/Applications/GoFly.app` 已存在，请先阅读提示再确认覆盖。安装器只会替换该 App bundle、移除它的隔离属性并打开 App；GoFly 状态及手机数据分开保存，不会被移除。
+5. 打开 GoFly，完成 Mac 环境步骤，通过 USB 连接 iPhone 并开始首次安装。必须等到 App 部署、配对导入及必要设备准备都验证完成，才算安装成功。
+6. 在 iPhone 从 App Store 安装 LocalDevVPN、启用 VPN 通道，再打开 GoFly。
 
-在已配置 Xcode 的 Mac，从仓库根目录执行：
+目前尚未公开 DMG。正式发布及校验码公布前，可用下方命令构建本地产物；本地 DMG 不代表正式发布版。
+
+## 构建本地 DMG
+
+在已安装完整 Xcode 的 Apple Silicon Mac，从仓库根目录运行，并传入生成 GoFly iOS Bundle ID 所用的 Team ID：
 
 ```sh
-bash app/GoFlyMac/build-app.sh
-open work/gofly-mac/GoFly.app
+bash app/GoFlyMac/make-dmg.sh <你的 Xcode Team ID>
 ```
 
-这会生成本机开发 App，并非可移植 DMG。生成配置含本机工作目录与 Python 路径，未做发布签名或 notarization。只读设备检查使用现有 `work/mac-setup-env/bin/python` 环境；没有该环境仍可查看界面预览，App 不会自动安装依赖。
+脚本会构建自给自足的 App、使用 ad-hoc 深度签名、验证签名，并在 `work/dist/` 生成 `GoFly-<版本>-arm64.dmg` 与旁边的 `.sha256` 校验码。DMG 是本地构建产物，不提交到版本控制。此版本没有 Developer ID 签名或 notarization；安装器只移除已安装 GoFly App 的隔离属性。
+
+只做 Swift 开发时，运行 `bash app/GoFlyMac/build-app.sh <你的 Xcode Team ID>`，再打开 `work/gofly-mac/GoFly.app`。
 
 ## 研究操作
 
@@ -81,7 +89,8 @@ iPhone 设置 GoFly。先确认实际发布版本、当前能力与目标设备�
 
 | 情况 | 处理方式 |
 | --- | --- |
-| 找不到 DMG | DMG 尚待发布；可从源代码构建，不以第三方安装包替代。 |
+| 找不到正式 DMG | 尚未公开发布。维护者可按上方命令构建本地 DMG；不要使用第三方安装包替代。 |
+| 校验码验证失败 | 删除不完整下载，从同一正式发布页重新下载 DMG 与匹配的 `.sha256` 文件。 |
 | 找不到 iPhone | 检查 USB 数据线、解锁／信任状态、Xcode 设备支持及选择的手机。 |
 | 安装／重新签名按钮禁用 | 核对环境、所选设备与待续事务；预览不会写入设备。 |
 | 手机 App 无法打开 | 核对实际签名到期时间，从 Mac 重新签名；开发者模式不会延长签名。 |
@@ -105,6 +114,6 @@ README 提供英文、繁体中文、简体中文。App 本地化同样以三语
 
 新编写、独立持有权利的内容选用 **0BSD**，允许免费使用、修改、再分发，无须署名。[LICENSE](LICENSE) 涵盖三份根目录 README 及 `docs/` 的指南，不更改现有 App 代码或依赖许可。可查阅 [0BSD 官方条款](https://opensource.org/license/0bsd)。
 
-LocalGo／StikDebug、复用的 Mac 设备边界及新版 GoFly 的[衍生／原生组件](app/GoFly/Legal/SOURCES.txt)保留 AGPL-3.0 声明。Mac App 使用 GPL-3.0 的 `pymobiledevice3`。整合发布的 App 不能宣称全部免署名，详见[许可说明](docs/LICENSING.md)及[上游来源](app/LocalGo/UPSTREAM.md)。
+LocalGo／StikDebug、复用的 Mac 设备边界及新版 GoFly 的[衍生／原生组件](app/GoFly/Legal/SOURCES.txt)保留 AGPL-3.0 声明。Mac App 使用 GPL-3.0 的 `pymobiledevice3`。整合发布的 App 不能宣称全部免署名，详见[许可说明](docs/LICENSING.md)及[上游来源](app/GoFly/Legal/UPSTREAM-LOCALGO.md)。
 
 文档结构参考 [Best-README-Template](https://github.com/othneildrew/Best-README-Template) 的项目介绍、必要条件、安装、使用与许可章节，按研究项目重新编写。

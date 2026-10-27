@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from setup_adapters import ArtifactIdentity, FormalSetupInput, build_formal_setup_input
 from setup_support import validate_generation
-from setup_protocol import SetupBridgeError
+from setup_protocol import SetupBridgeError, bundle_id_for_team
 
 
 class FrozenSupportPlanIntegrationTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class FrozenSupportPlanIntegrationTests(unittest.TestCase):
             app.mkdir()
             (app / 'GoFly').write_bytes(b'fixture executable')
             artifact = ArtifactIdentity(
-                str(app), 'com.neven.gofly', 'GoFly', 'ABCDEFGHIJ',
+                str(app), bundle_id_for_team('ABCDEFGHIJ'), 'GoFly', 'ABCDEFGHIJ',
                 'a' * 64, 'b' * 64, 'c' * 64, '2026-10-22T00:00:00Z', {}, '19',
             )
             plan = build_formal_setup_input(

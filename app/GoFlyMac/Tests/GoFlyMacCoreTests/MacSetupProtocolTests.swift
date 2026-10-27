@@ -10,9 +10,10 @@ import GoFlyMacCore
         let id = UUID()
         let request = try MacSetupRequest(action: .preflight, setupID: id, deviceID: device, options: options)
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
-        #expect(Set(object.keys) == ["requestID", "setupID", "deviceID", "mode", "action", "options"])
+        #expect(Set(object.keys) == ["requestID", "setupID", "deviceID", "mode", "transport", "action", "options", "teamID"])
         #expect(object["mode"] as? String == "install")
         #expect(object["setupID"] as? String == id.uuidString)
+        #expect(object["teamID"] as? String == "ABCDE12345")
         let encodedOptions = try #require(object["options"] as? [String: Any])
         #expect(Set(encodedOptions.keys) == ["teamID", "allowProvisioningUpdates"])
         #expect(encodedOptions["teamID"] as? String == "ABCDE12345")
@@ -29,14 +30,36 @@ import GoFlyMacCore
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .status, setupID: UUID(), deviceID: "other")
         }
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(MacSetupAction.self, from: Data("\"resume\"".utf8))
+        }
+    }
+
+    @Test func wifiIsEncodedOnlyForRenewAndResponseMustMatchItsTransport() throws {
         let options = try MacSetupOptions(teamID: "ABCDE12345")
+        let request = try MacSetupRequest(action: .preflight, setupID: UUID(), deviceID: device,
+                                          mode: .renew, transport: .wifi, options: options)
+        let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        #expect(object["transport"] as? String == "wifi")
+        let checked = try MacSetupResponseDecoder.decode(response(for: request, payload: [
+            "stage": "preflight", "outcome": "ready", "teamID": "ABCDE12345",
+            "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]
+        ]), for: request)
+        #expect(checked.outcome == .ready)
+
+        var wrongTransport = try #require(JSONSerialization.jsonObject(with: response(for: request)) as? [String: Any])
+        wrongTransport["transport"] = "usb"
+        #expect(throws: MacSetupFailure.invalidResponse) {
+            try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: wrongTransport), for: request)
+        }
         #expect(throws: MacSetupFailure.invalidRequest) {
-            try MacSetupRequest(action: .resume, setupID: UUID(), deviceID: device, options: options)
+            try MacSetupRequest(action: .apply, setupID: UUID(), deviceID: device,
+                                mode: .install, transport: .wifi, options: options)
         }
     }
 
     @Test func legacyRenewCanBeReadButNeedsPairingBeforeCompletion() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, mode: .renew)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, mode: .renew, teamID: "ABCDE12345")
         var legacy = payload()
         legacy["proof"] = ["installationConfirmed": true, "pairingImported": false, "supportObserved": false]
         let snapshot = try MacSetupResponseDecoder.decode(response(for: request, payload: legacy), for: request)
@@ -47,7 +70,7 @@ import GoFlyMacCore
     }
 
     @Test func matchingCompleteReceiptCanFinishButPartialEvidenceCannot() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let snapshot = try MacSetupResponseDecoder.decode(response(for: request), for: request)
         #expect(snapshot.isComplete)
         #expect(snapshot.appBuild == "19")
@@ -61,8 +84,8 @@ import GoFlyMacCore
     }
 
     @Test func staleForeignOrMalformedResponsesCannotFinish() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
-        let other = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
+        let other = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         #expect(throws: MacSetupFailure.invalidResponse) {
             try MacSetupResponseDecoder.decode(response(for: other), for: request)
         }
@@ -84,7 +107,7 @@ import GoFlyMacCore
     }
 
     @Test func duplicateEscapedKeysAndCoercedProtocolCannotCreateCompletion() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let valid = String(decoding: try response(for: request), as: UTF8.self)
         let invalid = [
             valid.replacingOccurrences(of: "\"proof\":{", with: "\"proof\":{\"supportObserved\":false,"),
@@ -98,11 +121,10 @@ import GoFlyMacCore
     }
 
     @Test func actualErrorRetainsItsUnknownStageWithoutLeakingArbitraryDiagnostics() throws {
-        let request = try MacSetupRequest(action: .resume, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         var progress = payload()
         progress["stage"] = "install"
         progress["outcome"] = "unknown"
-        progress["canResume"] = true
         progress["proof"] = ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]
         var root = try #require(JSONSerialization.jsonObject(with: response(for: request, payload: progress)) as? [String: Any])
         root["status"] = "error"
@@ -115,7 +137,7 @@ import GoFlyMacCore
         root["code"] = "app-running"
         let appRunning = try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request)
         #expect(appRunning.failure == .service("app-running"))
-        #expect(appRunning.canResume && !appRunning.isComplete)
+        #expect(!appRunning.isComplete)
         root["code"] = "untrusted diagnostic text"
         #expect(throws: MacSetupFailure.invalidResponse) {
             try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request)
@@ -129,7 +151,8 @@ import GoFlyMacCore
             try MacSetupResponseDecoder.decode(response(for: request), for: request)
         }
         let ready: [String: Any] = [
-            "stage": "preflight", "outcome": "ready", "canResume": false,
+            "stage": "preflight", "outcome": "ready",
+            "teamID": "ABCDE12345",
             "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]
         ]
         let checked = try MacSetupResponseDecoder.decode(response(for: request, payload: ready), for: request)
@@ -138,11 +161,10 @@ import GoFlyMacCore
         #expect(checked.outcome == .ready)
     }
 
-    @Test func completeStageUnknownAndSafeErrorRemainResumableWithoutCompletion() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+    @Test func completeStageUnknownAndSafeErrorRemainIncomplete() throws {
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         var progress = payload()
         progress["outcome"] = "unknown"
-        progress["canResume"] = true
         progress.removeValue(forKey: "receiptSHA256")
         for isError in [false, true] {
             var root = try #require(JSONSerialization.jsonObject(with: response(for: request, payload: progress)) as? [String: Any])
@@ -150,7 +172,6 @@ import GoFlyMacCore
             let snapshot = try MacSetupResponseDecoder.decode(JSONSerialization.data(withJSONObject: root), for: request)
             #expect(snapshot.stage == .complete)
             #expect(snapshot.outcome == .unknown)
-            #expect(snapshot.canResume)
             #expect(!snapshot.isComplete)
             #expect(snapshot.errorCode == (isError ? "commit-unknown" : nil))
         }
@@ -170,7 +191,7 @@ import GoFlyMacCore
         #expect(throws: MacSetupFailure.invalidRequest) {
             try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device + "\n")
         }
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         for key in ["teamID", "receiptSHA256"] {
             var bad = payload()
             bad[key] = try #require(bad[key] as? String) + "\n"
@@ -188,7 +209,7 @@ import GoFlyMacCore
     }
 
     @Test func appBuildUsesTheSharedOneHundredTwentyEightByteLimit() throws {
-        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device)
+        let request = try MacSetupRequest(action: .status, setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         var value = payload()
         var app = try #require(value["app"] as? [String: Any])
         app["build"] = String(repeating: "b", count: 128)
@@ -203,8 +224,8 @@ import GoFlyMacCore
     }
 
     private func payload() -> [String: Any] {
-        ["stage": "complete", "outcome": "confirmed", "canResume": false,
-         "app": ["bundleID": "com.neven.gofly", "build": "19",
+        ["stage": "complete", "outcome": "confirmed",
+         "app": ["bundleID": "com.neven.gofly.abcde12345", "build": "19",
                  "profileSHA256": String(repeating: "a", count: 64),
                  "executableSHA256": String(repeating: "b", count: 64)],
          "teamID": "ABCDE12345", "expiresAt": "2026-10-25T00:00:00Z",
@@ -216,7 +237,8 @@ import GoFlyMacCore
         try JSONSerialization.data(withJSONObject: [
             "action": request.action.rawValue,
             "requestID": request.requestID.uuidString, "setupID": request.setupID!.uuidString,
-            "deviceID": request.deviceID!, "status": "ok", "payload": payload ?? self.payload()
+            "deviceID": request.deviceID!, "transport": request.transport?.rawValue ?? "usb",
+            "status": "ok", "payload": payload ?? self.payload()
         ])
     }
 }

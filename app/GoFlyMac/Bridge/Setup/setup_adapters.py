@@ -32,17 +32,20 @@ from typing import Any, Mapping, Protocol, Sequence
 try:
     from .setup_protocol import (
         SetupBridgeError,
-        TARGET_BUNDLE_ID,
         TARGET_NAME,
         _parse_object,
         _uuid,
+        bundle_id_for_team,
+        bundle_id_matches_team,
+        is_gofly_bundle_id,
         normalized_device,
     )
 except ImportError:  # script execution from the packaged Setup directory
-    from setup_protocol import SetupBridgeError, TARGET_BUNDLE_ID, TARGET_NAME, _parse_object, _uuid, normalized_device
+    from setup_protocol import SetupBridgeError, TARGET_NAME, _parse_object, _uuid, bundle_id_for_team, bundle_id_matches_team, is_gofly_bundle_id, normalized_device
 
 PMD3_VERSION = "11.31.0"
 USB = "USB"
+NETWORK = "Network"
 WIFI_DEBUGGING_DOMAIN = "com.apple.mobile.wireless_lockdown"
 WIFI_DEBUGGING_KEY = "EnableWifiDebugging"
 MAX_ARTIFACT_BYTES = 4 * 1024 * 1024 * 1024
@@ -55,6 +58,7 @@ ACTIVATION_RECEIPT = f"{APP_SETUP_ROOT}/activation.json"
 FORMAL_INPUT = f"{APP_SETUP_ROOT}/incoming.json"
 FORMAL_GENERATIONS = f"{APP_SETUP_ROOT}/generations"
 V1_INCOMING = "Library/Application Support/LocalGoSetup/incoming.plist"
+V1_INCOMING_CONSUMING = V1_INCOMING + ".consuming"
 
 
 class _RemoteMissing(Exception):
@@ -399,7 +403,9 @@ def snapshot_artifact(artifact: "ArtifactIdentity", destination: Path, validator
     if destination.exists() or destination.is_symlink():
         if destination.is_symlink() or not destination.is_dir():
             raise SetupBridgeError("artifact-mismatch")
-        copied = validator.inspect(destination, device_id=device_id, team_id=team_id)
+        copied = validator.inspect(
+            destination, device_id=device_id, team_id=team_id, target_bundle_id=artifact.bundle_id
+        )
         if (
             copied.bundle_id != artifact.bundle_id
             or copied.executable != artifact.executable
@@ -420,7 +426,9 @@ def snapshot_artifact(artifact: "ArtifactIdentity", destination: Path, validator
     stage = staging_root / destination.name
     try:
         _snapshot_tree(source, stage)
-        copied = validator.inspect(stage, device_id=device_id, team_id=team_id)
+        copied = validator.inspect(
+            stage, device_id=device_id, team_id=team_id, target_bundle_id=artifact.bundle_id
+        )
         copied = ArtifactIdentity(
             str(destination), copied.bundle_id, copied.executable, copied.team_id,
             copied.artifact_sha256, copied.executable_sha256, copied.profile_sha256,
@@ -445,7 +453,9 @@ def snapshot_artifact(artifact: "ArtifactIdentity", destination: Path, validator
         if destination.exists() or destination.is_symlink():
             if destination.is_symlink() or not destination.is_dir():
                 raise SetupBridgeError("artifact-mismatch")
-            existing = validator.inspect(destination, device_id=device_id, team_id=team_id)
+            existing = validator.inspect(
+                destination, device_id=device_id, team_id=team_id, target_bundle_id=artifact.bundle_id
+            )
             if (
                 existing.bundle_id != artifact.bundle_id
                 or existing.executable != artifact.executable
@@ -488,7 +498,7 @@ class DeviceObservation:
 @dataclass(frozen=True)
 class InstalledAppObservation:
     present: bool
-    bundle_id: str = TARGET_BUNDLE_ID
+    bundle_id: str = ""
     artifact_sha256: str | None = None
     executable_sha256: str | None = None
     profile_sha256: str | None = None
@@ -580,7 +590,7 @@ def build_formal_setup_input(
         if frozen_files["manifest"][1] != input_manifest:
             raise ValueError()
         if (
-            artifact.bundle_id != TARGET_BUNDLE_ID
+            not bundle_id_matches_team(artifact.bundle_id, artifact.team_id)
             or artifact.executable != TARGET_NAME
             or not re.fullmatch(r"[A-Z0-9]{10}", artifact.team_id)
             or not artifact.build
@@ -604,7 +614,7 @@ def build_formal_setup_input(
             "pairingTransactionID": pairing_tx,
             "pairingSHA256": pairing_sha256,
             "app": {
-                "bundleID": TARGET_BUNDLE_ID,
+                "bundleID": artifact.bundle_id,
                 "build": artifact.build,
                 "profileSHA256": artifact.profile_sha256,
                 "executableSHA256": artifact.executable_sha256,
@@ -693,6 +703,8 @@ class DeviceAdapter(Protocol):
 
     def verify_pairing(self, device_id: str, candidate: Path) -> PairingObservation: ...
 
+    def retire_pending_pairing(self, device_id: str, transaction_id: str) -> None: ...
+
     def install(self, device_id: str, artifact: ArtifactIdentity) -> InstalledAppObservation: ...
 
     def query_support(self, device_id: str, method: str) -> SupportObservation: ...
@@ -721,7 +733,7 @@ class SupportAdapter(Protocol):
 
 
 class PinnedXcodeProcessAdapter:
-    """Build the fixed GoFly project into a transaction-private directory."""
+    """Build the bundled GoFly project from private Application Support copies."""
 
     def __init__(self, config: Any, *, timeout: int = 900):
         self.config = config
@@ -741,6 +753,32 @@ class PinnedXcodeProcessAdapter:
 
     def build(self, setup_id: str, team_id: str, allow_provisioning_updates: bool = False) -> Path:
         try:
+            target_bundle_id = self.config.target_bundle_id
+            if not bundle_id_matches_team(target_bundle_id, team_id):
+                raise SetupBridgeError("configuration-invalid")
+            resources_project = self.config.project_path.parent
+            build_root = Path(self.config.state_root).parent / "build"
+            if build_root.exists() and (build_root.is_symlink() or not build_root.is_dir()):
+                raise SetupBridgeError("storage-unavailable")
+            build_root.mkdir(parents=False, exist_ok=True, mode=0o700)
+            os.chmod(build_root, 0o700)
+            project_copy = build_root / "project"
+            derived = build_root / "derived"
+            for destination in (project_copy, derived):
+                if destination.exists():
+                    if destination.is_symlink() or not destination.is_dir():
+                        raise SetupBridgeError("storage-unavailable")
+                    shutil.rmtree(destination)
+            for source in resources_project.rglob("*"):
+                # SwiftPM keeps a developer build cache here; it may contain
+                # symlinks and is not part of the iOS project inputs.
+                if ".build" in source.relative_to(resources_project).parts:
+                    continue
+                if source.is_symlink():
+                    raise SetupBridgeError("configuration-invalid")
+            shutil.copytree(resources_project, project_copy, ignore=shutil.ignore_patterns(".build"))
+            derived.mkdir(mode=0o700)
+
             transaction = Path(self.config.state_root) / "transactions" / setup_id / "build"
             if transaction.exists() and transaction.is_symlink():
                 raise SetupBridgeError("storage-unavailable")
@@ -748,12 +786,18 @@ class PinnedXcodeProcessAdapter:
             os.chmod(transaction, 0o700)
             arguments = [
                 "/usr/bin/xcodebuild",
-                "-project", str(self.config.project_path),
+                "-project", str(project_copy / "GoFly.xcodeproj"),
                 "-scheme", TARGET_NAME,
                 "-configuration", "Debug",
                 "-sdk", "iphoneos",
+                "-derivedDataPath", str(derived),
                 "CONFIGURATION_BUILD_DIR=" + str(transaction),
+                "GOFLY_NATIVE_DIR=" + str(self.config.resources_root / "native")
+                if not self.config.development_mode
+                else "GOFLY_NATIVE_DIR=" + str(self.config.resources_root / "work" / "gofly-ios" / "native"),
                 "DEVELOPMENT_TEAM=" + team_id,
+                "PRODUCT_BUNDLE_IDENTIFIER=" + target_bundle_id,
+                "GOFLY_BUNDLE_ID=" + target_bundle_id,
                 "CODE_SIGN_STYLE=Automatic",
             ]
             if allow_provisioning_updates:
@@ -763,7 +807,7 @@ class PinnedXcodeProcessAdapter:
             try:
                 result = subprocess.run(
                     arguments,
-                    cwd=str(self.config.workspace_root),
+                    cwd=str(project_copy),
                     env=environment,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
@@ -830,14 +874,19 @@ class FormalArtifactValidator:
         *,
         device_id: str,
         team_id: str,
+        target_bundle_id: str | None = None,
         now: dt.datetime,
     ) -> dt.datetime:
-        expected = f"{team_id}.{TARGET_BUNDLE_ID}"
+        if target_bundle_id is None:
+            target_bundle_id = bundle_id_for_team(team_id)
+        if not bundle_id_matches_team(target_bundle_id, team_id):
+            raise SetupBridgeError("identity-mismatch")
+        expected = f"{team_id}.{target_bundle_id}"
         entitlements = profile.get("Entitlements")
         if not isinstance(entitlements, Mapping):
             raise SetupBridgeError("identity-mismatch")
         if (
-            info.get("CFBundleIdentifier") != TARGET_BUNDLE_ID
+            info.get("CFBundleIdentifier") != target_bundle_id
             or info.get("CFBundleExecutable") != TARGET_NAME
             or signed.get("application-identifier") != expected
             or entitlements.get("application-identifier") != expected
@@ -862,7 +911,18 @@ class FormalArtifactValidator:
             raise SetupBridgeError("identity-mismatch")
         return expiry
 
-    def inspect(self, app: str | Path, *, device_id: str, team_id: str) -> ArtifactIdentity:
+    def inspect(
+        self,
+        app: str | Path,
+        *,
+        device_id: str,
+        team_id: str,
+        target_bundle_id: str | None = None,
+    ) -> ArtifactIdentity:
+        if target_bundle_id is None:
+            target_bundle_id = bundle_id_for_team(team_id)
+        if not bundle_id_matches_team(target_bundle_id, team_id):
+            raise SetupBridgeError("identity-mismatch")
         path = Path(app)
         if path.is_symlink() or not path.is_dir() or path.suffix != ".app":
             raise SetupBridgeError("artifact-mismatch")
@@ -892,7 +952,10 @@ class FormalArtifactValidator:
             if b"Authority=Apple Development:" not in shown or (b"TeamIdentifier=" + team_id.encode()) not in shown:
                 raise SetupBridgeError("signing-required")
             self.command_runner(["/usr/bin/codesign", "--verify", "--strict", "-R=anchor apple generic", str(path)], timeout=30)
-            expiry = self.validate_profile(info, signed, profile, device_id=device_id, team_id=team_id, now=self.now)
+            expiry = self.validate_profile(
+                info, signed, profile, device_id=device_id, team_id=team_id,
+                target_bundle_id=target_bundle_id, now=self.now,
+            )
             executable_size, executable_hash = _stream_hash(executable_path)
             profile_size, profile_hash = _stream_hash(profile_path, max_bytes=MAX_MANIFEST_BYTES)
             artifact_size, artifact_hash = _tree_hash(path)
@@ -907,7 +970,7 @@ class FormalArtifactValidator:
         if not isinstance(build, str) or not build or len(build.encode("utf-8")) > MAX_BUILD_BYTES:
             raise SetupBridgeError("identity-mismatch")
         return ArtifactIdentity(
-            str(path), TARGET_BUNDLE_ID, TARGET_NAME, team_id, artifact_hash,
+            str(path), target_bundle_id, TARGET_NAME, team_id, artifact_hash,
             executable_hash, profile_hash, _canonical_utc(expiry), profile, build,
         )
 
@@ -942,12 +1005,24 @@ def _tree_hash(root: Path) -> tuple[int, str]:
 class PinnedPymobiledeviceAdapter:
     """USB inspection adapter with explicit 11.31.0 and no autopair."""
 
-    def __init__(self, *, helper_root: Path | None = None, state_root: Path | None = None):
+    def __init__(
+        self,
+        *,
+        helper_root: Path | None = None,
+        state_root: Path | None = None,
+        target_bundle_id: str | None = None,
+    ):
         self.helper_root = helper_root
         self.state_root = state_root
+        self.target_bundle_id = target_bundle_id
         self._modules: tuple[Any, Any, Any] | None = None
         self._process_pids: dict[str, int] = {}
         self._formal_inventories: dict[tuple[str, str], tuple[tuple[str, str, int, str], ...]] = {}
+
+    def _target_bundle_id(self) -> str:
+        if not is_gofly_bundle_id(self.target_bundle_id):
+            raise SetupBridgeError("configuration-invalid")
+        return self.target_bundle_id
 
     def _load(self) -> tuple[Any, Any, Any]:
         if self._modules is not None:
@@ -966,28 +1041,62 @@ class PinnedPymobiledeviceAdapter:
         self._modules = usbmux, lockdown, tunnel
         return self._modules
 
-    def transport_serial(self, device_id: str) -> str:
-        """Keep the USB spelling required by pymobiledevice3's exact match."""
+    @staticmethod
+    def _connection_type(transport: str) -> str:
+        if transport == "wifi":
+            return NETWORK
+        if transport == "usb":
+            return USB
+        raise SetupBridgeError("invalid-request")
+
+    def transport_serial(self, device_id: str, transport: str = "usb") -> str:
+        """Resolve one UDID through exactly the requested usbmux transport."""
         usbmux, _, _ = self._load()
+        connection_type = self._connection_type(transport)
         try:
             rows = _run(usbmux.list_devices())
         except Exception:
             raise SetupBridgeError("device-disconnected") from None
         for row in rows if isinstance(rows, list) else []:
             serial = getattr(row, "serial", None) or getattr(row, "udid", None)
-            transport = getattr(row, "connection_type", None) or getattr(row, "transport", None)
+            row_transport = getattr(row, "connection_type", None) or getattr(row, "transport", None)
             if (
                 isinstance(serial, str)
                 and serial.lower() == device_id.lower()
-                and isinstance(transport, str)
-                and transport.upper() == USB
+                and isinstance(row_transport, str)
+                and row_transport == connection_type
             ):
                 return serial
-        raise SetupBridgeError("device-disconnected")
+        raise SetupBridgeError("wifi-device-not-found" if transport == "wifi" else "device-disconnected")
 
-    def _open(self, serial: str, cache: Path) -> Any:
+    def tunnel_serial(self, device_id: str, transport: str = "usb") -> str:
+        """Resolve process-control tunnel serial without allowing an implicit USB fallback."""
+        if transport == "usb":
+            return self.transport_serial(device_id)
+        usbmux, _, _ = self._load()
+        try:
+            rows = _run(usbmux.list_devices())
+        except Exception:
+            raise SetupBridgeError("wifi-device-not-found" if transport == "wifi" else "device-disconnected") from None
+        selected: str | None = None
+        usb_present = False
+        for row in rows if isinstance(rows, list) else []:
+            serial = getattr(row, "serial", None) or getattr(row, "udid", None)
+            kind = getattr(row, "connection_type", None) or getattr(row, "transport", None)
+            if not isinstance(serial, str) or serial.lower() != device_id.lower():
+                continue
+            if kind == USB:
+                usb_present = True
+            if kind == self._connection_type(transport):
+                selected = serial
+        if selected is None or (transport == "wifi" and usb_present):
+            raise SetupBridgeError("wifi-device-not-found" if transport == "wifi" else "device-disconnected")
+        return selected
+
+    def _open(self, serial: str, cache: Path, transport: str = "usb") -> Any:
         _, lockdown, _ = self._load()
-        transport_serial = self.transport_serial(serial)
+        connection_type = self._connection_type(transport)
+        transport_serial = self.transport_serial(serial, transport)
         create = lockdown.create_using_usbmux
         client = None
         try:
@@ -996,7 +1105,7 @@ class PinnedPymobiledeviceAdapter:
                     serial=transport_serial,
                     label="GoFlyMac Setup",
                     autopair=False,
-                    connection_type=USB,
+                    connection_type=connection_type,
                     pair_timeout=60,
                     pairing_records_cache_folder=cache,
                 )
@@ -1138,31 +1247,28 @@ class PinnedPymobiledeviceAdapter:
 
         return CandidateRemotePairingLockdownService
 
-    def observe(self, device_id: str) -> DeviceObservation:
+    def observe(self, device_id: str, transport: str = "usb") -> DeviceObservation:
         usbmux, _, _ = self._load()
+        connection_type = self._connection_type(transport)
         try:
-            # pmd3 11.31.0 exposes the default USB mux endpoint through the
-            # zero-argument call; the selected row is still required to be
-            # USB below.
             rows = _run(usbmux.list_devices())
         except Exception:
-            raise SetupBridgeError("device-disconnected") from None
+            raise SetupBridgeError("wifi-device-not-found" if transport == "wifi" else "device-disconnected") from None
         selected: Any | None = None
         for row in rows if isinstance(rows, list) else []:
             serial = getattr(row, "serial", None) or getattr(row, "udid", None)
-            transport = getattr(row, "connection_type", None) or getattr(row, "transport", None)
+            row_transport = getattr(row, "connection_type", None) or getattr(row, "transport", None)
             if (
                 isinstance(serial, str)
                 and serial.strip().lower() == device_id.lower()
-                and isinstance(transport, str)
-                and transport.upper() == USB
+                and row_transport == connection_type
             ):
                 selected = row
                 break
         if selected is None:
-            raise SetupBridgeError("device-disconnected")
+            raise SetupBridgeError("wifi-device-not-found" if transport == "wifi" else "device-disconnected")
         with tempfile.TemporaryDirectory(prefix="gofly-setup-pair-") as directory:
-            client = self._open(str(getattr(selected, "serial", device_id)), Path(directory))
+            client = self._open(str(getattr(selected, "serial", device_id)), Path(directory), transport)
             try:
                 getter = getattr(client, "get_value", None)
                 if not callable(getter):
@@ -1185,7 +1291,7 @@ class PinnedPymobiledeviceAdapter:
                 trusted_value = values.get("TrustedHostAttached")
                 if type(trusted_value) is not bool:
                     raise SetupBridgeError("trust-required")
-                return DeviceObservation(actual, version, USB, developer_value, trusted_value)
+                return DeviceObservation(actual, version, connection_type, developer_value, trusted_value)
             finally:
                 with contextlib.suppress(Exception):
                     _run(getattr(client, "close")())
@@ -1193,27 +1299,28 @@ class PinnedPymobiledeviceAdapter:
     # Mutating methods deliberately remain explicit call sites.  The
     # orchestrator journals before invoking them and tests inject a controlled
     # implementation, so no accidental hardware call occurs during import.
-    def installed(self, device_id: str) -> InstalledAppObservation:
+    def installed(self, device_id: str, transport: str = "usb") -> InstalledAppObservation:
+        target_bundle_id = self._target_bundle_id()
         client = None
         service = None
         try:
             with tempfile.TemporaryDirectory(prefix="gofly-setup-inspect-") as directory:
-                client = self._open(device_id, Path(directory))
+                client = self._open(device_id, Path(directory), transport)
                 module = importlib.import_module("pymobiledevice3.services.installation_proxy")
                 service_cls = getattr(module, "InstallationProxyService", None)
                 if service_cls is None:
                     raise SetupBridgeError("runtime-api-mismatch")
                 service = service_cls(client)
-                apps = _run(service.get_apps(bundle_identifiers=[TARGET_BUNDLE_ID]))
+                apps = _run(service.get_apps(bundle_identifiers=[target_bundle_id]))
                 if not isinstance(apps, Mapping):
                     raise SetupBridgeError("runtime-api-mismatch")
-                value = apps.get(TARGET_BUNDLE_ID)
+                value = apps.get(target_bundle_id)
                 if value is None:
                     return InstalledAppObservation(False)
                 if not isinstance(value, Mapping):
                     raise SetupBridgeError("runtime-api-mismatch")
                 build = value.get("CFBundleVersion")
-                return InstalledAppObservation(True, TARGET_BUNDLE_ID, build=str(build) if build is not None else None)
+                return InstalledAppObservation(True, target_bundle_id, build=str(build) if build is not None else None)
         except SetupBridgeError:
             raise
         except Exception:
@@ -1290,7 +1397,7 @@ class PinnedPymobiledeviceAdapter:
                 if client is not None:
                     _run(client.close())
 
-    def verify_pairing(self, device_id: str, candidate: Path) -> PairingObservation:
+    def verify_pairing(self, device_id: str, candidate: Path, transport: str = "usb") -> PairingObservation:
         try:
             try:
                 data = _read_private_regular(candidate, max_bytes=1024 * 1024)
@@ -1318,10 +1425,10 @@ class PinnedPymobiledeviceAdapter:
                 uuid.UUID(value["identifier"])
             except (ValueError, AttributeError, TypeError):
                 raise SetupBridgeError("pairing-unknown") from None
-            # Reopen USB with autopair=False and only accept a verified
+            # Reopen the selected transport with autopair=False and only accept a verified
             # existing record.  No pair setup or candidate replacement occurs.
             with tempfile.TemporaryDirectory(prefix="gofly-setup-verify-") as directory:
-                client = self._open(device_id, Path(directory))
+                client = self._open(device_id, Path(directory), transport)
                 try:
                     _, _, tunnel = self._load()
                     service_cls = self._candidate_pairing_service_class(tunnel, candidate, device_id)
@@ -1364,8 +1471,8 @@ class PinnedPymobiledeviceAdapter:
                 "remote_unlock_host_key": remote,
             }
             # The device binds pair-verify signatures to the host identifier
-            # established during pair-setup.  Retain it with the candidate so
-            # resume verification never falls back to a new random ID.
+            # established during pair-setup. Retain it with the candidate so
+            # pair verification never falls back to a new random ID.
             value["identifier"] = identifier
             value["host_identifier"] = identifier
             alt = getattr(service, "peer_alt_irk", None)
@@ -1375,7 +1482,9 @@ class PinnedPymobiledeviceAdapter:
         except Exception:
             raise SetupBridgeError("pairing-unknown") from None
 
-    def install(self, device_id: str, artifact: ArtifactIdentity) -> InstalledAppObservation:
+    def install(
+        self, device_id: str, artifact: ArtifactIdentity, transport: str = "usb"
+    ) -> InstalledAppObservation:
         client = None
         service = None
         try:
@@ -1383,12 +1492,13 @@ class PinnedPymobiledeviceAdapter:
             # device client is opened.  The producer has already validated it;
             # this adapter boundary independently closes the source TOCTOU.
             current = FormalArtifactValidator().inspect(
-                artifact.path, device_id=device_id, team_id=artifact.team_id
+                artifact.path, device_id=device_id, team_id=artifact.team_id,
+                target_bundle_id=artifact.bundle_id,
             )
             if current != artifact:
                 raise SetupBridgeError("artifact-mismatch")
             with tempfile.TemporaryDirectory(prefix="gofly-setup-install-") as directory:
-                client = self._open(device_id, Path(directory))
+                client = self._open(device_id, Path(directory), transport)
                 module = importlib.import_module("pymobiledevice3.services.installation_proxy")
                 service_cls = getattr(module, "InstallationProxyService", None)
                 if service_cls is None:
@@ -1399,8 +1509,8 @@ class PinnedPymobiledeviceAdapter:
                 # transaction-owned result.  Confirm the target lookup and
                 # build before publishing that ownership to the journal; the
                 # later nonce readback remains a separate app-identity proof.
-                apps = _run(service.get_apps(bundle_identifiers=[TARGET_BUNDLE_ID]))
-                value = apps.get(TARGET_BUNDLE_ID) if isinstance(apps, Mapping) else None
+                apps = _run(service.get_apps(bundle_identifiers=[artifact.bundle_id]))
+                value = apps.get(artifact.bundle_id) if isinstance(apps, Mapping) else None
                 if not isinstance(value, Mapping):
                     raise SetupBridgeError("commit-unknown")
                 remote_build = value.get("CFBundleVersion") or value.get("CFBundleShortVersionString")
@@ -1439,7 +1549,7 @@ class PinnedPymobiledeviceAdapter:
             "nonce": _uuid(nonce),
             "expectedDeviceUDID": normalized_device(device_id),
             "app": {
-                "bundleID": TARGET_BUNDLE_ID,
+                "bundleID": artifact.bundle_id,
                 "build": artifact.build,
                 "profileSHA256": artifact.profile_sha256,
                 "executableSHA256": artifact.executable_sha256,
@@ -1462,7 +1572,7 @@ class PinnedPymobiledeviceAdapter:
                 service_cls = getattr(module, "HouseArrestService", None)
                 if service_cls is None or not callable(getattr(service_cls, "create", None)):
                     raise SetupBridgeError("runtime-api-mismatch")
-                service = _run(service_cls.create(client, TARGET_BUNDLE_ID, documents_only=False))
+                service = _run(service_cls.create(client, artifact.bundle_id, documents_only=False))
                 _run(service.makedirs(APP_SETUP_ROOT))
                 if self._remote_exists(service, READBACK_REQUEST):
                     existing = self._read_remote_bounded(service, READBACK_REQUEST)
@@ -1524,7 +1634,8 @@ class PinnedPymobiledeviceAdapter:
             raise SetupBridgeError("transaction-conflict")
         receipt = self._decode_activation_receipt(active_raw, device_id=device_id, setup_id=old_id, nonce=old_nonce)
         formal = self._decode_formal_manifest(snapshots[FORMAL_INPUT], device_id=device_id, setup_id=old_id, nonce=old_nonce)
-        self._decode_readback(snapshots[READBACK_RESPONSE], device_id=device_id, setup_id=old_id, nonce=old_nonce)
+        self._decode_readback(snapshots[READBACK_RESPONSE], device_id=device_id, setup_id=old_id,
+                              nonce=old_nonce, target_bundle_id=self._target_bundle_id())
         response = _parse_object(snapshots[READBACK_RESPONSE], limit=64 * 1024)
         active_entry = next(item for item in active["receipts"] if _uuid(item["setupID"]) == old_id)
         if (normalized_device(request["expectedDeviceUDID"]) != normalized_device(device_id)
@@ -1601,6 +1712,107 @@ class PinnedPymobiledeviceAdapter:
             raise SetupBridgeError("pairing-unknown")
         self._publish_house_arrest(device_id, V1_INCOMING, payload, conflict_code="handoff-unknown")
 
+    def retire_pending_pairing(self, device_id: str, transaction_id: str) -> None:
+        """Remove only the exact unconsumed one-shot envelope from an older transaction.
+
+        The iOS active PairingFileStore, activation receipts, GoFly app, and all
+        other application data remain untouched.
+        """
+        if not isinstance(transaction_id, str):
+            raise SetupBridgeError("transaction-conflict")
+        try:
+            expected_transaction = str(uuid.UUID(transaction_id)).lower()
+        except (ValueError, AttributeError, TypeError):
+            raise SetupBridgeError("transaction-conflict") from None
+        client = None
+        service = None
+        try:
+            with tempfile.TemporaryDirectory(prefix="gofly-setup-retire-pairing-") as directory:
+                client = self._open(device_id, Path(directory))
+                module = importlib.import_module("pymobiledevice3.services.house_arrest")
+                service_cls = getattr(module, "HouseArrestService", None)
+                if service_cls is None or not callable(getattr(service_cls, "create", None)):
+                    raise SetupBridgeError("runtime-api-mismatch")
+                service = _run(service_cls.create(client, self._target_bundle_id(), documents_only=False))
+                self._retire_pending_pairing_on_service(
+                    service, device_id=device_id, transaction_id=expected_transaction
+                )
+        except SetupBridgeError:
+            raise
+        except Exception:
+            raise SetupBridgeError("handoff-unknown") from None
+        finally:
+            with contextlib.suppress(Exception):
+                if service is not None:
+                    _run(service.close())
+            with contextlib.suppress(Exception):
+                if client is not None:
+                    _run(client.close())
+
+    @staticmethod
+    def _retire_pending_pairing_on_service(service: Any, *, device_id: str, transaction_id: str) -> None:
+        staging = V1_INCOMING + ".staging"
+        consuming = V1_INCOMING_CONSUMING
+        retiring = V1_INCOMING + ".retiring-" + transaction_id
+        if PinnedPymobiledeviceAdapter._remote_exists(service, staging):
+            raise SetupBridgeError("transaction-unknown")
+        if PinnedPymobiledeviceAdapter._remote_exists(service, consuming):
+            # iOS atomically claims the envelope before reading or importing
+            # it. Never race an in-flight consumer or delete its claimed file.
+            raise SetupBridgeError("handoff-unknown")
+        incoming_exists = PinnedPymobiledeviceAdapter._remote_exists(service, V1_INCOMING)
+        retiring_exists = PinnedPymobiledeviceAdapter._remote_exists(service, retiring)
+        if incoming_exists and retiring_exists:
+            raise SetupBridgeError("transaction-unknown")
+        if not incoming_exists and not retiring_exists:
+            return
+        if incoming_exists:
+            # Rename out of iOS's well-known consumer path first. The Mac
+            # retire operation and iOS consume operation now have one atomic
+            # winner, and validation/deletion target this exact object.
+            try:
+                _run(service.rename(V1_INCOMING, retiring))
+            except Exception:
+                if PinnedPymobiledeviceAdapter._remote_exists(service, consuming):
+                    raise SetupBridgeError("handoff-unknown") from None
+                raise SetupBridgeError("transaction-unknown") from None
+            if PinnedPymobiledeviceAdapter._remote_exists(service, V1_INCOMING):
+                raise SetupBridgeError("transaction-unknown")
+            if not PinnedPymobiledeviceAdapter._remote_exists(service, retiring):
+                raise SetupBridgeError("handoff-unknown")
+        raw = PinnedPymobiledeviceAdapter._read_remote_bounded(
+            service, retiring, max_bytes=1 * 1024 * 1024 + 64 * 1024
+        )
+        try:
+            value = plistlib.loads(raw)
+            if (
+                not isinstance(value, Mapping)
+                or set(value) != {"version", "transactionID", "expectedDeviceUDID", "pairingFile", "sha256"}
+                or type(value.get("version")) is not int
+                or value.get("version") != 1
+                or str(uuid.UUID(value.get("transactionID"))).lower() != transaction_id
+                or normalized_device(value.get("expectedDeviceUDID")) != normalized_device(device_id)
+                or not isinstance(value.get("pairingFile"), bytes)
+                or not isinstance(value.get("sha256"), bytes)
+                or hashlib.sha256(value["pairingFile"]).digest() != value["sha256"]
+            ):
+                raise ValueError("mismatched pairing input")
+        except Exception:
+            if not PinnedPymobiledeviceAdapter._remote_exists(service, V1_INCOMING):
+                try:
+                    _run(service.rename(retiring, V1_INCOMING))
+                except Exception:
+                    raise SetupBridgeError("transaction-unknown") from None
+            raise SetupBridgeError("transaction-conflict") from None
+        try:
+            _run(service.rm_single(retiring, force=True))
+        except Exception:
+            raise SetupBridgeError("handoff-unknown") from None
+        if (PinnedPymobiledeviceAdapter._remote_exists(service, retiring)
+                or PinnedPymobiledeviceAdapter._remote_exists(service, V1_INCOMING)
+                or PinnedPymobiledeviceAdapter._remote_exists(service, consuming)):
+            raise SetupBridgeError("handoff-unknown")
+
     def prepare_setup_input(
         self,
         device_id: str,
@@ -1612,6 +1824,7 @@ class PinnedPymobiledeviceAdapter:
         support: Mapping[str, Any],
         *,
         plan: FormalSetupInput,
+        transport: str = "usb",
     ) -> str:
         """Upload validated DDI bytes, then publish the manifest last."""
         if self.state_root is None:
@@ -1656,12 +1869,12 @@ class PinnedPymobiledeviceAdapter:
         service = None
         try:
             with tempfile.TemporaryDirectory(prefix="gofly-setup-input-") as directory:
-                client = self._open(device_id, Path(directory))
+                client = self._open(device_id, Path(directory), transport)
                 module = importlib.import_module("pymobiledevice3.services.house_arrest")
                 service_cls = getattr(module, "HouseArrestService", None)
                 if service_cls is None or not callable(getattr(service_cls, "create", None)):
                     raise SetupBridgeError("runtime-api-mismatch")
-                service = _run(service_cls.create(client, TARGET_BUNDLE_ID, documents_only=False))
+                service = _run(service_cls.create(client, self._target_bundle_id(), documents_only=False))
                 _run(service.makedirs(f"{FORMAL_GENERATIONS}/{_uuid(setup_id)}/DDI"))
                 for filename in names:
                     self._upload_remote_file(
@@ -1701,7 +1914,7 @@ class PinnedPymobiledeviceAdapter:
                 service_cls = getattr(module, "HouseArrestService", None)
                 if service_cls is None or not callable(getattr(service_cls, "create", None)):
                     raise SetupBridgeError("runtime-api-mismatch")
-                service = _run(service_cls.create(client, TARGET_BUNDLE_ID, documents_only=False))
+                service = _run(service_cls.create(client, self._target_bundle_id(), documents_only=False))
                 parent = remote.rsplit("/", 1)[0] if "/" in remote else ""
                 if parent:
                     _run(service.makedirs(parent))
@@ -1875,7 +2088,9 @@ class PinnedPymobiledeviceAdapter:
             raise
 
     @staticmethod
-    def _decode_readback(data: bytes, *, device_id: str, setup_id: str, nonce: str) -> ReadbackObservation:
+    def _decode_readback(
+        data: bytes, *, device_id: str, setup_id: str, nonce: str, target_bundle_id: str
+    ) -> ReadbackObservation:
         try:
             value = _parse_object(data, limit=64 * 1024)
             if set(value) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app", "pairing"}:
@@ -1892,7 +2107,7 @@ class PinnedPymobiledeviceAdapter:
             if not isinstance(app, Mapping) or set(app) != {"bundleID", "build", "profileSHA256", "executableSHA256"}:
                 raise ValueError()
             if (
-                app.get("bundleID") != TARGET_BUNDLE_ID
+                app.get("bundleID") != target_bundle_id
                 or not isinstance(app.get("build"), str)
                 or not app["build"]
                 or len(app["build"].encode("utf-8")) > MAX_BUILD_BYTES
@@ -1949,16 +2164,17 @@ class PinnedPymobiledeviceAdapter:
             _uuid(value.get("pairingTransactionID"))
             if not isinstance(value.get("pairingSHA256"), str) or re.fullmatch(r"[0-9a-f]{64}", value["pairingSHA256"]) is None:
                 raise ValueError()
+            team_id = value.get("teamID")
+            if not isinstance(team_id, str) or re.fullmatch(r"[A-Z0-9]{10}", team_id) is None:
+                raise ValueError()
             app = value.get("app")
             if not isinstance(app, Mapping) or set(app) != {"bundleID", "build", "profileSHA256", "executableSHA256"}:
                 raise ValueError()
-            if app.get("bundleID") != TARGET_BUNDLE_ID or not isinstance(app.get("build"), str) or not app["build"]:
+            if not bundle_id_matches_team(app.get("bundleID"), team_id) or not isinstance(app.get("build"), str) or not app["build"]:
                 raise ValueError()
             if not isinstance(app.get("profileSHA256"), str) or re.fullmatch(r"[0-9a-f]{64}", app["profileSHA256"]) is None:
                 raise ValueError()
             if not isinstance(app.get("executableSHA256"), str) or re.fullmatch(r"[0-9a-f]{64}", app["executableSHA256"]) is None:
-                raise ValueError()
-            if not isinstance(value.get("teamID"), str) or re.fullmatch(r"[A-Z0-9]{10}", value["teamID"]) is None:
                 raise ValueError()
             if not isinstance(value.get("signingExpiry"), str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["signingExpiry"]) is None:
                 raise ValueError()
@@ -2073,11 +2289,14 @@ class PinnedPymobiledeviceAdapter:
                     raise ValueError()
                 if not isinstance(pairing_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", pairing_sha):
                     raise ValueError()
+                team = receipt["teamID"]
+                if not isinstance(team, str) or re.fullmatch(r"[A-Z0-9]{10}", team) is None:
+                    raise ValueError()
                 app = receipt["app"]
                 if not isinstance(app, Mapping) or set(app) != {"bundleID", "build", "profileSHA256", "executableSHA256"}:
                     raise ValueError()
                 if (
-                    app.get("bundleID") != TARGET_BUNDLE_ID
+                    not bundle_id_matches_team(app.get("bundleID"), team)
                     or not isinstance(app.get("build"), str)
                     or not app["build"]
                     or len(app["build"].encode("utf-8")) > MAX_BUILD_BYTES
@@ -2088,9 +2307,6 @@ class PinnedPymobiledeviceAdapter:
                 if not isinstance(profile, str) or not re.fullmatch(r"[0-9a-f]{64}", profile):
                     raise ValueError()
                 if not isinstance(executable, str) or not re.fullmatch(r"[0-9a-f]{64}", executable):
-                    raise ValueError()
-                team = receipt["teamID"]
-                if not isinstance(team, str) or re.fullmatch(r"[A-Z0-9]{10}", team) is None:
                     raise ValueError()
                 expiry = receipt["signingExpiry"]
                 if not isinstance(expiry, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", expiry) is None:
@@ -2192,39 +2408,11 @@ class PinnedPymobiledeviceAdapter:
                 service_cls = getattr(module, "HouseArrestService", None)
                 if service_cls is None or not callable(getattr(service_cls, "create", None)):
                     raise SetupBridgeError("runtime-api-mismatch")
-                service = _run(service_cls.create(client, TARGET_BUNDLE_ID, documents_only=False))
+                service = _run(service_cls.create(client, self._target_bundle_id(), documents_only=False))
                 data = self._read_remote_bounded(service, READBACK_RESPONSE, max_bytes=64 * 1024)
-                return self._decode_readback(data, device_id=device_id, setup_id=setup_id, nonce=nonce)
-        except SetupBridgeError as error:
-            if error.code == "transaction-unknown":
-                return None
-            raise
-        except Exception:
-            raise SetupBridgeError("handoff-unknown") from None
-        finally:
-            with contextlib.suppress(Exception):
-                if service is not None:
-                    _run(service.close())
-            with contextlib.suppress(Exception):
-                if client is not None:
-                    _run(client.close())
-
-    def read_activation_receipt(
-        self, device_id: str, setup_id: str, nonce: str
-    ) -> ActivationReceiptObservation | None:
-        client = None
-        service = None
-        try:
-            with tempfile.TemporaryDirectory(prefix="gofly-setup-activation-") as directory:
-                client = self._open(device_id, Path(directory))
-                module = importlib.import_module("pymobiledevice3.services.house_arrest")
-                service_cls = getattr(module, "HouseArrestService", None)
-                if service_cls is None or not callable(getattr(service_cls, "create", None)):
-                    raise SetupBridgeError("runtime-api-mismatch")
-                service = _run(service_cls.create(client, TARGET_BUNDLE_ID, documents_only=False))
-                data = self._read_remote_bounded(service, ACTIVATION_RECEIPT, max_bytes=256 * 1024)
-                return self._decode_activation_receipt(
-                    data, device_id=device_id, setup_id=setup_id, nonce=nonce
+                return self._decode_readback(
+                    data, device_id=device_id, setup_id=setup_id, nonce=nonce,
+                    target_bundle_id=self._target_bundle_id(),
                 )
         except SetupBridgeError as error:
             if error.code == "transaction-unknown":
@@ -2240,19 +2428,55 @@ class PinnedPymobiledeviceAdapter:
                 if client is not None:
                     _run(client.close())
 
-    def query_support(self, device_id: str, method: str) -> SupportObservation:
+    def read_activation_receipt(
+        self, device_id: str, setup_id: str, nonce: str, transport: str = "usb"
+    ) -> ActivationReceiptObservation | None:
+        client = None
+        service = None
         try:
-            from .setup_support import PinnedSupportAdapter
-        except ImportError:
-            from setup_support import PinnedSupportAdapter
-        return PinnedSupportAdapter(self).query(device_id, method)
+            with tempfile.TemporaryDirectory(prefix="gofly-setup-activation-") as directory:
+                client = self._open(device_id, Path(directory), transport)
+                module = importlib.import_module("pymobiledevice3.services.house_arrest")
+                service_cls = getattr(module, "HouseArrestService", None)
+                if service_cls is None or not callable(getattr(service_cls, "create", None)):
+                    raise SetupBridgeError("runtime-api-mismatch")
+                service = _run(service_cls.create(client, self._target_bundle_id(), documents_only=False))
+                data = self._read_remote_bounded(service, ACTIVATION_RECEIPT, max_bytes=256 * 1024)
+                receipt = self._decode_activation_receipt(
+                    data, device_id=device_id, setup_id=setup_id, nonce=nonce
+                )
+                if receipt is not None and receipt.bundle_id != self._target_bundle_id():
+                    raise SetupBridgeError("handoff-unknown")
+                return receipt
+        except SetupBridgeError as error:
+            if error.code == "transaction-unknown":
+                return None
+            raise
+        except Exception:
+            raise SetupBridgeError("handoff-unknown") from None
+        finally:
+            with contextlib.suppress(Exception):
+                if service is not None:
+                    _run(service.close())
+            with contextlib.suppress(Exception):
+                if client is not None:
+                    _run(client.close())
 
-    def install_support(self, device_id: str, method: str, restore_dir: Path) -> SupportObservation:
+    def query_support(self, device_id: str, method: str, transport: str = "usb") -> SupportObservation:
         try:
             from .setup_support import PinnedSupportAdapter
         except ImportError:
             from setup_support import PinnedSupportAdapter
-        return PinnedSupportAdapter(self).install(device_id, method, restore_dir)
+        return PinnedSupportAdapter(self).query(device_id, method, transport)
+
+    def install_support(
+        self, device_id: str, method: str, restore_dir: Path, transport: str = "usb"
+    ) -> SupportObservation:
+        try:
+            from .setup_support import PinnedSupportAdapter
+        except ImportError:
+            from setup_support import PinnedSupportAdapter
+        return PinnedSupportAdapter(self).install(device_id, method, restore_dir, transport)
 
     def prepare_generation(self, method: str, restore_dir: Path) -> Any:
         """Materialize and validate one transaction-private support inventory."""
@@ -2264,7 +2488,7 @@ class PinnedPymobiledeviceAdapter:
         return adapter.prepare_generation(method, restore_dir)
 
     @contextlib.asynccontextmanager
-    async def _process_control(self, device_id: str, transport_serial: str):
+    async def _process_control(self, device_id: str, transport_serial: str, transport: str = "usb"):
         """iOS 26/27 DVT is exposed through same-device RSD, not Lockdown."""
         userspace = importlib.import_module("pymobiledevice3.remote.userspace_tunnel")
         module = importlib.import_module("pymobiledevice3.services.dvt.instruments.process_control")
@@ -2287,18 +2511,19 @@ class PinnedPymobiledeviceAdapter:
         finally:
             await tunnel.aclose()
 
-    def launch(self, device_id: str) -> int:
+    def launch(self, device_id: str, transport: str = "usb") -> int:
         try:
-            # Resolve USB outside the async operation: all pmd services share
+            # Resolve the transport outside the async operation: all pmd services share
             # the operation loop, and _run must not be nested inside that loop.
-            serial = self.transport_serial(device_id)
+            serial = self.tunnel_serial(device_id, transport)
 
             async def launch_checked() -> int:
-                async with self._process_control(device_id, serial) as control:
-                    existing = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
+                async with self._process_control(device_id, serial, transport) as control:
+                    target_bundle_id = self._target_bundle_id()
+                    existing = await control.process_identifier_for_bundle_identifier(target_bundle_id)
                     if existing:
                         raise SetupBridgeError("app-running")
-                    pid = await control.launch(TARGET_BUNDLE_ID, kill_existing=False)
+                    pid = await control.launch(target_bundle_id, kill_existing=False)
                     if type(pid) is not int or pid <= 0:
                         raise SetupBridgeError("handoff-unknown")
                     return pid
@@ -2311,7 +2536,9 @@ class PinnedPymobiledeviceAdapter:
         except Exception:
             raise SetupBridgeError("handoff-unknown") from None
 
-    def stop(self, device_id: str, expected_pid: int | None = None) -> None:
+    def stop(
+        self, device_id: str, expected_pid: int | None = None, transport: str = "usb"
+    ) -> None:
         expected = self._process_pids.get(device_id.lower())
         if expected_pid is not None:
             if expected is not None and expected_pid != expected:
@@ -2320,11 +2547,11 @@ class PinnedPymobiledeviceAdapter:
         if type(expected) is not int or expected <= 0:
             raise SetupBridgeError("handoff-unknown")
         try:
-            serial = self.transport_serial(device_id)
+            serial = self.tunnel_serial(device_id, transport)
 
             async def stop_checked() -> None:
-                async with self._process_control(device_id, serial) as control:
-                    current = await control.process_identifier_for_bundle_identifier(TARGET_BUNDLE_ID)
+                async with self._process_control(device_id, serial, transport) as control:
+                    current = await control.process_identifier_for_bundle_identifier(self._target_bundle_id())
                     if current == 0:
                         return
                     if current != expected:

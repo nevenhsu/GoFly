@@ -2,9 +2,9 @@
 //  LocalGoSetupHandoff.swift
 //  LocalGo
 //
-//  A one-shot, private handoff from the macOS USB setup helper.  The helper
-//  writes incoming.plist only while this app is terminated.  LocalGo consumes
-//  it after launch, once its command engine is idle.
+//  A one-shot, private handoff from the macOS setup helper. LocalGo atomically
+//  claims incoming.plist before reading it, so a restart can safely arbitrate
+//  with the Mac helper even when this app is active.
 //
 
 import Foundation
@@ -27,8 +27,12 @@ public final class LocalGoSetupHandoff {
 
     public static let directoryName = "LocalGoSetup"
     public static let incomingFileName = "incoming.plist"
+    /// Atomic claim path shared with the macOS setup bridge.
+    public static let consumingFileName = incomingFileName + ".consuming"
     public static let readyFileName = "ready.plist"
     public static let receiptsDirectoryName = "receipts"
+
+    private static let consumeLock = NSLock()
 
     private let directory: URL
     private let fileManager: FileManager
@@ -90,40 +94,66 @@ public final class LocalGoSetupHandoff {
         expectedTransactionID: UUID? = nil
     ) -> Outcome {
         guard commandsIdle, !isPreparing else { return .storageFailure }
+        guard Self.consumeLock.try() else { return .storageFailure }
+        defer { Self.consumeLock.unlock() }
 
         let incoming = directory.appendingPathComponent(Self.incomingFileName, isDirectory: false)
-        guard fileManager.fileExists(atPath: incoming.path) else { return .noPayload }
+        let claimed = directory.appendingPathComponent(Self.consumingFileName, isDirectory: false)
+        let hasIncoming = fileManager.fileExists(atPath: incoming.path)
+        let hasClaimed = fileManager.fileExists(atPath: claimed.path)
+        guard !(hasIncoming && hasClaimed) else { return .storageFailure }
+        guard hasIncoming || hasClaimed else { return .noPayload }
 
-        guard isRegularFile(incoming, fileManager: fileManager) else {
-            return finish(.rejected, incoming: incoming)
+        if hasIncoming {
+            do {
+                // Both URLs are in the same directory. This rename is the
+                // atomic claim that competes with macOS transaction retirement.
+                try fileManager.moveItem(at: incoming, to: claimed)
+            } catch {
+                guard !fileManager.fileExists(atPath: incoming.path),
+                      !fileManager.fileExists(atPath: claimed.path) else {
+                    return .storageFailure
+                }
+                return .noPayload
+            }
+        }
+
+        guard isRegularFile(claimed, fileManager: fileManager) else {
+            return finish(.rejected, incoming: claimed)
         }
 
         let incomingData: Data
         do {
             incomingData = try boundedRead(
-                incoming,
+                claimed,
                 maximumBytes: LocalGoSetupProtocol.maximumIncomingFileBytes,
                 fileManager: fileManager
             )
         } catch Failure.oversize {
-            return finish(.rejected, incoming: incoming)
+            return finish(.rejected, incoming: claimed)
         } catch {
-            return finish(.storageFailure, incoming: incoming)
+            return finish(.storageFailure, incoming: claimed)
         }
 
         let payload: LocalGoSetupProtocol.IncomingPayload
         do {
             payload = try LocalGoSetupProtocol.decodeIncoming(incomingData)
         } catch {
-            return finish(.rejected, incoming: incoming)
+            return finish(.rejected, incoming: claimed)
         }
 
         // A caller that already owns a formal setup transaction must reject a
-        // payload from any other transaction before touching receipts, the
-        // importer, or the one-shot file. The optional argument preserves the
-        // legacy consumer's existing behavior.
+        // payload from any other transaction before touching receipts/import.
         if let expectedTransactionID,
            payload.transactionID != expectedTransactionID {
+            do {
+                guard !fileManager.fileExists(atPath: incoming.path) else {
+                    return .storageFailure
+                }
+                try fileManager.moveItem(at: claimed, to: incoming)
+            } catch {
+                return .storageFailure
+            }
             return .rejected
         }
 
@@ -134,11 +164,8 @@ public final class LocalGoSetupHandoff {
 
             if fileManager.fileExists(atPath: receiptURL.path) {
                 guard isRegularFile(receiptURL, fileManager: fileManager) else {
-                    return finish(.storageFailure, incoming: incoming)
+                    return finish(.storageFailure, incoming: claimed)
                 }
-                // A replay is terminal. Replace even a successful receipt with
-                // a rejected one so a macOS producer cannot treat the replay
-                // as a successful transaction after reading the receipt.
                 _ = try LocalGoSetupProtocol.decodeReceipt(
                     try boundedRead(receiptURL, maximumBytes: 64 * 1024, fileManager: fileManager)
                 )
@@ -149,23 +176,18 @@ public final class LocalGoSetupHandoff {
                     ),
                     to: receiptURL
                 )
-                return finish(.rejected, incoming: incoming)
+                return finish(.rejected, incoming: claimed)
             }
 
             guard receipts.count < LocalGoSetupProtocol.maximumReceiptCount else {
-                // Do not prune old receipts to make room. At capacity the
-                // safe result is a generic storage failure with no import.
-                return finish(.storageFailure, incoming: incoming)
+                return finish(.storageFailure, incoming: claimed)
             }
 
             do {
                 try importer(payload.pairingFile, payload.expectedDeviceUDID)
             } catch {
-                // Do not leave a rejected payload queued for another launch.
-                // The rejected receipt is committed only after cleanup has
-                // succeeded, so a cleanup failure remains retryable.
                 do {
-                    try removeIncoming(incoming)
+                    try removeIncoming(claimed)
                     try writeReceipt(
                         LocalGoSetupProtocol.Receipt(
                             transactionID: payload.transactionID,
@@ -179,11 +201,8 @@ public final class LocalGoSetupHandoff {
                 }
             }
 
-            // The import has committed in the store. Remove the one-shot
-            // request before publishing a success receipt; otherwise a crash
-            // could leave a successful receipt beside a replayable payload.
             do {
-                try removeIncoming(incoming)
+                try removeIncoming(claimed)
                 try writeReceipt(
                     LocalGoSetupProtocol.Receipt(
                         transactionID: payload.transactionID,
@@ -191,23 +210,19 @@ public final class LocalGoSetupHandoff {
                     ),
                     to: receiptURL
                 )
-                // The import has already committed in the store. A receipt
-                // failure is therefore reported as unknown storage state,
-                // never as a claim that the old pairing remains active.
                 return .imported
             } catch {
                 return .storageFailure
             }
         } catch Failure.oversize {
-            return finish(.rejected, incoming: incoming)
+            return finish(.rejected, incoming: claimed)
         } catch {
-            return finish(.storageFailure, incoming: incoming)
+            return finish(.storageFailure, incoming: claimed)
         }
     }
 
     /// Creates or repairs the private setup directory and its ready marker.
-    /// The returned URL is the directory that the macOS helper may use for
-    /// its terminated-app handoff.
+    /// The returned URL is shared with the macOS helper's atomic one-shot handoff.
     @discardableResult
     public static func prepare(
         fileManager: FileManager = .default

@@ -207,7 +207,7 @@ App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的
 - 路線執行進度列標籤（D6／D6.a／D7／D10／D10.a 與深色版，2026-10-26 使用者確認；App 已實作，Figma 已同步，未裝置驗證）：前景只有單趟路線需要剩餘時間，進度條左側標籤（原「目前位置」位置）改顯示依目前時速估算的剩餘時間，無條件進位到分鐘：未滿 1 小時「剩餘 N 分」，1 小時以上「剩餘 H 小時 M 分」（en `N min left`／`H h M min left`、zh-Hans `剩余…`）；尚無進度時顯示「路線進度」。右側百分比不變。路線來回沒有終點，維持「目前路線位置」。執行中或暫停時改時速，剩餘時間立即依新時速重算（進度條標籤與頂部導航卡「約 N 分」同步），不必等下一步（2026-10-26 使用者確認，core 測試覆蓋）。 Grabber 下緣到進度標籤 20 pt（2026-10-26 使用者指示，原 11 pt）：執行面板頂端上移 9 pt、高度 +9 pt（D6 面板頂 y 625、Grabber y 631–636、標籤 y 656），其餘內容與按鈕位置不變，MapControls 同步上移 9 pt；App `executionPanel` 上內距 24 → 33 pt。
 - 全螢幕搜尋（D5，原 D2，2026-10-24 規格更新）：搜尋載入中 spinner 與「搜尋中…」文字對齊同一橫列；路線欄位選點對齊 Figma D5：搜尋欄採 `SearchField / focused` 並以「選擇終點」／「選擇停靠點 %ld」／「選擇起點」為 placeholder，下方灰底角色 chip 帶旗標圖示顯示「正在選：終點」（起點／停靠點 N 同理；2026-10-24 更新，取代「不顯示正在選」舊規則）；角色 chip 同行最右側配置 22 pt 空心星號搭配文字 `Favorite`（15 pt Medium），按鈕高度 44 pt；圖示與文字使用主文字色（Light `#000000`、Dark `#FFFFFF`），VoiceOver 名稱沿用 `favorites.shortTitle`，點擊打開最愛地點清單進行選點回填；「最近搜尋」標題同行最右側配置「清空記錄」純文字按鈕（`Button / text / 清空記錄`，點擊清空最近搜尋紀錄）。點任一結果立即回填目前選中的路線地點並返回 D1。
 - 背景持續不依賴定位權限：GoFly 只請求「使用 App 期間」，不要求「永遠」，也不顯示權限升級 sheet（2026-10-20 決定，取代原「非永遠時出現升級說明 sheet」條件）。
-- 2026-10-23 最新背景規則取代不定長 ACK 計數（2026-10-26 規格更新為可自訂）：瞬移成功後維持同一座標、路線開啟來回及漫步，預設使用 12 小時工作百分比（可於「設定 › 背景執行」中自訂背景運行時間，上限 24 小時 59 分鐘，Figma F6 / F6.a）；單程路線使用已確認的實際路程比例，在目的地終點 ACK 後完成。瞬移維持每 5 秒重新確認同一座標，不能製造位移；時間進度只在 App 位於背景且成功 ACK 後增加，不計入前景時間與失效／暫停缺口；回到前景歸零並以當下設定重新提交背景工作（2026-10-26 更新）。達到設定時間至 100% 後完成背景任務、停止維持或暫停移動，不自動開下一個任務；後續必須由使用者明確操作。共用一個 `com.neven.gofly.movement`（iOS 26 `BGContinuedProcessingTask`），採 `.queue` 等待名額，進度與任務標題須如實顯示。設定時間是工作目標，不是系統保證的背景時間，iOS 仍可提前中止。
+- 2026-10-23 最新背景規則取代不定長 ACK 計數（2026-10-26 規格更新為可自訂）：瞬移成功後維持同一座標、路線開啟來回及漫步，預設使用 12 小時工作百分比（可於「設定 › 背景執行」中自訂背景運行時間，上限 24 小時 59 分鐘，Figma F6 / F6.a）；單程路線使用已確認的實際路程比例，在目的地終點 ACK 後完成。瞬移維持每 5 秒重新確認同一座標，不能製造位移；時間進度只在 App 位於背景且成功 ACK 後增加，不計入前景時間與失效／暫停缺口；回到前景歸零並以當下設定重新提交背景工作（2026-10-26 更新）。達到設定時間至 100% 後完成背景任務、停止維持或暫停移動，不自動開下一個任務；後續必須由使用者明確操作。共用一個 `<Bundle ID>.movement`（Bundle ID 依簽署 Team ID 產生）（iOS 26 `BGContinuedProcessingTask`），採 `.queue` 等待名額，進度與任務標題須如實顯示。設定時間是工作目標，不是系統保證的背景時間，iOS 仍可提前中止。
 - 系統拒絕、不支援或讓任務到期時，移動暫停；若路線因此暫停，回到前景以頂部獨立 warning Toast（高度 80 pt、實心不透明底、附白色「重試」動作按鈕與 ✕ 關閉，呼叫同一路線 Resume）提示使用者。其他背景執行提示維持原因與設定修復動作；前景執行中、系統尚未啟動背景任務時被拒絕，只提示、不中斷前景移動。背景任務到期原因須由裝置診斷記錄判讀；截圖或程式模擬不代表真機背景續行驗證。
 - 瞬移維持暫停時顯示短文案「位置維持已暫停」及「重試」，只在可接受新 Go 時啟用；12 小時正常完成顯示「12 小時任務已完成」。session 暫時中斷時，在既有執行權內自動重建、重新核對身分並確認同一模擬座標；已失效而轉灰的箭頭需恢復的真實 ACK 才能還原，成功後接續剩餘工作。使用者 Stop、新操作交接或系統已收回執行權後，不得由舊重連重啟模擬；修復仍失敗或身分／配對問題沿用錯誤與明確 Stop 流程。
 - 新增驗收：瞬移實際 ACK 才啟動固定維持；三種 12 小時模式百分比與真實時間／ACK 一致，12 小時上限停止且無自動續開；單程仍按路程到達完成；session 故障可在同一執行權內恢復同一座標，停止／到期與遲到 ACK 不得復活任務。離線時鐘與故障注入驗證、安裝／配對核對、真機長時間切至遊戲或 Google Maps 的定位效果須分開記錄。
@@ -424,3 +424,31 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 - 錯誤文案：`error.tunnelUnavailable` 的修復指引由「在 GoFly 重置 VPN 通道」改為「在 GoFly 重新按『啟動』」。
 - Figma 同步（2026-10-26 完成）：04 頁 `F1 · 設定首頁`（淺色 `121:53504`、深色 `121:56326`）已移除「恢復 GPS」「重置 VPN 通道」，服務卡縮為只有主按鈕；新增 `F1.a · 設定首頁 / 停止失敗`（淺色 `239:15235`、深色 `239:15337`，位於 F3 右側），紅色「錯誤」pill、主按鈕「啟動」與下方「重置」，並更新 F1／新增 F1.a 說明。殘留差異：F1 主按鈕仍寫「停止服務」，App 為「停止」；紅色 pill 使用元件 `StatusPill / 連線中斷` 並覆寫文字為「錯誤」，元件名稱待同步為「錯誤」。
 - 驗收：正常停止後卡片只有「啟動」且 GPS 恢復；製造停止失敗（例如停止時中斷 Wi‑Fi／LocalDevVPN）後出現「重置」，按下後狀態回到停止、無紅色錯誤，恢復連線後再按一次可確認 GPS；通道異常後直接按「啟動」可自行重建並成功模擬。實作位於 `ServiceController.start()`／`forceReset()` 與 `ServiceSettingsView`；尚未真機驗證。
+
+## 2026-10-27 Figma 04 iOS theme 色彩更新（取代舊深色值）
+
+- iOS 維護自己的 theme 變數，不引用或共用 Mac 05 的變數。深色語意色值與 05 對齊：畫布 `#1E1E1E`、卡片／導覽表面 `#2C2C2E`、控制表面 `#3A3A3C`、輸入底 `#1C1C1E`、分隔線 `#38383A`、邊框 `#48484A`、主／次／停用文字 `#FFFFFF`／`#98989D`／`#636366`、accent `#0A84FF`、danger／warning／success `#FF453A`／`#FF9F0A`／`#30D158`。狀態底色延用 05 的 info `#182B40`、warning `#3A2B16`、success `#1D3225`；danger 底色 `#4D272A` 與地圖色票由 iOS 自行定義，05 沒有對應底色角色。地圖語意 token 保持 iOS 專屬。
+- Figma 04 使用 `GoFly iOS / Light Theme`、`GoFly iOS / Dark Theme` 兩組獨立變數集合；目前 Figma 每組集合限一個 mode，因此各自以 Light、Dark 集合承載。每組有 94 個色彩變數，涵蓋語意角色與畫面專用色票；2026-10-27 為 Primary 按鈕新增 `color/action/primary/filled-surface` 與 `color/action/primary/filled-text`。先前的變數綁定覆蓋率盤點沒有發現所有語意角色誤套到單一畫面的問題，因此舊 Dark 總數不再作為完成依據；本次以逐 frame 綁定檢查為主，並對發現的異常截圖讀回。
+- 2026-10-27 Dark frame-by-frame audit：04 `Dark` 區段 63 張完整 `393 × 852` frame、共 5,727 個圖層。其 3,050 個實心填色、2,120 個描邊及 1,044 段文字填色目前全數綁定 `GoFly iOS / Dark Theme`（5,170／5,170 paint properties、1,044／1,044 text segments；零裸色值、零跨 collection 綁定）。iOS Dark 變數獨立於 05 Mac collection。
+- 本次修正逐 frame 核對發現的顏色角色錯配：B10／D8 的錯誤 toast 與 D9／D22 的成功 snackbar 僅保留各自狀態元件色，畫面底層恢復中性深色；D8 路線列、拖曳及排序控制恢復一般元件色；R04／R05／R06 步驟號改為次要文字色；B3／B4 確認文字、狀態列及 Tab Bar 色彩恢復可讀的 Dark token；F1／F1.a 兩個未綁色文字層改綁次要文字 token。Dark 地圖專用色票為：canvas `#242426`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。
+- 此變更更新的是靜態 Figma 線框與設計規格；App 色彩系統尚未據此修改，也沒有宣稱程式實作或實機驗證完成。已對修正畫面截圖讀回核對；本次沒有做裝置驗證。
+- 設計缺口：`B11 · 地圖首頁 / 連接中（建立 VPN tunnel）`（`239:15137`）目前只有 Light 畫面，沒有 Dark variant；保留缺口，不把其 Dark 設計標為完成。
+- 本次讀回取代前文 2026-10-23 的 Dark variant 歷史缺漏清單；該清單中的 D1.a、D17、D1b 已不再是目前缺漏，現行已確認缺口為 B11 Dark variant。
+
+### Theme 驗收條件
+
+- 04 的 Light／Dark UI frame 與文字、實心填色及描邊使用各自 iOS theme 變數；04 不綁定 Mac 05 變數。
+- 深色共用角色維持上述與 05 對齊的值；地圖與 iOS 專屬狀態角色保留在 iOS 集合。
+- Dark 區段每張完整 UI frame 的實心填色、描邊及文字填色皆綁定獨立的 iOS Dark collection；狀態色只套用到對應的 toast、snackbar 或危險動作，不得因畫面名稱污染底層元件。
+- 調整任一 iOS 變數時，引用該 token 的 Light／Dark frame 隨之更新；以逐 frame 渲染讀回確認元件底色、文字、圖示及狀態色仍具可辨識度。
+- B11 Dark variant 仍列為缺少設計，不以 Light 畫面推定深色已設計。
+
+### 2026-10-27 Dark 共用按鈕元件整理
+
+- Figma 04 新增 `Dark · 0 · 共用元件（按鈕）`（section `249:16291`），作為 Dark 按鈕與文字欄位的集中整理區。元件顏色使用獨立的 `GoFly iOS / Dark Theme` 變數；深色共用語意角色與 05 對齊，但不引用 Mac 變數。新增 Ghost Primary／Secondary 後，此區共檢查 386 個實心填色／描邊，皆綁定 iOS Dark 變數，無裸色值或跨集合綁定。
+- `Button / Action` 收納 Primary（文字／圖示）、Secondary（文字）、Disabled Primary、Danger（圖示填色）及 Destructive（文字）按鈕；`Button / Icon` 收納 Standard、Route 圖示按鈕的 Enabled／Disabled 狀態；`Button / Check` 收納 Selected／Unselected；`Button / Status action` 收納 Error／Retry、Warning／Continue、Success／Undo。這是目前靜態稿已定義的型別與狀態，不代表未列出的所有組合都已設計。
+- 新增 `Button / Icon + Text` 與 `Button / Text` component sets；兩者均有 Primary／Neutral／Ghost Primary／Ghost Secondary、Active／Disabled、Large／Medium／Small／Extra Small 四個軸的完整組合（各 32 個 variant）。尺寸為 Large `280 × 56 pt`、Medium `224 × 48 pt`、Small `176 × 40 pt`、Extra Small `144 × 32 pt`。兩種 Ghost 都無填色、無描邊；Active 的 Ghost Primary 前景使用藍色 accent，Ghost Secondary 使用 `color/text/secondary`／`color/icon/secondary`（`#98989D`），Disabled 兩者皆使用停用色。
+- 按鈕色彩角色：Filled Primary 綁定 iOS 專用的 `color/action/primary/filled-surface` 與 `color/action/primary/filled-text`；Light 維持黑底白字 `#000000`／`#FFFFFF`，Dark 使用較深藍底白字 `#0066CC`／`#FFFFFF`。舊 `color/action/primary/surface` 與 `color/action/primary/text` 保留原值，避免影響共用系統表面與停用狀態。Secondary 使用卡片表面、分隔線描邊與主文字；Disabled 使用停用底色及停用文字／圖示；Danger 使用 danger 填色與高對比前景；Destructive 文字按鈕使用 danger 文字色。Standard／Route icon 按鈕依啟用狀態使用主／停用圖示色。勾選 Selected 為白底黑勾，Unselected 為深色底與次要描邊。狀態操作只使用所屬 Error、Warning、Success 語意色；Info 保留狀態色參考，不增加未設計的動作按鈕。
+- 新增 `Text Field / Neutral` component set，包含 Text 與 Icon + Text 兩種內容，每種有 Default、Focused、Disabled 三態（共 6 個 variant）。Default 使用輸入底、邊框及次要 placeholder／icon 色；Focused 使用 accent 描邊、主文字與 caret；Disabled 使用停用文字／icon 色與較弱描邊。
+- 此區只表達靜態 wireframe：Active／Disabled 按鈕、Default／Focused／Disabled 欄位、Selected／Unselected 勾選及狀態動作；沒有 hover／pressed 畫面或 prototype wiring。更新的是 Figma 設計，未表示 App 元件已實作或經裝置驗證。
+- 驗收：各型別、內容、尺寸與狀態以 Figma component set 維護；Primary 按鈕與引用它的 UI frame 依 Light／Dark collection 綁定 filled-surface／filled-text；Neutral 按鈕與欄位底色、文字、圖示、描邊及 caret 綁定 `GoFly iOS / Dark Theme`；Ghost Primary／Secondary 本體維持無底色、無邊框，前景依狀態使用 accent／secondary／disabled token；調整對應 token 後元件及引用該元件的 UI 同步更新。截圖讀回需確認四種尺寸層次明確、標籤可讀、啟用／停用、欄位焦點與危險／狀態色易於區分，且狀態色不套到無關背景或控制元件。

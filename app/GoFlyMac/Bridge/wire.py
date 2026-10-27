@@ -15,15 +15,16 @@ UUID_RE = re.compile(
 )
 TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
 SAFE_ERROR_CODES = frozenset({
-    "invalid-request", "protocol-mismatch", "configuration-invalid", "dependency-mismatch",
-    "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "trust-required",
+    "invalid-request", "protocol-mismatch", "configuration-invalid", "bundle-damaged", "dependency-mismatch",
+    "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "wifi-device-not-found",
+    "wifi-pairing-unknown", "wifi-support-unavailable", "wifi-renew-unknown", "trust-required",
     "developer-mode-required", "unsupported-os", "identity-mismatch",
     "app-already-installed", "app-not-installed", "app-running",
     "signing-required", "signature-invalid", "artifact-mismatch", "support-unavailable",
     "pairing-unknown", "pairing-rejected", "handoff-unknown", "commit-unknown",
     "transaction-unknown", "transaction-conflict", "busy", "cancelled", "timeout",
     "storage-unavailable", "operation-failed", "usb-lockdown-failed", "usb-device-not-found",
-    "device-identity-mismatch", "unsupported-os-version", "runtime-unavailable",
+    "device-identity-mismatch", "unsupported-os-version",
     "device-values-unavailable", "read-only-mode",
 })
 
@@ -99,7 +100,7 @@ def response(request: Mapping[str, Any] | None, *, status: str, payload: Mapping
         "action": value.get("action") if isinstance(value.get("action"), str) else None,
         "status": status,
     }
-    for key in ("setupID", "deviceID"):
+    for key in ("setupID", "deviceID", "mode", "transport"):
         if isinstance(value.get(key), str):
             result[key] = value[key]
     if status == "error":

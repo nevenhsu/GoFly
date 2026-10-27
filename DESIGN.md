@@ -17,7 +17,7 @@
 - 使用者最新確認的操作規則與產品規格決定行為。
 - **iOS UI 視覺權威**：以 [Figma 04 · iOS Redesign（Google Maps 參考）](https://www.figma.com/design/RtPV8PXCQJ2WXK3jk3kPrq/GoFly-%C2%B7-UI-%E7%B7%9A%E6%A1%86%E8%A8%8E%E8%AB%96?node-id=121-50359) 為準，決定流程、內容層級、控制位置與渲染樣式。舊版 `01 · iOS App`（`13-2098`）已廢棄。
 - 原生 iOS 的安全區、字級縮放、系統控制與無障礙決定平台適配。
-- `app/LocalGo` 是既有 prototype；正式 App 位於 `app/GoFly`。prototype 的樣式或測試不代表正式 App 已完成；正式 App 的實作與驗證依各次交付證據記錄。
+- 共用的 LocalGo/StikDebug setup 檔案已移入 `app/GoFly/Setup`；來源沿革不代表正式 App 功能已完成。正式 App 的實作與驗證依各次交付證據記錄。
 
 ## 參考的核心語彙
 

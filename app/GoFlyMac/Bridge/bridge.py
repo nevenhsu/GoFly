@@ -24,7 +24,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -54,10 +54,10 @@ except ImportError:  # direct script execution from the Bridge directory
     )
 
 BridgeError = WireError
-DEFAULT_BUNDLE_ID = "com.neven.gofly"
 DEFAULT_TARGET_NAME = "GoFly"
-PMD3_VERSION = "11.31.0"
 LOCALDEVVPN_BUNDLE_ID = "com.jkcoxson.LocalDevVPN"
+MINIMUM_FREE_SPACE_GB = 40
+PLANNED_XCODE_MINIMUM_MACOS_VERSION = "26.6"
 USB = "USB"
 NETWORK = "Network"
 SUPPORTED_OS_MAJOR = 26
@@ -69,50 +69,82 @@ _ACTIVE_RUNNER: contextvars.ContextVar[asyncio.Runner | None] = contextvars.Cont
 
 @dataclass(frozen=True)
 class Config:
-    workspace_root: Path
+    resources_root: Path
     python_path: Path
     developer_directory: Path
     project_path: Path
-    target_bundle_id: str = DEFAULT_BUNDLE_ID
     target_name: str = DEFAULT_TARGET_NAME
+    state_root: Path = field(default_factory=lambda: Path.home() / "Library" / "Application Support" / "GoFly" / "state")
 
     @classmethod
-    def load(cls, path: str | Path) -> "Config":
-        path = Path(path)
-        if not path.is_absolute() or path.is_symlink() or not path.is_file():
-            raise BridgeError("configuration-invalid")
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            raise BridgeError("configuration-invalid") from None
-        if not isinstance(raw, dict):
-            raise BridgeError("configuration-invalid")
+    def from_bundle(
+        cls,
+        resources_root: str | Path,
+        developer_directory: str | Path,
+        target_name: str = DEFAULT_TARGET_NAME,
+    ) -> "Config":
+        resources = Path(resources_root)
+        if (
+            not resources.is_absolute()
+            or resources.is_symlink()
+            or not resources.is_dir()
+            or not isinstance(target_name, str)
+            or not 1 <= len(target_name) <= 200
+            or not _bundle_resources_valid(resources)
+        ):
+            raise BridgeError("bundle-damaged")
+        return cls(
+            resources_root=resources,
+            python_path=resources / "Python" / "python" / "install" / "bin" / "python3.14",
+            developer_directory=Path(developer_directory),
+            project_path=resources / "iOSProject" / "GoFly.xcodeproj",
+            target_name=target_name,
+            state_root=Path.home() / "Library" / "Application Support" / "GoFly" / "state",
+        )
 
-        def required_path(name: str) -> Path:
-            value = raw.get(name)
-            if not isinstance(value, str) or not value or not Path(value).is_absolute():
-                raise BridgeError("configuration-invalid")
-            return Path(value)
 
-        workspace = required_path("workspaceRoot")
-        python = required_path("pythonPath")
-        developer = required_path("developerDirectory")
-        project = required_path("projectPath")
-        bundle = raw.get("targetBundleID", DEFAULT_BUNDLE_ID)
-        name = raw.get("targetName", DEFAULT_TARGET_NAME)
-        if not isinstance(bundle, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,200}", bundle):
-            raise BridgeError("configuration-invalid")
-        if not isinstance(name, str) or not (1 <= len(name) <= 200):
-            raise BridgeError("configuration-invalid")
-        return cls(workspace, python, developer, project, bundle, name)
+def _bundle_resources_valid(resources: Path) -> bool:
+    """Validate required bundled inputs before exposing environment checks."""
+    files = (
+        "Python/python/install/bin/python3.14",
+        "Bridge/bridge.py",
+        "Bridge/wire.py",
+        "Bridge/Device/gofly_device.py",
+        "Bridge/Setup/setup_protocol.py",
+        "Bridge/Setup/setup_config.py",
+        "Bridge/Setup/setup_journal.py",
+        "Bridge/Setup/setup_producer.py",
+        "Bridge/Setup/setup_adapters.py",
+        "Bridge/Setup/setup_support.py",
+        "iOSProject/GoFly.xcodeproj/project.pbxproj",
+        "iOSProject/GoFly.xcconfig",
+        "native/libidevice_ffi.a",
+    )
+    directories = (
+        "Python/python/install/lib/python3.14/site-packages",
+        "Bridge/Device",
+        "Bridge/Setup",
+        "iOSProject/GoFly.xcodeproj",
+    )
+    try:
+        if any((resources / relative).is_symlink() or not (resources / relative).is_file() for relative in files):
+            return False
+        interpreter = resources / files[0]
+        if not os.access(interpreter, os.X_OK):
+            return False
+        if any((resources / relative).is_symlink() or not (resources / relative).is_dir() for relative in directories):
+            return False
+    except OSError:
+        return False
+    return True
 
 
 def _load_module(path: Path, name: str) -> Any:
     if path.is_symlink() or not path.is_file():
-        raise BridgeError("runtime-unavailable")
+        raise BridgeError("bundle-damaged")
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise BridgeError("runtime-unavailable")
+        raise BridgeError("bundle-damaged")
     module = importlib.util.module_from_spec(spec)
     # Use a private module name so a different invocation cannot accidentally
     # reuse a module loaded from an arbitrary working directory.
@@ -121,21 +153,15 @@ def _load_module(path: Path, name: str) -> Any:
         spec.loader.exec_module(module)
     except Exception:
         sys.modules.pop(name, None)
-        raise BridgeError("runtime-unavailable") from None
+        raise BridgeError("bundle-damaged") from None
     return module
 
 
 def load_device_module(config: Config) -> Any:
-    """Load the packaged read-only device boundary, with a source-tree fallback."""
-
-    bundled = Path(__file__).resolve().parent / "Device" / "gofly_device.py"
-    source = config.workspace_root / "app" / "GoFlyMac" / "Bridge" / "Device" / "gofly_device.py"
-    if bundled.is_file():
-        path = bundled
-    elif source.is_file():
-        path = source
-    else:
-        raise BridgeError("runtime-unavailable")
+    """Load only the read-only device boundary inside the app bundle."""
+    path = config.resources_root / "Bridge" / "Device" / "gofly_device.py"
+    if path.is_symlink() or not path.is_file():
+        raise BridgeError("bundle-damaged")
     return _load_module(path, "_gofly_device_boundary")
 
 
@@ -220,6 +246,13 @@ def _version_supported(value: Any) -> bool:
         return False
     match = re.match(r"\s*(\d+)(?:\.\d+)*\s*\Z", value)
     return bool(match and int(match.group(1)) >= SUPPORTED_OS_MAJOR)
+
+
+def _version_tuple(value: Any) -> tuple[int, ...] | None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,3}", value) is None:
+        return None
+    parts = [int(part) for part in value.split(".")]
+    return tuple(parts + [0] * (4 - len(parts)))
 
 
 def _safe_process(arguments: list[str], *, env: Mapping[str, str] | None = None, timeout: int = 30) -> tuple[int, bytes]:
@@ -317,6 +350,7 @@ class Bridge:
             if transport is None or identity is None:
                 continue
             name = _value(item, "name", "device_name", "DeviceName")
+            model_name = _value(item, "model_name", "ProductType", "product_type")
             version = _value(item, "os_version", "ProductVersion", "product_version")
             row = {
                 "id": identity,
@@ -324,6 +358,7 @@ class Bridge:
                 # explicit unknown value while preserving the stable shape
                 # required by the macOS UI.
                 "name": name if isinstance(name, str) else "",
+                "modelName": model_name if isinstance(model_name, str) else None,
                 "transport": transport,
                 "osVersion": version if isinstance(version, str) else None,
             }
@@ -333,26 +368,26 @@ class Bridge:
     def devices(self) -> dict[str, Any]:
         return {"devices": self._device_rows(self._raw_devices())}
 
-    def _teams(self) -> list[dict[str, Any]]:
+    def _teams(self) -> list[dict[str, Any]] | None:
         defaults = Path("/usr/bin/defaults")
         if not defaults.is_file():
-            return []
+            return None
         env = os.environ.copy()
         try:
             status, data = _safe_process([str(defaults), "export", "com.apple.dt.Xcode", "-"], env=env, timeout=20)
         except BridgeError:
-            return []
+            return None
         if status != 0:
-            return []
+            return None
         try:
             values = plistlib.loads(data)
         except Exception:
-            return []
+            return None
         if not isinstance(values, dict):
-            return []
-        groups = values.get("IDEProvisioningTeamByIdentifier")
+            return None
+        groups = values.get("IDEProvisioningTeamByIdentifier", {})
         if not isinstance(groups, Mapping):
-            return []
+            return None
         found: dict[str, dict[str, Any]] = {}
         for group in groups.values():
             if not isinstance(group, list):
@@ -374,41 +409,8 @@ class Bridge:
                 })
         return sorted(found.values(), key=lambda team: (team["teamName"], team["teamID"]))
 
-    def _check_python(self) -> bool:
-        path = self.config.python_path
-        if not path.is_file() or not os.access(path, os.X_OK):
-            return False
-        # A standard venv exposes ``bin/python`` as a symlink.  Require the
-        # adjacent pyvenv.cfg and verify the interpreter reports that same
-        # venv prefix; this permits the normal symlink while rejecting an
-        # arbitrary executable supplied under a Python-looking name.
-        venv = path.parent.parent
-        if not (venv / "pyvenv.cfg").is_file():
-            return False
-        try:
-            status, data = _safe_process(
-                [
-                    str(path),
-                    "-c",
-                    "import importlib.metadata as m,sys; print(sys.executable); print(sys.prefix); print(m.version('pymobiledevice3'))",
-                ],
-                timeout=20,
-            )
-        except BridgeError:
-            return False
-        try:
-            lines = data.decode("ascii", "strict").strip().splitlines()
-            executable, prefix, version = lines[-3:]
-        except (UnicodeDecodeError, ValueError):
-            return False
-        return status == 0 and Path(prefix).resolve() == venv.resolve() and version == PMD3_VERSION and Path(executable).resolve() == path.resolve()
-
-    def _check_project(self) -> bool:
-        path = self.config.project_path
-        return path.is_absolute() and not path.is_symlink() and path.is_dir() and path.suffix == ".xcodeproj"
-
     def _project_identity(self) -> tuple[str | None, str | None]:
-        path = self.config.workspace_root / "app/GoFly/GoFly.xcconfig"
+        path = self.config.resources_root / "iOSProject/GoFly.xcconfig"
         if path.is_symlink() or not path.is_file():
             return None, None
         try:
@@ -430,24 +432,68 @@ class Bridge:
             build = None
         return version, build
 
-    def _check_developer_tools(self) -> bool:
+    def _check_xcode_installed(self) -> str:
         developer = self.config.developer_directory
-        if developer.is_symlink() or not developer.is_dir():
-            return False
-        # xcrun is intentionally the fixed system shim; DEVELOPER_DIR selects
-        # the configured Xcode installation without trusting PATH.
-        return (developer / "usr/bin/xcodebuild").is_file()
+        xcodebuild = developer / "usr/bin/xcodebuild"
+        try:
+            if developer.is_symlink() or not developer.is_dir():
+                return "failed"
+            if not xcodebuild.is_file():
+                return "failed"
+        except OSError:
+            return "unknown"
+        return "passed"
 
-    def _check_first_launch(self) -> bool:
-        if not self._check_developer_tools() or not Path("/usr/bin/xcrun").is_file():
-            return False
+    def _xcode_minimum_macos_version(self, xcode_installed: bool) -> str | None:
+        if not xcode_installed:
+            return PLANNED_XCODE_MINIMUM_MACOS_VERSION
+        info_path = self.config.developer_directory.parent / "Info.plist"
+        if info_path.is_symlink() or not info_path.is_file():
+            return None
+        try:
+            values = plistlib.loads(info_path.read_bytes())
+        except (OSError, plistlib.InvalidFileException, ValueError):
+            return None
+        if not isinstance(values, Mapping):
+            return None
+        version = values.get("LSMinimumSystemVersion") or values.get("MinimumOSVersion")
+        return version if _version_tuple(version) is not None else None
+
+    def _available_space_kib(self) -> int | None:
+        executable = Path("/bin/df")
+        if not executable.is_file():
+            return None
+        try:
+            status, data = _safe_process([str(executable), "-Pk", "/Applications"], timeout=15)
+            if status != 0:
+                return None
+            lines = data.decode("utf-8", "strict").strip().splitlines()
+        except (BridgeError, UnicodeDecodeError):
+            return None
+        if len(lines) < 2:
+            return None
+        fields = lines[-1].split()
+        if len(fields) < 6 or re.fullmatch(r"[0-9]+", fields[3]) is None:
+            return None
+        return int(fields[3])
+
+    def _check_first_launch(self, xcode_installed: bool) -> str:
+        if not xcode_installed or not Path("/usr/bin/xcrun").is_file():
+            return "unknown"
         env = os.environ.copy()
         env["DEVELOPER_DIR"] = str(self.config.developer_directory)
         try:
-            status, _ = _safe_process(["/usr/bin/xcrun", "xcodebuild", "-checkFirstLaunchStatus"], env=env, timeout=30)
+            first_status, _ = _safe_process(
+                ["/usr/bin/xcrun", "xcodebuild", "-checkFirstLaunchStatus"], env=env, timeout=30
+            )
+            if first_status != 0:
+                return "failed"
+            license_status, _ = _safe_process(
+                ["/usr/bin/xcrun", "xcodebuild", "-license", "check"], env=env, timeout=30
+            )
         except BridgeError:
-            return False
-        return status == 0
+            return "unknown"
+        return "passed" if license_status == 0 else "failed"
 
     def _xcode_version(self) -> str | None:
         if not Path("/usr/bin/xcrun").is_file():
@@ -466,6 +512,30 @@ class Bridge:
             return None
         match = re.fullmatch(r"Xcode\s+([0-9][^\r\n]{0,40})", first)
         return match.group(1) if match else None
+
+    def _ios_platform(self, xcode_installed: bool) -> tuple[str, str | None]:
+        if not xcode_installed:
+            return "unknown", None
+        sdk_root = self.config.developer_directory / "Platforms/iPhoneOS.platform/Developer/SDKs"
+        try:
+            sdk_root.stat()
+        except FileNotFoundError:
+            return "failed", None
+        except OSError:
+            return "unknown", None
+        if sdk_root.is_symlink() or not sdk_root.is_dir():
+            return "unknown", None
+        try:
+            sdks = sorted(
+                child.name[:-4]
+                for child in sdk_root.iterdir()
+                if child.name.startswith("iPhoneOS") and child.name.endswith(".sdk") and child.is_dir()
+            )
+        except OSError:
+            return "unknown", None
+        if not sdks:
+            return "failed", None
+        return "passed", sdks[-1]
 
     @staticmethod
     def _macos_version() -> str | None:
@@ -487,49 +557,70 @@ class Bridge:
     def environment(self) -> dict[str, Any]:
         checks: list[dict[str, Any]] = []
 
-        def check(identifier: str, title: str, detail: str, passed: bool) -> None:
-            checks.append({"id": identifier, "title": title, "detail": detail, "passed": bool(passed)})
+        def check(identifier: str, title: str, detail: str, status: str) -> None:
+            if status not in {"passed", "failed", "unknown"}:
+                status = "unknown"
+            checks.append({"id": identifier, "title": title, "detail": detail,
+                           "status": status, "passed": status == "passed"})
 
-        project = self._check_project()
-        check("project", "Xcode 專案", "已找到設定的 Xcode 專案。" if project else "找不到設定的 Xcode 專案。", project)
-        tools_ok = self._check_developer_tools()
-        xcode = self._xcode_version() if tools_ok else None
+        xcode_status = self._check_xcode_installed()
+        xcode_installed = xcode_status == "passed"
+        xcode = self._xcode_version() if xcode_installed else None
         macos = self._macos_version()
-        tool_detail = "已找到設定的 Xcode 開發者目錄。"
-        if xcode:
-            tool_detail += f" Xcode {xcode}。"
-        if macos:
-            tool_detail += f" macOS {macos}。"
-        if not tools_ok:
-            tool_detail = "找不到可用的 Xcode 開發者目錄。"
-        check("developer-tools", "Xcode 開發者工具", tool_detail, tools_ok)
-        first = self._check_first_launch() if tools_ok else False
-        check("xcode-first-launch", "Xcode 初始狀態", "Xcode 已完成初始檢查。" if first else "Xcode 初始檢查未通過。", first)
-        python_ok = self._check_python()
-        check("python-runtime", "Python 檢查環境", "已確認固定版本的 Python 依賴。" if python_ok else "找不到固定版本的 Python 依賴。", python_ok)
+        minimum_macos = self._xcode_minimum_macos_version(xcode_installed)
+        current_version = _version_tuple(macos)
+        minimum_version = _version_tuple(minimum_macos)
+        if current_version is None or minimum_version is None:
+            macos_status = "unknown"
+            macos_detail = "無法確認 macOS 版本與 Xcode 最低需求。"
+        else:
+            macos_status = "passed" if current_version >= minimum_version else "failed"
+            macos_detail = f"macOS {macos}；Xcode 至少需要 macOS {minimum_macos}。"
+        check("macos-version", "macOS 版本", macos_detail, macos_status)
 
-        device_ok = False
-        try:
-            raw = self._raw_devices()
-            device_ok = True
-            device_count = len(self._device_rows(raw))
-            detail = f"裝置清單可讀取，目前觀察到 {device_count} 台裝置。"
-        except BridgeError:
-            detail = "無法讀取裝置清單。"
-        check("device-discovery", "裝置清單", detail, device_ok)
+        available_kib = self._available_space_kib()
+        if available_kib is None:
+            space_status = "unknown"
+            space_detail = "無法確認可用儲存空間。"
+        else:
+            available_gb = available_kib / (1024 * 1024)
+            space_status = "passed" if available_kib >= MINIMUM_FREE_SPACE_GB * 1024 * 1024 else "failed"
+            space_detail = f"可用 {available_gb:.1f} GB；至少需要 {MINIMUM_FREE_SPACE_GB} GB。"
+        check("available-space", "可用空間", space_detail, space_status)
 
-        teams = self._teams()
-        check("apple-account", "Apple 開發者帳號",
-              f"已找到 {len(teams)} 個可用 Team。" if teams else "請在 Xcode → Settings → Apple Accounts 登入。",
-              bool(teams))
+        xcode_detail = (f"已偵測到 Xcode {xcode}。" if xcode else "已偵測到 Xcode，版本未知。") if xcode_installed else (
+            "尚未偵測到 Xcode。" if xcode_status == "failed" else "無法確認 Xcode 是否已安裝。"
+        )
+        check("xcode-installed", "Xcode", xcode_detail, xcode_status)
 
-        # A missing team blocks installation in the future, but does not make
-        # read-only environment/device management unavailable.
-        base_ids = {"project", "developer-tools", "xcode-first-launch", "python-runtime",
-                    "device-discovery", "apple-account"}
-        ready = all(item["passed"] for item in checks if item["id"] in base_ids)
+        first_status = self._check_first_launch(xcode_installed)
+        first_details = {
+            "passed": "Xcode 初次啟動已完成，且已接受授權條款。",
+            "failed": "請開啟 Xcode，完成初次啟動與授權條款。",
+            "unknown": "無法確認 Xcode 初次啟動或授權條款狀態。",
+        }
+        check("xcode-first-launch", "Xcode 初次啟動", first_details[first_status], first_status)
+
+        platform_status, sdk_name = self._ios_platform(xcode_installed)
+        platform_details = {
+            "passed": f"已安裝 iOS 平台 {sdk_name}。",
+            "failed": "尚未下載 iOS 平台。",
+            "unknown": "無法確認 iOS 平台狀態。",
+        }
+        check("ios-platform", "iOS 平台", platform_details[platform_status], platform_status)
+
+        teams = self._teams() if xcode_installed else None
+        team_status = "unknown" if teams is None else ("passed" if teams else "failed")
+        team_details = {
+            "passed": f"已找到 {len(teams or [])} 個 Apple 開發團隊。",
+            "failed": "尚未在 Xcode 登入 Apple 開發者帳號。",
+            "unknown": "無法確認 Xcode Apple 帳號狀態。",
+        }
+        check("apple-account", "Apple 帳號", team_details[team_status], team_status)
+
+        ready = all(item["status"] == "passed" for item in checks)
         project_version, project_build = self._project_identity()
-        return {"ready": ready, "checks": checks, "teams": teams, "xcodeVersion": xcode,
+        return {"ready": ready, "checks": checks, "teams": teams or [], "xcodeVersion": xcode,
                 "projectVersion": project_version, "projectBuild": project_build}
 
     def _find_device(self, raw: list[Any], target: str, selected_transport: str | None = None) -> tuple[Any, str, str]:
@@ -586,16 +677,19 @@ class Bridge:
         if actual is None or actual != expected:
             raise BridgeError("identity-mismatch")
         version = values.get("ProductVersion")
+        model_name = values.get("ProductType")
         return {
             "id": actual,
             "name": values.get("DeviceName") if isinstance(values.get("DeviceName"), str) else "",
+            "modelName": model_name if isinstance(model_name, str) else None,
             "osVersion": version if isinstance(version, str) else None,
             "developerMode": developer_mode,
             "supportedOS": _version_supported(version),
         }
 
     def _installed_info(self, client: Any, *, bundle_id: str | None = None) -> tuple[bool | None, Mapping[str, Any] | None]:
-        bundle_id = bundle_id or self.config.target_bundle_id
+        if not isinstance(bundle_id, str) or not bundle_id:
+            raise BridgeError("invalid-request")
         try:
             from pymobiledevice3.services.installation_proxy import InstallationProxyService
         except Exception:
@@ -620,7 +714,7 @@ class Bridge:
             raise BridgeError("operation-failed")
         return True, target
 
-    def inspect(self, target: str, selected_transport: str | None = None) -> dict[str, Any]:
+    def inspect(self, target: str, bundle_id: str, selected_transport: str | None = None) -> dict[str, Any]:
         target = _normalized_udid(target) or (_ for _ in ()).throw(BridgeError("invalid-request"))
         raw = self._raw_devices()
         item, serial, connection = self._find_device(raw, target, selected_transport)
@@ -631,7 +725,7 @@ class Bridge:
                 values = self._read_values(client, target)
                 if not values["supportedOS"]:
                     raise BridgeError("unsupported-os")
-                installed, info = self._installed_info(client)
+                installed, info = self._installed_info(client, bundle_id=bundle_id)
                 vpn_installed, _ = self._installed_info(client, bundle_id=LOCALDEVVPN_BUNDLE_ID)
             finally:
                 with contextlib.suppress(Exception):
@@ -649,6 +743,7 @@ class Bridge:
             "device": {
                 "id": values["id"],
                 "name": values["name"],
+                "modelName": values["modelName"],
                 "transport": "usb" if connection.upper() == USB else "wifi",
                 "osVersion": values["osVersion"],
             },
@@ -685,7 +780,8 @@ class Bridge:
             elif action == "devices":
                 payload = self.devices()
             else:
-                payload = self.inspect(request["deviceID"], request.get("transport"))
+                from Setup.setup_protocol import bundle_id_for_team
+                payload = self.inspect(request["deviceID"], bundle_id_for_team(request["teamID"]), request.get("transport"))
             return wire_response(request, status="ok", payload=payload)
         except BridgeError as error:
             return wire_response(request, status="error", code=error.code)
@@ -702,9 +798,10 @@ def _validate_request(request: Any) -> str:
         raise BridgeError("invalid-request")
     allowed = {"requestID", "action"}
     if action in {"inspect"}:
-        allowed.add("deviceID")
+        allowed.update({"deviceID", "teamID"})
         target = request.get("deviceID")
-        if _normalized_udid(target) is None:
+        team_id = request.get("teamID")
+        if _normalized_udid(target) is None or not isinstance(team_id, str) or TEAM_RE.fullmatch(team_id) is None:
             raise BridgeError("invalid-request")
         if "transport" in request:
             allowed.add("transport")
@@ -725,7 +822,7 @@ def _map_error(code: Any) -> str:
         "device-identity-unavailable": "identity-mismatch",
         "device-identity-mismatch": "identity-mismatch",
         "unsupported-os-version": "unsupported-os",
-        "runtime-import-unavailable": "runtime-unavailable",
+        "runtime-import-unavailable": "bundle-damaged",
         "runtime-version-mismatch": "dependency-mismatch",
     }
     mapped = mapping.get(str(code), "operation-failed")
@@ -778,10 +875,9 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
                     and re.fullmatch(r"[0-9a-f]{64}", journal["receiptSHA256"]) is not None
                 ):
                     outcome = "unknown"
-                delivery_state = journal.get("delivery", {}).get("state")
                 payload: dict[str, Any] = {
                     "stage": current, "outcome": outcome,
-                    "canResume": uses_full_setup(journal) and outcome != "confirmed" and delivery_state not in {"inflight", "unknown"},
+                    "teamID": journal.get("intent", {}).get("teamID"),
                     "proof": {
                         "installationConfirmed": proof.get("installationConfirmed") is True,
                         "pairingImported": proof.get("pairingImported") is True,
@@ -795,7 +891,6 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
                         "profileSHA256": artifact.get("profileSHA256"),
                         "executableSHA256": artifact.get("executableSHA256"),
                     }
-                    payload["teamID"] = journal.get("intent", {}).get("teamID")
                     payload["expiresAt"] = artifact.get("expiresAt")
                 receipt = journal.get("receiptSHA256")
                 if isinstance(receipt, str) and re.fullmatch(r"[0-9a-f]{64}", receipt) is not None:
@@ -805,49 +900,78 @@ def _setup_error_payload(request: Any, config: Any = None) -> dict[str, Any]:
             pass
     action = getattr(request, "action", None)
     stage = action if action in {"preflight", "artifact", "pairing", "install", "support", "handoff"} else "preflight"
-    return {"stage": stage, "outcome": "unknown", "canResume": stage != "preflight" and action not in {"status", "resume"},
-            "proof": {"installationConfirmed": False, "pairingImported": False, "supportObserved": False}}
+    payload = {"stage": stage, "outcome": "unknown",
+               "proof": {"installationConfirmed": False, "pairingImported": False, "supportObserved": False}}
+    team_id = getattr(request, "team_id", None)
+    if isinstance(team_id, str):
+        payload["teamID"] = team_id
+    return payload
 
 
-def _setup_response(value: Mapping[str, Any], config_path: Path, *, producer_factory: Any = None) -> dict[str, Any]:
+def _setup_response(value: Mapping[str, Any], config: Config, *, producer_factory: Any = None) -> dict[str, Any]:
     try:
         from Setup.setup_adapters import PinnedPymobiledeviceAdapter, PinnedXcodeProcessAdapter, close_async_runtime
         from Setup.setup_config import SetupConfiguration
         from Setup.setup_producer import SetupProducer
-        from Setup.setup_protocol import decode_request
+        from Setup.setup_protocol import bundle_id_for_team, decode_request
         from Setup.setup_support import PinnedSupportAdapter
     except ImportError:
         from setup_adapters import PinnedPymobiledeviceAdapter, PinnedXcodeProcessAdapter, close_async_runtime
         from setup_config import SetupConfiguration
         from setup_producer import SetupProducer
-        from setup_protocol import decode_request
+        from setup_protocol import bundle_id_for_team, decode_request
         from setup_support import PinnedSupportAdapter
-    config = None
+    bundle_config = config
+    setup_config = None
     request = None
     try:
-        config = SetupConfiguration.load(config_path)
-        config.validate_read_only_paths()
         request = decode_request(value)
+        team_id = request.team_id
+        if team_id is None:
+            try:
+                from Setup.setup_journal import JournalStore
+            except ImportError:
+                from setup_journal import JournalStore
+            journal = JournalStore(bundle_config.state_root).read()
+            if isinstance(journal, dict) and (
+                request.setup_id is None or journal.get("setupID") == request.setup_id
+            ) and (
+                request.device_id is None or journal.get("deviceID") == request.device_id
+            ):
+                team_id = journal.get("intent", {}).get("teamID")
+        target_bundle_id = bundle_id_for_team(team_id) if team_id is not None else None
+        setup_config = SetupConfiguration.from_bundle(
+            bundle_config.resources_root,
+            bundle_config.developer_directory,
+            target_bundle_id,
+            bundle_config.target_name,
+        )
+        setup_config.validate_read_only_paths()
         if producer_factory is not None:
-            producer = producer_factory(config)
+            producer = producer_factory(setup_config)
         else:
-            device = PinnedPymobiledeviceAdapter(state_root=config.state_root)
-            producer = SetupProducer(config, device=device, process=PinnedXcodeProcessAdapter(config),
+            device = PinnedPymobiledeviceAdapter(state_root=setup_config.state_root,
+                                                 target_bundle_id=setup_config.target_bundle_id)
+            producer = SetupProducer(setup_config, device=device, process=PinnedXcodeProcessAdapter(setup_config),
                                      support=PinnedSupportAdapter(device))
         payload = producer.handle(request).as_dict()
         from Setup.setup_protocol import _response_payload
         if request.action == "status" and request.setup_id is None:
-            journal = __import__("Setup.setup_journal", fromlist=["JournalStore"]).JournalStore(config.state_root).read()
+            journal = JournalStore(setup_config.state_root).read()
             if isinstance(journal, dict):
                 value = dict(value)
                 value["setupID"] = journal.get("setupID")
                 value["deviceID"] = journal.get("deviceID")
                 value["mode"] = journal.get("mode", "install")
+                value["transport"] = journal.get("intent", {}).get("transport", "usb")
+                value["teamID"] = journal.get("intent", {}).get("teamID")
         return wire_response(value, status="ok", payload=_response_payload(payload))
     except WireError as error:
-        return wire_response(value, status="error", code=error.code, payload=_setup_error_payload(request, config))
+        return wire_response(value, status="error", code=error.code,
+                             payload=_setup_error_payload(request, setup_config or bundle_config))
     except Exception:
-        return wire_response(value, status="error", code="operation-failed", payload=_setup_error_payload(request, config))
+        return wire_response(value, status="error", code="operation-failed",
+                             payload=_setup_error_payload(request, setup_config or bundle_config))
     finally:
         try:
             close_async_runtime()
@@ -855,7 +979,7 @@ def _setup_response(value: Mapping[str, Any], config_path: Path, *, producer_fac
             pass
 
 
-def run_stdio(config_path: str | Path, *, stdin: Any = None, setup_producer_factory: Any = None,
+def run_stdio(config: Config, *, stdin: Any = None, setup_producer_factory: Any = None,
               producer_factory: Any = None) -> dict[str, Any]:
     stream = stdin if stdin is not None else sys.stdin
     setup_producer_factory = setup_producer_factory or producer_factory
@@ -867,13 +991,13 @@ def run_stdio(config_path: str | Path, *, stdin: Any = None, setup_producer_fact
     if action in {"environment", "devices", "inspect"}:
         try:
             _validate_request(value)
-            return Bridge(Config.load(config_path)).handle(value)
+            return Bridge(config).handle(value)
         except WireError as error:
             return wire_response(value, status="error", code=error.code)
         except Exception:
             return wire_response(value, status="error", code="operation-failed")
-    if action in {"preflight", "apply", "status", "resume"}:
-        return _setup_response(value, Path(config_path), producer_factory=setup_producer_factory)
+    if action in {"preflight", "apply", "status"}:
+        return _setup_response(value, config, producer_factory=setup_producer_factory)
     return wire_response(value, status="error", code="invalid-request")
 
 
@@ -893,12 +1017,23 @@ def main(argv: list[str] | None = None) -> int:
         _emit(wire_response(None, status="error", code=error.code))
         return 1
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--resources", required=True)
+    parser.add_argument("--developer-directory", required=True)
+    parser.add_argument("--target-name", default=DEFAULT_TARGET_NAME)
     try:
         arguments, _ = parser.parse_known_args(argv)
     except SystemExit:
         return 2
-    response = run_stdio(arguments.config)
+    try:
+        config = Config.from_bundle(
+            arguments.resources,
+            arguments.developer_directory,
+            arguments.target_name,
+        )
+    except BridgeError as error:
+        _emit(wire_response(None, status="error", code=error.code))
+        return 0
+    response = run_stdio(config)
     _emit(response)
     return 0
 

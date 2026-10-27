@@ -10,7 +10,7 @@
         <key>UISceneConfigurations</key><dict/>
     </dict>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
-    <array><string>com.neven.gofly.movement</string></array>
+    <array><string>$(PRODUCT_BUNDLE_IDENTIFIER).movement</string></array>
     <key>UIBackgroundModes</key>
     <array><string>processing</string></array>
     <key>LSApplicationQueriesSchemes</key>

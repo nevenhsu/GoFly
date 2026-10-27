@@ -1,6 +1,6 @@
 # 05 · 環境步驟頁 E01–E09
 
-**Status:** todo
+**Status:** implemented; software-verified
 **Blocked by:** 04
 **Spec:** MAC-INSTALLER-SPEC §4 表格；Figma E01–E09（含畫面下方說明）。
 
@@ -16,3 +16,13 @@
 
 **Acceptance**
 - 每頁淺深色截圖與 Figma 對照；更換 Team 會提示「iPhone 上會變成另一個 GoFly」。
+
+## Evidence
+- E01–E09 已完成並與 Figma V1 淺／深色節點及各節點下方說明逐頁比對；E00 啟動畫面列於票 04。App 截圖：[`E01-light.png`](../../../work/gofly-mac/v1/screens/E01-light.png)／[`E01-dark.png`](../../../work/gofly-mac/v1/screens/E01-dark.png) 至 [`E09-light.png`](../../../work/gofly-mac/v1/screens/E09-light.png)／[`E09-dark.png`](../../../work/gofly-mac/v1/screens/E09-dark.png)。E09 深色圖已於 2026-10-27 重擷取，檔案可正常讀取。
+- E06 保留「設計待驗證」標記；操作步驟已寫入 `work/gofly-mac/v1/E06-VERIFY.md`，不宣稱需求已由乾淨 Mac 證實。
+- Swift 離線測試：60 tests / 4 suites 全過；三語 `.strings` plist lint 通過。系統設定、App Store、Xcode 與 Apple 網頁按鈕使用開啟動作，未實際操作使用者帳號。
+- Mac 色彩由 Mac 專屬語意 token 提供，淺／深外觀相符；不依賴 iOS 色彩實作。
+
+## Not verified
+- E06 是否可從必要建置流程移除，需依 `E06-VERIFY.md` 在乾淨 Mac 實測；未下載 iOS SDK 或操作 Apple 帳號。
+- 實際 App Store/Xcode 安裝偵測、軟體更新、Apple 登入與不同數量 Team 狀態仍需在乾淨 Mac 操作驗收；未連接實體 iPhone。最小視窗與鍵盤操作未人工驗收。

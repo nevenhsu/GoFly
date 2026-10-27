@@ -1,6 +1,6 @@
 # GoFly 總重構：執行順序與共同規則（先讀這份）
 
-> **2026-10-26**：Mac 部分（順序 5–9 與 03）已取代為 `04-mac-v1-codex.md`＋`.scratch/gofly-mac-v1/`；第一版不做備份／還原／重置，中斷只「重新開始」。
+> **2026-10-27**：Mac V1 已按 `04-mac-v1-codex.md` 與 `.scratch/gofly-mac-v1/` 的 12 張票實作；舊 Mac reset／backup prompt 已退役。公開發行與實機驗收狀態見 Mac V1 TRACKER。
 
 你在 repo `/Users/neven/Documents/projects/ianygo` 工作。這份文件決定**做事的順序**與**何時才停下**。各任務的細節在同目錄的子 prompt：
 
@@ -8,8 +8,7 @@
 | --- | --- |
 | `01-ui-ux-redesign.md` | iOS UI／UX flow 重構 |
 | `02-debug-movement-stops.md` | iOS「模擬位置突然停止」除錯（A 本機 → B 手機 → C 修復） |
-| `03-mac-redesign.md` | Mac UI／UX 改版，加上備份／還原／重置／更新簽名／取消接續 |
-| `work/gofly-planning/MAC-RESET-BACKUP-PLAN.md` | 03 引用的 Mac 開發計畫（Phase 0–3，含兩處 iOS 改動） |
+| `04-mac-v1-codex.md` | GoFly for Mac V1 依 12 張票實作；視覺唯一以 Figma 05 V1 section 為準 |
 
 開始前讀 `AGENTS.md`，以及這份文件之後要執行的子 prompt 全文。
 
@@ -23,13 +22,7 @@
 | 2 | 01 步驟 0–9 | iOS UI 重構 | 每步 `check.sh` 通過、截圖、驗收條件勾選 |
 | 3 | 02 階段 C | 使用者回傳手機證據後才做；在 01 某一步完成後的空檔插入，不要中斷進行中的步驟 | 依證據修復；給使用者修正後的驗證清單 |
 | 4 | 檢查點 | 更新 `.scratch/gofly-ios/DEVICE-ACCEPTANCE.md`，列出 iOS 需要真機驗收的項目 | 清單完成即可繼續，不必等使用者驗收 |
-| 5 | 03 步驟 0–4 | Mac UI 改版（環境、首次安裝、裝置管理、Wi‑Fi 限制、重新搜尋） | 建置與測試通過、截圖 |
-| 6 | 計畫 Phase 0 | 取消接續：中斷即從頭重新開始 | 計畫第 9 節離線驗收 |
-| 7 | 計畫 Phase 1 | iOS 偏好設定鏡像檔、bridge `backup`、備份管理頁、更新前備份 | 同上 |
-| 7b | 計畫 Phase 1.5 | 更新簽名：版本比對＋不一致時的確認步驟（沿用 renew） | 同上 |
-| 8 | 計畫 Phase 2 | 重置 GoFly | 同上 |
-| 9 | 計畫 Phase 3 | 還原（bridge `restore`＋iOS `RestoreIngress`） | 同上 |
-| 10 | 收尾 | 更新 `.scratch/gofly-ios/DEVICE-ACCEPTANCE.md`、`.scratch/gofly-ios/MAC-DEVICE-ACCEPTANCE.md`；整理所有文件 | 文件中「已實作／離線已驗證／待真機」標示正確 |
+| 5 | Mac V1 票 01–12 | 內建 runtime、全新環境引導、USB/Wi‑Fi install/renew、自動續簽、DMG、文件收尾 | 每票離線驗證與 Tracker 更新；乾淨 Mac／iPhone 實機事項留在驗收清單 |
 
 **順序理由**
 - 1 先做：改動小，而且讓使用者盡早拿到可抓日誌的 build，手機測試可以和 2 平行。
@@ -41,9 +34,9 @@
 ## 二、何時才停下（只有這些情況）
 
 1. **需要使用者在手機或 Mac 上操作**：安裝、開關 App、拔插 USB、輸入密碼、在系統視窗點按、抓裝置日誌。把步驟寫清楚後，這個任務暫停，**改做順序中下一個不依賴它的任務**。
-2. **會違反不變量**：`app/GoFly/ARCHITECTURE.md`「命令與送點」，或 `app/GoFlyMac/DEVELOPMENT.md` 的交易、完成判定、到期日規則。例外：計畫 Phase 0「中斷即重新開始」已核可。
+2. **會違反不變量**：`app/GoFly/ARCHITECTURE.md`「命令與送點」，或 `docs/MAC-INSTALLER-SPEC.md` 的交易、完成判定、到期日規則。Mac V1 中斷後使用新交易重新開始，不沿用舊 setup ID。
 3. **需要改原生 patch、FFI header 或重建 NativeBridge**。
-4. **會刪除使用者資料，且條件與開發計畫不同**；或要改變備份／還原的資料範圍。
+4. **會刪除使用者資料。**
 5. **需要憑證、簽署身分、Apple 帳號、付費服務**，或需要提交、推送到遠端。
 
 **其他情況一律不停**，包括：

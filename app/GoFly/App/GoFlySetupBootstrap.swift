@@ -135,7 +135,7 @@ enum GoFlySetupIdentityReader {
     /// executable or profile.
     static func readBundleID() throws -> String {
         guard let bundleID = Bundle.main.bundleIdentifier,
-              bundleID == SetupAppIdentity.formalBundleID else {
+              SetupAppIdentity.isGoFlyBundleID(bundleID) else {
             throw SetupFailure.identityMismatch
         }
         return bundleID

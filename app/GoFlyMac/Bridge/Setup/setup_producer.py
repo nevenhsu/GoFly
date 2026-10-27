@@ -28,8 +28,8 @@ try:
     )
     from .setup_config import SetupConfiguration
     from .setup_delivery import deliver_v1_once
-    from .setup_journal import JournalStore, uses_full_setup, stages_for
-    from .setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
+    from .setup_journal import JournalStore, uses_full_setup, uses_wifi_renew, stages_for
+    from .setup_protocol import SetupBridgeError, SetupOptions, SetupRequest, bundle_id_matches_team
 except ImportError:  # script execution from the packaged Setup directory
     from setup_adapters import (
         ArtifactIdentity,
@@ -45,8 +45,8 @@ except ImportError:  # script execution from the packaged Setup directory
     )
     from setup_config import SetupConfiguration
     from setup_delivery import deliver_v1_once
-    from setup_journal import JournalStore, uses_full_setup, stages_for
-    from setup_protocol import SetupBridgeError, SetupOptions, SetupRequest
+    from setup_journal import JournalStore, uses_full_setup, uses_wifi_renew, stages_for
+    from setup_protocol import SetupBridgeError, SetupOptions, SetupRequest, bundle_id_matches_team
 
 
 def _safe_version(value: str) -> bool:
@@ -69,7 +69,6 @@ def support_method(os_version: str) -> str:
 class ProducerPayload:
     stage: str
     outcome: str
-    can_resume: bool
     installation_confirmed: bool = False
     pairing_imported: bool = False
     support_observed: bool = False
@@ -88,7 +87,6 @@ class ProducerPayload:
                 "supportObserved": self.support_observed,
             },
         }
-        value["canResume"] = self.can_resume
         if self.app is not None:
             value["app"] = dict(self.app)
         if self.team_id is not None:
@@ -101,7 +99,7 @@ class ProducerPayload:
 
 
 class SetupProducer:
-    """One explicit transaction coordinator for preflight/apply/status/resume."""
+    """One explicit transaction coordinator for preflight/apply/status."""
 
     def __init__(
         self,
@@ -126,8 +124,6 @@ class SetupProducer:
             return self.preflight(request)
         if request.action == "status":
             return self.status(request)
-        if request.action == "resume":
-            return self.resume(request)
         if request.action == "apply":
             assert request.options is not None
             return self.apply(request)
@@ -137,9 +133,13 @@ class SetupProducer:
         options = request.options
         if options is None:
             raise SetupBridgeError("invalid-request")
+        self._validate_target_team(options.team_id)
         self.config.validate_read_only_paths()
-        observed = self._observe_device(request.device_id)
-        existing = self.device.installed(request.device_id)
+        observed = self._observe_device(request.device_id, request.transport)
+        if request.transport == "wifi":
+            source = self._wifi_pairing_source(request.device_id, options.team_id)
+            self._verify_wifi_pairing(request, source)
+        existing = self._device_call(self.device.installed, request, request.device_id)
         if request.mode == "renew":
             if not existing.present:
                 raise SetupBridgeError("app-not-installed")
@@ -148,7 +148,6 @@ class SetupProducer:
         return self._payload(
             stage="preflight",
             outcome="ready",
-            can_resume=False,
             artifact=None,
             team_id=options.team_id,
             observed=observed,
@@ -158,25 +157,44 @@ class SetupProducer:
         options = request.options
         if options is None:
             raise SetupBridgeError("invalid-request")
+        self._validate_target_team(options.team_id)
         mode = request.mode or "install"
         # State-root creation is a write-side operation.  The CLI validates
         # the frozen paths before constructing this producer; direct injected
         # seams may use a temporary SetupConfiguration for controlled tests.
         self.config.ensure_state_root()
         with self.store.lock():
-            # Apply is explicit, but still rechecks the selected USB device
+            existing = self.store.read()
+            if existing is not None and existing.get("setupID") == request.setup_id:
+                raise SetupBridgeError("transaction-conflict")
+            # Apply is explicit, but still rechecks the selected transport
             # and refuses an already-installed GoFly before creating a new
-            # transaction record.
-            self._observe_device(request.device_id)
-            installed_present = self.device.installed(request.device_id).present
+            # transaction record. Check the journal first so a disconnected
+            # device cannot mask a replayed setup ID as a transport failure.
+            self._observe_device(request.device_id, request.transport)
+            installed_present = self._device_call(self.device.installed, request, request.device_id).present
             if mode == "install" and installed_present:
                 raise SetupBridgeError("app-already-installed")
             if mode == "renew" and not installed_present:
                 raise SetupBridgeError("app-not-installed")
-            existing = self.store.read()
+            wifi_pairing_source = None
+            if request.transport == "wifi":
+                wifi_pairing_source = self._wifi_pairing_source(request.device_id, options.team_id)
+                self._verify_wifi_pairing(request, wifi_pairing_source)
             if existing is not None:
-                if existing.get("setupID") == request.setup_id and existing.get("deviceID") == request.device_id:
-                    raise SetupBridgeError("transaction-conflict")
+                if (
+                    not self._journal_is_completed(existing)
+                    and existing.get("deviceID") == request.device_id
+                    and existing.get("stages", {}).get("handoff", {}).get("state")
+                    in {"inflight", "unknown", "confirmed"}
+                ):
+                    pairing_transaction_id = existing.get("intent", {}).get("pairingTransactionID")
+                    retire = getattr(self.device, "retire_pending_pairing", None)
+                    if not isinstance(pairing_transaction_id, str) or not callable(retire):
+                        raise SetupBridgeError("runtime-api-mismatch")
+                    # Retire before archiving so a device-side failure leaves
+                    # the exact source journal available for a safe retry.
+                    retire(request.device_id, pairing_transaction_id)
                 # A proven completed record is archived as completed; any
                 # unfinished record is abandoned (archived, nothing deleted)
                 # and setup restarts from scratch with a fresh transaction.
@@ -194,11 +212,17 @@ class SetupProducer:
                     "targetName": self.config.target_name,
                     "artifact": None,
                     "fullSetup": True,
+                    "transport": request.transport,
+                    **({
+                        "wifiRenew": True,
+                        "pairingSourceSetupID": wifi_pairing_source["sourceSetupID"],
+                        "pairingTransactionID": wifi_pairing_source["pairingTransactionID"],
+                    } if wifi_pairing_source is not None else {}),
                 },
                 mode=mode,
             )
             try:
-                observed = self._observe_device(request.device_id)
+                observed = self._observe_device(request.device_id, request.transport)
                 journal["intent"]["deviceObservation"] = {
                     "deviceID": observed.device_id,
                     "osVersion": observed.os_version,
@@ -227,28 +251,46 @@ class SetupProducer:
                         "confirmed",
                         proof={"pairingImported": False},
                     )
+                elif uses_wifi_renew(journal):
+                    journal = self.store.checkpoint(journal, "pairing", "inflight")
+                    candidate = self.store.root / wifi_pairing_source["candidate"]
+                    verified = self._device_call(self.device.verify_pairing, request, request.device_id, candidate)
+                    if verified.state != "verified" or verified.sha256 != wifi_pairing_source["sha256"]:
+                        raise SetupBridgeError("wifi-pairing-unknown")
+                    journal["pairing"] = {
+                        "candidate": wifi_pairing_source["candidate"],
+                        "sha256": wifi_pairing_source["sha256"],
+                    }
+                    journal = self.store.update(journal)
+                    journal = self.store.checkpoint(
+                        journal,
+                        "pairing",
+                        "confirmed",
+                        proof={"pairingImported": True},
+                    )
                 # Installation is the irreversible device boundary.  Journal
                 # inflight before calling the injected production adapter.
-                if mode == "install" and self.device.installed(request.device_id).present:
+                if mode == "install" and self._device_call(self.device.installed, request, request.device_id).present:
                     raise SetupBridgeError("app-already-installed")
                 journal = self.store.checkpoint(journal, "install", "inflight")
-                self._observe_device(request.device_id)
-                if mode == "renew" and not self.device.installed(request.device_id).present:
+                self._observe_device(request.device_id, request.transport)
+                if mode == "renew" and not self._device_call(self.device.installed, request, request.device_id).present:
                     journal = self.store.checkpoint(journal, "install", "unknown", detail="app-not-installed")
                     raise SetupBridgeError("app-not-installed")
                 # Revalidate the immutable local bundle immediately before the
                 # irreversible device call.  A check performed earlier in the
                 # transaction cannot cover a changed bundle on disk.
                 current_artifact = self.artifact_validator.inspect(
-                    artifact.path, device_id=request.device_id, team_id=artifact.team_id
+                    artifact.path, device_id=request.device_id, team_id=artifact.team_id,
+                    target_bundle_id=self.config.target_bundle_id,
                 )
                 if current_artifact != artifact:
                     journal = self.store.checkpoint(journal, "install", "unknown", detail="artifact-changed")
                     raise SetupBridgeError("artifact-mismatch")
-                installed = self.device.install(request.device_id, artifact)
+                installed = self._device_call(self.device.install, request, request.device_id, artifact)
                 if not self._install_result_confirms(installed, artifact):
                     journal = self.store.checkpoint(journal, "install", "unknown", detail="postcondition-unconfirmed")
-                    return self._payload_from_journal(journal, artifact=artifact, can_resume=True)
+                    return self._payload_from_journal(journal, artifact=artifact)
                 # Persist the successful InstallationProxy result together
                 # with the confirmed install stage.  A later nonce receipt
                 # must still match all exact bundle digests, but it cannot
@@ -269,202 +311,161 @@ class SetupProducer:
                 )
                 if uses_full_setup(journal):
                     journal = self._handoff(journal, request, artifact)
+                elif uses_wifi_renew(journal):
+                    observed = self._boundary_observe(journal, request.device_id)
+                    journal = self._support(journal, request, observed)
+                    journal = self._wifi_handoff(journal, request, artifact)
                 journal = self.store.checkpoint(
                     journal,
                     "complete",
                     "confirmed",
                     proof={
                         "installationConfirmed": True,
-                        "pairingImported": uses_full_setup(journal),
-                        "supportObserved": uses_full_setup(journal),
+                        "pairingImported": uses_full_setup(journal) or uses_wifi_renew(journal),
+                        "supportObserved": uses_full_setup(journal) or uses_wifi_renew(journal),
                     },
                 )
                 receipt = self._receipt_digest(journal)
                 journal["receiptSHA256"] = receipt
                 # This final write records the receipt itself.  If it is
                 # interrupted, the complete stage remains durable but the
-                # transaction is conservatively resumed from the journal.
+                # transaction remains incomplete and must be restarted from scratch.
                 journal = self.store.update(journal)
-                return self._payload_from_journal(journal, artifact=artifact, can_resume=False, receipt=receipt)
+                return self._payload_from_journal(journal, artifact=artifact, receipt=receipt)
             except SetupBridgeError as error:
                 # Adapter-safe failures after an install checkpoint are still
                 # unknown.  The error code is surfaced, while the durable
-                # stage prevents any blind install retry on resume.
-                stage = self._inflight_stage(journal)
-                if stage is not None:
-                    with _suppress_journal_errors():
-                        journal = self.store.checkpoint(journal, stage, "unknown", detail=error.code)
+                # stage prevents any blind install retry in this transaction.
+                stage = None
+                with _suppress_journal_errors():
+                    latest = self.store.read() or journal
+                    stage = self._inflight_stage(latest)
+                error_code = self._wifi_stable_error(request, stage, error.code)
+                with _suppress_journal_errors():
+                    latest = self.store.read() or journal
+                    stage = self._inflight_stage(latest)
+                    if stage is not None:
+                        self.store.checkpoint(latest, stage, "unknown", detail=error_code)
+                if error_code != error.code:
+                    raise SetupBridgeError(error_code) from None
                 raise
             except TimeoutError:
-                stage = self._inflight_stage(journal)
                 with _suppress_journal_errors():
+                    latest = self.store.read() or journal
+                    stage = self._inflight_stage(latest)
                     if stage is not None:
-                        journal = self.store.checkpoint(journal, stage, "unknown", detail="timeout")
+                        self.store.checkpoint(latest, stage, "unknown", detail="timeout")
                 raise SetupBridgeError("timeout") from None
             except KeyboardInterrupt:
-                stage = self._inflight_stage(journal)
                 with _suppress_journal_errors():
+                    latest = self.store.read() or journal
+                    stage = self._inflight_stage(latest)
                     if stage is not None:
-                        journal = self.store.checkpoint(journal, stage, "unknown", detail="cancelled")
+                        self.store.checkpoint(latest, stage, "unknown", detail="cancelled")
                 raise SetupBridgeError("cancelled") from None
             except Exception:
                 # Once the irreversible boundary has been entered, process
                 # loss and adapter errors are unknown.  They never authorize
                 # resubmission or adoption of matching external metadata.
-                stage = self._inflight_stage(journal)
                 with _suppress_journal_errors():
+                    latest = self.store.read() or journal
+                    stage = self._inflight_stage(latest)
                     if stage is not None:
-                        journal = self.store.checkpoint(journal, stage, "unknown", detail="operation-failed")
+                        self.store.checkpoint(latest, stage, "unknown", detail="operation-failed")
                 raise SetupBridgeError("operation-failed") from None
 
     def status(self, request: SetupRequest) -> ProducerPayload:
         journal = self.store.read()
         if journal is None:
             raise SetupBridgeError("transaction-unknown")
+        if request.team_id is not None and request.team_id != journal.get("intent", {}).get("teamID"):
+            raise SetupBridgeError("transaction-conflict")
+        saved_bundle_id = journal.get("intent", {}).get("targetBundleID")
+        if self.config.target_bundle_id is not None and saved_bundle_id != self.config.target_bundle_id:
+            raise SetupBridgeError("transaction-conflict")
         if request.setup_id is not None:
             self._bind(journal, request)
-        return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
+        return self._payload_from_journal(journal)
 
-    def resume(self, request: SetupRequest) -> ProducerPayload:
-        with self.store.lock():
-            journal = self.store.read()
-            if journal is None:
-                raise SetupBridgeError("transaction-unknown")
-            self._bind(journal, request)
-            mode = journal.get("mode", "install")
-            stages = journal["stages"]
-            if not uses_full_setup(journal):
-                # An old incomplete renew cannot be upgraded or replayed.
-                return self._payload_from_journal(journal, can_resume=False)
-            if stages["artifact"]["state"] in {"pending", "unknown", "inflight"}:
-                journal = self._resume_artifact(journal, request)
-                stages = journal["stages"]
-            if uses_full_setup(journal):
-                if stages["pairing"]["state"] in {"unknown", "inflight"}:
-                    # Pair setup may have completed while the Mac lost its
-                    # process.  Verify the retained candidate over a fresh USB
-                    # connection; never generate or upload another record.
-                    observed = self._observe_device(request.device_id)
-                    candidate = self.store.transaction_root(request.setup_id) / "pairing.candidate"
-                    verified = self.device.verify_pairing(request.device_id, candidate)
-                    if verified.state != "verified" or not verified.sha256:
-                        with _suppress_journal_errors():
-                            self.store.checkpoint(journal, "pairing", "unknown", detail="candidate-unverified")
-                        raise SetupBridgeError("pairing-unknown")
-                    journal["pairing"] = {
-                        "candidate": "transactions/%s/pairing.candidate" % request.setup_id,
-                        "sha256": verified.sha256,
-                    }
-                    journal = self.store.checkpoint(journal, "pairing", "confirmed", proof={"pairingImported": False})
-                    stages = journal["stages"]
-                elif stages["pairing"]["state"] == "pending":
-                    journal = self.store.checkpoint(journal, "pairing", "inflight")
-                    journal = self._pair(journal, request)
-                    journal = self.store.checkpoint(journal, "pairing", "confirmed", proof={"pairingImported": False})
-                    stages = journal["stages"]
-            if stages["install"]["state"] == "pending":
-                artifact = self._artifact_from_journal(journal)
-                if artifact is None:
-                    raise SetupBridgeError("transaction-unknown")
-                if mode == "install":
-                    installed_probe = getattr(self.device, "installed", None)
-                    if not callable(installed_probe):
-                        return self._payload_from_journal(journal, can_resume=True)
-                    if installed_probe(request.device_id).present:
-                        journal = self.store.checkpoint(journal, "install", "unknown", detail="unexpected-existing-app")
-                        return self._payload_from_journal(journal, can_resume=True)
-                else:
-                    self._observe_device(request.device_id)
-                    if not self.device.installed(request.device_id).present:
-                        journal = self.store.checkpoint(journal, "install", "unknown", detail="app-not-installed")
-                        return self._payload_from_journal(journal, can_resume=True)
-                journal = self.store.checkpoint(journal, "install", "inflight")
-                self._observe_device(request.device_id)
-                current_artifact = self.artifact_validator.inspect(
-                    artifact.path, device_id=request.device_id, team_id=artifact.team_id
-                )
-                if current_artifact != artifact:
-                    journal = self.store.checkpoint(journal, "install", "unknown", detail="artifact-changed")
-                    raise SetupBridgeError("artifact-mismatch")
-                try:
-                    installed = self.device.install(request.device_id, artifact)
-                except SetupBridgeError as error:
-                    journal = self.store.checkpoint(journal, "install", "unknown", detail=error.code)
-                    return self._payload_from_journal(journal, can_resume=True)
-                except Exception:
-                    journal = self.store.checkpoint(journal, "install", "unknown", detail="operation-failed")
-                    return self._payload_from_journal(journal, can_resume=True)
-                if not self._install_result_confirms(installed, artifact):
-                    journal = self.store.checkpoint(journal, "install", "unknown", detail="postcondition-unconfirmed")
-                    return self._payload_from_journal(journal, can_resume=True)
-                journal["installOwnership"] = {
-                    "transactionID": request.setup_id,
-                    "bundleID": artifact.bundle_id,
-                    "build": artifact.build,
-                    "artifactSHA256": artifact.artifact_sha256,
-                    "executableSHA256": artifact.executable_sha256,
-                    "profileSHA256": artifact.profile_sha256,
-                }
-                journal = self.store.checkpoint(
-                    journal, "install", "confirmed", proof={"installationConfirmed": True}
-                )
-                stages = journal["stages"]
-            # A lost install result is permanently conservative for M1.  A
-            # matching external app is observed only for diagnostics and is
-            # never adopted, launched, stopped, handed off, or reinstalled.
-            if stages["install"]["state"] in {"inflight", "unknown"}:
-                self._observe_device(request.device_id)
-                with _suppress_journal_errors():
-                    self.device.installed(request.device_id)
-                return self._payload_from_journal(journal, can_resume=True)
-            if stages["install"]["state"] != "confirmed":
-                return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
-            if uses_full_setup(journal):
-                # A handoff resume must consume its frozen pre-effect plan before
-                # any support query/install.  The first App readback and PID stop
-                # establish the safe phase for those device boundaries.
-                if stages["handoff"]["state"] in {"unknown", "inflight"}:
-                    return self._resume_handoff(journal, request)
-                if stages["handoff"]["state"] == "pending":
-                    artifact = self._artifact_from_journal(journal)
-                    if artifact is None:
-                        raise SetupBridgeError("transaction-unknown")
-                    journal = self._handoff(journal, request, artifact)
-                stages = journal["stages"]
-                if stages["support"]["state"] != "confirmed":
-                    observed = self._boundary_observe(journal, request.device_id)
-                    expected_support = journal.get("support") if isinstance(journal.get("support"), Mapping) else None
-                    journal = self._support(journal, request, observed, expected=expected_support)
-            if stages["complete"]["state"] != "confirmed":
-                journal = self.store.checkpoint(
-                    journal,
-                    "complete",
-                    "confirmed",
-                    proof={
-                        "installationConfirmed": True,
-                        "pairingImported": uses_full_setup(journal),
-                        "supportObserved": uses_full_setup(journal),
-                    },
-                )
-                receipt = self._receipt_digest(journal)
-                journal["receiptSHA256"] = receipt
-                journal = self.store.update(journal)
-            elif not (
-                isinstance(journal.get("receiptSHA256"), str)
-                and re.fullmatch(r"[0-9a-f]{64}", journal["receiptSHA256"]) is not None
-            ):
-                # Complete-stage durability and receipt durability are two
-                # writes; finish the latter on an explicit resume.
-                receipt = self._receipt_digest(journal)
-                journal["receiptSHA256"] = receipt
-                journal = self.store.update(journal)
-            return self._payload_from_journal(journal, can_resume=self._can_resume(journal))
+    @staticmethod
+    def _device_call(method: Any, request: SetupRequest, *args: Any, **kwargs: Any) -> Any:
+        if request.transport == "wifi":
+            try:
+                return method(*args, **kwargs, transport="wifi")
+            except SetupBridgeError as error:
+                if error.code in {"device-disconnected", "trust-required"}:
+                    raise SetupBridgeError("wifi-device-not-found") from None
+                if error.code in {"pairing-unknown", "pairing-rejected"}:
+                    raise SetupBridgeError("wifi-pairing-unknown") from None
+                raise
+        return method(*args, **kwargs)
 
-    def _observe_device(self, device_id: str) -> DeviceObservation:
-        observed = self.device.observe(device_id)
+    @staticmethod
+    def _wifi_stable_error(request: SetupRequest, stage: str | None, error_code: str) -> str:
+        if request.transport != "wifi":
+            return error_code
+        if stage == "support" and error_code in {"support-unavailable", "operation-failed", "timeout"}:
+            return "wifi-support-unavailable"
+        if stage in {"install", "handoff"} and error_code in {
+            "operation-failed", "commit-unknown", "timeout", "handoff-unknown", "transaction-unknown"
+        }:
+            return "wifi-renew-unknown"
+        return error_code
+
+    def _wifi_pairing_source(self, device_id: str, team_id: str) -> dict[str, str]:
+        journal = self.store.read()
+        if (
+            journal is None
+            or journal.get("deviceID") != device_id.lower()
+            or journal.get("intent", {}).get("teamID") != team_id
+            or not self._journal_is_completed(journal)
+        ):
+            raise SetupBridgeError("wifi-pairing-unknown")
+        intent = journal.get("intent")
+        pairing = journal.get("pairing")
+        if not isinstance(intent, Mapping) or not isinstance(pairing, Mapping):
+            raise SetupBridgeError("wifi-pairing-unknown")
+        source_setup_id = (
+            intent.get("pairingSourceSetupID") if uses_wifi_renew(journal) else journal.get("setupID")
+        )
+        pairing_transaction_id = intent.get("pairingTransactionID")
+        candidate = pairing.get("candidate")
+        digest = pairing.get("sha256")
+        if (
+            not isinstance(source_setup_id, str)
+            or not isinstance(pairing_transaction_id, str)
+            or not isinstance(candidate, str)
+            or candidate != f"transactions/{source_setup_id}/pairing.candidate"
+            or not isinstance(digest, str)
+        ):
+            raise SetupBridgeError("wifi-pairing-unknown")
+        return {
+            "sourceSetupID": source_setup_id,
+            "pairingTransactionID": pairing_transaction_id,
+            "candidate": candidate,
+            "sha256": digest,
+        }
+
+    def _verify_wifi_pairing(self, request: SetupRequest, source: Mapping[str, str]) -> None:
+        candidate = self.store.root / source["candidate"]
+        result = self._device_call(self.device.verify_pairing, request, request.device_id, candidate)
+        if result.state != "verified" or result.sha256 != source["sha256"]:
+            raise SetupBridgeError("wifi-pairing-unknown")
+
+    def _observe_device(self, device_id: str, transport: str = "usb") -> DeviceObservation:
+        if transport == "wifi":
+            try:
+                observed = self.device.observe(device_id, transport="wifi")
+            except SetupBridgeError as error:
+                if error.code in {"device-disconnected", "trust-required"}:
+                    raise SetupBridgeError("wifi-device-not-found") from None
+                raise
+        else:
+            observed = self.device.observe(device_id)
         if observed.device_id.lower() != device_id.lower():
             raise SetupBridgeError("identity-mismatch")
-        if observed.transport.upper() != "USB":
+        expected_transport = "Network" if transport == "wifi" else "USB"
+        if observed.transport.upper() != expected_transport.upper():
             raise SetupBridgeError("device-disconnected")
         if not _safe_version(observed.os_version) or int(observed.os_version.split(".")[0]) < 26:
             raise SetupBridgeError("unsupported-os")
@@ -476,7 +477,8 @@ class SetupProducer:
 
     def _boundary_observe(self, journal: Mapping[str, Any], device_id: str) -> DeviceObservation:
         """Re-read identity and security state immediately before each write boundary."""
-        observed = self._observe_device(device_id)
+        frozen = journal.get("intent", {}).get("transport", "usb") if isinstance(journal.get("intent"), Mapping) else "usb"
+        observed = self._observe_device(device_id, frozen)
         intent = journal.get("intent", {})
         frozen = intent.get("deviceObservation") if isinstance(intent, Mapping) else None
         if not isinstance(frozen, Mapping):
@@ -503,6 +505,17 @@ class SetupProducer:
     def _journal_is_completed(self, journal: Mapping[str, Any]) -> bool:
         return self.store._completed_eligible(journal)
 
+    @staticmethod
+    def _inflight_stage(journal: Mapping[str, Any]) -> str | None:
+        stages = journal.get("stages")
+        if not isinstance(stages, Mapping):
+            return None
+        for stage in stages_for(journal):
+            value = stages.get(stage)
+            if isinstance(value, Mapping) and value.get("state") == "inflight":
+                return stage
+        return None
+
     def _build_or_validate(self, request: SetupRequest, observed: DeviceObservation) -> ArtifactIdentity:
         options = request.options
         assert options is not None
@@ -525,7 +538,14 @@ class SetupProducer:
             path.resolve().relative_to(expected_root)
         except ValueError:
             raise SetupBridgeError("artifact-mismatch") from None
-        return self.artifact_validator.inspect(path, device_id=request.device_id, team_id=options.team_id)
+        return self.artifact_validator.inspect(
+            path, device_id=request.device_id, team_id=options.team_id,
+            target_bundle_id=self.config.target_bundle_id,
+        )
+
+    def _validate_target_team(self, team_id: str) -> None:
+        if not bundle_id_matches_team(self.config.target_bundle_id, team_id):
+            raise SetupBridgeError("configuration-invalid")
 
     def _pair(self, journal: dict[str, Any], request: SetupRequest) -> dict[str, Any]:
         transaction = self.store.transaction_root(request.setup_id)
@@ -612,7 +632,7 @@ class SetupProducer:
                     support_unknown("identity-changed")
 
         query = self.support.query if self.support is not None else self.device.query_support
-        current = query(request.device_id, method)
+        current = self._device_call(query, request, request.device_id, method)
         if current.method != method or current.os_version != observed.os_version:
             support_unknown("identity-changed")
 
@@ -655,7 +675,8 @@ class SetupProducer:
                 support_unknown("input-changed")
             if not current.observed:
                 installer = self.support.install if self.support is not None else self.device.install_support
-                current = installer(request.device_id, method, transaction / "support")
+                current = self._device_call(installer, request, request.device_id, method,
+                                            transaction / "support")
             require_actual_support(current, planned)
             frozen_support = copy.deepcopy(dict(planned))
             frozen_support["generationID"] = current.generation_id
@@ -702,7 +723,8 @@ class SetupProducer:
             require_actual_support(current)
         else:
             installer = self.support.install if self.support is not None else self.device.install_support
-            current = installer(request.device_id, method, transaction / "support")
+            current = self._device_call(installer, request, request.device_id, method,
+                                        transaction / "support")
             require_actual_support(current)
         journal["support"] = {
             "method": current.method,
@@ -1050,8 +1072,8 @@ class SetupProducer:
             ),
         )
         # Stop only after the entire current-Bundle identity has been proven.
-        # If validation or stop fails, launchedPID remains durable and resume
-        # must reobserve the same identity before attempting a kill.
+        # If validation or stop fails, launchedPID remains durable for diagnosis;
+        # a fresh setup never repeats this handoff effect.
         self._boundary_observe(journal, request.device_id)
         stop(request.device_id, launched_pid)
         journal["handoff"]["launchedPID"] = None
@@ -1165,197 +1187,116 @@ class SetupProducer:
         journal = self.store.checkpoint(journal, "handoff", "confirmed", proof={"pairingImported": True})
         return journal
 
-    def _resume_handoff(self, journal: dict[str, Any], request: SetupRequest) -> ProducerPayload:
-        artifact = self._artifact_from_journal(journal)
-        handoff = journal.get("handoff")
-        delivery = journal.get("delivery", {}).get("state")
-        nonce = handoff.get("nonce") if isinstance(handoff, Mapping) else None
-        formal_published = handoff.get("formalPublished") if isinstance(handoff, Mapping) else None
-        if (
-            artifact is None
-            or delivery not in {"notStarted", "delivered"}
-            or not isinstance(nonce, str)
-            or type(formal_published) is not bool
-        ):
-            # Delivery ambiguity and a missing phase marker are permanently
-            # query-only.  They never authorize another v1 upload.
+    def _wifi_handoff(
+        self, journal: dict[str, Any], request: SetupRequest, artifact: ArtifactIdentity
+    ) -> dict[str, Any]:
+        """Commit a new activation receipt using only the installed pairing."""
+        frozen = journal.get("intent", {}).get("deviceObservation")
+        if not isinstance(frozen, Mapping):
             raise SetupBridgeError("transaction-unknown")
-        plan = self._frozen_plan_from_handoff(journal, request=request, artifact=artifact)
-        journal = self.store.checkpoint(journal, "handoff", "inflight")
+        observed = DeviceObservation(
+            request.device_id,
+            str(frozen.get("osVersion")),
+            str(frozen.get("transport", "Network")),
+            True,
+            True,
+        )
+        support = self._prepare_local_support(journal, request, observed)
+        journal["support"] = support
+        nonce = str(uuid.uuid4()).upper()
+        plan = self._formal_plan(journal, request=request, artifact=artifact, nonce=nonce)
+        journal["handoff"] = {
+            "nonce": nonce,
+            "setupID": request.setup_id,
+            "formalPublished": False,
+            "rawManifest": plan.raw_manifest.decode("utf-8"),
+            "manifestSHA256": plan.sha256,
+            "formalArtifacts": [
+                {"id": item[0], "filename": item[1], "byteCount": item[2], "sha256": item[3]}
+                for item in plan.artifacts
+            ],
+        }
+        journal["stages"]["handoff"] = {"state": "inflight"}
+        journal = self.store.update(journal)
 
-        readback = getattr(self.device, "readback", None)
-        read_receipt = getattr(self.device, "read_activation_receipt", None)
-        stop = getattr(self.device, "stop", None)
+        prepare_input = getattr(self.device, "prepare_setup_input", None)
         launch = getattr(self.device, "launch", None)
-        if not callable(readback) or not callable(read_receipt) or not callable(stop) or not callable(launch):
+        stop = getattr(self.device, "stop", None)
+        read_receipt = getattr(self.device, "read_activation_receipt", None)
+        intent = journal.get("intent", {})
+        pairing = journal.get("pairing", {})
+        pairing_transaction_id = intent.get("pairingTransactionID") if isinstance(intent, Mapping) else None
+        pairing_sha256 = pairing.get("sha256") if isinstance(pairing, Mapping) else None
+        if (
+            not callable(prepare_input)
+            or not callable(launch)
+            or not callable(stop)
+            or not callable(read_receipt)
+            or not isinstance(pairing_transaction_id, str)
+            or not isinstance(pairing_sha256, str)
+        ):
             raise SetupBridgeError("handoff-unknown")
 
-        # A marker-false transaction is still before formal publication.  A
-        # durable PID must therefore be reconciled with the first readback,
-        # never with an activation receipt whose digest merely exists.
-        launched_pid = handoff.get("launchedPID") if isinstance(handoff, Mapping) else None
-        activation: Any | None = None
-        if not formal_published and launched_pid is None:
-            prepare = getattr(self.device, "prepare_readback", None)
-            if not callable(prepare):
+        self._boundary_observe(journal, request.device_id)
+        manifest_sha256 = self._device_call(
+            prepare_input,
+            request,
+            request.device_id,
+            request.setup_id,
+            nonce,
+            artifact,
+            pairing_transaction_id,
+            pairing_sha256,
+            support,
+            plan=plan,
+        )
+        if manifest_sha256 != plan.sha256:
+            raise SetupBridgeError("handoff-unknown")
+        inventory_getter = getattr(self.device, "formal_inventory", None)
+        if callable(inventory_getter):
+            inventory = inventory_getter(request.setup_id, nonce)
+            if not isinstance(inventory, tuple) or inventory != plan.artifacts:
                 raise SetupBridgeError("handoff-unknown")
-            self._boundary_observe(journal, request.device_id)
-            prepare(request.device_id, request.setup_id, nonce, artifact)
-            self._boundary_observe(journal, request.device_id)
-            launched_pid = launch(request.device_id)
-            if type(launched_pid) is not int or launched_pid <= 0:
-                raise SetupBridgeError("handoff-unknown")
-            journal["handoff"]["launchedPID"] = launched_pid
-            journal = self.store.update(journal)
+        journal["handoff"]["formalPublished"] = True
+        journal = self.store.update(journal)
 
-        if launched_pid is not None:
-            self._boundary_observe(journal, request.device_id)
-            if formal_published:
-                activation = self._bounded_read(
-                    lambda: read_receipt(request.device_id, request.setup_id, nonce),
-                    validate=lambda value: self._validate_activation_receipt(
-                        value,
-                        request=request,
-                        artifact=artifact,
-                        journal=journal,
-                        manifest_sha256=plan.sha256,
-                    ),
-                )
-            else:
-                self._bounded_read(
-                    lambda: readback(request.device_id, request.setup_id, nonce),
-                    validate=lambda value: self._validate_readback(
-                        value, request=request, nonce=nonce, artifact=artifact, journal=journal
-                    ),
-                )
-            self._boundary_observe(journal, request.device_id)
-            stop(request.device_id, launched_pid)
-            journal["handoff"]["launchedPID"] = None
-            journal = self.store.update(journal)
-
-        # Before the marker, delivery may still be safely unentered.  Reuse
-        # only the frozen candidate and nonce; ambiguous delivery remains
-        # rejected by the entry guard above.
-        if not formal_published:
-            if delivery == "notStarted":
-                deliver = getattr(self.device, "deliver_pairing", None)
-                if not callable(deliver):
-                    raise SetupBridgeError("handoff-unknown")
-                self._boundary_observe(journal, request.device_id)
-                journal, _ = deliver_v1_once(
-                    self.store,
-                    journal,
-                    device_id=request.device_id,
-                    setup_id=request.setup_id,
-                    deliver=deliver,
-                )
-                delivery = journal.get("delivery", {}).get("state")
-            if delivery != "delivered":
-                raise SetupBridgeError("transaction-unknown")
-
-            # Support query/install is permitted only after the clean first
-            # readback and PID stop.  It revalidates the frozen local input.
-            observed = self._boundary_observe(journal, request.device_id)
-            journal = self._support(
-                journal,
-                request,
-                observed,
-                expected=copy.deepcopy(journal.get("support", {})),
-            )
-            support = journal.get("support", {})
-            if not isinstance(support, Mapping):
-                raise SetupBridgeError("handoff-unknown")
-            intent = journal.get("intent", {})
-            pairing = journal.get("pairing", {})
-            pairing_transaction_id = intent.get("pairingTransactionID") if isinstance(intent, Mapping) else None
-            pairing_sha256 = pairing.get("sha256") if isinstance(pairing, Mapping) else None
-            prepare_input = getattr(self.device, "prepare_setup_input", None)
-            if (
-                not callable(prepare_input)
-                or not isinstance(pairing_transaction_id, str)
-                or not isinstance(pairing_sha256, str)
-            ):
-                raise SetupBridgeError("handoff-unknown")
-            self._boundary_observe(journal, request.device_id)
-            manifest_sha256 = prepare_input(
-                request.device_id,
-                request.setup_id,
-                nonce,
-                artifact,
-                pairing_transaction_id,
-                pairing_sha256,
-                support,
-                plan=plan,
-            )
-            if manifest_sha256 != plan.sha256:
-                raise SetupBridgeError("handoff-unknown")
-            inventory_getter = getattr(self.device, "formal_inventory", None)
-            if callable(inventory_getter):
-                inventory = inventory_getter(request.setup_id, nonce)
-                if not isinstance(inventory, tuple) or inventory != plan.artifacts:
-                    raise SetupBridgeError("handoff-unknown")
-            journal["handoff"]["formalPublished"] = True
-            journal = self.store.update(journal)
-            formal_published = True
-
-        # Once formalPublished is durable, activation polling is the only
-        # remaining handoff phase.  Reuse the same nonce and immutable plan.
-        if not formal_published or journal.get("delivery", {}).get("state") != "delivered":
-            raise SetupBridgeError("transaction-unknown")
-        if activation is None:
-            # The first activation read after a durable formal publication is
-            # still a device boundary.  A process restart must not trust the
-            # old observation that created the journal before reading a
-            # receipt from a newly attached or changed device.
-            self._boundary_observe(journal, request.device_id)
-            activation = read_receipt(request.device_id, request.setup_id, nonce)
-        if activation is None:
-            # Receipt absence causes one recovery launch only after a second
-            # fresh binding check.  This keeps changed OS/developer/trust
-            # state from reaching the device process boundary.
-            self._boundary_observe(journal, request.device_id)
-            launched_pid = launch(request.device_id)
-            if type(launched_pid) is not int or launched_pid <= 0:
-                raise SetupBridgeError("handoff-unknown")
-            journal["handoff"]["launchedPID"] = launched_pid
-            journal = self.store.update(journal)
-            activation = self._bounded_read(
-                lambda: read_receipt(request.device_id, request.setup_id, nonce),
-                validate=lambda value: self._validate_activation_receipt(
-                    value,
-                    request=request,
-                    artifact=artifact,
-                    journal=journal,
-                    manifest_sha256=plan.sha256,
-                ),
-            )
-            self._boundary_observe(journal, request.device_id)
-            stop(request.device_id, launched_pid)
-            journal["handoff"]["launchedPID"] = None
-            journal = self.store.update(journal)
+        self._boundary_observe(journal, request.device_id)
+        launched_pid = self._device_call(launch, request, request.device_id)
+        if type(launched_pid) is not int or launched_pid <= 0:
+            raise SetupBridgeError("handoff-unknown")
+        journal["handoff"]["launchedPID"] = launched_pid
+        journal = self.store.update(journal)
+        activation = self._bounded_read(
+            lambda: self._device_call(
+                read_receipt, request, request.device_id, request.setup_id, nonce
+            ),
+            validate=lambda value: self._validate_activation_receipt(
+                value,
+                request=request,
+                artifact=artifact,
+                journal=journal,
+                manifest_sha256=manifest_sha256,
+            ),
+        )
+        self._boundary_observe(journal, request.device_id)
+        self._device_call(stop, request, request.device_id, launched_pid)
+        journal["handoff"]["launchedPID"] = None
+        journal = self.store.update(journal)
         self._validate_activation_receipt(
             activation,
             request=request,
             artifact=artifact,
             journal=journal,
-            manifest_sha256=plan.sha256,
+            manifest_sha256=manifest_sha256,
         )
         journal["activationReceipt"] = self._activation_binding(activation)
         journal = self.store.update(journal)
         expected_support = copy.deepcopy(journal.get("support", {}))
         observed = self._boundary_observe(journal, request.device_id)
         journal = self._support(journal, request, observed, expected=expected_support)
-        journal = self.store.checkpoint(journal, "handoff", "confirmed", proof={"pairingImported": True})
-        journal = self.store.checkpoint(
-            journal,
-            "complete",
-            "confirmed",
-            proof={"installationConfirmed": True, "pairingImported": True, "supportObserved": True},
+        return self.store.checkpoint(
+            journal, "handoff", "confirmed", proof={"pairingImported": True}
         )
-        receipt = self._receipt_digest(journal)
-        journal["receiptSHA256"] = receipt
-        journal = self.store.update(journal)
-        return self._payload_from_journal(journal, can_resume=False, receipt=receipt)
 
     @staticmethod
     def _install_result_confirms(installed: InstalledAppObservation, artifact: ArtifactIdentity) -> bool:
@@ -1381,24 +1322,6 @@ class SetupProducer:
         }
 
     @staticmethod
-    def _artifact_from_journal(journal: Mapping[str, Any]) -> ArtifactIdentity | None:
-        value = journal.get("intent", {}).get("artifact") if isinstance(journal.get("intent"), Mapping) else None
-        if not isinstance(value, Mapping):
-            return None
-        fields = ("path", "bundleID", "executable", "teamID", "artifactSHA256", "executableSHA256", "profileSHA256", "expiresAt", "build")
-        if any(not isinstance(value.get(field), str) or not value.get(field) for field in fields):
-            return None
-        if value.get("bundleID") != "com.neven.gofly" or value.get("executable") != "GoFly":
-            return None
-        if any(re.fullmatch(r"[0-9a-f]{64}", value.get(field, "")) is None for field in ("artifactSHA256", "executableSHA256", "profileSHA256")):
-            return None
-        return ArtifactIdentity(
-            value["path"], value["bundleID"], value["executable"], value["teamID"],
-            value["artifactSHA256"], value["executableSHA256"], value["profileSHA256"],
-            value["expiresAt"], {}, value["build"],
-        )
-
-    @staticmethod
     def _receipt_digest(journal: Mapping[str, Any]) -> str:
         copy_value = copy.deepcopy(dict(journal))
         copy_value.pop("receiptSHA256", None)
@@ -1412,62 +1335,16 @@ class SetupProducer:
             raise SetupBridgeError("identity-mismatch")
         if journal.get("mode", "install") != request.mode:
             raise SetupBridgeError("transaction-conflict")
-
-    @staticmethod
-    def _can_resume(journal: Mapping[str, Any]) -> bool:
-        if not uses_full_setup(journal):
-            return False
-        if journal.get("delivery", {}).get("state") in {"inflight", "unknown"}:
-            return False
-        return any(stage["state"] in {"pending", "inflight", "unknown"} for stage in journal["stages"].values())
-
-    @staticmethod
-    def _inflight_stage(journal: Mapping[str, Any]) -> str | None:
-        order = stages_for(journal)
-        for stage in order:
-            if journal.get("stages", {}).get(stage, {}).get("state") == "inflight":
-                return stage
-        return None
-
-    def _resume_artifact(self, journal: dict[str, Any], request: SetupRequest) -> dict[str, Any]:
-        intent = journal.get("intent", {})
-        team_id = (request.options.team_id if request.options and request.options.team_id else None) or intent.get("teamID")
-        if not isinstance(team_id, str):
-            raise SetupBridgeError("transaction-unknown")
-        intent["teamID"] = team_id
-        allow_provisioning = (
-            (request.options.allow_provisioning_updates if request.options else False)
-            or (intent.get("allowProvisioningUpdates") is True)
-        )
-        if request.options and request.options.allow_provisioning_updates:
-            intent["allowProvisioningUpdates"] = True
-        options = SetupOptions(team_id, allow_provisioning)
-        rebound = SetupRequest(request.request_id, "apply", request.setup_id, request.device_id, request.mode, options)
-        try:
-            observed = self._observe_device(request.device_id)
-            journal = self.store.checkpoint(journal, "artifact", "inflight")
-            artifact = self._build_or_validate(rebound, observed)
-            artifact = snapshot_artifact(
-                artifact,
-                self.store.transaction_root(request.setup_id) / "artifact" / "GoFly.app",
-                self.artifact_validator,
-                device_id=request.device_id,
-                team_id=artifact.team_id,
-            )
-            journal["intent"]["artifact"] = self._artifact_dict(artifact)
-            journal = self.store.checkpoint(journal, "artifact", "confirmed")
-        except SetupBridgeError as error:
-            with _suppress_journal_errors():
-                journal = self.store.checkpoint(journal, "artifact", "unknown", detail=error.code)
-            raise
-        return journal
+        if request.team_id is not None and request.team_id != journal.get("intent", {}).get("teamID"):
+            raise SetupBridgeError("transaction-conflict")
+        if request.transport != journal.get("intent", {}).get("transport", "usb"):
+            raise SetupBridgeError("transaction-conflict")
 
     def _payload(
         self,
         *,
         stage: str,
         outcome: str,
-        can_resume: bool,
         artifact: ArtifactIdentity | None = None,
         team_id: str | None = None,
         observed: DeviceObservation | None = None,
@@ -1475,7 +1352,6 @@ class SetupProducer:
         return ProducerPayload(
             stage,
             outcome,
-            can_resume,
             app=self._app_payload(artifact) if artifact is not None else None,
             team_id=team_id,
             expires_at=artifact.expires_at if artifact is not None else None,
@@ -1486,7 +1362,6 @@ class SetupProducer:
         journal: Mapping[str, Any],
         *,
         artifact: ArtifactIdentity | None = None,
-        can_resume: bool,
         receipt: str | None = None,
     ) -> ProducerPayload:
         stages = journal["stages"]
@@ -1505,12 +1380,12 @@ class SetupProducer:
                 break
         else:
             # A crash can occur after the complete stage checkpoint but
-            # before the receipt digest write. Keep that state resumable and
-            # below the protocol's confirmed-complete boundary.
+            # before the receipt digest write. Keep that state below the
+            # protocol's confirmed-complete boundary.
             receipt_value = journal.get("receiptSHA256")
             proof_complete = (
                 proof.get("installationConfirmed") is True
-                if not uses_full_setup(journal)
+                if not uses_full_setup(journal) and not uses_wifi_renew(journal)
                 else all(proof.get(key) is True for key in (
                     "installationConfirmed", "pairingImported", "supportObserved"
                 ))
@@ -1521,15 +1396,11 @@ class SetupProducer:
             else:
                 current = "complete"
                 outcome = "unknown"
-                can_resume = True
         intent_artifact = journal.get("intent", {}).get("artifact")
         app = self._app_payload_from_dict(intent_artifact) if isinstance(intent_artifact, Mapping) else None
-        if journal.get("delivery", {}).get("state") in {"inflight", "unknown"}:
-            can_resume = False
         return ProducerPayload(
             current,
             outcome,
-            can_resume,
             installation_confirmed=proof.get("installationConfirmed") is True,
             pairing_imported=proof.get("pairingImported") is True,
             support_observed=proof.get("supportObserved") is True,

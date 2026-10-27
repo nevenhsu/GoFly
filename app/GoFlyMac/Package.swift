@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "GoFlyMac",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "GoFlyMac", targets: ["GoFlyMac"])],
     targets: [

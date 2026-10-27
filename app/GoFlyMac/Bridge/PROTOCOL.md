@@ -1,62 +1,32 @@
-# GoFlyMac bridge
+# GoFlyMac Bridge Protocol
 
-One executable, one request, one response. `Bridge/bridge.py` reads one UTF-8
-JSON object from stdin (maximum 32 KiB) and writes one compact object to stdout
-(maximum 256 KiB). `action` selects the operation; there are no protocol
-numbers. Libraries and child processes have their output captured.
+`Bridge/bridge.py` handles one request per process. It reads one UTF-8 JSON object from stdin (maximum 32 KiB) and writes one compact response to stdout (maximum 256 KiB). Diagnostics and child process output do not enter the protocol stream.
 
-Requests carry a UUID `requestID` and an `action`:
+Every request has UUID `requestID` and `action`. Success replies echo them with `status: "ok"` and a `payload`; failures use `status: "error"` and a stable safe `code`.
 
-- `environment`, `devices`, `inspect`: read-only device checks.
-- `preflight`, `apply`, `status`, `resume`: formal setup or renewal.
+## Actions
 
-Setup requests add UUID `setupID`, a `deviceID`, `mode` (`install` or `renew`),
-and, for `preflight`/`apply`, an exact `options` object (`teamID`,
-`allowProvisioningUpdates`). `inspect` accepts an optional `transport` of `usb`
-or `wifi`; no transport is guessed.
+| Action | Effect |
+| --- | --- |
+| `environment` | Read-only Mac, Xcode, iOS platform, storage, Apple account and Team observations. Unknown values remain unknown. |
+| `devices` | Read-only USB and Network device observations; duplicate transports remain selectable. |
+| `inspect` | Read-only inspection of one `deviceID` over the explicit `transport` (`usb` or `wifi`). Lockdown uses `autopair=false`. |
+| `preflight` | Read-only validation for one fresh setup transaction. Does not pair, sign, install, or prepare device support. |
+| `apply` | Explicitly performs the install or renew transaction after preflight. |
+| `status` | Reads the current durable transaction; does not create or repair state. |
 
-Successful responses have `status: "ok"` and a `payload`; failures have
-`status: "error"` and a stable `code`. The `requestID` and `action` are echoed.
+`preflight` and `apply` require a UUID `setupID`, normalized `deviceID`, `mode` (`install` or `renew`), and exactly `{ "teamID": "<10-character Team ID>", "allowProvisioningUpdates": <boolean> }` in `options`. `install` requires USB. `renew` accepts USB or Wi-Fi. `inspect` requires an explicit transport and never guesses or silently changes transport. `status` may omit transaction fields to read the global current transaction.
 
-## Read-only actions
+## Bundle paths and state
 
-`environment` reports `ready`, safe check rows, `xcodeVersion`, and every team
-from Xcode's `IDEProvisioningTeamByIdentifier` as `teams` entries with
-`teamID`, `teamName`, and `isFreeProvisioningTeam`.
-`devices` lists exact usbmux USB and Network observations; duplicate IDs and
-transports collapse while both transports remain selectable. `inspect` requires
-`deviceID`, pins the selected transport, opens lockdown with `autopair=false`,
-and returns identity, OS, developer mode, installed app, LocalDevVPN presence,
-and signing evidence that is actually known (otherwise `null`).
+The app derives resources from `Bundle.main`; no generated setup-configuration JSON, repository path, or workspace fallback is used by the production bundle. The Bridge, CPython interpreter, Python packages, iOS project, and native archive are validated under `Contents/Resources`. Persistent transaction data is private under `~/Library/Application Support/GoFly/state`; old `GoFlySetup` user state is not read, moved, or removed. Python runs isolated with `-I -B` so environment variables and bytecode writes cannot alter the signed app bundle.
 
-## Setup actions
+## Setup and completion
 
-`SetupConfiguration` fixes the workspace, interpreter, project, target and
-private state root. `JournalStore` owns `stateRoot/journal.json` and
-`operation.lock`; writes use a private temporary file, fsync, and atomic
-replacement. Reads never create or repair state.
+An install runs `artifact → pairing → install → support → handoff → complete` and refuses an already-installed GoFly. A renew requires the same Team-scoped GoFly app, overwrites it without uninstalling or resetting app data, and completes the same pairing, device-support, and activation-receipt checks.
 
-All setup mutations require the one lease. A proven completed install journal
-may be replaced for a later explicit setup on another device; a completed renew
-journal may be replaced by the next explicit renew. Unresolved same-device
-state remains a conflict.
+Wi-Fi renewal validates and reuses the phone's existing pairing; it must not create or deliver a replacement pairing. USB operations use the explicit pairing handoff path. Neither mode is complete until deployment, the required pairing result, device-support observation, and exact activation receipt are confirmed. Missing or unreadable evidence stays pending.
 
-`mode: "install"` runs `artifact → pairing → install → support → handoff →
-complete`; it refuses an already installed app. `mode: "renew"` requires an
-installed app (`app-not-installed` otherwise), overwrites the same bundle, and
-runs the same full pairing, support and handoff stages as installation, while
-overwriting the same bundle without uninstalling or resetting app data. Both
-modes require exact App activation proof. New journals freeze `intent.fullSetup`
-as true. Historical renew journals without it retain their original three-stage
-shape; incomplete historical renews cannot resume writes, and signed-only
-completion is not device-ready. An unknown install is never adopted or resubmitted.
+A fresh explicit `apply` archives an unfinished current transaction and starts a new one. Reusing the same setup ID returns `transaction-conflict`. If an old transaction may have published a pairing envelope, the producer atomically quarantines that exact unclaimed envelope and validates its transaction ID, device ID, bytes, and SHA-256 before removing only that object. iOS claims an envelope by renaming it to `incoming.plist.consuming` before reading or importing. A live claim, replacement, or ambiguous state fails closed. The active pairing store, receipt, GoFly app, transaction history, and other user data are retained.
 
-Before a subsequent full handoff, only the three fixed control files from the
-exact active committed activation may be archived under `GoFlySetup/retired`.
-Activation, support generations, pairing receipts and user files are retained.
-Pending/foreign controls, staging, an existing archive or an interrupted rename
-remain unknown; rollover is never blindly replayed.
-
-`preflight` validates options and device state without writing. `apply` creates
-the journal and performs the stages. `status` and `resume` bind the original
-setup, device, and mode; an explicit resume may only continue that transaction.
+An unknown write outcome is never replayed under the old setup ID. There is no `resume` action: the UI presents D14 and “重新開始,” which begins with a fresh observation and preflight. Offline tests use fake adapters and do not connect to or write a physical iPhone.

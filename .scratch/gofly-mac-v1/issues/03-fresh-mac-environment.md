@@ -1,6 +1,6 @@
 # 03 · 全新 Mac 環境檢查（bridge `environment`）
 
-**Status:** todo
+**Status:** implemented; software-verified
 **Blocked by:** 01
 **Spec:** MAC-INSTALLER-SPEC §4；Figma E01–E09。
 
@@ -16,5 +16,15 @@
 **Acceptance**
 - 每個檢查項目有離線測試（以假 Xcode 路徑、假 plist、假 `df` 結果模擬全新 Mac、只差 Apple 帳號、全部通過等情境）。
 - 偵測不到時回「未知」而不是假通過。
+
+**Evidence**
+- `Bridge/bridge.py` 依序回報 macOS 版本、`/Applications` 磁碟可用空間（40 GiB）、Xcode 安裝、首次啟動／授權、iOS 平台、Apple 帳號；unknown 不會通過 readiness。平台檢查只讀 Xcode 目錄，沒有執行安裝命令。內建資源錯誤使用 `bundle-damaged`，Swift UI 只顯示指定通用文案。
+- 首次開啟旗標存在 `UserDefaults`，只記錄於本機。
+- 離線驗證：Bridge 18 項、Mac Swift 48 項全過；測試涵蓋完整通過、磁碟或 macOS 版本不足、觀察未知、Xcode 最低版本 plist、`df` 解析、授權只讀與 bundle 資源缺漏。
+- E06 乾淨 Mac 驗證步驟：[`../../../work/gofly-mac/v1/E06-VERIFY.md`](../../../work/gofly-mac/v1/E06-VERIFY.md)。本票沒有新增環境頁 UI，因此沒有 App 截圖。
+
+**Not verified**
+- 尚未在乾淨 Mac 確認不下載 iOS 平台時是否能建置、簽名實機版；因此保留 E06 檢查。
+- App Store 實際 Xcode 版本與下載容量尚未在乾淨 Mac 確認。未連接 iPhone；Personal Team 簽署／實機交接未驗證。
 
 **Stop if:** 判斷 iOS 平台是否已安裝的方法需要執行會修改系統的命令。

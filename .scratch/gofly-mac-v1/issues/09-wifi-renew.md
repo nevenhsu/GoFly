@@ -1,6 +1,6 @@
 # 09 · Wi‑Fi 延長簽名
 
-**Status:** todo
+**Status:** implemented; software-verified; visual-design-verified
 **Blocked by:** 08
 **Spec:** MAC-INSTALLER-SPEC §5.2；Figma D08–D11、D13。
 
@@ -13,5 +13,13 @@
 
 **Acceptance**
 - 離線測試覆蓋 Wi‑Fi 成功、找不到手機、配對核對失敗、中途斷線（→ D14）。實機驗收列入清單，不宣稱已驗。
+
+**Evidence**
+- `work/gofly-mac/v1/WIFI-RENEW-RESEARCH.md` 記錄固定版 `pymobiledevice3` Network usbmux 路徑與限制；實作只核對已保存 pairing（`autopair=False`），依 UDID 明確選 Network，覆蓋安裝後讀回並核對 activation receipt；Wi‑Fi 不建立或匯入 pairing，失敗要求改用 USB。
+- `app/GoFlyMac/Bridge/Setup/Tests/test_setup_wifi_renew.py` 覆蓋 Wi‑Fi 成功、裝置不存在、配對驗證失敗與連線中斷。整套 Bridge 離線測試 94 passed（2 skipped）；GoFlyMac Swift 測試 65 passed，含 Wi‑Fi transport 路由測試。
+- D08–D11、D13、D14 淺／深色 App 截圖位於 `work/gofly-mac/v1/screens/`，並已與對應 Figma V1 畫面並排核對；D10／D11 本輪重新擷取與核對。
+
+**Not verified**
+- 未在真實同一 Wi‑Fi 網路的已配對 iPhone 上執行覆蓋安裝、保留資料、裝置支援與 receipt 讀回驗收；未連接或寫入實體 iPhone。
 
 **Stop if:** 需要改原生 patch／FFI；或 Wi‑Fi 上無法安全讀回 receipt（記錄研究結果，交使用者決定）。

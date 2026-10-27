@@ -1,6 +1,6 @@
 # 07 · 首次安裝流程 D04–D07
 
-**Status:** todo
+**Status:** implemented; software-verified
 **Blocked by:** 02、06
 **Spec:** MAC-INSTALLER-SPEC §5.1；Figma D04–D07、D05 鑰匙圈示意。
 
@@ -17,3 +17,12 @@
 
 **Acceptance**
 - 離線以假 bridge 跑完整流程與各階段失敗；截圖對照 Figma。實機首次安裝列入 `.scratch/gofly-ios/MAC-DEVICE-ACCEPTANCE.md`，不宣稱已驗。
+
+## Evidence
+- D04–D07 淺／深色畫面與 Figma 節點和說明完成比對。App 截圖：[`D04-light.png`](../../../work/gofly-mac/v1/screens/D04-light.png)／[`D04-dark.png`](../../../work/gofly-mac/v1/screens/D04-dark.png) 至 [`D07-light.png`](../../../work/gofly-mac/v1/screens/D07-light.png)／[`D07-dark.png`](../../../work/gofly-mac/v1/screens/D07-dark.png)。測試資料的日期依當前日動態產生。
+- 離線驗證：Swift 60 tests / 4 suites、Bridge 18 tests、Setup 53 tests（其中 2 個環境需求測試略過）全過。完成條件仍要求安裝、配對匯入、裝置支援與 activation receipt 同時有真實證據。
+- 已刪除舊 `MacSetupPage.swift` 表單／4 步流程、舊 setup configuration 測試與舊 `I08` 安裝完成頁入口；新流程使用 D04–D07 和裝置頁 D08。App 截圖由假 bridge harness 產生，不連接實機。
+
+## Not verified
+- 真實 Xcode 簽名及鑰匙圈提示、iPhone 安裝、配對匯入、LocalDevVPN／開啟 GoFly 後的 activation receipt 讀回均未在實體 iPhone 驗證。
+- D07 的到期日期／剩餘天數為截圖假資料；需用實際 bridge receipt 驗收。最小視窗與鍵盤操作尚未人工驗收。

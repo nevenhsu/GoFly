@@ -2,11 +2,20 @@
 
 [English](#english) · [繁體中文](#繁體中文) · [简体中文](#简体中文)
 
+The Mac V1 local DMG builder and installer are implemented, but no public
+release or clean-Mac download acceptance is recorded. For a local build, use
+the DMG-first root README, verify its generated `.sha256` file, and run
+`bash /Volumes/GoFly/install.sh` from Terminal. Do not describe a local build
+as an official release; the installer only targets `/Applications/GoFly.app`
+and does not remove GoFly state or phone data.
+
 ## Device-test install/update / 實機測試安裝更新（2026-10-26）
 
 Use the shared entry below for every AI-assisted device test; do not use an install-only Xcode/devicectl command. Existing apps use `renew`, which includes pairing and device preparation. This is an implemented USB development workflow; device success must be recorded separately from offline checks. The pinned `pymobiledevice3` USB adapter must read `/var/run/usbmuxd`; a restricted shell can raise `PermissionError` and misreport `device-disconnected` while Device Hub still shows the iPhone. In Codex, run both preflight and apply with `sandbox_permissions: "require_escalated"` from the outset. Do not first retry in the restricted shell, use `sudo`, or switch install paths; if escalation is rejected, stop and report the blocker.
 
 AI 實機測試固定用以下腳本，與 Mac App 共用正式 producer。`renew` 覆蓋同一 App 並保留偏好、最愛及路線，同時核對並交付該手機的配對資料、準備必要支援；不是移除 App 後重裝。不要以單獨 Xcode／devicectl 安裝取代。目前使用者指定的 Xcode Personal Team 是 `48XD59469V`；舊 Team `NHW5EDBH4P` 已淘汰，不得使用或自動 fallback。每次核對登入帳號並明確指定 Personal Team ID；裝置或 Team 身分不符立即停止。目前這條完整交接限 USB。固定 `pymobiledevice3` 需讀取 `/var/run/usbmuxd`；受限命令列的 `PermissionError` 會被 producer 誤報成 `device-disconnected`，即使 Device Hub 看得到手機。Codex 從 `preflight` 起至 `apply` 都要用 `sandbox_permissions: "require_escalated"` 執行；不要先以受限權限重試、改用 `sudo` 或繞過正式流程；升權遭拒時停止回報。
+
+此 maintainer-only 測試腳本依 `--team` 產生 Team 專屬 Bundle ID。舊 `com.neven.gofly` 會成為另一個 App，資料不會自動移轉；`renew` 只會覆蓋相同 Team Bundle ID 的 App 並保留該 App 資料。簽名 Team、描述檔及手機配對仍須逐項核對。
 
 ```sh
 # After the user authorizes installation and Apple provisioning updates / 使用者授權安裝與 Apple 佈建更新後：
@@ -16,11 +25,11 @@ bash scripts/install-ios-test.sh --device <IPHONE_UDID> --team 48XD59469V --mode
 # Interrupted? Do not resume; start over with preflight → apply / 中斷時不接續，從頭重新 preflight → apply
 ```
 
-Always pass the verified 10-character Team ID explicitly. For this project use Personal Team `48XD59469V`; `NHW5EDBH4P` is obsolete. First installation uses `--mode install`; an existing app uses `--mode renew`. Provisioning updates are off by default; when the user authorizes them, include `--allow-provisioning-updates` on both preflight and apply. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall or data reset. After an interruption, never use `--action resume`; start over with preflight → apply (2026-10-26 design, matching the Mac app). The producer has one global current transaction: `apply` abandons any unfinished transaction, regardless of its device (archived as `journal.abandoned.json`; transaction data is retained), then starts fresh. Repeating the identical setupID still returns `transaction-conflict`. Revoking an old unused pairing is not implemented yet.
+Always pass the verified 10-character Team ID explicitly. For this project use Personal Team `48XD59469V`; `NHW5EDBH4P` is obsolete. First installation uses `--mode install`; an existing app uses `--mode renew`. Provisioning updates are off by default; when the user authorizes them, include `--allow-provisioning-updates` on both preflight and apply. Script success requires `complete=true` and all three proofs, including an exact App activation receipt. Installation alone never counts. No automatic retry, uninstall or data reset. After an interruption, create a new setupID and start with preflight → apply. The producer has one global current transaction: `apply` abandons an unfinished transaction and retains its archived files, then starts fresh. Repeating the identical setupID still returns `transaction-conflict`. iOS claims a pairing envelope by atomically renaming `incoming.plist` to `incoming.plist.consuming` before reading or importing it. Mac restart atomically quarantines an unclaimed envelope, verifies the exact old transaction ID, device ID, pairing bytes, and SHA-256, and removes only that quarantined object. A live claim or replacement fails closed. It does not remove the active pairing store, activation receipt, app, or user data.
 
-首次安裝加 `--mode install`，已有 App 使用 `--mode renew`。本專案目前使用 Xcode Personal Team `48XD59469V`；舊 Team `NHW5EDBH4P` 不得再使用。預設不連 Apple 更新佈建資料；使用者授權後，`--allow-provisioning-updates` 須同時帶在 preflight 與 apply。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。中斷後不使用 `--action resume`，一律從頭重新 preflight → apply（2026-10-26 設計，與 Mac App 一致）；producer 只有一筆全域現行交易，`apply` 會放棄任何裝置的未完成交易（封存為 `journal.abandoned.json`，保留交易資料）並開新交易；相同 setupID 重送仍回 `transaction-conflict`。作廢舊的未使用配對尚未實作。
+首次安裝加 `--mode install`，已有 App 使用 `--mode renew`。本專案目前使用 Xcode Personal Team `48XD59469V`；舊 Team `NHW5EDBH4P` 不得再使用。預設不連 Apple 更新佈建資料；使用者授權後，`--allow-provisioning-updates` 須同時帶在 preflight 與 apply。三項證據及手機精確啟用回報全部通過才成功；VPN／定位效果仍須另外測試。中斷後建立新的 setupID，從頭重新 preflight → apply；producer 只有一筆全域現行交易，`apply` 會封存任何裝置留下的未完成交易（保留交易資料）並開新交易；相同 setupID 重送仍回 `transaction-conflict`。iOS 先原子 rename `incoming.plist` 為 `incoming.plist.consuming` 再讀取或匯入；Mac restart 將未認領信封原子隔離，再精確核對交易 ID、裝置 ID、配對 bytes 及 SHA-256，只移除隔離檔。iOS claim 或新檔替換時 fail closed；活動配對、activation receipt、App 與其他使用者資料保留。
 
-AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后不接续、不用 `--action resume`，从头重新 preflight → apply；全局唯一的未完成交易会在 apply 时自动放弃（封存，保留交易资料），并开新交易。不卸载、不清数据。本项目目前使用 Xcode Personal Team `48XD59469V`，旧 Team `NHW5EDBH4P` 已淘汰；用户授权 Apple provisioning 更新后，preflight 和 apply 都带 `--allow-provisioning-updates`。固定 `pymobiledevice3` 需读取 `/var/run/usbmuxd`；受限命令列的 `PermissionError` 会被 producer 误报为 `device-disconnected`。Codex 从 `preflight` 起到 `apply` 都须使用 `sandbox_permissions: "require_escalated"`；不可先以受限权限重试、改用 `sudo` 或绕过正式流程；升权被拒时停止并报告。只有完整安装、配对、设备准备回报全部通过才算完成。
+AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路线，并核对目标手机的配对资料；中断后使用新的 setupID，从头重新 preflight → apply；全局唯一的未完成交易会在 apply 时封存保留，并开始新交易。iOS 先原子 rename incoming 配对信封为 `.consuming` 再读取；Mac 只会原子隔离、精确验证并移除旧交易的信封。遇到 iOS claim 或新档替换会 fail closed；活动配对、receipt、App 与用户资料保留。不卸载、不清数据。本项目目前使用 Xcode Personal Team `48XD59469V`，旧 Team `NHW5EDBH4P` 已淘汰；用户授权 Apple provisioning 更新后，preflight 和 apply 都带 `--allow-provisioning-updates`。固定 `pymobiledevice3` 需读取 `/var/run/usbmuxd`；受限命令列的 `PermissionError` 会被 producer 误报为 `device-disconnected`。Codex 从 `preflight` 起到 `apply` 都须使用 `sandbox_permissions: "require_escalated"`；不可先以受限权限重试、改用 `sudo` 或绕过正式流程；升权被拒时停止并报告。只有完整安装、配对、设备准备回报全部通过才算完成。
 
 ## iOS device-test prompt
 
@@ -43,7 +52,7 @@ AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路�
 - preflight 與 apply 都帶 --allow-provisioning-updates，並將 preflight 回傳的同一 setupID 傳給 apply。
 - 不得以單獨 Xcode 或 devicectl 安裝取代共用流程。
 - 必須確認 complete=true，且 installationConfirmed、pairingImported、supportObserved 全部為 true，才算完成。
-- 中斷時不接續、不用 --action resume：從頭重新 preflight → apply；全域唯一未完成交易會在 apply 時自動放棄（封存、保留交易資料）並重新開始，不限該交易的裝置；重送相同 setupID 仍衝突。仍不手動刪除 journal、配對或 App。舊的未使用配對作廢尚未實作。
+- 中斷時建立新的 setupID，從頭重新 preflight → apply；全域唯一未完成交易會在 apply 時封存保留並重新開始，不限該交易的裝置；重送相同 setupID 仍衝突。iOS 先將 `incoming.plist` 原子 rename 為 `.consuming` 才讀取；producer 僅將未認領信封原子隔離，精確驗證後移除該隔離檔。看到 iOS claim 或替換檔時 fail closed，不動活動配對、receipt、App、journal archive 或使用者資料；不要手動刪除這些資料。
 - 比對更新前後既有偏好與資料，確認保留。
 - 配對資料、憑證與原始日誌只保留在私密／忽略目錄，不貼聊天、不提交。
 - 完成後回報手機上的版本/build、配對與裝置準備結果，以及資料保留核對結果。安裝成功與外部地圖定位成功分開說明。
@@ -51,16 +60,18 @@ AI 实机测试同样固定使用此脚本。更新保留偏好、收藏及路�
 
 ## English
 
+The maintainer-only device-test script derives its Bundle ID from `--team`. The old `com.neven.gofly` becomes a separate app and its data is not migrated automatically; `renew` updates only an app with the same Team-scoped Bundle ID and retains that app's data. Team signing, provisioning-profile, and phone-pairing checks still apply.
+
 ### Establish the task
 
 1. Read the selected root README, this guide, [Mac capabilities](../app/GoFlyMac/README.md), and applicable workspace rules. Identify whether the user wants a GoFly release or a Mac development-preview run. Continue within existing authorization without asking for the same permission repeatedly.
-2. **Current state, 2026-10-18:** no verified public DMG is recorded. The development GUI implements formal USB first installation; iPhone acceptance is deferred. Renewal includes full pairing/preparation as of 2026-10-22; portable packaging remains in development. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
+2. **Current state, 2026-10-27:** no public DMG release or clean-Mac download acceptance is recorded. The local DMG builder and `install.sh` are implemented; physical iPhone acceptance is still separate. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
 3. Check Mac/Xcode, iPhone/iOS, USB, and signing team. Use only the intended phone. Resolve ambiguous device/team selection before writing.
 4. The user handles Apple sign-in, passwords, 2FA, terms, Keychain prompts, iPhone trust/Developer Mode, and VPN permission. Do not request credentials or pairing private keys in chat. Report pending physical phone actions.
 
 ### Choose the available route
 
-- **GoFly release — pending implementation:** when an actual release exists, verify its official source, version, architecture, minimum OS, and published checksum. Open the DMG, place the app in Applications, launch it, and run environment checks. Do not disable Gatekeeper globally or recursively remove quarantine to force it open. Connect by USB, verify the phone, then use the supported install flow. Verify signing, deployment, pairing import, and required device preparation separately. The Mac must finish necessary preparation before declaring completion; reuse ready items and do not add the old prototype's phone-side support download. After verified completion, hand off to LocalDevVPN and GoFly on the phone. A verified VPN channel is distinct from a running location task; service startup must not move the location.
+- **GoFly public release — not yet published:** when a release exists, verify its official source, version, architecture, minimum OS, and published checksum. For a local build, follow the root README, verify the generated `.sha256` file, then run `bash /Volumes/GoFly/install.sh` in Terminal. The script installs only `/Applications/GoFly.app`, removes quarantine from that app, and opens it. Clean-Mac or other-user download testing remains a user-run task. Do not disable Gatekeeper globally. Then use USB, verify the phone, and use the supported install flow. Verify signing, deployment, pairing import, and required device preparation separately. After verified completion, hand off to LocalDevVPN and GoFly on the phone. A verified VPN channel is distinct from a running location task; service startup must not move the location.
 - **Current Mac development app:** use the root README's build/open commands and existing Python environment; the GUI does not install missing dependencies. USB first installation uses formal GoFly, a verified device/team and explicit start. In Codex, run preflight and apply with `sandbox_permissions: "require_escalated"`: the pinned USB adapter needs `/var/run/usbmuxd`, and restricted access is misreported as `device-disconnected`. Apple provisioning updates require the per-operation option and authorization. After an interruption, start over instead of resuming; stop on `transaction-conflict` until the restart path is implemented. Keep preview results separate and honor any user instruction to defer phone operations.
 - **LocalGo prototype — retired:** the prototype app and its `localgo_setup.py` install CLI were removed (2026-10-19 and 2026-10-20). GoFly is the only install path; do not attempt the old `com.neven.localgo` flow.
 
@@ -75,14 +86,14 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 確認任務
 
 1. 先讀選用語言的根目錄 README、本文、[Mac 現況](../app/GoFlyMac/README.md)及適用的工作目錄規則。確認使用者要 GoFly 發行版還是 Mac 開發預覽。沿用已有授權，不重複詢問同一權限。
-2. **2026-10-18 現況：**尚無已驗證的公開 DMG。開發版 GUI 已實作正式 USB 首次安裝，手機驗收延後；2026-10-22 起續簽納入完整配對／準備交接，可攜包仍在開發。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
+2. **2026-10-27 現況：**尚未公開 DMG，也沒有乾淨 Mac 下載驗收紀錄。本機 DMG 建置器與 `install.sh` 已實作；iPhone 實機驗收另行記錄。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
 3. 檢查 Mac／Xcode、iPhone／iOS、USB 及簽署 Team，只操作指定手機。多裝置／Team 且意圖不明時，寫入前先釐清。
 4. Apple 登入、密碼、雙重認證、條款、鑰匙圈提示、手機信任／開發者模式及 VPN 權限由使用者處理。不在聊天索取憑證或配對私鑰；需要實體手機操作時回報待辦。
 
 ### 選擇可用路徑
 
-- **GoFly 發行版 — 尚待實作：**實際發行後核對正式來源、版本、架構、最低系統與公布校驗碼，再開啟 DMG、放入「應用程式」、啟動及檢查環境。不以全域關閉 Gatekeeper 或遞迴移除隔離屬性強行開啟。USB 連接、核對手機，再使用正式安裝流程。分別驗證簽署、部署、配對匯入及必要裝置準備；Mac 完成準備才可宣告成功，已備妥則重用，不加回舊 prototype 手機下載步驟。驗證完成後交接手機 LocalDevVPN 與 GoFly。實際 VPN 通道可用與定位任務執行中分開，啟動服務不移動位置。
-- **目前 Mac 開發版：**使用根目錄 README 的建置／開啟命令及既有 Python 環境，GUI 不會自動安裝依賴。USB 首次安裝使用正式 GoFly，核對裝置／Team 後明確開始。Codex 的 `preflight` 與 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要讀取 `/var/run/usbmuxd`，受限存取會被誤報為 `device-disconnected`。Apple 佈建更新須本次選項與授權。中斷後從頭重來、不接續；遇到 `transaction-conflict` 時停止回報。預覽另外標示，並遵守使用者延後手機操作的要求。
+- **GoFly 公開發行版 — 尚未公開：**正式發行後核對來源、版本、架構、最低系統與公布校驗碼。若使用本機建置版，依根目錄 README 核對產生的 `.sha256`，再於「終端機」執行 `bash /Volumes/GoFly/install.sh`。腳本只安裝到 `/Applications/GoFly.app`、移除該 App 隔離屬性並開啟它。乾淨 Mac 或另一個帳號下載測試仍由使用者執行。不全域關閉 Gatekeeper。之後以 USB 核對手機並使用正式流程，分別驗證簽署、部署、配對匯入與必要裝置準備。完成驗證後再交接 iPhone LocalDevVPN 與 GoFly；VPN 通道可用不代表定位任務執行中，啟動服務不應移動位置。
+- **目前 Mac 開發版：**本機 DMG 已可用 `bash app/GoFlyMac/make-dmg.sh <TEAM_ID>` 建置，來源預覽則用 `bash app/GoFlyMac/build-app.sh <TEAM_ID>`。USB 安裝或 renew 使用正式 GoFly，核對裝置／Team 後明確開始。Codex 的 `preflight` 與 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要讀取 `/var/run/usbmuxd`，受限存取會被誤報為 `device-disconnected`。Apple 佈建更新須本次選項與授權。中斷後用新 setupID 重新 preflight/apply；同 setupID 衝突時先停止查明。預覽另外標示，並遵守使用者延後手機操作的要求。
 - **LocalGo prototype — 已退役：**prototype App 與其 `localgo_setup.py` 安裝 CLI 已分別於 2026-10-19、2026-10-20 移除。GoFly 是唯一安裝路徑，不要再走舊的 `com.neven.localgo` 流程。
 
 不得為了強行成功移除 App、刪資料、撤銷憑證或更換 Team。破壞性修復需要相應授權。寫入中斷可能已改變手機，重試前核對同一裝置／交易。完成回報只證明 App／配對交付，不代表 VPN、DDI 或其他裝置服務。VPN、服務、模擬定位及 GPS 恢復分別驗證，不當作 GoFly 完整驗收。
@@ -96,14 +107,14 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 确认任务
 
 1. 先读所选语言的根目录 README、本文、[Mac 现状](../app/GoFlyMac/README.md)及适用的工作目录规则。确认用户要 GoFly 发布版还是 Mac 开发预览。沿用已有授权，不重复询问同一权限。
-2. **2026-10-18 现状：**尚无已验证的公开 DMG。开发版 GUI 已实现正式 USB 首次安装，手机验收延后；2026-10-22 起续签纳入完整配对／准备交接，可移植包仍在开发。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
+2. **2026-10-27 现状：**尚未公开 DMG，也没有干净 Mac 下载验收记录。本地 DMG 构建器与 `install.sh` 已实现；iPhone 真机验收另行记录。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
 3. 检查 Mac／Xcode、iPhone／iOS、USB 及签名 Team，只操作指定手机。多设备／Team 且意图不明时，写入前先明确。
 4. Apple 登录、密码、双重认证、条款、钥匙串提示、手机信任／开发者模式及 VPN 权限由用户处理。不在聊天索取凭证或配对私钥；需要实体手机操作时报告待办。
 
 ### 选择可用路径
 
-- **GoFly 发布版 — 尚待实现：**实际发布后核对正式来源、版本、架构、最低系统与公布校验码，再打开 DMG、放入“应用程序”、启动及检查环境。不通过全局关闭 Gatekeeper 或递归移除隔离属性强行打开。USB 连接、核对手机，再使用正式安装流程。分别验证签名、部署、配对导入及必要设备准备；Mac 完成准备才可宣布成功，已就绪则复用，不加回旧 prototype 手机下载步骤。验证完成后交接手机 LocalDevVPN 与 GoFly。实际 VPN 通道可用与定位任务运行中分开，启动服务不移动位置。
-- **当前 Mac 开发版：**使用根目录 README 的构建／打开命令及现有 Python 环境，GUI 不会自动安装依赖。USB 首次安装使用正式 GoFly，核对设备／Team 后明确开始。Codex 的 `preflight` 与 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要读取 `/var/run/usbmuxd`，受限访问会被误报为 `device-disconnected`。Apple 配置更新须本次选项与授权。中断后从头重来、不接续；遇到 `transaction-conflict` 时停止报告。预览另行标注，并遵守用户延后手机操作的要求。
+- **GoFly 公开发布版 — 尚未发布：**正式发布后核对来源、版本、架构、最低系统与公布校验码。本地构建版依根目录 README 核对生成的 `.sha256`，再在“终端”运行 `bash /Volumes/GoFly/install.sh`。脚本只安装到 `/Applications/GoFly.app`、移除该 App 的隔离属性并打开它。干净 Mac 或其他账号下载测试仍由用户执行。不全局关闭 Gatekeeper。之后通过 USB 核对手机并使用正式流程，分别验证签名、部署、配对导入与必要设备准备。完成验证后再交接 iPhone LocalDevVPN 与 GoFly；VPN 通道可用不代表定位任务运行中，启动服务不应移动位置。
+- **当前 Mac 开发版：**本地 DMG 可用 `bash app/GoFlyMac/make-dmg.sh <TEAM_ID>` 构建；源码预览使用 `bash app/GoFlyMac/build-app.sh <TEAM_ID>`。USB 首次安装使用正式 GoFly，核对设备／Team 后明确开始。Codex 的 `preflight` 与 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要读取 `/var/run/usbmuxd`，受限访问会被误报为 `device-disconnected`。Apple 配置更新须本次选项与授权。中断后从头重来、不接续；遇到 `transaction-conflict` 时停止报告。预览另行标注，并遵守用户延后手机操作的要求。
 - **LocalGo prototype — 已退役：**prototype App 及其 `localgo_setup.py` 安装 CLI 已分别于 2026-10-19、2026-10-20 移除。GoFly 是唯一安装路径，不要再走旧的 `com.neven.localgo` 流程。
 
 不得为了强行成功移除 App、删数据、撤销证书或更换 Team。破坏性修复需要相应授权。写入中断可能已改变手机，重试前核对同一设备／事务。完成报告只证明 App／配对交付，不代表 VPN、DDI 或其他设备服务。VPN、服务、模拟定位及 GPS 恢复分别验证，不当作 GoFly 完整验收。

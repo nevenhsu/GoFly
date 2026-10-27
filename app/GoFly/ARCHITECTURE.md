@@ -51,7 +51,7 @@
    （含過期定位被新定位取代）或該筆定位讓已派送的瞬移進入 sending 時，才送 `availabilityChanged`；
    只是更新已可用起點的定位不喚醒 route／joystick 的觀察者（2026-10-26）。
 8. 背景由 `GoFlyContinuedProcessingDriver` 管理：Info.plist 宣告 `processing` 背景模式；瞬移維持、路線及漫步共用一個
-   `com.neven.gofly.movement` 任務；採 `.queue` 等待系統可用的繼續執行名額。單程路線回報 ACK 距離比例，目的地終點 ACK
+   `<Bundle ID>.movement` 任務（Bundle ID 依簽署 Team ID 產生）；採 `.queue` 等待系統可用的繼續執行名額。單程路線回報 ACK 距離比例，目的地終點 ACK
    呼叫 `finishFiniteArrival` 正常完成；瞬移維持、來回路線及漫步使用 `finiteDuration(43_200)` 的 12 小時百分比，
    進度只累計相鄰有效 ACK 間的單調時間（第一筆為零，超過 15 秒的缺口不計入；瞬移維持為心跳 3 倍的 45 秒）。固定位置 ACK 由其 controller
    提供時間，來回／漫步由 facade 的同 identity／sequence epoch 計時，避免重複計入。達到目標後先完成有效的系統
@@ -69,9 +69,10 @@
 ## 首次啟動與 setup 身分
 
 1. 沒有 `incoming.json`、`readback-request.json` 或 activation 時直接一般啟動，不讀身分。
-2. activation 與 input 的啟動比對只綁 bundle ID；build、profile、executable 雜湊不參與啟動阻擋。
+2. `LocalGoSetupHandoff` 在讀取或匯入舊式 pairing envelope 前，先將 `incoming.plist` 原子 rename 為 `incoming.plist.consuming`；Mac restart 與 iOS 消費者競爭同一來源路徑，確保只有一方認領。失敗後留下的 consuming claim 會在下一次 App 啟動時繼續處理，Mac 看到 claim 時不會刪除或封存其交易。
+3. activation 與 input 的啟動比對只綁 bundle ID；build、profile、executable 雜湊不參與啟動阻擋。
    重建、覆蓋安裝與 `renew` 會改變雜湊，但不會把 App 鎖在 `identityMismatch`。
-3. Mac readback 握手仍綁完整身分（bundleID、build、兩個 SHA-256）。只有這條流程會計算
+4. Mac readback 握手仍綁完整身分（bundleID、build、兩個 SHA-256）。只有這條流程會計算
    profile 與執行檔（上限 256 MiB）的雜湊；一般啟動不計算。
 
 ## 儲存

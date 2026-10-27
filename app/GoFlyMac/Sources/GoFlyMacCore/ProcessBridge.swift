@@ -1,180 +1,103 @@
 import Foundation
 import Darwin
 
-public struct BridgeConfiguration: Codable, Sendable {
-    public let workspaceRoot: String
-    public let pythonPath: String
-    public let developerDirectory: String
-    public let projectPath: String
-    public let targetBundleID: String
-    public let targetName: String
+public struct MacBundleResources: Sendable {
+    public let resourcesURL: URL
+    public let pythonURL: URL
+    public let bridgeURL: URL
+    public let projectURL: URL
+    public let nativeLibraryURL: URL
+    public let stateRootURL: URL
+    public let developerDirectoryURL: URL
 
-    init(verifiedData data: Data) throws {
-        guard !data.isEmpty, data.count <= 32_768 else { throw CheckFailure.unavailable }
-        let object = try SetupWireJSON.object(data)
-        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath", "targetBundleID", "targetName"] else {
-            throw CheckFailure.unavailable
-        }
-        self = try JSONDecoder().decode(Self.self, from: data)
-        let root = URL(fileURLWithPath: workspaceRoot).standardizedFileURL
-        let formal = targetBundleID == "com.neven.gofly" && targetName == "GoFly" &&
-            projectPath == root.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path
-        guard workspaceRoot.hasPrefix("/"), root.path == workspaceRoot,
-              !workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
-              pythonPath == root.appendingPathComponent("work/mac-setup-env/bin/python").path, formal,
-              developerDirectory == "/Applications/Xcode.app/Contents/Developer" else { throw CheckFailure.unavailable }
-    }
-}
-
-public struct MacSetupConfiguration: Decodable, Sendable {
-    public let workspaceRoot: String
-    public let pythonPath: String
-    public let developerDirectory: String
-    public let projectPath: String
-    public let targetBundleID: String
-    public let targetName: String
-    public let stateRoot: String
-
-    init(verifiedData data: Data) throws {
-        guard !data.isEmpty, data.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
-        let object = try SetupWireJSON.object(data)
-        guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath",
-                                   "targetBundleID", "targetName", "stateRoot"] else {
-            throw MacSetupFailure.invalidRequest
-        }
-        self = try JSONDecoder().decode(Self.self, from: data)
-        try Self.validate(self, failure: MacSetupFailure.invalidRequest)
-    }
-
-    public init(configurationURL: URL) throws {
-        do {
-            guard configurationURL.isFileURL else { throw MacSetupFailure.invalidRequest }
-            let file = open(configurationURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-            guard file >= 0 else { throw MacSetupFailure.invalidRequest }
-            defer { close(file) }
-            var info = stat()
-            guard fstat(file, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
-                  info.st_size > 0, info.st_size <= 32_768 else { throw MacSetupFailure.invalidRequest }
-            var data = Data()
-            var buffer = [UInt8](repeating: 0, count: 4_096)
-            while true {
-                let count = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
-                if count < 0, errno == EINTR { continue }
-                guard count >= 0, data.count + count <= 32_768 else { throw MacSetupFailure.invalidRequest }
-                if count == 0 { break }
-                data.append(contentsOf: buffer.prefix(count))
-            }
-            guard data.count == info.st_size else { throw MacSetupFailure.invalidRequest }
-            let object = try SetupWireJSON.object(data)
-            guard Set(object.keys) == ["workspaceRoot", "pythonPath", "developerDirectory", "projectPath",
-                                       "targetBundleID", "targetName", "stateRoot"] else {
-                throw MacSetupFailure.invalidRequest
-            }
-            self = try JSONDecoder().decode(Self.self, from: data)
-            try Self.validate(self, failure: MacSetupFailure.invalidRequest)
-        } catch { throw MacSetupFailure.invalidRequest }
-    }
-
-    static func validate(_ value: MacSetupConfiguration, failure: MacSetupFailure) throws {
-        let workspace = URL(fileURLWithPath: value.workspaceRoot).standardizedFileURL
+    public init(
+        resourcesURL: URL,
+        developerDirectoryURL: URL = URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer")
+    ) throws {
+        guard resourcesURL.isFileURL else { throw CheckFailure.bundleInvalid }
+        let root = resourcesURL.standardizedFileURL
+        let python = root.appendingPathComponent("Python/python/install/bin/python3.14")
+        let bridge = root.appendingPathComponent("Bridge/bridge.py")
+        let project = root.appendingPathComponent("iOSProject/GoFly.xcodeproj")
+        let projectFile = project.appendingPathComponent("project.pbxproj")
+        let projectConfig = root.appendingPathComponent("iOSProject/GoFly.xcconfig")
+        let native = root.appendingPathComponent("native/libidevice_ffi.a")
+        let wire = root.appendingPathComponent("Bridge/wire.py")
+        let deviceBoundary = root.appendingPathComponent("Bridge/Device/gofly_device.py")
+        let setupProtocol = root.appendingPathComponent("Bridge/Setup/setup_protocol.py")
+        let setupConfig = root.appendingPathComponent("Bridge/Setup/setup_config.py")
+        let setupJournal = root.appendingPathComponent("Bridge/Setup/setup_journal.py")
+        let setupProducer = root.appendingPathComponent("Bridge/Setup/setup_producer.py")
+        let setupAdapters = root.appendingPathComponent("Bridge/Setup/setup_adapters.py")
+        let setupSupport = root.appendingPathComponent("Bridge/Setup/setup_support.py")
+        let sitePackages = root.appendingPathComponent("Python/python/install/lib/python3.14/site-packages", isDirectory: true)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("GoFlySetup").path
-        guard value.workspaceRoot.hasPrefix("/"), workspace.path == value.workspaceRoot,
-              !value.workspaceRoot.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
-              value.pythonPath == workspace.appendingPathComponent("work/mac-setup-env/bin/python").path,
-              value.projectPath == workspace.appendingPathComponent("app/GoFly/GoFly.xcodeproj").path,
-              value.developerDirectory == "/Applications/Xcode.app/Contents/Developer",
-              value.targetBundleID == "com.neven.gofly", value.targetName == "GoFly",
-              value.stateRoot == support else { throw failure }
-    }
-}
-
-/// One bounded Python process boundary for both read-only checks and setup.
-public struct ProcessBridge: MacChecking, MacSetupRunning {
-    private enum Role { case readOnly, setup }
-    private let role: Role
-    private let configurationURL: URL
-    private let scriptURL: URL
-    private let pythonPath: String
-    private let developerDirectory: String
-
-    public init(configurationURL: URL, scriptURL: URL) throws {
-        guard let resources = Bundle.main.resourceURL,
-              configurationURL.isFileURL, scriptURL.isFileURL,
-              scriptURL.standardizedFileURL == resources.appendingPathComponent("Bridge/bridge.py").standardizedFileURL,
-              (try? scriptURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])).map({
-                  $0.isRegularFile == true && $0.isSymbolicLink != true
-              }) == true else { throw CheckFailure.bundleInvalid }
-        let setup = configurationURL.standardizedFileURL == resources.appendingPathComponent("SetupConfiguration.json").standardizedFileURL
-        let readOnly = configurationURL.standardizedFileURL == resources.appendingPathComponent("LocalConfiguration.json").standardizedFileURL
-        guard setup || readOnly else { throw CheckFailure.bundleInvalid }
-        let data: Data
-        do { data = try Self.boundedConfiguration(configurationURL) }
-        catch { throw CheckFailure.bundleInvalid }
-        if setup {
-            let config: MacSetupConfiguration
-            do {
-                config = try MacSetupConfiguration(verifiedData: data)
-                try MacSetupConfiguration.validate(config, failure: MacSetupFailure.unavailable)
-            } catch { throw CheckFailure.bundleInvalid }
-            guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
-                throw CheckFailure.pythonUnavailable
-            }
-            guard FileManager.default.fileExists(atPath: config.projectPath) else {
-                throw CheckFailure.unavailable
-            }
-            self.init(role: .setup, configurationURL: configurationURL, scriptURL: scriptURL,
-                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory)
-        } else {
-            let config: BridgeConfiguration
-            do { config = try BridgeConfiguration(verifiedData: data) }
-            catch { throw CheckFailure.bundleInvalid }
-            guard FileManager.default.isExecutableFile(atPath: config.pythonPath) else {
-                throw CheckFailure.pythonUnavailable
-            }
-            self.init(role: .readOnly, configurationURL: configurationURL, scriptURL: scriptURL,
-                      pythonPath: config.pythonPath, developerDirectory: config.developerDirectory)
-        }
-    }
-
-    private init(role: Role, configurationURL: URL, scriptURL: URL, pythonPath: String,
-                 developerDirectory: String) {
-        self.role = role
-        self.configurationURL = configurationURL
-        self.scriptURL = scriptURL
-        self.pythonPath = pythonPath
-        self.developerDirectory = developerDirectory
-    }
-
-    private static func boundedConfiguration(_ url: URL) throws -> Data {
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-        guard values.isRegularFile == true, values.isSymbolicLink != true,
-              let size = values.fileSize, size > 0, size <= 32_768 else {
+        let requiredFiles = [bridge, native, projectFile, projectConfig, wire, deviceBoundary,
+                             setupProtocol, setupConfig, setupJournal, setupProducer,
+                             setupAdapters, setupSupport]
+        guard root.path.hasPrefix("/"), !Self.isSymlink(root),
+              requiredFiles.allSatisfy(Self.isRegularFile),
+              Self.isDirectory(project), Self.isDirectory(sitePackages),
+              FileManager.default.isExecutableFile(atPath: python.path) else {
             throw CheckFailure.bundleInvalid
         }
-        let data = try Data(contentsOf: url)
-        guard data.count == size else { throw CheckFailure.bundleInvalid }
-        return data
+        self.resourcesURL = root
+        self.pythonURL = python
+        self.bridgeURL = bridge
+        self.projectURL = project
+        self.nativeLibraryURL = native
+        self.stateRootURL = support.appendingPathComponent("GoFly/state", isDirectory: true)
+        self.developerDirectoryURL = developerDirectoryURL.standardizedFileURL
+    }
+
+    private static func isRegularFile(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { return false }
+        return values.isRegularFile == true && values.isSymbolicLink != true
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else { return false }
+        return values.isDirectory == true && values.isSymbolicLink != true
+    }
+
+    private static func isSymlink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+    }
+}
+
+/// One bounded Python process boundary for read-only checks and setup.
+public struct ProcessBridge: MacChecking, MacSetupRunning {
+    private let bundle: MacBundleResources
+
+    public init(bundle: MacBundleResources) {
+        self.bundle = bundle
+    }
+
+    private var arguments: [String] {
+        [
+            "-I", "-B", bundle.bridgeURL.path,
+            "--resources", bundle.resourcesURL.path,
+            "--developer-directory", bundle.developerDirectoryURL.path,
+            "--target-name", "GoFly",
+        ]
     }
 
     public func check(_ request: CheckRequest) async throws -> Data {
-        guard role == .readOnly else { throw CheckFailure.unavailable }
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw CheckFailure.invalidResponse }
         let runner = BoundedProcess()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await Task.detached {
-                try runner.run(executable: self.pythonPath,
-                               arguments: ["-I", self.scriptURL.path, "--config", self.configurationURL.path],
-                               developerDirectory: self.developerDirectory, input: input,
+                try runner.run(executable: self.bundle.pythonURL.path,
+                               arguments: self.arguments,
+                               developerDirectory: self.bundle.developerDirectoryURL.path, input: input,
                                timeout: request.action == .inspect ? 100 : 45)
             }.value
         } onCancel: { runner.cancel(reason: .cancelled) }
     }
 
     public func run(_ request: MacSetupRequest) async throws -> Data {
-        guard role == .setup else { throw MacSetupFailure.unavailable }
         let input = try JSONEncoder().encode(request)
         guard input.count <= 32_768 else { throw MacSetupFailure.invalidRequest }
         let process = BoundedProcess()
@@ -182,9 +105,9 @@ public struct ProcessBridge: MacChecking, MacSetupRunning {
             return try await withTaskCancellationHandler {
                 try Task.checkCancellation()
                 return try await Task.detached {
-                    try process.run(executable: self.pythonPath,
-                                    arguments: ["-I", self.scriptURL.path, "--config", self.configurationURL.path],
-                                    developerDirectory: self.developerDirectory, input: input,
+                    try process.run(executable: self.bundle.pythonURL.path,
+                                    arguments: self.arguments,
+                                    developerDirectory: self.bundle.developerDirectoryURL.path, input: input,
                                     timeout: request.action == .status ? 30 : request.action == .preflight ? 120 : 1_800)
                 }.value
             } onCancel: { process.cancel(reason: .cancelled) }
@@ -204,8 +127,8 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
 
     public init(runner: any MacSetupRunning) { self.runner = runner }
 
-    public func readContinuation() async throws -> MacSetupContinuation? {
-        try await readState().continuation
+    public func readPendingTransaction() async throws -> MacSetupTransactionIdentity? {
+        try await readState().pendingTransaction
     }
 
     public func readState() async throws -> MacSetupJournalState {
@@ -220,7 +143,7 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
                       root["code"] as? String == "transaction-unknown" else {
                     throw MacSetupFailure.invalidResponse
                 }
-                return MacSetupJournalState(continuation: nil, completed: nil)
+                return MacSetupJournalState(pendingTransaction: nil, completed: nil)
             }
             guard root["status"] as? String == "ok",
                   let rawID = root["setupID"] as? String, let id = UUID(uuidString: rawID),
@@ -237,21 +160,28 @@ public struct BridgeStatusJournalReader: MacSetupJournalReading {
                 // Older journals predate the mode header.  They are installs.
                 mode = .install
             }
+            guard let transport = ConnectedDevice.Transport(rawValue: root["transport"] as? String ?? "usb") else {
+                throw MacSetupFailure.invalidResponse
+            }
             if let payload = root["payload"] as? [String: Any],
                payload["stage"] as? String == "complete",
                payload["outcome"] as? String == "confirmed" {
-                // A completed journal has nothing to resume and must never lock
+                // A completed journal has nothing pending and must never lock
                 // the app.  Keep its snapshot for device-page facts only.
+                guard let teamID = payload["teamID"] as? String else { throw MacSetupFailure.invalidResponse }
                 let statusRequest = try MacSetupRequest(action: .status, requestID: request.requestID,
-                                                        setupID: id, deviceID: device, mode: mode)
+                                                        setupID: id, deviceID: device, mode: mode,
+                                                        transport: transport, teamID: teamID)
                 let completed = try? MacSetupResponseDecoder.decode(data, for: statusRequest)
-                return MacSetupJournalState(continuation: nil, completed: completed)
+                return MacSetupJournalState(pendingTransaction: nil, completed: completed)
             }
-            return MacSetupJournalState(
-                continuation: try MacSetupContinuation(setupID: id, deviceID: device, mode: mode),
-                completed: nil)
+            let (identity, snapshot) = try MacSetupResponseDecoder.probe(data)
+            guard identity.setupID == id, identity.deviceID == device, identity.mode == mode else {
+                throw MacSetupFailure.invalidResponse
+            }
+            return MacSetupJournalState(pendingTransaction: identity, pendingSnapshot: snapshot, completed: nil)
         } catch MacSetupFailure.service("transaction-unknown") {
-            return MacSetupJournalState(continuation: nil, completed: nil)
+            return MacSetupJournalState(pendingTransaction: nil, completed: nil)
         } catch let error as MacSetupFailure {
             throw error
         } catch {

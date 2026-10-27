@@ -1,17 +1,20 @@
 from __future__ import annotations
 import hashlib
 import json
+import plistlib
 import sys
 import unittest
 import uuid
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from setup_adapters import (PinnedPymobiledeviceAdapter, APP_SETUP_ROOT, READBACK_REQUEST,
-                            READBACK_RESPONSE, FORMAL_INPUT, ACTIVATION_RECEIPT, V1_INCOMING)
-from setup_protocol import SetupBridgeError
+                            READBACK_RESPONSE, FORMAL_INPUT, ACTIVATION_RECEIPT, V1_INCOMING,
+                            V1_INCOMING_CONSUMING)
+from setup_protocol import SetupBridgeError, bundle_id_for_team
 
 DEVICE = "0" * 40
 PATHS = (READBACK_REQUEST, READBACK_RESPONSE, FORMAL_INPUT)
+TEAM_A_BUNDLE_ID = bundle_id_for_team("ABCDEFGHIJ")
 
 
 def encoded(value):
@@ -43,13 +46,15 @@ class MemoryAFC:
     async def rename(self, source, target):
         if self.fail_after is not None and self.renames >= self.fail_after:
             raise OSError("controlled interrupted rename")
+        if target in self.files or target in self.dirs:
+            raise FileExistsError(target)
         self.files[target] = self.files.pop(source)
         self.renames += 1
 
 
 def completed_fixture(service):
     setup, nonce = str(uuid.uuid4()), str(uuid.uuid4())
-    app = {"bundleID": "com.neven.gofly", "build": "26", "profileSHA256": "a"*64, "executableSHA256": "b"*64}
+    app = {"bundleID": TEAM_A_BUNDLE_ID, "build": "26", "profileSHA256": "a"*64, "executableSHA256": "b"*64}
     formal = {"version": 1, "setupID": setup, "nonce": nonce, "expectedDeviceUDID": DEVICE,
               "pairingTransactionID": str(uuid.uuid4()), "pairingSHA256": "c"*64, "app": app,
               "teamID": "ABCDEFGHIJ", "signingExpiry": "2030-01-01T00:00:00Z",
@@ -68,7 +73,7 @@ def completed_fixture(service):
 class HandoffRolloverTests(unittest.TestCase):
     def setUp(self):
         self.service = MemoryAFC()
-        self.adapter = PinnedPymobiledeviceAdapter()
+        self.adapter = PinnedPymobiledeviceAdapter(target_bundle_id=TEAM_A_BUNDLE_ID)
     def retire(self): self.adapter._retire_completed_controls(self.service, device_id=DEVICE)
     def test_fresh_container_does_not_write(self):
         self.retire()
@@ -93,6 +98,7 @@ class HandoffRolloverTests(unittest.TestCase):
                 del self.service.files[absent]
                 with self.assertRaises(SetupBridgeError): self.retire()
                 self.assertEqual(self.service.renames, 0)
+
     def test_each_interrupted_rename_refuses_retry(self):
         for fail_after in range(3):
             with self.subTest(fail_after=fail_after):
@@ -103,6 +109,7 @@ class HandoffRolloverTests(unittest.TestCase):
                 self.service.fail_after = None
                 with self.assertRaises(SetupBridgeError): self.retire()
                 self.assertEqual(self.service.renames, previous)
+
     def test_finished_archive_without_new_publish_stays_unknown(self):
         completed_fixture(self.service)
         self.retire()
@@ -114,6 +121,7 @@ class HandoffRolloverTests(unittest.TestCase):
         self.service.dirs.add(f"{APP_SETUP_ROOT}/retired/{setup}-{nonce}")
         with self.assertRaises(SetupBridgeError): self.retire()
         self.assertEqual(self.service.renames, 0)
+
     def test_inactive_historical_receipt_cannot_retire_controls(self):
         completed_fixture(self.service)
         active = json.loads(self.service.files[ACTIVATION_RECEIPT])
@@ -121,6 +129,7 @@ class HandoffRolloverTests(unittest.TestCase):
         self.service.files[ACTIVATION_RECEIPT] = encoded(active)
         with self.assertRaises(SetupBridgeError): self.retire()
         self.assertEqual(self.service.renames, 0)
+
     def test_pending_staging_foreign_or_mismatched_controls_fail(self):
         for variant in ('pending', 'staging', 'foreign', 'tamper', 'response', 'symlink'):
             with self.subTest(variant=variant):
@@ -138,6 +147,146 @@ class HandoffRolloverTests(unittest.TestCase):
                 with self.assertRaises(SetupBridgeError): self.retire()
                 self.assertEqual(self.service.renames, 0)
 
+
+class PendingPairingRetirementTests(unittest.TestCase):
+    class IncomingService:
+        def __init__(self, files):
+            self.files = dict(files)
+            self.removed = []
+            self.on_remove = None
+            self.race_consumer_on_retirement = False
+
+        async def stat(self, path):
+            if path not in self.files:
+                raise FileNotFoundError(path)
+            return {"st_ifmt": "S_IFREG", "st_size": len(self.files[path])}
+
+        async def fopen(self, path, _mode):
+            return [path, 0]
+
+        async def fread(self, handle, size):
+            value = self.files[handle[0]][handle[1]:handle[1] + size]
+            handle[1] += len(value)
+            return value
+
+        async def fclose(self, _handle):
+            return None
+
+        async def rm_single(self, path, force=False):
+            if force:
+                if self.on_remove is not None:
+                    self.on_remove(self, path)
+                self.removed.append(path)
+                self.files.pop(path, None)
+
+        async def rename(self, source, target):
+            if self.race_consumer_on_retirement and ".retiring-" in target:
+                self.race_consumer_on_retirement = False
+                self.files[V1_INCOMING_CONSUMING] = self.files.pop(source)
+                raise FileNotFoundError(source)
+            if source not in self.files or target in self.files:
+                raise FileNotFoundError(source)
+            self.files[target] = self.files.pop(source)
+
+    def payload(self, transaction_id, device=DEVICE, pairing=b"one-shot-pairing"):
+        return plistlib.dumps({
+            "version": 1,
+            "transactionID": transaction_id,
+            "expectedDeviceUDID": device,
+            "pairingFile": pairing,
+            "sha256": hashlib.sha256(pairing).digest(),
+        })
+
+    def retire(self, service, transaction_id, device=DEVICE):
+        PinnedPymobiledeviceAdapter._retire_pending_pairing_on_service(
+            service, device_id=device, transaction_id=transaction_id.lower()
+        )
+
+    def test_removes_exact_old_incoming_only_and_preserves_active_pairing_and_user_data(self):
+        transaction_id = str(uuid.uuid4())
+        active_pairing = b"active pairing store"
+        user_data = b"favorite and route data"
+        service = self.IncomingService({
+            V1_INCOMING: self.payload(transaction_id),
+            "Library/LocalGo/PairingFileStore/active.plist": active_pairing,
+            "Documents/user-data.json": user_data,
+        })
+        self.retire(service, transaction_id)
+        self.assertNotIn(V1_INCOMING, service.files)
+        self.assertEqual(service.removed, [V1_INCOMING + ".retiring-" + transaction_id])
+        self.assertEqual(service.files["Library/LocalGo/PairingFileStore/active.plist"], active_pairing)
+        self.assertEqual(service.files["Documents/user-data.json"], user_data)
+
+    def test_missing_incoming_is_a_noop(self):
+        service = self.IncomingService({"Documents/user-data.json": b"keep"})
+        self.retire(service, str(uuid.uuid4()))
+        self.assertEqual(service.removed, [])
+        self.assertEqual(service.files, {"Documents/user-data.json": b"keep"})
+
+    def test_mismatched_transaction_or_device_refuses_to_delete(self):
+        transaction_id = str(uuid.uuid4())
+        for mismatch in ("transaction", "device"):
+            with self.subTest(mismatch=mismatch):
+                service = self.IncomingService({
+                    V1_INCOMING: self.payload(str(uuid.uuid4()) if mismatch == "transaction" else transaction_id,
+                                              device="1" * 40 if mismatch == "device" else DEVICE),
+                })
+                with self.assertRaises(SetupBridgeError):
+                    self.retire(service, transaction_id)
+                self.assertIn(V1_INCOMING, service.files)
+                self.assertEqual(service.removed, [])
+
+    def test_staging_envelope_prevents_retirement(self):
+        service = self.IncomingService({V1_INCOMING + ".staging": b"partial"})
+        with self.assertRaises(SetupBridgeError):
+            self.retire(service, str(uuid.uuid4()))
+        self.assertEqual(service.removed, [])
+
+    def test_ios_claim_wins_race_and_is_never_deleted(self):
+        transaction_id = str(uuid.uuid4())
+        service = self.IncomingService({V1_INCOMING: self.payload(transaction_id)})
+        service.race_consumer_on_retirement = True
+        with self.assertRaisesRegex(SetupBridgeError, "handoff-unknown"):
+            self.retire(service, transaction_id)
+        self.assertIn(V1_INCOMING_CONSUMING, service.files)
+        self.assertEqual(service.removed, [])
+
+    def test_existing_ios_claim_blocks_retirement(self):
+        transaction_id = str(uuid.uuid4())
+        service = self.IncomingService({
+            V1_INCOMING: self.payload(transaction_id),
+            V1_INCOMING_CONSUMING: self.payload(transaction_id),
+        })
+        with self.assertRaisesRegex(SetupBridgeError, "handoff-unknown"):
+            self.retire(service, transaction_id)
+        self.assertIn(V1_INCOMING, service.files)
+        self.assertIn(V1_INCOMING_CONSUMING, service.files)
+        self.assertEqual(service.removed, [])
+
+    def test_replacement_at_well_known_path_survives_retirement(self):
+        transaction_id = str(uuid.uuid4())
+        replacement = self.payload(str(uuid.uuid4()), pairing=b"replacement")
+        service = self.IncomingService({V1_INCOMING: self.payload(transaction_id)})
+
+        def replace_incoming(active, path):
+            if ".retiring-" in path:
+                active.files[V1_INCOMING] = replacement
+
+        service.on_remove = replace_incoming
+        with self.assertRaisesRegex(SetupBridgeError, "handoff-unknown"):
+            self.retire(service, transaction_id)
+        self.assertEqual(service.files[V1_INCOMING], replacement)
+        self.assertNotIn(V1_INCOMING + ".retiring-" + transaction_id, service.files)
+
+    def test_mismatched_quarantine_is_restored_without_deletion(self):
+        expected = str(uuid.uuid4())
+        source = self.payload(str(uuid.uuid4()))
+        service = self.IncomingService({V1_INCOMING: source})
+        with self.assertRaisesRegex(SetupBridgeError, "transaction-conflict"):
+            self.retire(service, expected)
+        self.assertEqual(service.files[V1_INCOMING], source)
+        self.assertEqual(service.removed, [])
+
 class CompletedJournalNonceTests(unittest.TestCase):
     def test_uuid_case_does_not_block_repeat_renew_but_other_nonce_does(self):
         import tempfile
@@ -148,22 +297,25 @@ class CompletedJournalNonceTests(unittest.TestCase):
             candidate.write_bytes(b'fixture'); candidate.chmod(0o600)
             app_path = transaction/'artifact/GoFly.app'; app_path.mkdir(parents=True)
             setup, nonce = str(uuid.uuid4()), str(uuid.uuid4())
-            artifact = dict(path=str(app_path), bundleID='com.neven.gofly', build='26',
+            artifact = dict(path=str(app_path), bundleID=TEAM_A_BUNDLE_ID, build='26',
                             artifactSHA256='a'*64, executableSHA256='b'*64,
                             profileSHA256='c'*64, teamID='ABCDEFGHIJ', expiresAt='2030-01-01T00:00:00Z')
             formal = [{'fixture': True}]
             manifest = '{}'
             manifest_hash = hashlib.sha256(manifest.encode()).hexdigest()
             tx = str(uuid.uuid4())
+            pairing_bytes = b'fixture'
+            pairing_sha = hashlib.sha256(pairing_bytes).hexdigest()
+            candidate.write_bytes(pairing_bytes)
             activation = {key: artifact[key] for key in ('bundleID','build','profileSHA256','executableSHA256','teamID')}
             activation.update(setupID=setup,deviceID=DEVICE,nonce=nonce,rawManifestSHA256=manifest_hash,
-                              pairingTransactionID=tx,pairingSHA256='d'*64,signingExpiry=artifact['expiresAt'],
+                              pairingTransactionID=tx,pairingSHA256=pairing_sha,signingExpiry=artifact['expiresAt'],
                               deviceOS='26.0',method='personalized',generationID=setup,artifacts=formal)
             journal = dict(setupID=setup,deviceID=DEVICE,mode='renew',
                 intent=dict(fullSetup=True,artifact=artifact,pairingTransactionID=tx),
                 stages={key: {'state':'confirmed'} for key in ('artifact','pairing','install','support','handoff','complete')},
                 proof={key:True for key in ('installationConfirmed','pairingImported','supportObserved')},
-                delivery={'state':'delivered'},pairing={'sha256':'d'*64},
+                delivery={'state':'delivered'},pairing={'candidate':f'transactions/{setup}/pairing.candidate','sha256':pairing_sha},
                 support=dict(osVersion='26.0',method='personalized',generationID=setup),
                 handoff=dict(nonce=nonce.upper(),manifestSHA256=manifest_hash,formalArtifacts=formal,rawManifest=manifest),
                 activationReceipt=activation)

@@ -25,8 +25,14 @@ import sys
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PACKAGE_ROOT))
 
-from bridge import run_stdio as bridge_run_stdio, _setup_error_payload as _error_payload  # noqa: E402
-from setup_protocol import SetupBridgeError, decode_request, encode_response  # noqa: E402
+from bridge import Config as BridgeConfig, run_stdio as bridge_run_stdio, _setup_error_payload as _error_payload  # noqa: E402
+from setup_protocol import (  # noqa: E402
+    SetupBridgeError,
+    bundle_id_for_team,
+    bundle_id_matches_team,
+    decode_request,
+    encode_response,
+)
 from setup_journal import JournalStore  # noqa: E402
 from setup_adapters import (  # noqa: E402
     ArtifactIdentity,
@@ -35,6 +41,7 @@ from setup_adapters import (  # noqa: E402
     InstalledAppObservation,
     PairingObservation,
     PinnedPymobiledeviceAdapter,
+    PinnedXcodeProcessAdapter,
     ReadbackObservation,
     SupportObservation,
     FormalArtifactValidator,
@@ -50,6 +57,7 @@ from setup_support import validate_generation  # noqa: E402
 
 
 DEVICE = "0123456789abcdef0123456789abcdef01234567"
+TEAM_A_BUNDLE_ID = bundle_id_for_team("ABCDEFGHIJ")
 SETUP_ID = str(uuid.uuid4())
 REQUEST_ID = str(uuid.uuid4())
 
@@ -67,6 +75,50 @@ def request(action: str = "status", **extra: object) -> dict[str, object]:
 
 
 class ProtocolB1Tests(unittest.TestCase):
+    def test_bundle_id_is_scoped_to_each_team_without_legacy_fallback(self) -> None:
+        self.assertTrue(bundle_id_matches_team(TEAM_A_BUNDLE_ID, "ABCDEFGHIJ"))
+        self.assertNotEqual(TEAM_A_BUNDLE_ID, bundle_id_for_team("ABCDE12345"))
+        self.assertFalse(bundle_id_matches_team("com.neven.gofly", "ABCDEFGHIJ"))
+        self.assertFalse(bundle_id_matches_team("com.neven.gofly.abcdefghik", "ABCDEFGHIJ"))
+        self.assertFalse(bundle_id_matches_team("com.neven.gofly.other", "ABCDEFGHIJ"))
+
+    def test_xcode_build_uses_the_selected_team_bundle_identifier(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            project_root = workspace / "app" / "GoFly"
+            project = project_root / "GoFly.xcodeproj"
+            project.mkdir(parents=True)
+            (project / "project.pbxproj").write_text("fixture")
+            (workspace / "work" / "gofly-ios" / "native").mkdir(parents=True)
+            developer = root / "Developer"
+            developer.mkdir()
+            seen = []
+
+            def fake_xcodebuild(arguments, **_kwargs):
+                seen.append(arguments)
+                destination = next(value.split("=", 1)[1] for value in arguments
+                                   if value.startswith("CONFIGURATION_BUILD_DIR="))
+                (Path(destination) / "GoFly.app").mkdir()
+                return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+            for team_id in ("ABCDE12345", "ABCDEFGHIJ"):
+                config = SetupConfiguration(
+                    workspace, workspace / "work" / "mac-setup-env" / "bin" / "python",
+                    developer, project, bundle_id_for_team(team_id), "GoFly", root / "state",
+                    development_mode=True,
+                )
+                with mock.patch("setup_adapters.subprocess.run", side_effect=fake_xcodebuild):
+                    result = PinnedXcodeProcessAdapter(config).build(str(uuid.uuid4()), team_id)
+                self.assertTrue(result.is_dir())
+
+            self.assertEqual(len(seen), 2)
+            for arguments, team_id in zip(seen, ("ABCDE12345", "ABCDEFGHIJ")):
+                expected = bundle_id_for_team(team_id)
+                self.assertIn("DEVELOPMENT_TEAM=" + team_id, arguments)
+                self.assertIn("PRODUCT_BUNDLE_IDENTIFIER=" + expected, arguments)
+                self.assertIn("GOFLY_BUNDLE_ID=" + expected, arguments)
+
     def test_json_constants_nan_and_infinity_are_safe_invalid_request(self) -> None:
         with self.assertRaisesRegex(SetupBridgeError, "invalid-request"):
             decode_request(json.dumps({**request(), "deviceID": float("nan")}).encode())
@@ -113,7 +165,6 @@ class ProtocolB1Tests(unittest.TestCase):
         payload = {
             "stage": "preflight",
             "outcome": "ready",
-            "canResume": False,
             "proof": {
                 "installationConfirmed": False,
                 "pairingImported": False,
@@ -129,6 +180,20 @@ class ProtocolB1Tests(unittest.TestCase):
         self.assertEqual(json.loads(encoded)["payload"]["proof"], payload["proof"])
 
 class JournalB1Tests(unittest.TestCase):
+    def test_legacy_transaction_can_be_read_and_archived_without_reusing_its_bundle_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = JournalStore(Path(directory) / "state")
+            journal = store.create(SETUP_ID, DEVICE, {
+                "teamID": "ABCDEFGHIJ",
+                "allowProvisioningUpdates": False,
+                "targetBundleID": "com.neven.gofly",
+                "targetName": "GoFly",
+            })
+            self.assertEqual(store.read()["intent"]["targetBundleID"], "com.neven.gofly")
+            with store.lock():
+                store.abandon_unfinished_locked(SETUP_ID, DEVICE)
+            self.assertTrue((store.transaction_root(SETUP_ID) / "journal.abandoned.json").is_file())
+
     def test_delivery_unknown_status_is_query_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -136,11 +201,11 @@ class JournalB1Tests(unittest.TestCase):
             project = root / "GoFly.xcodeproj"
             project.mkdir()
             config = SetupConfiguration(root, root / "python", root / "Developer", project,
-                                        "com.neven.gofly", "GoFly", state)
+                                        TEAM_A_BUNDLE_ID, "GoFly", state)
             store = JournalStore(state)
             journal = store.create(SETUP_ID, DEVICE, {
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
-                "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
+                "targetBundleID": TEAM_A_BUNDLE_ID, "targetName": "GoFly",
                 "deviceObservation": {
                     "deviceID": DEVICE, "osVersion": "27.0", "transport": "USB",
                     "developerMode": True, "trust": True,
@@ -148,33 +213,25 @@ class JournalB1Tests(unittest.TestCase):
             })
             journal["delivery"] = {"state": "unknown"}
             store.update(journal)
-            producer = SetupProducer(config, store=store, device=ResumePairDevice())
+            producer = SetupProducer(config, store=store, device=ReadOnlyStatusDevice())
             payload = producer.status(decode_request(json.dumps(request("status")).encode()))
-            self.assertFalse(payload.can_resume)
+            self.assertEqual(payload.stage, "artifact")
+            self.assertEqual(payload.outcome, "inProgress")
+            self.assertEqual(producer.device.verify_calls, 0)
+            self.assertEqual(producer.device.pair_calls, 0)
             error_payload = _error_payload(decode_request(json.dumps(request("status")).encode()), config)
-            self.assertFalse(error_payload["canResume"])
+            self.assertNotIn("canResume", error_payload)
 
-    def test_completed_journal_cannot_be_replaced_on_same_device(self) -> None:
+    def test_unfinished_journal_is_archived_before_a_fresh_setup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / "state"
             store = JournalStore(state)
             journal = store.create(SETUP_ID, DEVICE, {
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
-                "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
+                "targetBundleID": TEAM_A_BUNDLE_ID, "targetName": "GoFly",
             })
-            for stage in ("artifact", "pairing", "install", "support", "handoff", "complete"):
-                journal["stages"][stage] = {"state": "confirmed"}
-            journal["proof"] = {
-                "installationConfirmed": True,
-                "pairingImported": True,
-                "supportObserved": True,
-            }
-            journal_without_receipt = dict(journal)
-            journal_without_receipt.pop("receiptSHA256", None)
-            journal["receiptSHA256"] = __import__("hashlib").sha256(
-                json.dumps(journal_without_receipt, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
+            journal["stages"]["install"] = {"state": "unknown", "detail": "device-disconnected"}
             store.update(journal)
 
             class ExistingDevice:
@@ -186,12 +243,13 @@ class JournalB1Tests(unittest.TestCase):
 
             config = SetupConfiguration(
                 root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
-                "com.neven.gofly", "GoFly", state,
+                TEAM_A_BUNDLE_ID, "GoFly", state,
             )
             producer = SetupProducer(config, store=store, device=ExistingDevice())
             replacement = request(
                 "apply",
                 setupID=str(uuid.uuid4()),
+                mode="install",
                 options={
                     "teamID": "ABCDEFGHIJ",
                     "allowProvisioningUpdates": False,
@@ -202,14 +260,15 @@ class JournalB1Tests(unittest.TestCase):
             except SetupBridgeError as error:
                 self.assertNotEqual(str(error), "transaction-conflict")
             self.assertNotEqual(store.read()["setupID"], SETUP_ID)
-            self.assertTrue((store.transaction_root(SETUP_ID) / "journal.abandoned.json").exists())
+            self.assertEqual(store.read()["stages"]["artifact"]["state"], "unknown")
+            self.assertTrue((store.transaction_root(SETUP_ID) / "journal.abandoned.json").is_file())
 
     def test_reopen_maps_inflight_stage_and_delivery_to_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = JournalStore(Path(directory))
             journal = store.create(SETUP_ID, DEVICE, {
                 "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
-                "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
+                "targetBundleID": TEAM_A_BUNDLE_ID, "targetName": "GoFly",
             })
             journal["stages"]["install"] = {"state": "inflight"}
             journal["delivery"] = {"state": "inflight"}
@@ -226,7 +285,7 @@ class JournalB1Tests(unittest.TestCase):
             project.mkdir()
             (root / "Developer").mkdir()
             config = SetupConfiguration(root, root / "python", root / "Developer", project,
-                                        "com.neven.gofly", "GoFly", root / "state")
+                                        TEAM_A_BUNDLE_ID, "GoFly", root / "state")
             # The production snapshot boundary requires a real source tree;
             # the validator remains the controlled seam for this test.
             (root / "GoFly.app").mkdir()
@@ -247,24 +306,25 @@ class JournalB1Tests(unittest.TestCase):
             # The validator is controlled, so no filesystem artifact or Apple
             # tool is reached by this test.
             with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
-                with self.assertRaisesRegex(Exception, "runtime-api-mismatch"):
+                with self.assertRaisesRegex(SetupBridgeError, "operation-failed"):
                     producer.handle(decode_request(json.dumps(apply_request).encode()))
             journal = JournalStore(root / "state").read()
-            self.assertEqual(journal["stages"]["pairing"]["state"], "unknown")
+            self.assertEqual(journal["stages"]["pairing"]["state"], "confirmed")
+            self.assertEqual(journal["stages"]["install"]["state"], "unknown")
 
-            resumed = producer.handle(
+            with self.assertRaisesRegex(SetupBridgeError, "invalid-request"):
                 decode_request(json.dumps(request("resume")).encode())
-            )
-            self.assertEqual(resumed.outcome, "unknown")
             self.assertEqual(device.install_calls, 1)
             self.assertEqual(device.launch_calls, 0)
             self.assertEqual(device.delivery_calls, 0)
 
 class FakeArtifactValidator:
-    def inspect(self, _path: str, *, device_id: str, team_id: str) -> ArtifactIdentity:
+    def inspect(
+        self, _path: str, *, device_id: str, team_id: str, target_bundle_id: str | None = None
+    ) -> ArtifactIdentity:
         return ArtifactIdentity(
             str(_path),
-            "com.neven.gofly",
+            target_bundle_id or TEAM_A_BUNDLE_ID,
             "GoFly",
             team_id,
             "a" * 64,
@@ -298,7 +358,12 @@ class UnknownInstallDevice:
     def installed(self, device_id: str) -> InstalledAppObservation:
         # The app appears only after the controlled install boundary, which
         # then raises before a durable success result is returned.
-        return InstalledAppObservation(self.install_calls > 0, "com.neven.gofly", "a" * 64, "b" * 64, "c" * 64)
+        return InstalledAppObservation(self.install_calls > 0, TEAM_A_BUNDLE_ID, "a" * 64, "b" * 64, "c" * 64)
+
+    def prepare_pairing(self, _device_id: str, candidate: Path) -> None:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_bytes(b"pairing")
+        candidate.chmod(0o600)
 
     def pair(self, device_id: str, candidate: Path) -> PairingObservation:
         return PairingObservation("verified", device_id, "d" * 64)
@@ -329,7 +394,7 @@ class UnknownInstallDevice:
         raise AssertionError("readback must not run after unknown install")
 
 
-class ResumePairDevice:
+class ReadOnlyStatusDevice:
     def __init__(self) -> None:
         self.verify_calls = 0
         self.pair_calls = 0
@@ -343,7 +408,7 @@ class ResumePairDevice:
 
     def pair(self, device_id: str, candidate: Path) -> PairingObservation:
         self.pair_calls += 1
-        raise AssertionError("resume must not run pair setup after unknown")
+        raise AssertionError("status must not run pair setup")
 
 
 class ChangingBoundaryDevice:
@@ -366,23 +431,23 @@ class RenewDevice:
         return DeviceObservation(device_id, "27.0", "USB", True, True)
 
     def installed(self, device_id: str) -> InstalledAppObservation:
-        return InstalledAppObservation(self.present, "com.neven.gofly")
+        return InstalledAppObservation(self.present, TEAM_A_BUNDLE_ID)
 
     def install(self, device_id: str, artifact: ArtifactIdentity) -> InstalledAppObservation:
         self.install_calls += 1
         if self.fail_install:
             raise RuntimeError("controlled process death")
-        return InstalledAppObservation(True, "com.neven.gofly", build=artifact.build)
+        return InstalledAppObservation(True, TEAM_A_BUNDLE_ID, build=artifact.build)
 
     def prepare_pairing(self, _device_id: str, candidate: Path) -> None:
         candidate.write_bytes(b"pairing")
         candidate.chmod(0o600)
 
     def pair(self, *_args: object) -> PairingObservation:
-        return PairingObservation("verified", "com.neven.gofly", "d" * 64)
+        return PairingObservation("verified", DEVICE, "d" * 64)
 
     def verify_pairing(self, *_args: object) -> PairingObservation:
-        return PairingObservation("verified", "com.neven.gofly", "d" * 64)
+        return PairingObservation("verified", DEVICE, "d" * 64)
 
     def deliver_pairing(self, *_args: object) -> None:
         raise AssertionError("renew must not deliver pairing")
@@ -412,7 +477,7 @@ class RenewB1Tests(unittest.TestCase):
         (root / "python").touch()
         config = SetupConfiguration(
             root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
-            "com.neven.gofly", "GoFly", root / "state",
+            TEAM_A_BUNDLE_ID, "GoFly", root / "state",
         )
         return SetupProducer(config, device=device, process=FakeProcess(root / "state"),
                              artifact_validator=FakeArtifactValidator())
@@ -460,7 +525,7 @@ class RenewB1Tests(unittest.TestCase):
             self.assertEqual(journal["stages"]["pairing"]["state"], "confirmed")
             self.assertEqual(device.install_calls, 1)
 
-    def test_renew_unknown_install_resume_does_not_resubmit(self) -> None:
+    def test_renew_unknown_install_status_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             device = RenewDevice(fail_install=True)
@@ -468,10 +533,12 @@ class RenewB1Tests(unittest.TestCase):
             with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
                 with self.assertRaises(SetupBridgeError):
                     producer.handle(decode_request(json.dumps(request(
-                        "apply", mode="renew", options=self.options(root)
+                        "apply", mode="renew", options={
+                            "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                        }
                     )).encode()))
                 self.assertEqual(device.install_calls, 1)
-                result = producer.handle(decode_request(json.dumps(request("resume", mode="renew")).encode()))
+                result = producer.status(decode_request(json.dumps(request("status", mode="renew")).encode()))
             self.assertEqual(result.outcome, "unknown")
             self.assertEqual(result.stage, "install")
             self.assertEqual(device.install_calls, 1)
@@ -491,19 +558,9 @@ class RenewB1Tests(unittest.TestCase):
 class FullRenewRegressionTests(unittest.TestCase):
     producer = RenewB1Tests.producer
     options = RenewB1Tests.options
-    def test_legacy_incomplete_renew_resume_does_not_call_device(self):
-        with tempfile.TemporaryDirectory() as directory:
-            producer = self.producer(directory, mock.Mock())
-            producer.store.create(SETUP_ID, DEVICE, {
-                "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
-                "targetBundleID": "com.neven.gofly", "targetName": "GoFly",
-            }, mode="renew")
-            before = producer.store.journal_path.read_bytes()
-            result = producer.handle(decode_request(request("resume", mode="renew")))
-            self.assertFalse(result.can_resume)
-            self.assertNotEqual(result.outcome, "confirmed")
-            self.assertEqual(producer.store.journal_path.read_bytes(), before)
-            self.assertEqual(producer.device.mock_calls, [])
+    def test_resume_action_is_rejected(self):
+        with self.assertRaisesRegex(SetupBridgeError, "invalid-request"):
+            decode_request(request("resume", mode="renew"))
 
     def test_renew_pairing_unknown_never_installs_or_generates_again(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -514,8 +571,6 @@ class FullRenewRegressionTests(unittest.TestCase):
                  mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact):
                 with self.assertRaisesRegex(SetupBridgeError, "pairing-unknown"):
                     producer.handle(decode_request(request("apply", mode="renew", options=self.options(Path(directory)))))
-                with self.assertRaisesRegex(SetupBridgeError, "pairing-unknown"):
-                    producer.handle(decode_request(request("resume", mode="renew")))
             self.assertEqual(pair.call_count, 1)
             self.assertEqual(device.install_calls, 0)
 
@@ -529,6 +584,112 @@ class FullRenewRegressionTests(unittest.TestCase):
             result = producer.handle(decode_request(request("status", mode="renew")))
             self.assertFalse(result.pairing_imported)
             self.assertNotEqual(result.stage, "complete")
+
+
+class RestartFromScratchStageTests(unittest.TestCase):
+    def producer(self, root: Path, device: RenewDevice) -> SetupProducer:
+        (root / "GoFly.app").mkdir(exist_ok=True)
+        (root / "GoFly.xcodeproj").mkdir(exist_ok=True)
+        (root / "Developer").mkdir(exist_ok=True)
+        (root / "python").touch()
+        config = SetupConfiguration(
+            root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
+            TEAM_A_BUNDLE_ID, "GoFly", root / "state",
+        )
+        return SetupProducer(config, device=device, process=FakeProcess(root / "state"),
+                             artifact_validator=FakeArtifactValidator())
+
+    def test_same_setup_id_conflicts_before_disconnected_device_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = RenewDevice()
+            producer = self.producer(root, device)
+            producer.store.create(SETUP_ID, DEVICE, {
+                "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                "targetBundleID": TEAM_A_BUNDLE_ID, "targetName": "GoFly",
+                "fullSetup": True,
+            }, mode="renew")
+
+            with mock.patch.object(
+                device, "observe", side_effect=SetupBridgeError("device-disconnected")
+            ) as observe:
+                with self.assertRaisesRegex(SetupBridgeError, "transaction-conflict"):
+                    producer.handle(decode_request(json.dumps(request(
+                        "apply", mode="renew", options={
+                            "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                        }
+                    )).encode()))
+            observe.assert_not_called()
+
+    def test_each_interrupted_stage_archives_old_input_and_starts_a_fresh_pairing_transaction(self):
+        class RestartDevice(RenewDevice):
+            def __init__(self):
+                super().__init__(present=True)
+                self.pairing_candidates = []
+                self.retired = []
+
+            def prepare_pairing(self, _device_id: str, candidate: Path) -> None:
+                candidate.write_bytes(b"fresh-pairing-candidate")
+                candidate.chmod(0o600)
+                self.pairing_candidates.append(candidate)
+
+            def pair(self, *_args: object) -> PairingObservation:
+                return PairingObservation("verified", DEVICE, "e" * 64)
+
+            def verify_pairing(self, *_args: object) -> PairingObservation:
+                return PairingObservation("verified", DEVICE, "e" * 64)
+
+            def retire_pending_pairing(self, device_id: str, transaction_id: str) -> None:
+                self.retired.append((device_id, transaction_id))
+
+        for interrupted_stage in ("artifact", "pairing", "install", "support", "handoff"):
+            with self.subTest(stage=interrupted_stage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                device = RestartDevice()
+                producer = self.producer(root, device)
+                old_setup_id = SETUP_ID
+                old_transaction_id = str(uuid.uuid4())
+                store = producer.store
+                old = store.create(old_setup_id, DEVICE, {
+                    "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                    "targetBundleID": TEAM_A_BUNDLE_ID, "targetName": "GoFly",
+                    "pairingTransactionID": old_transaction_id,
+                    "fullSetup": True,
+                }, mode="renew")
+                stage_order = ("artifact", "pairing", "install", "support", "handoff", "complete")
+                for stage in stage_order:
+                    old["stages"][stage] = {"state": "confirmed" if stage_order.index(stage) < stage_order.index(interrupted_stage) else "pending"}
+                old["stages"][interrupted_stage] = {"state": "unknown", "detail": "controlled interruption"}
+                store.update(old)
+                old_candidate = store.transaction_root(old_setup_id) / "pairing.candidate"
+                old_candidate.write_bytes(b"old-transaction-pairing")
+                old_candidate.chmod(0o600)
+                new_setup_id = str(uuid.uuid4())
+                new_request = request("apply", setupID=new_setup_id, mode="renew", options={
+                    "teamID": "ABCDEFGHIJ", "allowProvisioningUpdates": False,
+                })
+                def fail_handoff(journal, *_args):
+                    producer.store.checkpoint(journal, "handoff", "inflight")
+                    raise SetupBridgeError("handoff-unknown")
+
+                with mock.patch("setup_producer.snapshot_artifact", side_effect=lambda artifact, *_a, **_k: artifact), \
+                     mock.patch.object(producer, "_handoff", side_effect=fail_handoff):
+                    with self.assertRaisesRegex(SetupBridgeError, "handoff-unknown"):
+                        producer.handle(decode_request(json.dumps(new_request).encode()))
+
+                current = store.read()
+                self.assertEqual(current["setupID"], new_setup_id)
+                self.assertEqual(current["mode"], "renew")
+                self.assertEqual(current["stages"]["handoff"]["state"], "unknown", current["stages"])
+                self.assertEqual(current["stages"]["pairing"]["state"], "confirmed")
+                self.assertEqual(device.install_calls, 1)
+                self.assertEqual(len(device.pairing_candidates), 1)
+                self.assertEqual(device.pairing_candidates[0], store.transaction_root(new_setup_id) / "pairing.candidate")
+                self.assertNotEqual(device.pairing_candidates[0], store.transaction_root(old_setup_id) / "pairing.candidate")
+                archived_candidate = store.transaction_root(old_setup_id) / "pairing.candidate"
+                self.assertEqual(archived_candidate.read_bytes(), b"old-transaction-pairing")
+                expected_retired = [(DEVICE, old_transaction_id)] if interrupted_stage == "handoff" else []
+                self.assertEqual(device.retired, expected_retired)
 
 
 class AdapterBoundaryTests(unittest.TestCase):
@@ -556,7 +717,7 @@ class AdapterBoundaryTests(unittest.TestCase):
 
     def test_launch_uses_verified_rsd_and_never_kills_existing(self) -> None:
         device = "00000000-000000000000abcd"
-        adapter = PinnedPymobiledeviceAdapter()
+        adapter = PinnedPymobiledeviceAdapter(target_bundle_id=TEAM_A_BUNDLE_ID)
 
         def serial(value: str) -> str:
             self.assertEqual(value, device)
@@ -582,7 +743,7 @@ class AdapterBoundaryTests(unittest.TestCase):
         }
         with mock.patch("setup_adapters.importlib.import_module", side_effect=modules.__getitem__):
             self.assertEqual(adapter.launch(device), 123)
-        control.launch.assert_awaited_once_with("com.neven.gofly", kill_existing=False)
+        control.launch.assert_awaited_once_with(TEAM_A_BUNDLE_ID, kill_existing=False)
         tunnel.aclose.assert_awaited_once()
 
     @unittest.skipUnless(
@@ -602,20 +763,20 @@ class InstallDevice(RenewDevice):
         self.installed_present = False
 
     def installed(self, device_id: str) -> InstalledAppObservation:
-        return InstalledAppObservation(self.installed_present, "com.neven.gofly")
+        return InstalledAppObservation(self.installed_present, TEAM_A_BUNDLE_ID)
 
     def prepare_pairing(self, _device_id: str, candidate: Path) -> None:
         candidate.write_bytes(b"pairing")
 
     def pair(self, _device_id: str, _candidate: Path) -> PairingObservation:
-        return PairingObservation("verified", "com.neven.gofly", "a" * 64)
+        return PairingObservation("verified", DEVICE, "a" * 64)
 
     def verify_pairing(self, _device_id: str, _candidate: Path) -> PairingObservation:
-        return PairingObservation("verified", "com.neven.gofly", "a" * 64)
+        return PairingObservation("verified", DEVICE, "a" * 64)
 
     def install(self, device_id: str, artifact: ArtifactIdentity) -> InstalledAppObservation:
         self.installed_present = True
-        return InstalledAppObservation(True, "com.neven.gofly", build=artifact.build)
+        return InstalledAppObservation(True, TEAM_A_BUNDLE_ID, build=artifact.build)
 
 
 class InstallApplyTests(unittest.TestCase):
@@ -627,7 +788,7 @@ class InstallApplyTests(unittest.TestCase):
             (root / "Developer").mkdir()
             (root / "python").touch()
             config = SetupConfiguration(root, root / "python", root / "Developer", root / "GoFly.xcodeproj",
-                                        "com.neven.gofly", "GoFly", root / "state")
+                                        TEAM_A_BUNDLE_ID, "GoFly", root / "state")
             producer = SetupProducer(config, device=InstallDevice(),
                                      process=FakeProcess(root / "state"),
                                      artifact_validator=FakeArtifactValidator())
@@ -685,53 +846,28 @@ class StdioB1Tests(unittest.TestCase):
 
     def test_invalid_request_has_bounded_protocol2_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            missing = Path(directory) / "SetupConfiguration.json"
-            response = bridge_run_stdio(missing, stdin=io.BytesIO(b"{}"))
+            root = Path(directory)
+            config = BridgeConfig(root, root / "python", root / "Developer", root / "GoFly.xcodeproj")
+            response = bridge_run_stdio(config, stdin=io.BytesIO(b"{}"))
             self.assertEqual(response["status"], "error")
             self.assertEqual(response["code"], "invalid-request")
 
-    def test_status_does_not_create_state_or_lock(self) -> None:
+    def test_bundle_setup_paths_derive_without_configuration_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            state = root / "state"
-            project = root / "GoFly.xcodeproj"
-            project.mkdir()
-            (root / "Developer").mkdir()
-            config = root / "SetupConfiguration.json"
-            config.write_text(json.dumps({
-                "workspaceRoot": str(root),
-                "pythonPath": str(root / "python"),
-                "developerDirectory": str(root / "Developer"),
-                "projectPath": str(project),
-                "targetBundleID": "com.neven.gofly",
-                "targetName": "GoFly",
-                "stateRoot": str(state),
-            }))
-            response = bridge_run_stdio(config, stdin=io.BytesIO(json.dumps(request("status")).encode()))
-            self.assertEqual(response["code"], "configuration-invalid")
-            self.assertFalse(state.exists())
+            config = SetupConfiguration.from_bundle(root, root / "Developer")
+            self.assertEqual(config.project_path, root / "iOSProject/GoFly.xcodeproj")
+            self.assertEqual(config.python_path, root / "Python/python/install/bin/python3.14")
+            self.assertEqual(config.state_root, Path.home() / "Library/Application Support/GoFly/state")
 
-    def test_runtime_error_keeps_safe_unknown_payload(self) -> None:
+    def test_error_payload_query_does_not_create_a_state_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            project = root / "GoFly.xcodeproj"
-            project.mkdir()
-            (root / "Developer").mkdir()
-            config = root / "SetupConfiguration.json"
-            config.write_text(json.dumps({
-                "workspaceRoot": str(root),
-                "pythonPath": str(root / "python"),
-                "developerDirectory": str(root / "Developer"),
-                "projectPath": str(project),
-                "targetBundleID": "com.neven.gofly",
-                "targetName": "GoFly",
-                "stateRoot": str(root / "state"),
-            }))
-            value = request("status")
-            response = bridge_run_stdio(config, stdin=io.BytesIO(json.dumps(value).encode()))
-            self.assertEqual(response["status"], "error")
-            self.assertEqual(response["payload"]["outcome"], "unknown")
-            self.assertEqual(response["payload"]["stage"], "preflight")
+            state = Path(directory) / "state"
+            config = SimpleNamespace(state_root=state)
+            response = _error_payload(SimpleNamespace(action="apply", setup_id=None, device_id=None), config)
+            self.assertEqual(response["outcome"], "unknown")
+            self.assertEqual(response["stage"], "preflight")
+            self.assertFalse(state.exists())
 
 if __name__ == "__main__":
     unittest.main()

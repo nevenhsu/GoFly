@@ -1,6 +1,6 @@
 # 10 · 自動延長簽名
 
-**Status:** todo
+**Status:** implemented; software-verified; visual-design-verified
 **Blocked by:** 09
 **Spec:** MAC-INSTALLER-SPEC §5.3；Figma D10、D11、D08 開關。
 
@@ -14,3 +14,11 @@
 
 **Acceptance**
 - 以可注入的時鐘測試：剩 4 天以上不觸發、剩不到 4 天觸發、過期觸發、有操作進行中不觸發、失敗後 24 小時才再試、開關關閉不觸發。
+
+**Evidence**
+- Mac App 開啟時啟動排程，先等待唯讀環境與網路狀態，再執行一次檢查；之後每 24 小時檢查。檢查時間先落到本機偏好，避免失敗或重開後快速重試。Policy 覆蓋 4 天門檻、24 小時週期；裝置開關逐裝置保存，預設開啟；候選裝置優先使用 USB。
+- 執行狀態驅動 D10／D11、macOS 通知與 IOPM sleep assertion；成功／失敗／取消會釋放 assertion。GoFlyMac Swift suite 65 tests passed，包含門檻、週期、裝置開關、USB 優先、操作中不觸發與 Wi‑Fi transport 規則。
+- D08 開關及 D10、D11 淺／深色 App 截圖位於 `work/gofly-mac/v1/screens/`，已與 Figma V1 並排核對；D10／D11 本輪重新擷取與核對。
+
+**Not verified**
+- 未以真實長時間運行驗證 24 小時喚醒／排程；macOS 通知權限與送達、實際 IOPMAssertion 睡眠抑制，以及自動續簽的實機 receipt 仍待使用者操作驗收。

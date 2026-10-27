@@ -38,7 +38,7 @@
 
 Figma 與規格的畫面數一致：淺色、深色各 34 張；M1 環境設定 E01–E08 共 8 張、M2 首次安裝 I01–I09 共 9 張、M3 裝置管理 G01–G17 共 17 張。新版 Mac 視覺與流程規格已依此分節。舊 `02 · Mac App` 畫面不再作新版基準。
 
-唯一已確認的跨規格差異是 M2 I09 的「USB 中斷後從頭安裝、重建配對」敘述，和目前安裝交易規則不一致。實際寫入中斷須保留原 `setupID`，先查 status，只在明確可續時 resume；因此 I09 的畫面文案不可改變實際交易流程。詳見 [`MAC-UI-DESIGN.md`](MAC-UI-DESIGN.md) 與 [`AI-INSTALL.md`](AI-INSTALL.md)。
+Mac M2 I09／D14 的「中斷後重新開始」行為已與安裝交易同步：建立新 `setupID` 並從頭 preflight/apply；renew 覆蓋同一 App、保留資料並重建 USB 配對。若舊交易可能已發布一次性 pairing envelope，僅移除身份與 digest 完全相符的未消耗 `incoming.plist`，保留活動 pairing store、receipt、App 及使用者資料。詳見 [`MAC-INSTALLER-SPEC.md`](MAC-INSTALLER-SPEC.md)、[`MAC-UI-DESIGN.md`](MAC-UI-DESIGN.md) 與 [`AI-INSTALL.md`](AI-INSTALL.md)。
 
 ## 未來更新方式
 
@@ -146,3 +146,21 @@ Figma 與規格的畫面數一致：淺色、深色各 34 張；M1 環境設定 
 - 票 06：以 Figma Console 讀回 E1/E2/E2.a/E3/E5 淺深色共10畫面；速度 pill、設定 sheet（5/25/50/100、1–120 slider）及恢復列在兩種主題結構一致，沿用既有線框，沒有新增 Figma 狀態畫面。
 - 票 07：以 Figma Console 讀回 E5 淺／深色恢復畫面；均為恢復列＋tabs，Dark 不再呈現大搖桿或 Switch。設計只表達靜態恢復態，不宣稱已驗證背景 runtime 或實機恢復。
 - 票 01–03 對 App 的漫步道路規劃和 ACK 進度描述屬於行為／實作更新；設計圖不表示原型已接線。本次未新增 Figma prototype wiring。
+
+## 2026-10-27 04 iOS theme 色彩與變數綁定
+
+- 04 深色語意角色已對齊 05 的 Mac 深色值；變數仍由 iOS 自己管理，分別放在 `GoFly iOS / Light Theme` 與 `GoFly iOS / Dark Theme`，未共用 Mac 變數。地圖色票及 05 未定義的 danger 底色為 iOS 專屬。
+- 逐 frame 綁定檢查發現先前單看變數綁定數量仍會漏掉畫面層級的語意誤染；對異常畫面另行截圖讀回。本次盤點 04 Dark 區段 63 張完整 `393 × 852` frame、5,727 個圖層；3,050 個實心填色、2,120 個描邊及 1,044 段文字填色全數綁定 `GoFly iOS / Dark Theme`，無裸色值或錯誤 collection 綁定。這項 frame-level 結果取代先前 Dark 5,670 的覆蓋數字。
+- 已修正 B10／D8 錯誤 toast 與 D9／D22 成功 snackbar 把狀態色套到整張畫面的問題，現在狀態色只保留在 toast／snackbar 本身；D8 路線列與控制圖示恢復中性色。R04／R05／R06 步驟號、B3／B4 確認文字、狀態列、Tab Bar 與 F1／F1.a 未綁色文字亦已逐項對應 Dark token。Dark B1、B3／B4、D8／D9、R06、F1／F1.a 等修正畫面均已截圖讀回。
+- Dark 地圖 palette 維持 iOS 專用值：canvas `#242426`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。共用深色語意值仍與 05 對齊；Figma collection 保持 iOS 獨立。
+- 此為靜態 Figma 設計更新，App 實作與裝置驗證狀態另行追蹤。B11（`239:15137`）目前只有 Light 畫面，Dark variant 尚缺，列為設計缺口。
+- 後續驗收：Light／Dark 各自維持 iOS 變數來源；每張 Dark frame 的底色、邊線、文字及圖示需依語意 token 綁定，調整變數後引用畫面同步更新，並逐 frame 渲染讀回確認文字與元件對比。
+
+### Dark · 0 · 共用元件（按鈕）
+
+- 2026-10-27 新增於 04 `Dark · 0 · 共用元件（按鈕）`（section `249:16291`），集中整理按鈕類型、色彩角色與靜態狀態。`Button / Action` 含 Primary（文字／圖示）、Secondary、Disabled Primary、Danger 與 Destructive；`Button / Icon` 含 Standard／Route 的 Enabled／Disabled；`Button / Check` 含 Selected／Unselected；`Button / Status action` 含 Error／Retry、Warning／Continue、Success／Undo。
+- 新增 `Button / Icon + Text` 與 `Button / Text` component sets，Type 為 Primary／Neutral／Ghost Primary／Ghost Secondary、State 為 Active／Disabled，Size 為 Large／Medium／Small／Extra Small；每組 32 個組合。尺寸為 `280 × 56`、`224 × 48`、`176 × 40`、`144 × 32 pt`。兩種 Ghost 均無填色、無描邊；Active Ghost Primary 使用 accent 藍，Ghost Secondary 使用 `#98989D` 次要色，Disabled 使用停用色；右側色彩角色卡並列兩種前景色及無 surface／border 說明。
+- 新增 `Text Field / Neutral`，包含 Text／Icon + Text 及 Default／Focused／Disabled（6 個組合）。Focused 使用 accent 藍描邊與 caret；停用態使用停用文字／圖示色與次要邊線。
+- 板內另列 Primary、Secondary、Disabled、Danger、Destructive、Icon enabled／disabled 色彩角色，及 Danger、Warning、Success、Info 狀態色參考。Primary 的專用 token 為 `color/action/primary/filled-surface`／`filled-text`：Light 維持黑底白字 `#000000`／`#FFFFFF`，Dark 改為藍底白字 `#0066CC`／`#FFFFFF`；舊 `primary/surface`／`primary/text` token 保留原值，避免污染共用系統表面和停用狀態。Dark 共用按鈕板與 04 Dark UI 中 40 個 Primary 按鈕主節點已改綁新 token；Light 29 個 Primary 按鈕主節點改為對應 Light 專屬 token，渲染顏色不變。Secondary 與停用按鈕採深色表面並使用對應文字／描邊；Danger 為紅色填色搭配高對比前景；Destructive 採紅色文字；icon 停用態使用停用 icon 色；勾選態為白底黑勾，未勾選態為深色底與次要描邊。Error／Warning／Success 動作依所屬狀態語意上色，Info 目前只有色彩參考。
+- 此區的 386 個實心填色／描邊皆綁定 `GoFly iOS / Dark Theme`，無裸色值或跨 collection 綁定，不引用 Mac 05 變數。截圖讀回確認分類、尺寸、欄位狀態、兩種 Ghost 無底無框外觀與色彩卡片清晰，沒有超出 section 邊界；未新增 prototype wiring。此為 Figma 靜態設計更新，App 尚未據此實作，未做裝置驗證。
+- 驗收：新增的 component sets 保留 Type／Content／State／Size 屬性；Primary filled surface／text 依各自 iOS Light／Dark variables 調整（Dark `#0066CC`／`#FFFFFF`）；欄位焦點與停用色彩可辨；修改 token 後元件及引用者同步變色；只將上述已列組合視為已設計，未列出的組合記為尚未定義。

@@ -2,7 +2,7 @@
 
 - 上游：[StikDebug](https://github.com/StikDebug/StikDebug)，commit `734361bb9d03817ed8dd82cb27cf8b2b3792b458`。
 - 上游原樣保存在研究專案 `tools/StikDebug`；完整 git archive 在 `work/localgo-upstream-734361bb.tar`，SHA-256 `c81e961cfd0e8f1e374167d6ed3d9cb3a91896e5848360f0b839f8e7fa318f8a`。
-- 保留 AGPL-3.0 [LICENSE](LICENSE)、作者註記及 [原 README](UPSTREAM-README.md)。移除 `.git`、`.github` 及 JIT App Intents；未發布 workflow。
+- 保留 AGPL-3.0 [授權文本](AGPL-3.0.txt)及共用 Swift 檔的作者註記；LocalGo prototype 與其上游 README 副本已移除。移除 `.git`、`.github` 及 JIT App Intents；未發布 workflow。
 - 模組仍名 StikDebug；顯示名稱為 LocalGo，Bundle ID 為 `com.neven.localgo`。
 
 ## 已知直接依賴
@@ -32,6 +32,6 @@
 
 ## Mac 首次設定
 
-曾新增獨立 Python USB 設定工具 `MacSetup/`，固定 `pymobiledevice3==11.31.0`（GPL-3.0）；該 prototype 與其測試已於 2026-10-20 移除。Mac App 現使用自有唯讀裝置邊界 `app/GoFlyMac/Bridge/Device/gofly_device.py`，仍以隔離的 `work/mac-setup-env` 執行（需求清單在 `app/GoFlyMac/requirements.txt`）。實際環境版本清單在研究專案 `work/mac-first-setup/dependency-lock.txt`。配對 schema 以 idevice 原始碼核對，未使用 AnyGo 的程式碼、嵌入身分、金鑰或服務。
+曾新增獨立 Python USB 設定工具 `MacSetup/`，固定 `pymobiledevice3==11.31.0`（GPL-3.0）；該 prototype 與其測試已於 2026-10-20 移除。Mac App 使用自有唯讀裝置邊界 `app/GoFlyMac/Bridge/Device/gofly_device.py`。V1 bundle 內含固定 CPython 與 `requirements.txt` 鎖定的套件；`work/mac-setup-env` 僅供 repo 內維護腳本及離線測試。實際環境版本清單在研究專案 `work/mac-first-setup/dependency-lock.txt`。配對 schema 以 idevice 原始碼核對，未使用 AnyGo 的程式碼、嵌入身分、金鑰或服務。
 
 新增手機端私密交付 codec、一次性匯入、交易回報與重播防護，保留 PairingFileStore 原子匯入與原生驗證。最新驗證及已遮蔽身分的實機狀態在 `work/mac-first-setup/`；簽署產物在 `work/localgo-signed`，個人配對／憑證不放入產品原始碼。

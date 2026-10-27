@@ -6,21 +6,21 @@ import GoFlyMacCore
     private let device = "00008110-001234567890abcd"
 
     @Test func reopenRetainsOriginalIdentityWithoutCallingTheDevice() async throws {
-        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let journal = ModelJournal(original)
         let runner = HeldSetupRunner()
         let model = MacSetupModel(runner: runner, journal: journal)
         #expect(!model.isRestored)
         await model.restore()
         #expect(model.isRestored)
-        #expect(model.continuation == original)
+        #expect(model.pendingTransaction == original)
         #expect(await runner.requests.isEmpty)
         #expect(!model.canApply)
         #expect(throws: MacSetupFailure.service("transaction-conflict")) {
             try model.configure(deviceID: "00008110-ffffffffffffffff",
                                 options: MacSetupOptions(teamID: "ABCDE12345"))
         }
-        #expect(model.continuation == original)
+        #expect(model.pendingTransaction == original)
     }
 
     @Test func corruptJournalBlocksNewAuthority() async throws {
@@ -43,7 +43,7 @@ import GoFlyMacCore
             await model.restore()
             let options = try MacSetupOptions(teamID: "ABCDE12345")
             try model.configure(deviceID: device, options: options)
-            let identity = model.continuation
+            let identity = model.pendingTransaction
             model.preflight()
             #expect(await waitForRequests(1, runner))
             let preflight = try #require(await runner.requests.last)
@@ -54,8 +54,8 @@ import GoFlyMacCore
             let apply = try #require(await runner.requests.last)
             await runner.returnData(try response(apply, stage: stage, outcome: code == nil ? "ready" : "unknown", code: code))
             #expect(await waitUntilIdle(model))
-            #expect(model.continuation == identity)
-            #expect(!model.hasRecordedTransaction && !model.canApply && !model.canResume)
+            #expect(model.pendingTransaction == identity)
+            #expect(!model.hasRecordedTransaction && !model.canApply)
             if blocked {
                 #expect(model.failure == .invalidResponse)
                 #expect(model.locksDevice)
@@ -79,7 +79,7 @@ import GoFlyMacCore
         await model.restore()
         let options = try MacSetupOptions(teamID: "ABCDE12345")
         try model.configure(deviceID: device, options: options)
-        let original = try #require(model.continuation)
+        let original = try #require(model.pendingTransaction)
         model.apply()
         #expect(await runner.requests.isEmpty, "Apply requires an actual ready preflight for these options.")
         model.preflight()
@@ -98,13 +98,12 @@ import GoFlyMacCore
         model.cancel()
         #expect(model.isBusy, "Cancellation cannot release a still-running external operation.")
         #expect(model.cancellationRequested)
-        #expect(!model.canApply && !model.canResume)
+        #expect(!model.canApply)
         model.apply()
-        model.resume()
         #expect(await runner.requests.count == 2)
         await runner.fail(.cancelled)
         #expect(await waitUntilIdle(model))
-        #expect(model.continuation == original)
+        #expect(model.pendingTransaction == original)
         #expect(model.failure == .cancelled)
         #expect(!model.canApply)
         #expect(model.snapshot == nil)
@@ -116,9 +115,9 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(model))
     }
 
-    @Test func actualUnknownResponseRetainsStageAndRequiresExplicitResume() async throws {
+    @Test func incompleteJournalCanOnlyStartWithANewTransaction() async throws {
         let runner = HeldSetupRunner()
-        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let model = MacSetupModel(runner: runner, journal: ModelJournal(original))
         await model.restore()
         model.status()
@@ -129,20 +128,53 @@ import GoFlyMacCore
         #expect(model.snapshot?.stage == .install)
         #expect(model.snapshot?.outcome == .unknown)
         #expect(model.failure == .service("transaction-unknown"))
-        #expect(!model.canApply && model.canResume)
+        #expect(!model.canApply && model.hasUnfinishedTransaction)
         #expect(await runner.requests.count == 1)
-        model.resume()
-        guard await waitForRequests(2, runner) else { Issue.record("Explicit resume did not reach the runner"); return }
-        let resumed = try #require(await runner.requests.last)
-        #expect(resumed.action == .resume && resumed.setupID == original.setupID && resumed.options == nil)
+        try model.beginRestart(deviceID: original.deviceID, options: MacSetupOptions(teamID: original.teamID))
+        guard await waitForRequests(2, runner) else { Issue.record("Fresh preflight did not reach the runner"); return }
+        let restarted = try #require(await runner.requests.last)
+        #expect(restarted.action == .preflight && restarted.setupID != original.setupID && restarted.options != nil)
         await runner.fail(.unavailable)
         #expect(await waitUntilIdle(model))
-        #expect(model.continuation == original)
+        #expect(model.pendingTransaction?.setupID != original.setupID)
         #expect(model.snapshot == nil, "A failed observation cannot leave apparently current progress evidence.")
     }
 
+    @Test func restartingAnInstallWithAnAppAlreadyPresentSwitchesTheFreshTransactionToRenew() async throws {
+        let runner = HeldSetupRunner()
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device,
+                                                       mode: .install, teamID: "ABCDE12345")
+        let journal = ModelJournal(original)
+        let model = MacSetupModel(runner: runner, journal: journal)
+        await model.restore()
+        try model.beginRestart(deviceID: original.deviceID, options: MacSetupOptions(teamID: original.teamID))
+        guard await waitForRequests(1, runner) else { Issue.record("Restart preflight did not reach the runner"); return }
+        let installPreflight = try #require(await runner.requests.last)
+        #expect(installPreflight.mode == .install)
+        let newSetupID = try #require(installPreflight.setupID)
+        await runner.returnData(try response(installPreflight, stage: "preflight", outcome: "unknown",
+                                             code: "app-already-installed"))
+        guard await waitForRequests(2, runner) else { Issue.record("Renewal preflight did not follow existing app discovery"); return }
+        let renewPreflight = try #require(await runner.requests.last)
+        #expect(renewPreflight.action == .preflight && renewPreflight.mode == .renew)
+        #expect(renewPreflight.setupID == newSetupID)
+        await runner.returnData(try response(renewPreflight, stage: "preflight", outcome: "ready"))
+        guard await waitForRequests(3, runner) else { Issue.record("Fresh renewal apply did not follow preflight"); return }
+        let apply = try #require(await runner.requests.last)
+        #expect(apply.action == .apply && apply.mode == .renew && apply.setupID == newSetupID)
+        let restartedIdentity = try MacSetupTransactionIdentity(setupID: newSetupID, deviceID: original.deviceID,
+                                                                mode: .renew, teamID: original.teamID)
+        await journal.set(restartedIdentity)
+        await runner.returnData(try response(apply, stage: "install", outcome: "unknown", code: "device-disconnected"),
+                                action: .apply)
+        #expect(await waitUntilIdle(model))
+        #expect(model.pendingTransaction == restartedIdentity)
+        #expect(model.hasUnfinishedTransaction)
+        #expect(model.failure == .service("device-disconnected"))
+    }
+
     @Test func restoredSetupCannotBeHiddenByDeviceSelection() async throws {
-        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let runner = HeldSetupRunner()
         let setup = MacSetupModel(runner: runner, journal: ModelJournal(original))
         let app = MacAppModel(live: SetupReadOnlyChecker(), setup: setup)
@@ -150,12 +182,12 @@ import GoFlyMacCore
         app.checkEnvironment()
         for _ in 0..<200 where app.busy { try await Task.sleep(for: .milliseconds(5)) }
         #expect(app.ready)
-        #expect(app.page == .install && app.selectedID == original.deviceID)
+        #expect(app.route == .deviceDetail && app.selectedID == original.deviceID)
         app.openDevices(firstInstall: false)
         app.select("00008110-ffffffffffffffff")
         app.refreshDevices()
-        app.navigate(.devices)
-        #expect(app.page == .install && app.selectedID == original.deviceID)
+        app.navigate(.deviceList)
+        #expect(app.route == .deviceDetail && app.selectedID == original.deviceID)
         #expect(await runner.requests.isEmpty)
         setup.status()
         guard await waitForRequests(1, runner) else { Issue.record("Status did not reach the runner"); return }
@@ -171,12 +203,12 @@ import GoFlyMacCore
         let setup = MacSetupModel(runner: HeldSetupRunner(), journal: ModelJournal(nil, corrupt: true))
         let app = MacAppModel(live: SetupReadOnlyChecker(), setup: setup)
         await app.restoreSetup()
-        #expect(app.page == .install)
+        #expect(app.route == .install)
         #expect(setup.locksDevice)
-        app.navigate(.home)
-        #expect(app.page == .home)
+        app.navigate(.startup)
+        #expect(app.route == .startup)
         app.navigate(.install)
-        #expect(app.page == .install, "A corrupt transaction must remain reachable without environment readiness.")
+        #expect(app.route == .install, "A corrupt transaction must remain reachable without environment readiness.")
     }
 
     @Test func devicePickerRetiresUnappliedPreflight() async throws {
@@ -194,27 +226,27 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(setup))
         #expect(setup.canApply)
         app.openDevices(firstInstall: true)
-        #expect(setup.continuation == nil && setup.options == nil && setup.snapshot == nil)
+        #expect(setup.pendingTransaction == nil && setup.options == nil && setup.snapshot == nil)
         setup.apply()
         #expect(await runner.requests.count == 1, "A preflight for the prior selection cannot install after switching devices.")
     }
 
     @Test func onlyObservedCompleteJournalCanReleaseTheLocalSelection() async throws {
         let runner = HeldSetupRunner()
-        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device)
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device, teamID: "ABCDE12345")
         let journal = ModelJournal(original)
         let setup = MacSetupModel(runner: runner, journal: journal)
         await setup.restore()
         setup.resetSelection()
-        #expect(setup.continuation == original, "The header alone cannot retire an unresolved transaction.")
+        #expect(setup.pendingTransaction == original, "The header alone cannot retire an unresolved transaction.")
         setup.status()
         guard await waitForRequests(1, runner) else { Issue.record("Status did not reach the runner"); return }
         let request = try #require(await runner.requests.last)
         var wire = try #require(JSONSerialization.jsonObject(with: response(request, stage: "complete", outcome: "confirmed")) as? [String: Any])
         // This is a protocol projection test, never a runtime/App/native success adapter.
-        wire["payload"] = ["stage": "complete", "outcome": "confirmed", "canResume": false,
+        wire["payload"] = ["stage": "complete", "outcome": "confirmed",
                            "proof": ["installationConfirmed": true, "pairingImported": true, "supportObserved": true],
-                           "app": ["bundleID": "com.neven.gofly", "build": "19",
+                           "app": ["bundleID": "com.neven.gofly.abcde12345", "build": "19",
                                    "profileSHA256": String(repeating: "1", count: 64),
                                    "executableSHA256": String(repeating: "2", count: 64)],
                            "teamID": "ABCDE12345", "expiresAt": "2030-01-01T00:00:00Z",
@@ -223,11 +255,11 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(setup))
         #expect(setup.snapshot?.isComplete == true)
         setup.resetSelection()
-        #expect(setup.continuation == nil && !setup.hasRecordedTransaction)
-        #expect(try await journal.readContinuation() == original, "UI retirement must not archive or erase the authoritative journal.")
+        #expect(setup.pendingTransaction == nil && !setup.hasRecordedTransaction)
+        #expect(try await journal.readPendingTransaction() == original, "UI retirement must not archive or erase the authoritative journal.")
         try setup.configure(deviceID: "00008110-ffffffffffffffff",
                             options: MacSetupOptions(teamID: "ABCDE12345"))
-        #expect(setup.continuation?.deviceID == "00008110-ffffffffffffffff")
+        #expect(setup.pendingTransaction?.deviceID == "00008110-ffffffffffffffff")
         #expect(!setup.canApply, "The new choice still requires its own actual preflight.")
         setup.preflight()
         guard await waitForRequests(2, runner) else { Issue.record("New preflight did not reach the runner"); return }
@@ -238,9 +270,9 @@ import GoFlyMacCore
         guard await waitForRequests(3, runner) else { Issue.record("New apply did not reach the runner"); return }
         await runner.fail(.unavailable)
         #expect(await waitUntilIdle(setup))
-        #expect(setup.continuation == original && setup.hasRecordedTransaction)
+        #expect(setup.pendingTransaction == original && setup.hasRecordedTransaction)
         #expect(setup.failure == .service("transaction-conflict"))
-        #expect(setup.snapshot == nil && !setup.canApply && !setup.canResume)
+        #expect(setup.snapshot == nil && !setup.canApply)
         #expect(await runner.requests.count == 3, "Rebinding an unchanged header does not automatically query either device.")
     }
 
@@ -250,7 +282,7 @@ import GoFlyMacCore
         let setup = MacSetupModel(runner: runner, journal: journal)
         await setup.restore()
         try setup.configure(deviceID: device, options: MacSetupOptions(teamID: "ABCDE12345"))
-        let original = try #require(setup.continuation)
+        let original = try #require(setup.pendingTransaction)
         setup.preflight()
         guard await waitForRequests(1, runner) else { Issue.record("Preflight did not reach the runner"); return }
         let preflight = try #require(await runner.requests.last)
@@ -270,7 +302,7 @@ import GoFlyMacCore
         await runner.returnData(try response(status, stage: "install", outcome: "unknown"), action: .status)
         for _ in 0..<100 where setup.progressStage == nil { try await Task.sleep(for: .milliseconds(5)) }
         #expect(setup.progressStage == .install)
-        #expect(setup.isBusy && setup.snapshot == nil && !setup.canResume && !setup.canApply)
+        #expect(setup.isBusy && setup.snapshot == nil && !setup.canApply)
         guard await waitForRequests(4, runner, attempts: 800) else {
             setup.cancel()
             await runner.fail(.cancelled)
@@ -286,14 +318,14 @@ import GoFlyMacCore
         #expect(setup.isBusy, "The read-only observer must also physically return before releasing the fence.")
         await runner.returnData(try response(heldStatus, stage: "handoff", outcome: "unknown"), action: .status)
         #expect(await waitUntilIdle(setup))
-        #expect(setup.continuation == original && setup.failure == .cancelled)
+        #expect(setup.pendingTransaction == original && setup.failure == .cancelled)
         #expect(setup.progressStage == nil, "A late cancelled observer cannot publish new progress.")
     }
 
 
     @Test func legacySignedOnlyRenewCanStartAFullRenewFromDevicePage() async throws {
         let runner = HeldSetupRunner()
-        let original = try MacSetupContinuation(setupID: UUID(), deviceID: device, mode: .renew)
+        let original = try MacSetupTransactionIdentity(setupID: UUID(), deviceID: device, mode: .renew, teamID: "ABCDE12345")
         let setup = MacSetupModel(runner: runner, journal: ModelJournal(original))
         let app = MacAppModel(live: RenewChecker(), setup: setup)
         await app.restoreSetup()
@@ -303,8 +335,7 @@ import GoFlyMacCore
         var root = try #require(JSONSerialization.jsonObject(with: response(status, stage: "complete", outcome: "confirmed")) as? [String: Any])
         var payload = try #require(root["payload"] as? [String: Any])
         payload["proof"] = ["installationConfirmed": true, "pairingImported": false, "supportObserved": false]
-        payload["canResume"] = false
-        payload["app"] = ["bundleID": "com.neven.gofly", "build": "20",
+        payload["app"] = ["bundleID": "com.neven.gofly.abcde12345", "build": "20",
                           "profileSHA256": String(repeating: "a", count: 64),
                           "executableSHA256": String(repeating: "b", count: 64)]
         payload["teamID"] = "ABCDE12345"
@@ -397,33 +428,52 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(setup))
     }
 
+    @Test func wifiRenewKeepsNetworkTransportAcrossPreflightAndApply() async throws {
+        let runner = HeldSetupRunner()
+        let setup = MacSetupModel(runner: runner, journal: ModelJournal(nil))
+        await setup.restore()
+        try setup.configure(deviceID: device, options: MacSetupOptions(teamID: "ABCDE12345"),
+                            mode: .renew, transport: .wifi)
+        setup.preflight()
+        guard await waitForRequests(1, runner) else { Issue.record("Wi-Fi preflight did not reach the runner"); return }
+        let preflight = try #require(await runner.requests.first)
+        #expect(preflight.transport == .wifi)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
+        guard await waitForRequests(2, runner) else { Issue.record("Wi-Fi apply did not follow preflight"); return }
+        let apply = try #require(await runner.requests.last)
+        #expect(apply.action == .apply && apply.mode == .renew && apply.transport == .wifi)
+        await runner.fail(.cancelled)
+        #expect(await waitUntilIdle(setup))
+    }
+
 
     @Test func bridgeStatusReaderReturnsOnlyTheCurrentJournalHeader() async throws {
         let id = UUID()
         let reader = BridgeStatusJournalReader(runner: StatusRunner(setupID: id))
-        let continuation = try await reader.readContinuation()
-        #expect(continuation?.setupID == id)
-        #expect(continuation?.deviceID == device)
-        #expect(continuation?.mode == .install)
+        let pendingTransaction = try await reader.readPendingTransaction()
+        #expect(pendingTransaction?.setupID == id)
+        #expect(pendingTransaction?.deviceID == device)
+        #expect(pendingTransaction?.mode == .install)
+        #expect(pendingTransaction?.teamID == "ABCDE12345")
     }
 
     @Test func bridgeStatusReaderMapsMissingJournalToNoContinuation() async throws {
         let reader = BridgeStatusJournalReader(runner: MissingStatusRunner())
-        #expect(try await reader.readContinuation() == nil)
+        #expect(try await reader.readPendingTransaction() == nil)
     }
 
     @Test func bridgeStatusReaderMapsTransactionUnknownResponseToNoContinuation() async throws {
         let reader = BridgeStatusJournalReader(runner: TransactionUnknownStatusRunner())
-        #expect(try await reader.readContinuation() == nil)
+        #expect(try await reader.readPendingTransaction() == nil)
     }
 
     @Test @MainActor func completedJournalDoesNotLockRetainedState() async throws {
         let runner = CompletedLegacyStatusRunner()
         let reader = BridgeStatusJournalReader(runner: runner)
-        #expect(try await reader.readContinuation() == nil)
+        #expect(try await reader.readPendingTransaction() == nil)
         let model = MacSetupModel(runner: runner, journal: reader)
         await model.restore()
-        #expect(model.continuation == nil)
+        #expect(model.pendingTransaction == nil)
         #expect(!model.locksDevice)
         #expect(model.lastCompleted?.expiresAt == "2027-10-17T09:06:10Z")
     }
@@ -456,8 +506,10 @@ import GoFlyMacCore
         var value: [String: Any] = [
             "action": request.action.rawValue,
             "requestID": request.requestID.uuidString, "setupID": request.setupID!.uuidString,
-            "deviceID": request.deviceID!, "status": code == nil ? "ok" : "error",
-            "payload": ["stage": stage, "outcome": outcome, "canResume": outcome == "unknown",
+            "deviceID": request.deviceID!, "transport": request.transport?.rawValue ?? "usb",
+            "status": code == nil ? "ok" : "error",
+            "payload": ["stage": stage, "outcome": outcome,
+                        "teamID": "ABCDE12345",
                         "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]]
         ]
         if let code { value["code"] = code }
@@ -472,7 +524,8 @@ private struct StatusRunner: MacSetupRunning {
             "requestID": request.requestID.uuidString, "action": "status",
             "setupID": setupID.uuidString, "deviceID": "00008110-001234567890abcd", "mode": "install",
             "status": "ok",
-            "payload": ["stage": "install", "outcome": "inProgress", "canResume": true,
+            "payload": ["stage": "install", "outcome": "inProgress",
+                        "teamID": "ABCDE12345",
                         "proof": ["installationConfirmed": false, "pairingImported": false, "supportObserved": false]]
         ])
     }
@@ -500,10 +553,10 @@ private struct CompletedLegacyStatusRunner: MacSetupRunning {
             "setupID": "4b21f244-9f20-4ece-b1ae-7811f6ff6b3d",
             "deviceID": "00008110-001234567890abcd",
             "payload": [
-                "stage": "complete", "outcome": "confirmed", "canResume": false,
+                "stage": "complete", "outcome": "confirmed",
                 "proof": ["installationConfirmed": true, "pairingImported": true,
                           "supportObserved": true],
-                "app": ["bundleID": "com.neven.gofly", "build": "22",
+                "app": ["bundleID": "com.neven.gofly.abcde12345", "build": "22",
                         "executableSHA256": String(repeating: "a", count: 64),
                         "profileSHA256": String(repeating: "b", count: 64)],
                 "teamID": "ABCDE12345", "expiresAt": "2027-10-17T09:06:10Z",
@@ -540,11 +593,11 @@ private struct SetupReadOnlyChecker: MacChecking {
 }
 
 private actor ModelJournal: MacSetupJournalReading {
-    var value: MacSetupContinuation?
+    var value: MacSetupTransactionIdentity?
     let corrupt: Bool
-    init(_ value: MacSetupContinuation?, corrupt: Bool = false) { self.value = value; self.corrupt = corrupt }
-    func set(_ value: MacSetupContinuation?) { self.value = value }
-    func readContinuation() async throws -> MacSetupContinuation? {
+    init(_ value: MacSetupTransactionIdentity?, corrupt: Bool = false) { self.value = value; self.corrupt = corrupt }
+    func set(_ value: MacSetupTransactionIdentity?) { self.value = value }
+    func readPendingTransaction() async throws -> MacSetupTransactionIdentity? {
         if corrupt { throw MacSetupFailure.invalidResponse }
         return value
     }

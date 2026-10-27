@@ -17,7 +17,7 @@ import importlib.util
 sys.path.append(str(PACKAGE_ROOT))
 
 import setup_support  # noqa: E402
-from setup_protocol import SetupBridgeError  # noqa: E402
+from setup_protocol import SetupBridgeError, bundle_id_for_team  # noqa: E402
 from setup_journal import JournalStore, MAX_SUPPORT_GENERATION_BYTES  # noqa: E402
 
 
@@ -118,7 +118,7 @@ class SupportSourceTests(unittest.TestCase):
             setup_id = str(uuid.uuid4())
             journal = store.create(setup_id, "0" * 40, {
                 "teamID": "ABCDEFGHIJ",
-                "allowProvisioningUpdates": False, "targetBundleID": "com.neven.gofly",
+                "allowProvisioningUpdates": False, "targetBundleID": bundle_id_for_team("ABCDEFGHIJ"),
                 "targetName": "GoFly", "artifact": None,
             })
             inventory = [

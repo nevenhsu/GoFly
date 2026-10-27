@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 try:
-    from .setup_protocol import SetupBridgeError, TARGET_BUNDLE_ID, TARGET_NAME, normalized_device
+    from .setup_protocol import LEGACY_BUNDLE_ID, SetupBridgeError, TARGET_NAME, bundle_id_for_team, normalized_device
 except ImportError:  # script execution from the packaged Setup directory
-    from setup_protocol import SetupBridgeError, TARGET_BUNDLE_ID, TARGET_NAME, normalized_device
+    from setup_protocol import LEGACY_BUNDLE_ID, SetupBridgeError, TARGET_NAME, bundle_id_for_team, normalized_device
 
 MAX_JOURNAL_BYTES = 256 * 1024
 # Inventory byteCount values describe external support files, not JSON bytes.
@@ -32,15 +32,25 @@ _UUID_RE = re.compile(
 )
 _INSTALL_STAGES = ("artifact", "pairing", "install", "support", "handoff", "complete")
 _RENEW_STAGES = ("artifact", "install", "complete")
+_WIFI_RENEW_STAGES = ("artifact", "pairing", "install", "support", "handoff", "complete")
 _MODES = frozenset({"install", "renew"})
 
 
 def uses_full_setup(journal: Mapping[str, Any]) -> bool:
-    """New renews include pairing; old journals keep their original shape."""
-    return journal.get("mode", "install") == "install" or journal.get("intent", {}).get("fullSetup") is True
+    """Return whether this transaction creates and delivers a new pairing."""
+    intent = journal.get("intent", {})
+    return journal.get("mode", "install") == "install" or (
+        intent.get("fullSetup") is True and intent.get("wifiRenew") is not True
+    )
+
+
+def uses_wifi_renew(journal: Mapping[str, Any]) -> bool:
+    return journal.get("intent", {}).get("wifiRenew") is True
 
 
 def stages_for(journal: Mapping[str, Any]) -> tuple[str, ...]:
+    if uses_wifi_renew(journal):
+        return _WIFI_RENEW_STAGES
     return _INSTALL_STAGES if uses_full_setup(journal) else _RENEW_STAGES
 _STATES = frozenset({"pending", "inflight", "confirmed", "unknown", "failed"})
 _TEAM_RE = re.compile(r"[A-Z0-9]{10}\Z")
@@ -215,6 +225,27 @@ def _read_regular_bytes(path: Path, *, max_bytes: int) -> bytes:
                 os.close(fd)
 
 
+def _pairing_candidate(journal: Mapping[str, Any], transaction: Path) -> Path:
+    pairing = journal.get("pairing")
+    if not isinstance(pairing, Mapping) or not isinstance(pairing.get("sha256"), str):
+        raise SetupBridgeError("storage-unavailable")
+    if uses_wifi_renew(journal):
+        source_id = _validate_setup_id(journal.get("intent", {}).get("pairingSourceSetupID"))
+        expected = f"transactions/{source_id}/pairing.candidate"
+        if pairing.get("candidate") != expected:
+            raise SetupBridgeError("storage-unavailable")
+        candidate = transaction.parent.parent / expected
+    else:
+        if pairing.get("candidate") != f"transactions/{journal.get('setupID')}/pairing.candidate":
+            raise SetupBridgeError("storage-unavailable")
+        candidate = transaction / "pairing.candidate"
+    _regular(candidate)
+    data = _read_regular_bytes(candidate, max_bytes=1024 * 1024)
+    if hashlib.sha256(data).hexdigest() != pairing.get("sha256"):
+        raise SetupBridgeError("storage-unavailable")
+    return candidate
+
+
 def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
     """Pure eligibility predicate for replacing one current completed record."""
     try:
@@ -225,11 +256,13 @@ def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
             return False
         if not all(stages[name]["state"] == "confirmed" for name in stages_for(journal)):
             return False
-        if not uses_full_setup(journal):
+        wifi_renew = uses_wifi_renew(journal)
+        if not uses_full_setup(journal) and not wifi_renew:
             return proof.get("installationConfirmed") is True
         if not all(proof[name] is True for name in ("installationConfirmed", "pairingImported", "supportObserved")):
             return False
-        if journal.get("delivery", {}).get("state") != "delivered":
+        expected_delivery = "notStarted" if wifi_renew else "delivered"
+        if journal.get("delivery", {}).get("state") != expected_delivery:
             return False
         intent = journal["intent"]
         artifact = intent["artifact"]
@@ -249,8 +282,7 @@ def _completed_eligible(journal: Mapping[str, Any], transaction: Path) -> bool:
             "profileSHA256": artifact["profileSHA256"],
         }:
             return False
-        candidate = transaction / "pairing.candidate"
-        _regular(candidate)
+        _pairing_candidate(journal, transaction)
         artifact_path = Path(str(artifact["path"]))
         if artifact_path.is_symlink() or not artifact_path.is_dir():
             return False
@@ -426,11 +458,23 @@ class JournalStore:
         team_id = intent.get("teamID")
         if not isinstance(team_id, str) or _TEAM_RE.fullmatch(team_id) is None:
             raise SetupBridgeError("storage-unavailable")
-        if intent.get("targetBundleID") != TARGET_BUNDLE_ID or intent.get("targetName") != TARGET_NAME:
+        expected_bundle_id = intent.get("targetBundleID")
+        if expected_bundle_id not in {LEGACY_BUNDLE_ID, bundle_id_for_team(team_id)} or intent.get("targetName") != TARGET_NAME:
             raise SetupBridgeError("storage-unavailable")
         if type(intent.get("allowProvisioningUpdates")) is not bool:
             raise SetupBridgeError("storage-unavailable")
         if "fullSetup" in intent and intent["fullSetup"] is not True:
+            raise SetupBridgeError("storage-unavailable")
+        mode = value.get("mode", "install")
+        transport = intent.get("transport", "usb")
+        wifi_renew = intent.get("wifiRenew") is True
+        if transport not in {"usb", "wifi"}:
+            raise SetupBridgeError("storage-unavailable")
+        if wifi_renew:
+            if mode != "renew" or transport != "wifi" or intent.get("fullSetup") is not True:
+                raise SetupBridgeError("storage-unavailable")
+            _validate_setup_id(intent.get("pairingSourceSetupID"))
+        elif "pairingSourceSetupID" in intent:
             raise SetupBridgeError("storage-unavailable")
         observation = intent.get("deviceObservation")
         if observation is not None:
@@ -442,7 +486,7 @@ class JournalStore:
                 observation.get("deviceID") != device_id
                 or not isinstance(observation.get("osVersion"), str)
                 or _OS_RE.fullmatch(observation.get("osVersion", "")) is None
-                or observation.get("transport") != "USB"
+                or observation.get("transport") != ("Network" if transport == "wifi" else "USB")
                 or observation.get("developerMode") is not True
                 or observation.get("trust") is not True
             ):
@@ -455,7 +499,7 @@ class JournalStore:
             if not isinstance(artifact, dict):
                 raise SetupBridgeError("storage-unavailable")
             expected_artifact = {"path", "bundleID", "executable", "teamID", "artifactSHA256", "executableSHA256", "profileSHA256", "expiresAt", "build"}
-            if set(artifact) != expected_artifact or artifact.get("bundleID") != TARGET_BUNDLE_ID or artifact.get("executable") != TARGET_NAME:
+            if set(artifact) != expected_artifact or artifact.get("bundleID") != expected_bundle_id or artifact.get("executable") != TARGET_NAME:
                 raise SetupBridgeError("storage-unavailable")
             if artifact.get("teamID") != team_id or any(
                 not isinstance(artifact.get(key), str) or not artifact.get(key)
@@ -464,7 +508,6 @@ class JournalStore:
                 raise SetupBridgeError("storage-unavailable")
             if any(re.fullmatch(r"[0-9a-f]{64}", artifact.get(key, "")) is None for key in ("artifactSHA256", "executableSHA256", "profileSHA256")):
                 raise SetupBridgeError("storage-unavailable")
-        mode = value.get("mode", "install")
         if mode not in _MODES:
             raise SetupBridgeError("storage-unavailable")
         expected_stages = stages_for(value)
@@ -537,7 +580,8 @@ class JournalStore:
             if (
                 activation.get("setupID") != value.get("setupID")
                 or activation.get("deviceID") != value.get("deviceID")
-                or activation.get("bundleID") != TARGET_BUNDLE_ID
+                or activation.get("bundleID") != expected_bundle_id
+                or activation.get("teamID") != team_id
                 or activation.get("method") not in {"personalized", "cryptex"}
                 or not isinstance(activation.get("artifacts"), list)
             ):
@@ -552,7 +596,7 @@ class JournalStore:
             }
             if not isinstance(ownership, dict) or set(ownership) != expected_ownership:
                 raise SetupBridgeError("storage-unavailable")
-            if ownership.get("transactionID") != value.get("setupID") or ownership.get("bundleID") != TARGET_BUNDLE_ID:
+            if ownership.get("transactionID") != value.get("setupID") or ownership.get("bundleID") != expected_bundle_id:
                 raise SetupBridgeError("storage-unavailable")
             for key in ("build", "artifactSHA256", "executableSHA256", "profileSHA256"):
                 if not isinstance(ownership.get(key), str) or not ownership.get(key):
@@ -572,9 +616,9 @@ class JournalStore:
         self.transaction_root(setup_id)
         intent_value = copy.deepcopy(dict(intent))
         stage = {name: {"state": "pending"} for name in stages_for({"mode": mode, "intent": intent_value})}
-        # The pairing transaction is part of immutable intent.  It is created
-        # before any pair boundary and survives a reopen, so resume never has
-        # to invent a second transaction identity.
+        # The pairing transaction is part of immutable intent and is created
+        # before any pair boundary so retries within this transaction can be
+        # detected without inventing a second identity.
         pairing_transaction = intent_value.get("pairingTransactionID")
         if pairing_transaction is None:
             pairing_transaction = str(uuid.uuid4())
@@ -692,11 +736,10 @@ class JournalStore:
         return self.read_header()
 
     def read_header(self) -> JournalHeader | None:
-        """Read only the frozen continuation header.
+        """Read only the frozen transaction identity header.
 
-        This method deliberately does not authorize status or resume and does
-        not validate stage/proof fields.  The producer always calls ``read``
-        before deriving any operation state.
+        This method does not authorize writes or validate stage/proof fields.
+        The producer calls ``read`` before deriving any operation state.
         """
         _existing_private_root(self.root)
         if not self.root.exists():

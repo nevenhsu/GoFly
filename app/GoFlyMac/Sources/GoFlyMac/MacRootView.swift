@@ -4,232 +4,238 @@ import GoFlyMacCore
 
 struct MacRootView: View {
     @Bindable var model: MacAppModel
+    @State private var splashDelayFinished = false
+
     var body: some View {
-        VStack(spacing: 0) {
-            if model.shouldShowEnvironmentGate { MacEnvironmentGate(model: model) }
-            else if model.page == .home { home }
-            else {
-                HStack(spacing: 0) {
-                    sidebar
-                    VStack(alignment: .leading, spacing: 0) {
-                        header.padding(.bottom, 24)
-                        if let failure = pageCheckFailure { errorCard(failure) }
-                        else { pageContent }
-                        footer.padding(.top, 28)
-                    }
-                    .padding(.horizontal, 32).padding(.top, 24).padding(.bottom, 16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+        Group {
+            switch model.route {
+            case .startup:
+                if splashDelayFinished { LaunchScreen(model: model) }
+                else { GoFlyStyle.canvas }
+            case .environment(let step):
+                MacEnvironmentScreen(model: model, step: step)
+            case .environmentSummary:
+                MacEnvironmentSummaryScreen(model: model)
+            case .deviceList:
+                DeviceListScreen(model: model)
+            case .deviceDetail:
+                MacDeviceDetailScreen(model: model)
+            case .install:
+                if let setup = model.setup { MacInstallScreen(model: model, setup: setup) }
             }
         }
-        .background(GoFlyStyle.canvas).foregroundStyle(GoFlyStyle.ink)
-        .tint(GoFlyStyle.ink)
+        .frame(minWidth: 1000, minHeight: 700)
+        .background(GoFlyStyle.canvas)
+        .foregroundStyle(GoFlyStyle.ink)
         .font(GoFlyStyle.font(14))
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            model.checkEnvironment()
+        .task {
+            try? await Task.sleep(for: .milliseconds(500))
+            if model.route == .startup { splashDelayFinished = true }
         }
-    }
-
-    private var home: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-            VStack(spacing: 0) {
-            DesignAsset("WingedArrow", width: 112)
-            Text("GoFly").font(GoFlyStyle.font(38, bold: true)).padding(.top, 4)
-            Text("在 Mac 安裝與管理 iPhone 上的 GoFly")
-                .font(GoFlyStyle.font(15)).foregroundStyle(GoFlyStyle.muted).padding(.top, 10)
-            HStack(spacing: 10) {
-                if model.busy { ProgressView().controlSize(.small) }
-                else if model.environment?.ready == true { DesignAsset("EnvironmentPassed", width: 24) }
-                Text(model.busy ? "正在檢查 Mac 環境…" : model.environment?.ready == true ? "Mac 環境已就緒" : "Mac 環境尚未就緒")
-                    .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
-            }.padding(.horizontal, 14).padding(.vertical, 8)
-                .background(GoFlyStyle.secondarySurface, in: Capsule())
-                .padding(.top, 20).padding(.bottom, 28)
-            PillButton(title: "首次安裝", primary: true, width: 360, height: 48, enabled: model.ready) { model.openDevices(firstInstall: true) }
-                .accessibilityIdentifier("first-install")
-            Text("USB 連接 iPhone，完成首次安裝與裝置準備")
-                .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted).padding(.top, 8)
-            if model.setup?.hasRecordedTransaction == true || model.setupLocksDevice {
-                Button("查看安裝狀態") { model.openRecordedOperation() }
-                    .padding(.top, 12).disabled(model.busy)
+        .onChange(of: splashDelayFinished) { _, shown in
+            if shown, model.route == .startup {
+                Task { await CaptureScreenshotHelper.captureIfRequested(expectedScreen: "E00") }
             }
-            PillButton(title: "裝置管理", width: 360, height: 48, enabled: model.ready) { model.openDevices(firstInstall: false) }
-                .padding(.top, 20).accessibilityIdentifier("manage-devices")
-            Text("查看裝置狀態、簽名、連線與保留資料")
-                .font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted).padding(.top, 8)
-            environmentLabel
-            if let failure = model.failure {
-                VStack(spacing: 4) {
-                    Text(failure.title).font(GoFlyStyle.font(13, bold: true))
-                    Text(failure.detail).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                        .multilineTextAlignment(.center)
-                }.padding(.top, 12).frame(maxWidth: 620)
-            }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 32).padding(.top, 36).padding(.bottom, 24)
-            }
-            HStack {
-                Text("GoFly Mac · 本機開發版")
-                Spacer()
-            }.font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted).padding(24)
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var environmentLabel: some View {
-        Button { model.navigate(.environment) } label: {
-            HStack(spacing: 10) {
-                Text("Mac 環境").font(GoFlyStyle.font(12, bold: true))
-                Text(xcodeText).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                Text(accountText).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
-                if let team = model.selectedTeam {
-                    Text(team.displayName).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+            if shown, model.route == .deviceList {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    if model.route == .deviceList {
+                        await CaptureScreenshotHelper.captureIfRequested(expectedScreen: "D01")
+                    }
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(GoFlyStyle.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(GoFlyStyle.line, lineWidth: 0.75))
         }
-        .buttonStyle(.plain).disabled(model.busy).padding(.top, 22)
-        .accessibilityIdentifier("mac-environment-label")
-    }
-
-    private var xcodeText: String {
-        model.environment?.xcodeVersion.map { "Xcode \($0)" } ?? "Xcode 版本待確認"
-    }
-    private var accountText: String {
-        model.environment?.teams.isEmpty == false ? "Apple 帳號已登入" : "尚未登入 Apple 帳號"
-    }
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                DesignAsset("WingedArrow", width: 42)
-                Text("GoFly").font(GoFlyStyle.font(24, bold: true))
-            }.padding(.horizontal, 24).padding(.top, 24)
-            if model.selected != nil {
-                PillButton(title: "切換裝置", width: 176, height: 28, enabled: !model.busy && !model.setupLocksDevice) { model.openDevices(firstInstall: model.firstInstall) }
-                    .padding(.horizontal, 24).padding(.top, 4)
+        .onChange(of: model.route) { _, route in
+            if route == .deviceList {
+                Task { await CaptureScreenshotHelper.captureIfRequested(expectedScreen: "D01") }
+            } else if route == .deviceDetail, model.devicePageState == .restartRequired {
+                Task { await CaptureScreenshotHelper.captureIfRequested(expectedScreen: "D14") }
             }
-            Text(model.page == .environment ? "開始前準備" : model.firstInstall ? "首次安裝" : "裝置管理")
-                .font(GoFlyStyle.font(12, bold: true)).foregroundStyle(GoFlyStyle.muted)
-                .padding(.horizontal, 24).padding(.top, model.selected == nil ? 32 : 12).padding(.bottom, 20)
-            ForEach(Array(sidebarItems.enumerated()), id: \.offset) { index, item in
-                Button { model.navigate(item.1) } label: {
-                    HStack(spacing: 12) {
-                        if model.firstInstall && model.page != .environment {
-                            Text("\(index + 1)").font(GoFlyStyle.font(12, bold: true))
-                                .frame(width: 20, height: 20)
-                                .overlay(Circle().strokeBorder(selectedSidebar == item.1 ? GoFlyStyle.surface : GoFlyStyle.line))
-                        } else {
-                            Image(systemName: sidebarSymbol(item.1))
-                                .font(.system(size: 16, weight: .medium)).frame(width: 22)
-                                .accessibilityHidden(true)
+        }
+        .onChange(of: model.setup?.hasUnfinishedTransaction) { _, unfinished in
+            if unfinished == true { model.openInterruptedSetup() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if model.route != .startup { model.checkEnvironment() }
+        }
+    }
+}
+
+private struct LaunchScreen: View {
+    @Bindable var model: MacAppModel
+
+    private var damagedBundle: Bool {
+        guard let failure = model.failure else { return false }
+        return failure == .bundleInvalid || failure == .unavailable || failure == .service("bundle-damaged")
+    }
+
+    var body: some View {
+        if damagedBundle {
+            Text("GoFly 無法啟動，請重新安裝")
+                .font(GoFlyStyle.font(15))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(MacColorSystem.brandMarkSurface)
+                    .frame(width: 112, height: 112)
+                    .overlay { DesignAsset("WingedArrow", width: 68, tint: MacColorSystem.brandMark) }
+                    .padding(.bottom, 24)
+                Text("GoFly").font(GoFlyStyle.font(32, bold: true))
+                Text("for Mac").font(GoFlyStyle.font(14)).foregroundStyle(GoFlyStyle.muted).padding(.top, 2)
+                if model.failure == nil {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(GoFlyStyle.line.opacity(0.55))
+                            Capsule().fill(GoFlyStyle.ink).frame(width: geometry.size.width * 0.7)
                         }
-                        Text(item.0).font(GoFlyStyle.font(14, bold: true)).lineLimit(1)
-                        Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 12).frame(minHeight: 40)
-                    .foregroundStyle(selectedSidebar == item.1 ? GoFlyStyle.surface : GoFlyStyle.ink)
-                    .background(selectedSidebar == item.1 ? GoFlyStyle.ink : .clear, in: RoundedRectangle(cornerRadius: 10))
-                    .contentShape(RoundedRectangle(cornerRadius: 10))
-                }.buttonStyle(.plain).goFlyRowFocus().disabled(model.busy).help(item.0)
-                    .accessibilityAddTraits(selectedSidebar == item.1 ? .isSelected : [])
-                    .padding(.horizontal, 12).padding(.bottom, 6)
+                    .frame(width: 100, height: 5)
+                    .padding(.top, 22)
+                    Text("正在檢查 Mac 環境…")
+                        .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted).padding(.top, 16)
+                } else {
+                    Text("無法完成檢查")
+                        .font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted).padding(.top, 24)
+                    Button("重新檢查") { model.beginLaunchCheck() }
+                        .buttonStyle(.borderedProminent).controlSize(.regular).padding(.top, 16)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(GoFlyStyle.canvas)
+        }
+    }
+}
+
+private struct DeviceListScreen: View {
+    @Bindable var model: MacAppModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            MacDeviceSidebar(model: model)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(MacLocalization.text("device.crumb")).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        Text(MacLocalization.text("device.d01.title"))
+                            .font(GoFlyStyle.font(28, bold: true)).padding(.top, 10)
+                        Text(MacLocalization.text("device.d01.subtitle"))
+                            .font(GoFlyStyle.font(15)).foregroundStyle(GoFlyStyle.muted).padding(.top, 5)
+                        if model.visibleDevices.isEmpty {
+                            emptyDeviceCard.padding(.top, 30)
+                        } else {
+                            deviceRows.padding(.top, 30)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 48).padding(.top, 20).padding(.bottom, 32)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                deviceFooter
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(GoFlyStyle.canvas)
+        }
+        .background(GoFlyStyle.canvas)
+        .onAppear {
+            #if DEBUG
+            Task { await CaptureScreenshotHelper.captureIfRequested(expectedScreen: "D01") }
+            #endif
+        }
+    }
+
+    private var emptyDeviceCard: some View {
+        VStack(spacing: 0) {
+            instructionRow("1", title: MacLocalization.text("device.d01.step1"))
+            Rule()
+            instructionRow("2", title: MacLocalization.text("device.d01.step2"), detail: MacLocalization.text("device.d01.step2.detail"))
+            Rule()
+            instructionRow("3", title: MacLocalization.text("device.d01.step3"))
+        }
+        .background(GoFlyStyle.sidebar, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityIdentifier("device-connect-instructions")
+    }
+
+    private func instructionRow(_ number: String, title: String, detail: String? = nil) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            Text(number).font(GoFlyStyle.font(15)).frame(width: 12, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(GoFlyStyle.font(15))
+                if let detail { Text(detail).font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted) }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20).padding(.vertical, 15.2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var deviceRows: some View {
+        VStack(spacing: 0) {
+            ForEach(model.visibleDevices, id: \.connectionID) { device in
+                Button {
+                    model.select(device.id, transport: device.transport)
+                    model.inspectSelected()
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "iphone").font(.system(size: 22)).frame(width: 28)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(device.displayName).font(GoFlyStyle.font(15, bold: true))
+                            Text(device.connectionName).font(GoFlyStyle.font(12)).foregroundStyle(GoFlyStyle.muted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(GoFlyStyle.muted)
+                    }
+                    .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).goFlyRowFocus()
+                if device.connectionID != model.visibleDevices.last?.connectionID { Rule() }
+            }
+        }
+        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var deviceFooter: some View {
+        HStack {
             Spacer()
-            Text(model.firstInstall ? "先確認裝置，再開始安裝\n中斷時接續原裝置交易" : "核對目前連接的 iPhone\n操作與結果以實際回報為準")
-                .font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted).lineSpacing(4)
-                .padding(.horizontal, 24).padding(.bottom, 40)
-        }.frame(width: 240).frame(maxHeight: .infinity).background(GoFlyStyle.sidebar)
-            .overlay(alignment: .trailing) {
-                Rectangle().fill(GoFlyStyle.divider).frame(width: 0.5).allowsHitTesting(false)
+            Button {} label: {
+                Text(MacLocalization.text("device.d01.waiting")).font(GoFlyStyle.font(13, bold: true))
+                    .foregroundStyle(GoFlyStyle.muted)
+                    .frame(width: 140, height: 36)
+                    .background(GoFlyStyle.secondarySurface, in: Capsule())
             }
-    }
-
-    private func sidebarSymbol(_ page: MacPage) -> String {
-        switch page {
-        case .home: GoFlyMacSymbols.home
-        case .environment: GoFlyMacSymbols.environment
-        case .devices, .device: GoFlyMacSymbols.device
-        case .install: GoFlyMacSymbols.install
+            .buttonStyle(.plain).disabled(true)
+                .accessibilityIdentifier("device-waiting")
         }
+        .padding(.horizontal, 48).frame(height: 80)
+        .overlay(alignment: .top) { Rule() }
     }
+}
 
-    private var sidebarItems: [(String, MacPage)] {
-        if model.page == .environment { return [("Mac 環境", .environment)] }
-        if model.firstInstall {
-            return [("選擇 iPhone", .devices), ("確認與安裝", .install)]
+enum CaptureScreenshotHelper {
+    @MainActor
+    static func captureIfRequested(expectedScreen: String) async {
+        #if DEBUG
+        guard let info = Bundle.main.infoDictionary,
+              let directory = info["GoFlyCaptureOutput"] as? String,
+              let screen = info["GoFlyCaptureScreen"] as? String,
+              screen == expectedScreen,
+              let appearance = info["GoFlyCaptureAppearance"] as? String else { return }
+        try? await Task.sleep(for: .milliseconds(250))
+        guard let content = NSApp.windows.first(where: \.isVisible)?.contentView else { return }
+        content.displayIfNeeded()
+        guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { return }
+        content.cacheDisplay(in: content.bounds, to: bitmap)
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { return }
+        let folder = URL(fileURLWithPath: directory, isDirectory: true)
+        let file = folder.appendingPathComponent("\(screen)-\(appearance).png")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file, options: .atomic)
+        } catch {
+            NSLog("Unable to save GoFly capture screenshot: %@", String(describing: error))
         }
-        return [(model.selected?.displayName ?? "我的 iPhone", .device)]
-    }
-    private var selectedSidebar: MacPage { model.page }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(model.page == .environment ? "GoFly  /  Mac 環境" : (model.firstInstall ? "首次安裝" : model.selected?.displayName ?? "裝置管理") + "  /  " + pageTitle)
-                    .font(GoFlyStyle.font(12, bold: true)).foregroundStyle(GoFlyStyle.muted)
-                Spacer()
-                PillButton(title: "首頁", width: 86, height: 36, enabled: !model.busy) { model.navigate(.home) }
-            }
-            Text(pageCheckFailure?.title ?? pageTitle).font(GoFlyStyle.font(28, bold: true)).padding(.top, 6)
-            Text(pageCheckFailure?.detail ?? pageSubtitle).font(GoFlyStyle.font(14)).foregroundStyle(GoFlyStyle.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func errorCard(_ error: CheckFailure) -> some View {
-        StatusCard {
-            StatusRow(title: error.title, detail: error.detail)
-            Rule()
-            StatusRow(title: "裝置狀態待確認", detail: "檢查失敗後不沿用先前結果。完成手機上的必要設定後，請手動重新檢查。")
-            Rule()
-            StatusRow(title: "目前是唯讀檢查", detail: "沒有安裝 App、簽署、建立配對或變更手機資料。")
-        }
-    }
-
-    private var footer: some View {
-        VStack(spacing: 20) {
-            Rule()
-            HStack(spacing: 24) {
-                if !model.isChecking && model.page == .install && model.setup != nil {
-                    pageActions
-                } else if model.busy {
-                    ProgressView().controlSize(.small)
-                    Text(model.isCancellingCheck ? "正在結束檢查…" : "正在檢查，請保持手機連接…").font(GoFlyStyle.font(13)).foregroundStyle(GoFlyStyle.muted)
-                    Spacer()
-                    PillButton(title: "取消檢查", enabled: !model.isCancellingCheck) { model.cancel() }
-                } else { pageActions }
-            }
-            HStack {
-                Text("GoFly Mac · 本機開發版")
-                Spacer()
-            }.font(GoFlyStyle.font(11)).foregroundStyle(GoFlyStyle.muted)
-        }
-    }
-
-    private var pageTitle: String {
-        switch model.page {
-        case .home: "GoFly"
-        case .environment: model.environment?.ready == true ? "Mac 環境已就緒" : "Mac 環境設定"
-        case .devices: "選擇要連接的裝置"
-        case .device: model.selected?.displayName ?? "我的 iPhone"
-        case .install: "確認 GoFly 簽名與安裝"
-        }
-    }
-    private var pageSubtitle: String {
-        switch model.page {
-        case .home: ""
-        case .environment: "背景檢測通過後，開放首次安裝介面與裝置管理檢查。"
-        case .devices: model.firstInstall ? "只列出 USB 連接的裝置，請選擇要檢查的 iPhone。" : "相同 iPhone 只列一次並預設 USB；有兩種通道時，可明確選擇本次使用的連線。"
-        case .device: "查看這部 iPhone 的裝置、安裝與連接狀態。"
-        case .install: "先檢查原裝置與簽名來源，再明確開始本次安裝。"
-        }
-    }
-
-    private var pageCheckFailure: CheckFailure? {
-        model.page == .install && model.setup != nil ? nil : model.failure
+        #endif
     }
 }

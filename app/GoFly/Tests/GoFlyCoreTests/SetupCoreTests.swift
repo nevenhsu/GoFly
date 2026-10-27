@@ -6,6 +6,7 @@ import GoFlyCore
 
 final class SetupCoreTests: XCTestCase {
     private let device = String(repeating: "a", count: 40)
+    private let teamID = "ABCDE12345"
 
     func testOrdinaryStartupDoesNotInvokeIdentityReaders() throws {
         let directory = try temporaryDirectory()
@@ -35,7 +36,7 @@ final class SetupCoreTests: XCTestCase {
         let store = SetupActivationStore(directory: directory)
         _ = try store.commit(SetupInput(manifest: manifest))
         let rebuilt = try SetupAppIdentity(
-            bundleID: SetupAppIdentity.formalBundleID,
+            bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!,
             build: "19",
             profileSHA256: String(repeating: "6", count: 64),
             executableSHA256: String(repeating: "7", count: 64))
@@ -59,7 +60,7 @@ final class SetupCoreTests: XCTestCase {
         _ = try store.commit(SetupInput(manifest: manifest))
         XCTAssertNil(try store.readInput())
         let newerBuild = try SetupAppIdentity(
-            bundleID: SetupAppIdentity.formalBundleID,
+            bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!,
             build: "20",
             profileSHA256: String(repeating: "8", count: 64),
             executableSHA256: String(repeating: "9", count: 64))
@@ -76,7 +77,7 @@ final class SetupCoreTests: XCTestCase {
         try materializeSupport(manifest, in: directory)
         try writeInput(try SetupInput(manifest: manifest), to: directory)
         let staleIdentity = try SetupAppIdentity(
-            bundleID: SetupAppIdentity.formalBundleID,
+            bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!,
             build: "19",
             profileSHA256: String(repeating: "6", count: 64),
             executableSHA256: String(repeating: "7", count: 64))
@@ -101,6 +102,23 @@ final class SetupCoreTests: XCTestCase {
         XCTAssertEqual(result, .blocked(.identityMismatch))
     }
 
+    func testBundleIdentifierIsTeamScopedAndManifestBindsItToSigningTeam() throws {
+        let first = try XCTUnwrap(SetupAppIdentity.bundleID(forTeamID: "ABCDE12345"))
+        let second = try XCTUnwrap(SetupAppIdentity.bundleID(forTeamID: "ABCDEFGHIJ"))
+        XCTAssertEqual(first, "com.neven.gofly.abcde12345")
+        XCTAssertEqual(second, "com.neven.gofly.abcdefghij")
+        XCTAssertNotEqual(first, second)
+        XCTAssertFalse(SetupAppIdentity.isGoFlyBundleID("com.neven.gofly"))
+        XCTAssertFalse(SetupAppIdentity.bundleID("com.neven.gofly", matchesTeamID: teamID))
+        XCTAssertThrowsError(try SetupAppIdentity(bundleID: "com.neven.gofly", build: "18",
+                                                  profileSHA256: String(repeating: "1", count: 64),
+                                                  executableSHA256: String(repeating: "2", count: 64)))
+        let foreign = try SetupAppIdentity(bundleID: second, build: "18",
+                                           profileSHA256: String(repeating: "1", count: 64),
+                                           executableSHA256: String(repeating: "2", count: 64))
+        XCTAssertThrowsError(try makeManifest(method: .personalized, app: foreign))
+    }
+
     func testReadbackStillRequiresFullIdentity() throws {
         let directory = try temporaryDirectory()
         let manifest = try makeManifest()
@@ -110,7 +128,7 @@ final class SetupCoreTests: XCTestCase {
         try request.encoded().write(to: requestURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: requestURL.path)
         let rebuilt = try SetupAppIdentity(
-            bundleID: SetupAppIdentity.formalBundleID,
+            bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!,
             build: "19",
             profileSHA256: String(repeating: "6", count: 64),
             executableSHA256: String(repeating: "7", count: 64))
@@ -449,7 +467,7 @@ final class SetupCoreTests: XCTestCase {
         let directory = try temporaryDirectory()
         let old = try makeManifest()
         let rebuiltApp = try SetupAppIdentity(
-            bundleID: SetupAppIdentity.formalBundleID,
+            bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!,
             build: "19",
             profileSHA256: String(repeating: "4", count: 64),
             executableSHA256: String(repeating: "5", count: 64))
@@ -971,7 +989,7 @@ final class SetupCoreTests: XCTestCase {
         let appIdentity: SetupAppIdentity
         if let app { appIdentity = app }
         else {
-            appIdentity = try SetupAppIdentity(bundleID: "com.neven.gofly", build: "18", profileSHA256: String(repeating: "1", count: 64), executableSHA256: String(repeating: "2", count: 64))
+            appIdentity = try SetupAppIdentity(bundleID: SetupAppIdentity.bundleID(forTeamID: teamID)!, build: "18", profileSHA256: String(repeating: "1", count: 64), executableSHA256: String(repeating: "2", count: 64))
         }
         let methodBytes = Data(method.rawValue.utf8)
         var artifacts = try [
@@ -988,7 +1006,7 @@ final class SetupCoreTests: XCTestCase {
         }
         return try SetupManifest(setupID: setupID, nonce: nonce, expectedDeviceUDID: device,
                                  pairingTransactionID: UUID(), pairingSHA256: String(repeating: "3", count: 64), app: appIdentity,
-                                 teamID: "ABCDE12345", signingExpiry: "2030-01-01T00:00:00Z", deviceOS: method == .personalized ? "26.3.0" : "26.4.0",
+                                 teamID: teamID, signingExpiry: "2030-01-01T00:00:00Z", deviceOS: method == .personalized ? "26.3.0" : "26.4.0",
                                  method: method, artifacts: artifacts)
     }
 

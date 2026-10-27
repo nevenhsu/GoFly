@@ -2,27 +2,28 @@ import SwiftUI
 import AppKit
 
 enum GoFlyStyle {
-    static let ink = Color(nsColor: .labelColor)
-    static let muted = Color(nsColor: .secondaryLabelColor)
-    static let line = Color(nsColor: .separatorColor)
-    static let divider = Color(nsColor: .separatorColor)
-    static let sidebar = Color(nsColor: .underPageBackgroundColor)
-    static let canvas = Color(nsColor: .windowBackgroundColor)
-    static let surface = Color(nsColor: .controlBackgroundColor)
-    static let secondarySurface = Color(nsColor: .controlColor)
-    static let inputSurface = adaptive(light: 0.93, dark: 0.16)
-    static let inputBorder = adaptive(light: 0.58, dark: 0.48)
+    static let ink = MacColorSystem.primaryText
+    static let muted = MacColorSystem.secondaryText
+    static let disabled = MacColorSystem.disabledText
+    static let line = MacColorSystem.separator
+    static let divider = MacColorSystem.separator
+    static let border = MacColorSystem.border
+    static let sidebar = MacColorSystem.sidebar
+    static let canvas = MacColorSystem.canvas
+    static let surface = MacColorSystem.surface
+    static let secondarySurface = MacColorSystem.controlSurface
+    static let disabledSurface = MacColorSystem.disabledSurface
+    static let inputSurface = MacColorSystem.inputSurface
+    static let inputBorder = MacColorSystem.inputBorder
+    static let success = MacColorSystem.success
+    static let warning = MacColorSystem.warning
+    static let error = MacColorSystem.error
     static let cornerRadius: CGFloat = 16
 
     static func font(_ size: CGFloat, bold: Bool = false) -> Font {
         .system(size: size, weight: bold ? .semibold : .regular)
     }
 
-    private static func adaptive(light: CGFloat, dark: CGFloat) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            NSColor(calibratedWhite: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light, alpha: 1)
-        })
-    }
 }
 
 enum GoFlyMacSymbols {
@@ -95,22 +96,25 @@ private struct GoFlyRowFocus: ViewModifier {
 struct DesignAsset: View {
     let name: String
     let size: CGSize
-    init(_ name: String, width: CGFloat, height: CGFloat? = nil) {
-        self.name = name; self.size = CGSize(width: width, height: height ?? width)
+    let tint: Color
+    init(_ name: String, width: CGFloat, height: CGFloat? = nil, tint: Color = GoFlyStyle.ink) {
+        self.name = name
+        self.size = CGSize(width: width, height: height ?? width)
+        self.tint = tint
     }
     var body: some View {
         if let symbol = symbol {
             Image(systemName: symbol)
                 .font(.system(size: min(size.width, size.height) * 0.78, weight: .regular))
                 .frame(width: size.width, height: size.height)
-                .foregroundStyle(GoFlyStyle.ink)
+                .foregroundStyle(tint)
                 .accessibilityHidden(true)
         } else if let url = Bundle.module.url(forResource: name, withExtension: "svg"),
            let image = NSImage(contentsOf: url) {
             Image(nsImage: image).resizable().renderingMode(.template).aspectRatio(contentMode: .fit)
                 .frame(width: name == "WingedArrow" ? size.width * 0.640625 : size.width,
                        height: name == "WingedArrow" ? size.height * 0.515625 : size.height)
-                .frame(width: size.width, height: size.height).foregroundStyle(GoFlyStyle.ink).accessibilityHidden(true)
+                .frame(width: size.width, height: size.height).foregroundStyle(tint).accessibilityHidden(true)
         }
     }
 
@@ -132,8 +136,8 @@ private struct GoFlyMacButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(isEnabled ? (primary ? GoFlyStyle.surface : GoFlyStyle.ink) : GoFlyStyle.muted)
-            .background(isEnabled && primary ? GoFlyStyle.ink : GoFlyStyle.secondarySurface,
+            .foregroundStyle(isEnabled ? (primary ? MacColorSystem.primaryActionText : GoFlyStyle.ink) : GoFlyStyle.disabled)
+            .background(isEnabled && primary ? MacColorSystem.primaryActionSurface : GoFlyStyle.secondarySurface,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)

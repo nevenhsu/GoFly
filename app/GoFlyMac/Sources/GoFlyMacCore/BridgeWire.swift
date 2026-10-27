@@ -100,27 +100,47 @@ import Foundation
 /// Live requests are deliberately a closed, read-only set.
 public enum CheckAction: String, Codable, Sendable { case environment, devices, inspect }
 
+public enum MacBundleIdentifier {
+    private static let prefix = "com.neven.gofly."
+
+    public static func forTeamID(_ teamID: String) -> String? {
+        guard setupFullMatch(teamID, "^[A-Z0-9]{10}$") else { return nil }
+        return prefix + teamID.lowercased()
+    }
+
+    public static func isGoFly(_ value: String) -> Bool {
+        setupFullMatch(value, "^com\\.neven\\.gofly\\.[a-z0-9]{10}$")
+    }
+}
+
 public struct CheckRequest: Codable, Sendable {
     public let requestID: String
     public let action: CheckAction
     public let deviceID: String?
     public let transport: ConnectedDevice.Transport?
+    public let teamID: String?
 
-    public init(action: CheckAction, deviceID: String? = nil, transport: ConnectedDevice.Transport? = nil) {
+    public init(action: CheckAction, deviceID: String? = nil, transport: ConnectedDevice.Transport? = nil,
+                teamID: String? = nil) {
         self.requestID = UUID().uuidString
         self.action = action
         self.deviceID = deviceID
         self.transport = action == .inspect ? transport : nil
+        self.teamID = action == .inspect ? teamID : nil
     }
 }
+
+public enum EnvironmentCheckStatus: String, Codable, Sendable { case passed, failed, unknown }
 
 public struct EnvironmentCheck: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let detail: String
     public let passed: Bool
-    public init(id: String, title: String, detail: String, passed: Bool) {
-        self.id = id; self.title = title; self.detail = detail; self.passed = passed
+    public let status: EnvironmentCheckStatus?
+    public init(id: String, title: String, detail: String, passed: Bool,
+                status: EnvironmentCheckStatus? = nil) {
+        self.id = id; self.title = title; self.detail = detail; self.passed = passed; self.status = status
     }
 }
 
@@ -129,8 +149,6 @@ public struct MacTeam: Codable, Identifiable, Equatable, Sendable {
     public let teamName: String
     public let isFreeProvisioningTeam: Bool
     public var id: String { teamID }
-    public var kind: String { isFreeProvisioningTeam ? "個人（免費，簽名 7 天）" : "團隊" }
-    public var displayName: String { "\(teamName) · \(kind)" }
     public init(teamID: String, teamName: String, isFreeProvisioningTeam: Bool) {
         self.teamID = teamID; self.teamName = teamName; self.isFreeProvisioningTeam = isFreeProvisioningTeam
     }
@@ -166,10 +184,12 @@ public struct ConnectedDevice: Codable, Identifiable, Equatable, Sendable {
     public enum Transport: String, Codable, Sendable { case usb, wifi }
     public let id: String
     public let name: String
+    public let modelName: String?
     public let transport: Transport
     public let osVersion: String?
-    public init(id: String, name: String, transport: Transport, osVersion: String? = nil) {
-        self.id = id; self.name = name; self.transport = transport; self.osVersion = osVersion
+    public init(id: String, name: String, transport: Transport, osVersion: String? = nil, modelName: String? = nil) {
+        self.id = id; self.name = name; self.modelName = modelName
+        self.transport = transport; self.osVersion = osVersion
     }
     public var connectionName: String { transport == .usb ? "USB" : "Wi-Fi" }
     public var displayName: String { name.isEmpty ? "iPhone · …\(id.suffix(6))" : name }
@@ -218,15 +238,14 @@ public struct DeviceInspection: Codable, Equatable, Sendable {
 public struct DeviceList: Codable, Sendable { public let devices: [ConnectedDevice] }
 
 public enum CheckFailure: Error, Equatable, Sendable {
-    case bundleInvalid, pythonUnavailable, unavailable, invalidResponse, timeout, cancelled, service(String)
+    case bundleInvalid, unavailable, invalidResponse, timeout, cancelled, service(String)
 
     public var title: String {
         switch self {
         case .cancelled: "檢查已取消"
         case .timeout: "檢查逾時"
-        case .bundleInvalid: "Bundle 驗證失敗"
-        case .pythonUnavailable: "Python 環境無法使用"
-        case .unavailable: "檢查工具尚未就緒"
+        case .bundleInvalid: "GoFly 無法啟動，請重新安裝"
+        case .unavailable: "GoFly 無法啟動，請重新安裝"
         case .invalidResponse: "無法確認檢查結果"
         case .service(let code):
             switch code {
@@ -236,21 +255,22 @@ public enum CheckFailure: Error, Equatable, Sendable {
             case "identity-mismatch", "device-identity-mismatch": "目前連接的 iPhone 不符"
             case "unsupported-os", "unsupported-os-version": "目前 iOS 版本不在檢查範圍"
             case "environment-not-ready": "Mac 環境尚未就緒"
+            case "bundle-damaged": "GoFly 無法啟動，請重新安裝"
             default: "尚未確認檢查成功"
             }
         }
     }
     public var detail: String {
         switch self {
-        case .bundleInvalid: "App 內的 Bridge 檔案與 manifest 不一致。請重新執行 bash app/GoFlyMac/build-app.sh。"
-        case .pythonUnavailable: "找不到或無法執行 LocalConfiguration.json 指定的 Python。請確認 work/mac-setup-env 後重新執行 build-app.sh。"
-        case .unavailable: "請使用 build-app.sh 建立本機開發版，確認專案的 Python 檢查環境可用。"
+        case .bundleInvalid: ""
+        case .unavailable: ""
         case .timeout: "沒有取得完整回覆。請確認連線與手機解鎖狀態，再手動重新檢查。"
         case .cancelled: "這次唯讀檢查已結束，可重新選擇裝置或再檢查。"
         case .invalidResponse: "回覆未通過格式或裝置身分核對，先前狀態已作廢。請重新檢查。"
         case .service(let code):
             switch code {
             case "trust-required", "usb-lockdown-failed": "解鎖 iPhone，確認已信任這部 Mac，再按重新檢查。本版不會自動建立配對。"
+            case "bundle-damaged": ""
             case "developer-mode-required": "在 iPhone「設定 → 隱私權與安全性 → 開發者模式」手動完成設定後，再重新檢查。"
             case "device-disconnected", "usb-device-not-found": "請重新連接原 iPhone，再回到裝置清單。檢查不會自動切換到其他手機。"
             case "unsupported-os", "unsupported-os-version": "現有檢查介面以 iOS 26 以上為目標；這不代表各版本已通過實機驗收。"
@@ -280,12 +300,12 @@ public enum ResponseDecoder {
             guard envelope.requestID == request.requestID,
                   ["ok", "error"].contains(envelope.status) else { throw CheckFailure.invalidResponse }
             if envelope.status == "error" {
-                let safeCodes: Set<String> = ["invalid-request", "protocol-mismatch", "environment-not-ready",
+                let safeCodes: Set<String> = ["invalid-request", "protocol-mismatch", "bundle-damaged", "environment-not-ready",
                     "device-disconnected", "trust-required", "developer-mode-required", "unsupported-os", "identity-mismatch",
                     "signing-required", "operation-failed", "busy", "usb-lockdown-failed", "usb-device-not-found",
                     "device-identity-mismatch", "unsupported-os-version", "runtime-unavailable", "dependency-mismatch",
                     "device-values-unavailable", "runtime-api-mismatch", "timeout", "configuration-invalid",
-                    "invalid-config", "runtime-import-unavailable"]
+                    "invalid-config"]
                 guard let code = envelope.code, safeCodes.contains(code) else { throw CheckFailure.invalidResponse }
                 throw CheckFailure.service(code)
             }
@@ -301,7 +321,7 @@ func setupFullMatch(_ value: String, _ pattern: String) -> Bool {
     value.range(of: pattern, options: .regularExpression) == value.startIndex..<value.endIndex
 }
 
-public enum MacSetupAction: String, Codable, Sendable { case preflight, apply, status, resume }
+public enum MacSetupAction: String, Codable, Sendable { case preflight, apply, status }
 public enum MacSetupMode: String, Codable, Sendable { case install, renew }
 
 public enum MacSetupFailure: Error, Equatable, Sendable {
@@ -341,11 +361,14 @@ public struct MacSetupRequest: Encodable, Sendable {
     public let setupID: UUID?
     public let deviceID: String?
     public let mode: MacSetupMode?
+    public let transport: ConnectedDevice.Transport?
     public let action: MacSetupAction
     public let options: MacSetupOptions?
+    public let teamID: String?
 
     public init(action: MacSetupAction, requestID: UUID = UUID(), setupID: UUID? = nil, deviceID: String? = nil,
-                mode: MacSetupMode? = nil, options: MacSetupOptions? = nil) throws {
+                mode: MacSetupMode? = nil, transport: ConnectedDevice.Transport? = nil,
+                options: MacSetupOptions? = nil, teamID: String? = nil) throws {
         let normalized = deviceID?.lowercased()
         if let normalized {
             guard setupFullMatch(normalized, "^(?:[0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$") else {
@@ -353,22 +376,38 @@ public struct MacSetupRequest: Encodable, Sendable {
             }
         }
         let resolvedMode: MacSetupMode?
+        if let options, let teamID, options.teamID != teamID {
+            throw MacSetupFailure.invalidRequest
+        }
+        let resolvedTeamID = options?.teamID ?? teamID
         if action == .status, setupID == nil, deviceID == nil, mode == nil {
+            guard resolvedTeamID == nil else { throw MacSetupFailure.invalidRequest }
             resolvedMode = nil
         } else if setupID == nil || normalized == nil {
             throw MacSetupFailure.invalidRequest
         } else {
             resolvedMode = mode ?? .install
         }
+        let resolvedTransport = setupID == nil ? nil : (transport ?? .usb)
+        guard resolvedMode != .install || resolvedTransport == .usb else {
+            throw MacSetupFailure.invalidRequest
+        }
         guard ((action == .preflight || action == .apply) == (options != nil)) else {
             throw MacSetupFailure.invalidRequest
+        }
+        if setupID != nil {
+            guard let resolvedTeamID, MacBundleIdentifier.forTeamID(resolvedTeamID) != nil else {
+                throw MacSetupFailure.invalidRequest
+            }
         }
         self.requestID = requestID
         self.setupID = setupID
         self.deviceID = normalized
         self.mode = resolvedMode
+        self.transport = resolvedTransport
         self.action = action
         self.options = options
+        self.teamID = resolvedTeamID
     }
 }
 
@@ -383,7 +422,6 @@ public struct MacSetupSnapshot: Equatable, Sendable {
     public let mode: MacSetupMode
     public let stage: MacSetupStage
     public let outcome: MacSetupOutcome
-    public let canResume: Bool
     public let appBuild: String?
     public let teamID: String?
     public let expiresAt: String?
@@ -393,13 +431,30 @@ public struct MacSetupSnapshot: Equatable, Sendable {
     public let supportObserved: Bool
     public let errorCode: String?
 
+    public init(mode: MacSetupMode, stage: MacSetupStage, outcome: MacSetupOutcome,
+                appBuild: String?, teamID: String?, expiresAt: String?, receiptSHA256: String?,
+                installationConfirmed: Bool, pairingImported: Bool, supportObserved: Bool,
+                errorCode: String?) {
+        self.mode = mode
+        self.stage = stage
+        self.outcome = outcome
+        self.appBuild = appBuild
+        self.teamID = teamID
+        self.expiresAt = expiresAt
+        self.receiptSHA256 = receiptSHA256
+        self.installationConfirmed = installationConfirmed
+        self.pairingImported = pairingImported
+        self.supportObserved = supportObserved
+        self.errorCode = errorCode
+    }
+
     public var failure: MacSetupFailure? { errorCode.map(MacSetupFailure.service) }
 
     /// A legacy signed-only renew may be replaced, but is not device-ready.
     public var canReplaceCompletedTransaction: Bool {
         isComplete || (mode == .renew && stage == .complete && outcome == .confirmed &&
             installationConfirmed && !pairingImported && !supportObserved &&
-            !canResume && receiptSHA256 != nil && appBuild != nil && errorCode == nil)
+            receiptSHA256 != nil && appBuild != nil && errorCode == nil)
     }
 
     public var isComplete: Bool {
@@ -414,25 +469,34 @@ public protocol MacSetupRunning: Sendable {
 }
 
 public enum MacSetupResponseDecoder {
-    public static func probe(_ data: Data) throws -> (MacSetupContinuation, MacSetupSnapshot) {
+    public static func probe(_ data: Data) throws -> (MacSetupTransactionIdentity, MacSetupSnapshot) {
         do {
             let root = try SetupWireJSON.object(data)
-            guard let rawID = root["setupID"] as? String, rawID.utf8.count == 36,
+            guard let rawRequestID = root["requestID"] as? String, rawRequestID.utf8.count == 36,
+                  let requestID = UUID(uuidString: rawRequestID),
+                  let rawID = root["setupID"] as? String, rawID.utf8.count == 36,
                   let id = UUID(uuidString: rawID),
                   let device = root["deviceID"] as? String, device == device.lowercased(),
-                  let rawMode = root["mode"] as? String, let mode = MacSetupMode(rawValue: rawMode) else {
+                  let rawMode = root["mode"] as? String, let mode = MacSetupMode(rawValue: rawMode),
+                  let teamID = (root["payload"] as? [String: Any])?["teamID"] as? String else {
                 throw MacSetupFailure.invalidResponse
             }
-            let request = try MacSetupRequest(action: .status, setupID: id, deviceID: device, mode: mode)
+            guard let transport = ConnectedDevice.Transport(rawValue: root["transport"] as? String ?? "usb") else {
+                throw MacSetupFailure.invalidResponse
+            }
+            let request = try MacSetupRequest(action: .status, requestID: requestID, setupID: id, deviceID: device,
+                                              mode: mode, transport: transport, teamID: teamID)
             let snapshot = try decode(data, for: request)
-            return (try MacSetupContinuation(setupID: id, deviceID: device, mode: mode), snapshot)
+            return (try MacSetupTransactionIdentity(setupID: id, deviceID: device, mode: mode,
+                                                     transport: transport, teamID: teamID), snapshot)
         } catch let error as MacSetupFailure { throw error }
         catch { throw MacSetupFailure.invalidResponse }
     }
 
     private static let safeCodes: Set<String> = [
         "invalid-request", "protocol-mismatch", "configuration-invalid", "dependency-mismatch",
-        "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "trust-required",
+        "runtime-api-mismatch", "environment-not-ready", "device-disconnected", "wifi-device-not-found",
+        "wifi-pairing-unknown", "wifi-support-unavailable", "wifi-renew-unknown", "trust-required",
         "developer-mode-required", "unsupported-os", "identity-mismatch", "app-already-installed", "app-not-installed", "app-running",
         "signing-required", "signature-invalid", "artifact-mismatch", "support-unavailable",
         "pairing-unknown", "pairing-rejected", "handoff-unknown", "commit-unknown",
@@ -443,18 +507,19 @@ public enum MacSetupResponseDecoder {
     public static func decode(_ data: Data, for request: MacSetupRequest) throws -> MacSetupSnapshot {
         do {
             let root = try SetupWireJSON.object(data)
-            guard keys(root, required: ["action", "requestID", "setupID", "deviceID", "status"], optional: ["payload", "code", "mode"]),
+            guard keys(root, required: ["action", "requestID", "setupID", "deviceID", "status"], optional: ["payload", "code", "mode", "transport"]),
                   root["action"] as? String == request.action.rawValue,
                   uuid(root["requestID"]) == request.requestID,
                   uuid(root["setupID"]) == request.setupID,
                   root["deviceID"] as? String == request.deviceID,
+                  ((root["transport"] as? String).map { $0 == request.transport?.rawValue }
+                    ?? (request.transport == nil || request.transport == .usb)),
                   let status = root["status"] as? String, ["ok", "error"].contains(status),
                   let payload = root["payload"] as? [String: Any],
-                  keys(payload, required: ["stage", "outcome", "canResume", "proof"],
+                  keys(payload, required: ["stage", "outcome", "proof"],
                        optional: ["app", "teamID", "expiresAt", "receiptSHA256"]),
                   let stage = (payload["stage"] as? String).flatMap(MacSetupStage.init(rawValue:)),
                   let outcome = (payload["outcome"] as? String).flatMap(MacSetupOutcome.init(rawValue:)),
-                  let canResume = boolean(payload["canResume"]),
                   let proof = payload["proof"] as? [String: Any],
                   keys(proof, required: ["installationConfirmed", "pairingImported", "supportObserved"]),
                   let installed = boolean(proof["installationConfirmed"]),
@@ -482,7 +547,8 @@ public enum MacSetupResponseDecoder {
             if let raw = payload["app"], !(raw is NSNull) {
                 guard let app = raw as? [String: Any],
                       keys(app, required: ["bundleID", "build", "profileSHA256", "executableSHA256"]),
-                      app["bundleID"] as? String == "com.neven.gofly",
+                      let bundleID = app["bundleID"] as? String,
+                      MacBundleIdentifier.forTeamID(team ?? "") == bundleID,
                       let value = app["build"] as? String, !value.isEmpty, value.utf8.count <= 128,
                       !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
                       let profile = app["profileSHA256"] as? String, hash(profile),
@@ -491,17 +557,19 @@ public enum MacSetupResponseDecoder {
                 }
                 build = value
             } else { build = nil }
+            if let requestedTeam = request.teamID, requestedTeam != team {
+                throw MacSetupFailure.invalidResponse
+            }
             if stage == .preflight, installed || paired || support { throw MacSetupFailure.invalidResponse }
             if request.action == .preflight, stage != .preflight { throw MacSetupFailure.invalidResponse }
             if stage == .complete, outcome == .confirmed {
                 let mode = request.mode ?? .install
                 let imported = mode == .renew || (paired && support)
-                guard !canResume, installed, imported, receipt != nil, build != nil, team != nil else {
+                guard installed, imported, receipt != nil, build != nil, team != nil else {
                     throw MacSetupFailure.invalidResponse
                 }
-                if (request.mode ?? .install) == .install, expiry == nil { throw MacSetupFailure.invalidResponse }
             }
-            return MacSetupSnapshot(mode: request.mode ?? .install, stage: stage, outcome: outcome, canResume: canResume,
+            return MacSetupSnapshot(mode: request.mode ?? .install, stage: stage, outcome: outcome,
                                     appBuild: build, teamID: team, expiresAt: expiry, receiptSHA256: receipt,
                                     installationConfirmed: installed, pairingImported: paired,
                                     supportObserved: support, errorCode: code)

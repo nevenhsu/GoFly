@@ -102,7 +102,7 @@ public enum SetupBootstrapResult: Equatable, Sendable {
 }
 
 public struct SetupAppIdentity: Codable, Equatable, Sendable {
-    public static let formalBundleID = "com.neven.gofly"
+    public static let bundleIDPrefix = "com.neven.gofly."
     public let bundleID: String
     public let build: String
     public let profileSHA256: String
@@ -123,10 +123,28 @@ public struct SetupAppIdentity: Codable, Equatable, Sendable {
     }
 
     static func valid(bundleID: String, build: String, profileSHA256: String, executableSHA256: String) -> Bool {
-        bundleID == formalBundleID && !build.isEmpty && build.utf8.count <= 128 &&
+        isGoFlyBundleID(bundleID) && !build.isEmpty && build.utf8.count <= 128 &&
             build.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) } &&
             SetupValidation.isLowerHex(profileSHA256, count: 64) &&
             SetupValidation.isLowerHex(executableSHA256, count: 64)
+    }
+
+    public static func bundleID(forTeamID teamID: String) -> String? {
+        guard teamID.utf8.count == 10,
+              teamID.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) }) else { return nil }
+        return bundleIDPrefix + teamID.lowercased()
+    }
+
+    public static func isGoFlyBundleID(_ value: String) -> Bool {
+        guard value.hasPrefix(bundleIDPrefix) else { return false }
+        let suffix = value.dropFirst(bundleIDPrefix.count)
+        return suffix.utf8.count == 10 && suffix.utf8.allSatisfy {
+            (48...57).contains($0) || (97...122).contains($0)
+        }
+    }
+
+    public static func bundleID(_ bundleID: String, matchesTeamID teamID: String) -> Bool {
+        bundleID == self.bundleID(forTeamID: teamID)
     }
 }
 
@@ -187,6 +205,7 @@ public struct SetupManifest: Codable, Equatable, Sendable {
               teamID.count == 10, teamID.unicodeScalars.allSatisfy({
                   ($0.value >= 48 && $0.value <= 57) || ($0.value >= 65 && $0.value <= 90)
               }),
+              SetupAppIdentity.bundleID(app.bundleID, matchesTeamID: teamID),
               SetupValidation.validISO8601(signingExpiry),
               SetupValidation.validOS(deviceOS),
               SetupValidation.method(method, supports: deviceOS),

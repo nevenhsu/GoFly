@@ -54,12 +54,32 @@ def _uuid(value: Any) -> str:
 
 MAX_REQUEST_BYTES = 32 * 1024
 MAX_RESPONSE_BYTES = 256 * 1024
-TARGET_BUNDLE_ID = "com.neven.gofly"
+BUNDLE_ID_PREFIX = "com.neven.gofly."
+LEGACY_BUNDLE_ID = "com.neven.gofly"
 TARGET_NAME = "GoFly"
-_ACTIONS = frozenset({"preflight", "apply", "status", "resume"})
+_ACTIONS = frozenset({"preflight", "apply", "status"})
 _MODES = frozenset({"install", "renew"})
 _STAGES = frozenset({"preflight", "artifact", "pairing", "install", "support", "handoff", "complete"})
 _OUTCOMES = frozenset({"ready", "inProgress", "confirmed", "unknown", "failed"})
+
+
+def bundle_id_for_team(team_id: str) -> str:
+    if not isinstance(team_id, str) or TEAM_RE.fullmatch(team_id) is None:
+        raise SetupBridgeError("invalid-request")
+    return BUNDLE_ID_PREFIX + team_id.lower()
+
+
+def is_gofly_bundle_id(value: Any) -> bool:
+    return isinstance(value, str) and re.fullmatch(
+        re.escape(BUNDLE_ID_PREFIX) + r"[a-z0-9]{10}", value
+    ) is not None
+
+
+def bundle_id_matches_team(value: Any, team_id: Any) -> bool:
+    """Require the Bundle ID scoped to this signing Team."""
+    if not is_gofly_bundle_id(value) or not isinstance(team_id, str) or TEAM_RE.fullmatch(team_id) is None:
+        return False
+    return value == bundle_id_for_team(team_id)
 
 
 def normalized_device(value: Any) -> str:
@@ -91,6 +111,8 @@ class SetupRequest:
     device_id: str | None
     mode: str | None
     options: SetupOptions | None = None
+    team_id: str | None = None
+    transport: str = "usb"
 
     def as_dict(self) -> dict[str, Any]:
         value: dict[str, Any] = {
@@ -99,9 +121,12 @@ class SetupRequest:
             "setupID": self.setup_id,
             "deviceID": self.device_id,
             "mode": self.mode,
+            "transport": self.transport,
         }
         if self.options is not None:
             value["options"] = self.options.as_dict()
+        if self.team_id is not None:
+            value["teamID"] = self.team_id
         return value
 
 
@@ -125,14 +150,16 @@ def decode_request(data: Any) -> SetupRequest:
     if not isinstance(value, Mapping):
         raise SetupBridgeError("invalid-request")
     required = {"requestID", "action"}
-    if set(value) - required - {"setupID", "deviceID", "mode", "options"}:
+    if set(value) - required - {"setupID", "deviceID", "mode", "transport", "options", "teamID"}:
         raise SetupBridgeError("invalid-request")
     request_id = _uuid(value.get("requestID"))
     action = value.get("action")
     if action not in _ACTIONS:
         raise SetupBridgeError("invalid-request")
     if action == "status" and "setupID" not in value and "deviceID" not in value and "mode" not in value:
-        return SetupRequest(request_id, action, None, None, None, None)
+        if "teamID" in value or "options" in value:
+            raise SetupBridgeError("invalid-request")
+        return SetupRequest(request_id, action, None, None, None, None, None)
     if not {"setupID", "deviceID", "mode"}.issubset(value):
         raise SetupBridgeError("invalid-request")
     setup_id = _uuid(value.get("setupID"))
@@ -140,26 +167,30 @@ def decode_request(data: Any) -> SetupRequest:
     mode = value.get("mode")
     if mode not in _MODES:
         raise SetupBridgeError("invalid-request")
+    transport = value.get("transport", "usb")
+    if transport not in {"usb", "wifi"} or (mode == "install" and transport != "usb"):
+        raise SetupBridgeError("invalid-request")
     requires_options = action in {"preflight", "apply"}
     if requires_options != ("options" in value):
         raise SetupBridgeError("invalid-request")
     options = _decode_options(value["options"]) if requires_options else None
-    return SetupRequest(request_id, action, setup_id, device_id, mode, options)
+    team_id = value.get("teamID")
+    if team_id is not None and (not isinstance(team_id, str) or TEAM_RE.fullmatch(team_id) is None):
+        raise SetupBridgeError("invalid-request")
+    if options is not None:
+        if team_id is not None and team_id != options.team_id:
+            raise SetupBridgeError("invalid-request")
+        team_id = options.team_id
+    return SetupRequest(request_id, action, setup_id, device_id, mode, options, team_id, transport)
 
 
 def _response_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise SetupBridgeError("operation-failed")
-    # canResume is part of the frozen payload shape even for a confirmed
-    # completion.  It describes whether the transaction can be continued and
-    # is therefore false for a completed record; omitting it would force the
-    # Mac decoder to infer authority from stage alone.
-    required = {"stage", "outcome", "canResume", "proof"}
+    required = {"stage", "outcome", "proof"}
     if set(payload) - required - {"app", "teamID", "expiresAt", "receiptSHA256"}:
         raise SetupBridgeError("operation-failed")
     if payload.get("stage") not in _STAGES or payload.get("outcome") not in _OUTCOMES:
-        raise SetupBridgeError("operation-failed")
-    if type(payload.get("canResume")) is not bool:
         raise SetupBridgeError("operation-failed")
     proof = payload.get("proof")
     if not isinstance(proof, dict) or set(proof) != {
@@ -174,6 +205,8 @@ def _response_payload(payload: Any) -> dict[str, Any]:
         if not payload["proof"]["installationConfirmed"]:
             raise SetupBridgeError("operation-failed")
         if not isinstance(payload.get("app"), dict):
+            raise SetupBridgeError("operation-failed")
+        if not isinstance(payload.get("teamID"), str) or TEAM_RE.fullmatch(payload["teamID"]) is None:
             raise SetupBridgeError("operation-failed")
         if set(payload["app"]) != {"bundleID", "build", "profileSHA256", "executableSHA256"}:
             raise SetupBridgeError("operation-failed")
@@ -191,7 +224,12 @@ def _response_payload(payload: Any) -> dict[str, Any]:
     if app is not None:
         if not isinstance(app, dict) or set(app) != {"bundleID", "build", "profileSHA256", "executableSHA256"}:
             raise SetupBridgeError("operation-failed")
-        if app.get("bundleID") != TARGET_BUNDLE_ID or not isinstance(app.get("build"), str) or not app.get("build"):
+        if (
+            not is_gofly_bundle_id(app.get("bundleID"))
+            or not bundle_id_matches_team(app.get("bundleID"), payload.get("teamID"))
+            or not isinstance(app.get("build"), str)
+            or not app.get("build")
+        ):
             raise SetupBridgeError("operation-failed")
         if any(re.fullmatch(r"[0-9a-f]{64}", app.get(key, "")) is None for key in ("profileSHA256", "executableSHA256")):
             raise SetupBridgeError("operation-failed")
@@ -232,7 +270,6 @@ def _default_error_payload() -> dict[str, Any]:
     return {
         "stage": "preflight",
         "outcome": "unknown",
-        "canResume": False,
         "proof": {
             "installationConfirmed": False,
             "pairingImported": False,

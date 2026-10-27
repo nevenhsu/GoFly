@@ -782,27 +782,35 @@ class PinnedSupportAdapter:
         if method == "cryptex":
             _materialize_cryptex_restore(Path(restore_dir), require_existing=True)
 
-    def _lockdown(self, device_id: str, cache: Path) -> Any:
+    def _lockdown(self, device_id: str, cache: Path, transport: str = "usb") -> Any:
         opener = getattr(self.device_adapter, "_open", None)
         if not callable(opener):
             raise _failure("runtime-api-mismatch")
-        return opener(device_id, cache)
+        return opener(device_id, cache, transport) if transport != "usb" else opener(device_id, cache)
 
-    def query(self, device_id: str, method: str) -> SupportObservation:
+    def _tunnel_serial(self, device_id: str, transport: str) -> str:
+        resolver = getattr(self.device_adapter, "tunnel_serial", None)
+        if not callable(resolver):
+            resolver = getattr(self.device_adapter, "transport_serial", None)
+        if not callable(resolver):
+            raise _failure("runtime-api-mismatch")
+        return resolver(device_id, transport) if transport != "usb" else resolver(device_id)
+
+    def query(self, device_id: str, method: str, transport: str = "usb") -> SupportObservation:
         if method not in {"personalized", "cryptex"}:
             raise _failure()
         if method == "personalized":
-            return self._query_personalized(device_id)
-        return self._query_cryptex(device_id)
+            return self._query_personalized(device_id, transport)
+        return self._query_cryptex(device_id, transport)
 
-    def install(self, device_id: str, method: str, restore_dir: Path) -> SupportObservation:
+    def install(self, device_id: str, method: str, restore_dir: Path, transport: str = "usb") -> SupportObservation:
         self.restore_dir = Path(restore_dir)
         _ensure_fetched_generation(method, self.restore_dir)
         generation = validate_generation(method, self.restore_dir)
         generation_id = self._generation_id(generation.restore_dir)
         if method == "personalized":
             with tempfile.TemporaryDirectory(prefix="gofly-setup-support-") as cache_dir:
-                client = self._lockdown(device_id, Path(cache_dir))
+                client = self._lockdown(device_id, Path(cache_dir), transport)
                 mounter = None
                 try:
                     module = importlib.import_module("pymobiledevice3.services.mobile_image_mounter")
@@ -835,7 +843,8 @@ class PinnedSupportAdapter:
             service_cls = getattr(cryptex_module, "CryptexdService", None)
             if tunnel_cls is None or service_cls is None:
                 raise _failure("runtime-api-mismatch")
-            tunnel = tunnel_cls(serial=self.device_adapter.transport_serial(device_id), autopair=False, remotepairing_fallback=False)
+            tunnel_serial = self._tunnel_serial(device_id, transport)
+            tunnel = tunnel_cls(serial=tunnel_serial, autopair=False, remotepairing_fallback=False)
             rsd = _run(tunnel.aopen())
             self._verify_rsd(rsd, device_id)
             service = service_cls(rsd)
@@ -860,9 +869,9 @@ class PinnedSupportAdapter:
                 if tunnel is not None:
                     _run(tunnel.aclose())
 
-    def _query_personalized(self, device_id: str) -> SupportObservation:
+    def _query_personalized(self, device_id: str, transport: str = "usb") -> SupportObservation:
         with tempfile.TemporaryDirectory(prefix="gofly-setup-support-") as cache_dir:
-            client = self._lockdown(device_id, Path(cache_dir))
+            client = self._lockdown(device_id, Path(cache_dir), transport)
             mounter = None
             try:
                 module = importlib.import_module("pymobiledevice3.services.mobile_image_mounter")
@@ -885,7 +894,7 @@ class PinnedSupportAdapter:
                 with contextlib.suppress(Exception):
                     _run(client.close())
 
-    def _query_cryptex(self, device_id: str) -> SupportObservation:
+    def _query_cryptex(self, device_id: str, transport: str = "usb") -> SupportObservation:
         tunnel = None
         service = None
         try:
@@ -895,7 +904,8 @@ class PinnedSupportAdapter:
             service_cls = getattr(cryptex_module, "CryptexdService", None)
             if tunnel_cls is None or service_cls is None:
                 raise _failure("runtime-api-mismatch")
-            tunnel = tunnel_cls(serial=self.device_adapter.transport_serial(device_id), autopair=False, remotepairing_fallback=False)
+            tunnel_serial = self._tunnel_serial(device_id, transport)
+            tunnel = tunnel_cls(serial=tunnel_serial, autopair=False, remotepairing_fallback=False)
             rsd = _run(tunnel.aopen())
             self._verify_rsd(rsd, device_id)
             service = service_cls(rsd)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import asyncio
 import json
+import plistlib
 import tempfile
 import unittest
 import uuid
@@ -19,6 +20,8 @@ import bridge  # noqa: E402
 
 UDID = "0123456789abcdef0123456789abcdef01234567"
 RID = str(uuid.uuid4())
+TEAM_ID = "ABCDEFGHIJ"
+TARGET_BUNDLE_ID = "com.neven.gofly.abcdefghij"
 
 
 class FakeClient:
@@ -94,18 +97,20 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(bridge.BridgeError, "device-disconnected"):
             instance._find_device(rows[1:], UDID, "wifi")
         self.assertEqual(bridge._validate_request({"requestID": RID, "action": "inspect",
-                                                 "deviceID": UDID, "transport": "wifi"}), "inspect")
+                                                 "deviceID": UDID, "transport": "wifi",
+                                                 "teamID": TEAM_ID}), "inspect")
         with self.assertRaisesRegex(bridge.BridgeError, "invalid-request"):
             bridge._validate_request({"requestID": RID, "action": "inspect",
                                       "deviceID": UDID, "transport": ["wifi"]})
 
     def test_inspect_uses_exact_usb_autopair_false_and_developer_mode(self):
-        values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "DeviceName": "Test Phone"}
+        values = {"UniqueDeviceID": UDID, "ProductVersion": "27.0", "ProductType": "iPhone16,1", "DeviceName": "Test Phone"}
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID.upper(), connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), device).inspect(UDID)
+        result = bridge.Bridge(self.config(), device).inspect(UDID, TARGET_BUNDLE_ID)
         self.assertEqual(device.calls, [(UDID.upper(), "USB", False)])
         self.assertEqual(result["device"]["transport"], "usb")
+        self.assertEqual(result["device"]["modelName"], "iPhone16,1")
         self.assertTrue(result["developerMode"])
         self.assertIsNone(result["vpnInstalled"])
 
@@ -114,7 +119,7 @@ class BridgeTests(unittest.TestCase):
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
         response = bridge.Bridge(self.config(), device).handle(
-            {"requestID": RID, "action": "inspect", "deviceID": UDID}
+            {"requestID": RID, "action": "inspect", "deviceID": UDID, "teamID": TEAM_ID}
         )
         self.assertEqual(response["status"], "ok")
         self.assertEqual(len(client.loop_ids), 1)
@@ -137,25 +142,10 @@ class BridgeTests(unittest.TestCase):
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
                 module = SimpleNamespace(InstallationProxyService=Service)
                 with mock.patch.dict(sys.modules, {"pymobiledevice3.services.installation_proxy": module}):
-                    result = bridge.Bridge(self.config(), device).inspect(UDID)
+                    result = bridge.Bridge(self.config(), device).inspect(UDID, TARGET_BUNDLE_ID)
                 self.assertIs(result["vpnInstalled"], expected)
                 self.assertIn([bridge.LOCALDEVVPN_BUNDLE_ID], queried)
-
-    def test_configured_venv_python_symlink_is_accepted(self):
-        configured = Path.cwd() / "work/mac-setup-env/bin/python"
-        if not configured.is_file() or not (configured.parent.parent / "pyvenv.cfg").is_file():
-            self.skipTest("configured mac setup venv is unavailable")
-        config = bridge.Config(
-            Path.cwd(), configured, self.config().developer_directory, self.config().project_path
-        )
-        self.assertTrue(bridge.Bridge(config, self.device([]))._check_python())
-
-    def test_developer_tools_only_require_xcodebuild_under_directory(self):
-        config = self.config()
-        xcodebuild = config.developer_directory / "usr/bin/xcodebuild"
-        xcodebuild.parent.mkdir(parents=True)
-        xcodebuild.touch()
-        self.assertTrue(bridge.Bridge(config, self.device([]))._check_developer_tools())
+                self.assertIn([TARGET_BUNDLE_ID], queried)
 
     def test_missing_developer_mode_observation_remains_unknown(self):
         class MissingDeveloper(FakeClient):
@@ -166,7 +156,7 @@ class BridgeTests(unittest.TestCase):
 
         client = MissingDeveloper({"UniqueDeviceID": UDID, "ProductVersion": "27.0"})
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
-        result = bridge.Bridge(self.config(), device).inspect(UDID)
+        result = bridge.Bridge(self.config(), device).inspect(UDID, TARGET_BUNDLE_ID)
         self.assertIsNone(result["developerMode"])
 
     def test_identity_mismatch_fails_closed(self):
@@ -174,7 +164,7 @@ class BridgeTests(unittest.TestCase):
         client = FakeClient(values)
         device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
         with self.assertRaisesRegex(bridge.BridgeError, "identity-mismatch"):
-            bridge.Bridge(self.config(), device).inspect(UDID)
+            bridge.Bridge(self.config(), device).inspect(UDID, TARGET_BUNDLE_ID)
 
     def test_unsupported_or_unknown_ios_stops_before_app_lookup(self):
         for version in ["25.9", None, "invalid"]:
@@ -183,23 +173,137 @@ class BridgeTests(unittest.TestCase):
                 device = FakeDeviceModule([SimpleNamespace(serial=UDID, connection_type="USB")], client)
                 instance = bridge.Bridge(self.config(), device)
                 with mock.patch.object(instance, "_installed_info", side_effect=AssertionError("must not query apps")):
-                    response = instance.handle({"requestID": RID, "action": "inspect", "deviceID": UDID})
+                    response = instance.handle({"requestID": RID, "action": "inspect", "deviceID": UDID,
+                                               "teamID": TEAM_ID})
                 self.assertEqual(response["status"], "error")
                 self.assertEqual(response["code"], "unsupported-os")
                 self.assertTrue(client.closed)
 
     def test_stdio_response_is_single_json_object(self):
         config = self.config()
-        config_file = config.workspace_root / "bridge.json"
-        config_file.write_text(json.dumps({
-            "workspaceRoot": str(config.workspace_root),
-            "pythonPath": str(config.python_path),
-            "developerDirectory": str(config.developer_directory),
-            "projectPath": str(config.project_path),
-        }))
         request = json.dumps({"requestID": RID, "action": "unknown"}).encode()
-        response = bridge.run_stdio(config_file, stdin=io.BytesIO(request))
+        response = bridge.run_stdio(config, stdin=io.BytesIO(request))
         self.assertEqual(response["code"], "invalid-request")
+
+    def test_bundle_layout_derives_paths_without_configuration_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            directories = [
+                "Python/python/install/bin",
+                "Python/python/install/lib/python3.14/site-packages",
+                "Bridge/Device", "Bridge/Setup", "iOSProject/GoFly.xcodeproj", "native",
+            ]
+            for relative in directories:
+                (root / relative).mkdir(parents=True, exist_ok=True)
+            files = [
+                "Bridge/bridge.py", "Bridge/wire.py", "Bridge/Device/gofly_device.py",
+                "Bridge/Setup/setup_protocol.py", "Bridge/Setup/setup_config.py",
+                "Bridge/Setup/setup_journal.py", "Bridge/Setup/setup_producer.py",
+                "Bridge/Setup/setup_adapters.py", "Bridge/Setup/setup_support.py",
+                "iOSProject/GoFly.xcodeproj/project.pbxproj", "iOSProject/GoFly.xcconfig",
+                "native/libidevice_ffi.a",
+            ]
+            for relative in files:
+                (root / relative).write_text("fixture")
+            interpreter = root / "Python/python/install/bin/python3.14"
+            interpreter.write_text("#!/bin/sh\nexit 0\n")
+            interpreter.chmod(0o700)
+            config = bridge.Config.from_bundle(root, root / "Developer")
+            self.assertEqual(config.python_path, root / "Python/python/install/bin/python3.14")
+            self.assertEqual(config.project_path, root / "iOSProject/GoFly.xcodeproj")
+            self.assertEqual(config.state_root, Path.home() / "Library/Application Support/GoFly/state")
+
+    def test_incomplete_bundle_has_one_stable_damage_code(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(bridge.BridgeError, "bundle-damaged"):
+                bridge.Config.from_bundle(directory, Path(directory) / "Developer")
+
+    def test_environment_returns_ordered_fresh_mac_checks_and_teams(self):
+        instance = bridge.Bridge(self.config(), self.device([]))
+        instance._check_xcode_installed = lambda: "passed"
+        instance._xcode_version = lambda: "27.1"
+        instance._macos_version = lambda: "27.0.1"
+        instance._xcode_minimum_macos_version = lambda _installed: "26.6"
+        instance._available_space_kib = lambda: 50 * 1024 * 1024
+        instance._check_first_launch = lambda _installed: "passed"
+        instance._ios_platform = lambda _installed: ("passed", "iPhoneOS27.1.sdk")
+        instance._teams = lambda: [{"teamID": TEAM_ID, "teamName": "Test Team", "isFreeProvisioningTeam": True}]
+
+        result = instance.environment()
+        self.assertTrue(result["ready"])
+        self.assertEqual([row["id"] for row in result["checks"]], [
+            "macos-version", "available-space", "xcode-installed", "xcode-first-launch", "ios-platform", "apple-account",
+        ])
+        self.assertTrue(all(row["status"] == "passed" and row["passed"] for row in result["checks"]))
+        self.assertEqual(result["teams"][0]["teamID"], TEAM_ID)
+
+    def test_environment_uses_planned_xcode_minimum_and_does_not_fake_unknowns(self):
+        instance = bridge.Bridge(self.config(), self.device([]))
+        instance._check_xcode_installed = lambda: "failed"
+        instance._macos_version = lambda: "25.5"
+        instance._available_space_kib = lambda: 10 * 1024 * 1024
+        instance._teams = lambda: (_ for _ in ()).throw(AssertionError("no Xcode account query"))
+
+        result = instance.environment()
+        rows = {row["id"]: row for row in result["checks"]}
+        self.assertFalse(result["ready"])
+        self.assertEqual(rows["macos-version"]["status"], "failed")
+        self.assertIn(bridge.PLANNED_XCODE_MINIMUM_MACOS_VERSION, rows["macos-version"]["detail"])
+        self.assertEqual(rows["available-space"]["status"], "failed")
+        self.assertEqual(rows["xcode-installed"]["status"], "failed")
+        self.assertEqual(rows["xcode-first-launch"]["status"], "unknown")
+        self.assertEqual(rows["ios-platform"]["status"], "unknown")
+        self.assertEqual(rows["apple-account"]["status"], "unknown")
+
+    def test_environment_reports_unknown_when_observations_cannot_be_read(self):
+        instance = bridge.Bridge(self.config(), self.device([]))
+        instance._check_xcode_installed = lambda: "unknown"
+        instance._macos_version = lambda: None
+        instance._available_space_kib = lambda: None
+        instance._xcode_minimum_macos_version = lambda _installed: None
+        instance._teams = lambda: None
+
+        result = instance.environment()
+        rows = {row["id"]: row for row in result["checks"]}
+        self.assertFalse(result["ready"])
+        self.assertEqual(rows["macos-version"]["status"], "unknown")
+        self.assertEqual(rows["macos-version"]["passed"], False)
+        self.assertEqual(rows["available-space"]["status"], "unknown")
+        self.assertEqual(rows["xcode-installed"]["status"], "unknown")
+        self.assertEqual(rows["apple-account"]["status"], "unknown")
+
+    def test_xcode_minimum_is_read_from_xcode_info_plist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            developer = root / "Xcode.app/Contents/Developer"
+            developer.mkdir(parents=True)
+            (developer.parent / "Info.plist").write_bytes(plistlib.dumps({"LSMinimumSystemVersion": "26.6"}))
+            instance = bridge.Bridge(bridge.Config(root, root / "python", developer, root / "GoFly.xcodeproj"))
+            self.assertEqual(instance._xcode_minimum_macos_version(True), "26.6")
+            self.assertEqual(instance._xcode_minimum_macos_version(False), bridge.PLANNED_XCODE_MINIMUM_MACOS_VERSION)
+
+    def test_xcode_first_launch_and_license_checks_are_read_only(self):
+        instance = bridge.Bridge(self.config())
+        is_file = Path.is_file
+
+        def fake_is_file(path):
+            if path == Path("/usr/bin/xcrun"):
+                return True
+            return is_file(path)
+
+        with mock.patch.object(bridge.Path, "is_file", autospec=True, side_effect=fake_is_file), \
+             mock.patch.object(bridge, "_safe_process", side_effect=[(0, b""), (0, b"")]) as process:
+            self.assertEqual(instance._check_first_launch(True), "passed")
+        self.assertEqual(process.call_count, 2)
+        self.assertEqual(process.call_args_list[0].args[0], ["/usr/bin/xcrun", "xcodebuild", "-checkFirstLaunchStatus"])
+        self.assertEqual(process.call_args_list[1].args[0], ["/usr/bin/xcrun", "xcodebuild", "-license", "check"])
+
+    def test_df_available_space_parser_uses_gibibyte_blocks(self):
+        output = b"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk3 1000000 100 500000 1% /Applications\n"
+        with mock.patch.object(bridge.Path, "is_file", return_value=True), \
+             mock.patch.object(bridge, "_safe_process", return_value=(0, output)) as process:
+            self.assertEqual(bridge.Bridge(self.config())._available_space_kib(), 500000)
+        self.assertEqual(process.call_args.args[0], ["/bin/df", "-Pk", "/Applications"])
 
 
 if __name__ == "__main__":

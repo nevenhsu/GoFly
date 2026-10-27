@@ -7,7 +7,7 @@ import GoFlyCore
 @MainActor
 public final class GoFlyContinuedProcessingDriver: ContinuedProcessingDriving {
     public static let shared = GoFlyContinuedProcessingDriver()
-    static let identifier = "com.neven.gofly.movement"
+    static let identifier = (Bundle.main.bundleIdentifier ?? "") + ".movement"
 
     private let scheduler = BGTaskScheduler.shared
     private var registrationResult: Bool?

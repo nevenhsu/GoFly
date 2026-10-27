@@ -1,6 +1,6 @@
 # 06 · 以裝置為中心的側欄與裝置頁狀態
 
-**Status:** todo
+**Status:** implemented; software-verified
 **Blocked by:** 04
 **Spec:** MAC-INSTALLER-SPEC §5 表格；Figma D01–D04、D08、D09、D12、D13。
 
@@ -17,3 +17,12 @@
 
 **Acceptance**
 - 狀態機有 model 測試（每種 inspect 結果 → 正確頁面與按鈕）；截圖對照 Figma。
+
+## Evidence
+- D01–D04、D08、D09、D12、D13 均已按 Figma V1 淺／深色畫面和畫面下方行為說明實作與逐頁比對。App 截圖：[`D01-light.png`](../../../work/gofly-mac/v1/screens/D01-light.png)／[`D01-dark.png`](../../../work/gofly-mac/v1/screens/D01-dark.png)、D02–D04、D08–D09、D12–D13 的同名 `-light.png`／`-dark.png` 檔案也在同一目錄。
+- Model 狀態與主要動作、側欄裝置呈現由 Swift 離線測試覆蓋；60 tests / 4 suites 全過。三語字串已加入；裝置型號有可讀名稱才顯示，否則使用友善裝置名稱。
+- 已移除舊裝置清單／頁面與舊導覽；USB／Wi‑Fi 同機以裝置識別碼合併，選取狀態只觸發唯讀 inspect。Mac 色彩仍使用獨立 token。
+
+## Not verified
+- 實體 USB 信任、開發者模式實際出現、USB/Wi‑Fi 同機去重、Wi‑Fi 找回與到期資訊需在連接實機後驗證；本票沒有連接或寫入 iPhone。
+- 最小視窗、鍵盤操作及真實安裝資訊與裝置狀態尚未人工驗收。

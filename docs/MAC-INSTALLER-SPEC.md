@@ -1,6 +1,6 @@
 # Mac 安裝器框架與規格
 
-狀態：**設計已確認 v1（2026-10-26）**，尚未實作、未經實機驗證。這份文件是 GoFly Mac 版流程的準據，取代 [`MAC-UI-DESIGN.md`](MAC-UI-DESIGN.md)「新版 UI／UX 改版（2026-10-20）」中的 M1／M2／M3 流程與 G01–G17 動作。視覺以 Figma「05 · Mac Redesign（新版）」（`123-61504`）的「V1」section 為準。DMG 打包架構沿用 [`F-dmg-architecture.md`](../.scratch/gofly-ios/decisions/F-dmg-architecture.md)。
+狀態：**V1 流程設計已確認（2026-10-26）；01–11 已實作並完成軟體驗證，12 文件與色彩靜態驗證已完成；Figma Archive sections 刪除待使用者確認；尚未公開發行，乾淨 Mac 與 iPhone 驗收待使用者執行（2026-10-27）**。這份文件是 GoFly Mac 版流程的準據，取代舊版 M1／M2／M3 流程與 G01–G17 動作。視覺以 Figma「05 · Mac Redesign（新版）」（`123-61504`）的「V1」section 為準。DMG 打包架構沿用 [`F-dmg-architecture.md`](../.scratch/gofly-ios/decisions/F-dmg-architecture.md)。逐票證據與尚未驗證事項見 [Mac V1 TRACKER](../.scratch/gofly-mac-v1/TRACKER.md)。
 
 ## 1. 目標
 
@@ -26,11 +26,13 @@
 | LocalDevVPN | App Store | 在 iPhone 安裝並允許 VPN |
 | 啟用回報（activation receipt） | iOS App 開啟時提交，Mac 讀回 | 無；Mac 讀到之前不顯示「完成」 |
 
+舊 Bundle ID `com.neven.gofly` 會成為另一個 App；舊 App 的資料不會自動搬到依 Team ID 產生的新 Bundle ID。
+
 Python、pymobiledevice3 和 Bridge 都打包在 App 內，**使用者不會看到 Python 步驟**。不另外安裝命令列工具：GoFly 直接用 Xcode.app 內的 `DEVELOPER_DIR`，不依賴 `xcode-select` 的設定。
 
 ## 3. 取得與開啟 GoFly Mac（App 外）
 
-DMG 內含 `GoFly.app` 與 `install.sh`。README（三語）公布 SHA-256，使用者先核對，再在「終端機」執行 `bash /Volumes/GoFly/install.sh`。腳本把 App 複製到 `/Applications`、移除隔離屬性後開啟 App。這一段只寫在 README，沒有 Figma 畫面。
+DMG 內含 `GoFly.app`、`install.sh` 與 `THIRD-PARTY-NOTICES.md`。建置器在忽略的 `work/dist/` 輸出版本化 arm64 DMG 及相符 `.sha256` sidecar；正式發行時需把同版 DMG 與 checksum 一起發布並在 README 提供核對方式。使用者核對 checksum 後，在「終端機」執行 `bash /Volumes/GoFly/install.sh`。腳本只替換 `/Applications/GoFly.app`，覆蓋前詢問、移除已安裝 App 的隔離屬性再開啟，不使用 sudo、不修改 Gatekeeper，也不移除 GoFly state 或手機資料。App 使用 ad-hoc 深度簽署，沒有 Developer ID 或 notarization；乾淨 Mac／另一帳號下載驗收仍待使用者操作。此步驟不設 Figma 畫面。
 
 ## 4. Mac 環境（預設是全新的 Mac）
 
@@ -59,9 +61,18 @@ DMG 內含 `GoFly.app` 與 `install.sh`。README（三語）公布 SHA-256，使
 | E08 選擇開發團隊 | 有多個 Team 時才出現；只有 1 個時自動選取 | 選一個，各項標示「個人（免費・7 天）」或「團隊」 | — |
 | E09 Mac 環境（檢查結果） | 從側欄底部打開，不在啟動流程中 | 查看結果、重新檢查、更換 Team | — |
 
+唯讀 `environment` 依序回報 macOS 版本、可用空間、Xcode 安裝、Xcode 初次啟動／授權、iOS 平台及 Apple 帳號六項檢查，另回報 Team 清單。檢查狀態為通過、未通過或未知；無法讀取時不得當成通過。E01 是否第一次開啟以本機偏好旗標判斷。macOS 最低版本取已安裝 Xcode 的 `LSMinimumSystemVersion`；尚未安裝時依目前規劃的 Xcode 27.1（最低 macOS 26.6）判斷。可用空間以 `/Applications` 所在磁碟為準，至少 40 GB。只讀檢查不執行 `-runFirstLaunch`、不接受授權、不下載平台。若 GoFly 內建資源驗證失敗，只顯示「GoFly 無法啟動，請重新安裝」。
+
 Bridge、Python 與 iOS 專案都打包在 DMG 內，沒有「App 資源」或「Python 環境」的設定步驟。萬一 App 內建檔案被修改或刪除，只顯示通用錯誤視窗「GoFly 無法啟動，請重新安裝」，不另外設計畫面。
 
 GoFly 只打開 App Store、Xcode、系統設定和網頁，不代替使用者點擊、接受條款或輸入密碼。文案必須說清楚要輸入哪一種密碼：Mac 登入密碼、iPhone 密碼或 Apple 帳號密碼。
+
+### Mac 色彩系統
+
+- Mac App 的色彩 token 集中在 `app/GoFlyMac/Sources/GoFlyMac/MacColorSystem.swift`，以語意角色提供畫布、側欄、卡片、文字、分隔線、互動、狀態與品牌色，依 macOS 淺／深外觀解析。
+- 所有 Mac 畫面都使用這套 Mac 專屬 token；View 不直接指定 hex、RGB 或 `Color.black`／`Color.green` 等原始色值。新增顏色或更換 Mac theme 時只改這套 palette，逐頁檢查外觀。
+- 色值依 Figma「05 · Mac Redesign（新版）」V1 淺／深色渲染稿；不從 `app/GoFly` 匯入色彩程式或 token。iOS App 與 Mac App 各自維護平台色彩系統。
+- V1 不新增 theme 選擇器；色彩跟隨系統外觀。驗收需檢查淺／深色畫面，並確認 Mac 色彩修改不改變 iOS 色彩。
 
 ## 5. 裝置（日常唯一的畫面）
 
@@ -103,7 +114,7 @@ App 以**裝置為中心**。側欄列出看得到的 iPhone（USB／Wi‑Fi 標
 
 - 安裝或延長簽名中斷、失敗（USB 拔掉、Wi‑Fi 斷線、Mac 睡眠、App 被關閉）時顯示 D14。唯一的動作是「**重新開始**」，會從頭重新安裝或重新簽名，**不做接續**。
 - 重新開始前，先重新觀察手機狀態。手機上已經有 GoFly 就用覆蓋安裝（保留資料）；USB 時重新產生配對，並先作廢舊的、還沒用掉的配對，不套用舊交易的配對。
-- Setup producer 以一筆全域現行 journal 序列化交易。`apply` 遇到任何裝置留下的未完成 journal 時，會先在原交易資料夾中耐久封存為 `journal.abandoned.json`，再移除現行指標並建立新交易；不刪除 App、配對檔或原交易資料夾。只有已證明完成的交易可封存為 `journal.completed.json`；同一 setupID 重送仍衝突。舊的、已產生但尚未使用的配對作廢尚未實作，完成此步驟仍是 §5.4 的驗收要求；裝置／配對階段前的中斷不會產生需作廢的配對。
+- Setup producer 以一筆全域現行 journal 序列化交易。`apply` 遇到任何裝置留下的未完成 journal 時，會先在原交易資料夾中耐久封存為 `journal.abandoned.json`，再移除現行指標並建立新交易；不刪除 App、配對檔或原交易資料夾。只有已證明完成的交易可封存為 `journal.completed.json`；同一 setupID 重送仍衝突。iOS 消費者在讀取前原子 rename `incoming.plist` 為 `incoming.plist.consuming`；Mac 作廢舊交接時原子 rename 到以舊交易 ID 標記的隔離路徑，再驗證並只刪除該隔離檔。若 iOS 已認領、出現替換檔或狀態不明，producer fail closed，不封存舊交易或刪除使用者資料。
 - 重新開 Mac App 時，如果上次有未完成的操作，同樣顯示 D14，不提供「繼續」。
 
 ## 6. 畫面清單（Figma V1）
@@ -141,13 +152,13 @@ App 以**裝置為中心**。側欄列出看得到的 iPhone（USB／Wi‑Fi 標
 
 ## 7. 尚待實測（不宣告可行）
 
-- Wi‑Fi 上的覆蓋安裝、配對核對與啟用回報讀回（目前完整交接只在 USB 上實作並實機驗證過）。
+- Wi‑Fi renew 的覆蓋安裝、既有配對核對、裝置支援及啟用回報已完成離線軟體驗證；同網路／解鎖手機的實機流程尚未驗收。
 - 免費 Personal Team 是否支援 GoFly 用到的所有 capability（背景處理等）。
 - 免費 Team 的限制：每支手機最多 3 個自簽 App、7 天內新 App ID 數量有上限；換 Team 會變成另一個 App。
 - 簽名過期後再延長，資料是否完整保留（預期會）。
 - **E06 是否必要**：在乾淨的 Mac 安裝 Xcode、完成首次啟動但**不下載 iOS 平台**，用 `xcodebuild` 建置實機版 GoFly（含 LaunchScreen.storyboard 與 Assets.xcassets）並自動簽名。建置成功就刪除 E06；失敗時記錄錯誤訊息並保留。另一個方向是在 DMG 附預先建置的 GoFly.app，只在使用者 Mac 上改 Bundle ID 並重新簽名，但免費 Team 的描述檔仍需要經過 Xcode 產生，需要另外研究。
-- 全新 Mac 上 Xcode 的最低 macOS 版本、實際下載大小與所需空間（E01／E02 的數字要以實測為準）。
-- `install.sh` 在乾淨 Mac 上開啟 ad-hoc 簽名的 App 與內建 Python。
+- 規劃 Xcode 27.1 的最低 macOS 版本以本機 Xcode `Info.plist` 的 26.6 為目前判斷值；仍要在乾淨 Mac 核對 App Store 實際版本，以及 Xcode／iOS 平台下載大小與空間。
+- `install.sh` 在乾淨 Mac 或另一個 macOS 使用者帳號上清除下載 quarantine、開啟 ad-hoc App，並執行內建 Python／原生擴充。
 
 ## 8. 驗收（實作時）
 
@@ -160,3 +171,4 @@ App 以**裝置為中心**。側欄列出看得到的 iPhone（USB／Wi‑Fi 標
 - 只有讀回啟用回報後才顯示「完成」與新的到期日；讀不到時寫「待確認」。
 - 中斷後只能「重新開始」；重新開始不會套用舊交易的配對，覆蓋安裝保留資料。
 - 1000 × 700 pt 下內容可捲動、底部按鈕可按到；深淺色都清楚可讀。
+- Mac 所有色彩都來自 Mac 專屬語意 token；淺／深色符合 Figma，檢視畫面程式時沒有散落的原始色值，iOS 色彩程式不受影響。
