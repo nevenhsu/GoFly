@@ -190,7 +190,7 @@ private struct GoFlyManualJoystickPad: View {
                 .padding(20)
             ForEach(0..<24) { direction in
                 Capsule()
-                    .fill(GoFlyStyle.secondary.opacity(0.5))
+                    .fill(GoFlyGrayScale.secondaryLabel.opacity(0.5))
                     .frame(width: direction % 6 == 0 ? 2 : 1, height: direction % 6 == 0 ? 8 : 4)
                     .offset(y: -diameter / 2 + 12)
                     .rotationEffect(.degrees(Double(direction) * 15))

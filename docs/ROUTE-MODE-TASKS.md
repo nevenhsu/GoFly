@@ -46,7 +46,7 @@
 
 ### R3 選中欄位與再次點擊搜尋（D1、D4、D5）
 - 現況：頂部搜尋列已直接開 D5；點擊清單列只選取欄位。
-- Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側 22 pt 空心星號＋文字 `Favorite`（15 pt Medium），44 pt 高命中區，圖示與文字使用主文字色（Light `#000000`、Dark `#FFFFFF`），VoiceOver 名稱 `Favorite`，「最近搜尋」＋「清空記錄」。
+- Figma：D1 選中列 `#F2F2F7`＋1.5 pt `#007AFF`＋藍色游標；D5 為 `SearchField / focused`（placeholder「選擇終點」）＋灰底旗標 chip「正在選：終點」＋右側 22 pt 空心星號＋文字 `Favorite`（15 pt Medium），44 pt 高命中區，圖示與文字使用主文字色（Light `#000000`、Dark `#E5E5EA`），VoiceOver 名稱 `Favorite`，「最近搜尋」＋「清空記錄」。
 - 做法：維持選中欄位狀態與 D1 樣式；第一次點欄位選取，第二次點同一欄位透過 `openSelectedPicker()` 開 D5 並聚焦搜尋欄；點其他欄位會選取並重新開始兩次點擊流程。路線頂部搜尋列仍可立即開 D5；D4 Pin 與 LocationCard 的「確認」仍回填選中欄位並返回 D1。
 - 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；`Favorite` 入口顯示空心星號與文字、使用主文字色，命中區高 44 pt 且 VoiceOver 名稱為 `Favorite`；點空欄位不顯示 toast。
 - **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。D5 最愛入口使用 22 pt 空心星號＋15 pt `Favorite` 文字、主文字色與 44 pt 高命中區，VoiceOver 名稱沿用 `favorites.shortTitle`。Figma D1 維持目前選中列渲染，D5 已同步 focused 搜尋頁與星號＋`Favorite` 文字入口；靜態 Figma 未定義再次點擊互動 variant，本次同步畫面與規格。
@@ -69,6 +69,8 @@
 - 頁面：導航式全螢幕頁；隱藏地圖、頂部搜尋列、路線面板星號／開始按鈕與 TabBar。頂列為「返回」＋「全部點位」，下方使用高度隨列數自適應增加、填滿後才捲動的清單卡片（可見捲動指示器；拖曳中卡片保持當下高度並停止使用者捲動（避免捲動手勢與拖曳列衝突），手指接近清單上／下緣時自動捲動以便跨越可視範圍改變順序；拖曳列中心跟隨手指位置。面板與清單頁共用 `GoFlyRouteNodeCard`。），底部固定與 D1 操作列相同樣式的小型無外框文字按鈕：左「＋ 新增停靠點」、右「⇅ 反轉順序」（無「關閉檢視」）。原生向右返回手勢或「返回」關閉。拖曳排序後被移動列成為選中欄位。
 - 清單：重用 `GoFlyRouteNodeList`，因此左側排序圖示可拖曳調整順序；欄位首次點擊只選取，再次點擊同一欄位推入 D5；右側 ✕ 對起訖點清空、對停靠點刪除整列。新增停靠點後捲至新列。
 - Figma 狀態：D13 是匯入 GPX 的唯讀點位清單；本頁僅參照其版面層級，拖曳、欄位編輯、固定操作列與關閉手勢是新增 App 行為，04 頁尚無對應 wireframe。不可記為 Figma 已設計。
+- 2026-10-28 grip UI 規格（由 04 `Light · Color Scheme`、`Dark · Color Scheme` 與 Light／Dark D2 拖曳排序靜態示意確認）：路線清單外卡用 `subtle`；一般列框用 `default`；grip 抓取列用 `focus`；新順序空位框用 `strong`，Light `#E5E5EA`／`#C7C7CC`／`#007AFF`／`#8E8E93`，Dark `#38383A`／`#48484A`／`#0A84FF`／`#8E8E93`。Dark `default` 保留 `#48484A`，`strong` 使用 `#8E8E93` 以拉開差異。D2 拖曳排序示意只涵蓋面板中的拖曳列與新順序框，並非全螢幕清單 wireframe；靜態畫面沒有 prototype wiring。
+- 外框驗收：Light 外卡／一般列／抓取列／新順序空位分別呈現 subtle／default／focus／strong；`strong` `#8E8E93` 必須與 `default` `#C7C7CC` 明顯不同。Dark 一般列 `#48484A` 與新順序空位 `#8E8E93` 必須明顯不同，並綁各自語意色；D8 選中列使用 focus，不沿用錯誤紅色。App SwiftUI 尚未同步這次角色映射。
 - 驗收：在清單頁逐一確認首次選取／再次開 D5、結果回填後回到清單、清空起訖／刪除停靠點、拖曳重排（首／末列越過可視範圍上／下緣一列高度內放開仍提交，超出容差才取消）、新增後自動捲動、關閉按鈕與右滑返回；確認頁面隱藏地圖與 TabBar。
 - **狀態：程式已實作；2026-10-26 修正拖曳首／末列的邊界投放容差；尚未模擬器／實機驗收。**
 
@@ -87,11 +89,11 @@
 
 ### R7 D10 / D10.a 中斷與暫停恢復
 - 2026-10-25 / 2026-10-26 使用者確認與 Figma 拆分：
-  - **D10 · 路線中斷 / 恢復（系統中斷）**：只有系統異常暫停／中斷時（`suspensionReason` 非空或 `interrupted`）才顯示 C1 warn toast（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕）；底部沿用執行控制面板（進度列、控制列、結束＋「繼續」），不再換成 76 pt 窄面板。
-  - **D10.a · 路線中斷 / 恢復（使用者暫停）**：路線進行中由使用者主動按暫停時之畫面，無 warn toast；相對 D6 只換 StatusPill（暫停）、頂部卡文字與暫停圖示、主按鈕（play 圖示＋「繼續」），其餘面板不變。
-- Figma D10 / D10.a：頂部卡改為暫停圖示＋「已暫停 · 前往 …」；`StatusPill / 暫停`；底部 76 pt 窄面板「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」＋主按鈕「繼續」（搭配 17×17 pt 居中之 `play.fill` 圖示）；無 TabBar。
-- 驗收：淺深色（D10、D10.a、Dark D10、Dark D10.a）1:1 對齊；Dark D10 採用 `Dark · Toast / 系統訊息 / warn`，Dark D10.a 無 toast；「重試」與「繼續」呼叫同一 resume；toast 關閉不影響面板。Play icon 向量座標（4.96, 2.83）與 disabled 狀態（D1 等）外框描邊色彩與填色一致（淺色 `#8E8E93`、深色 `#98989F`）。
-- **狀態：已實作，待審查。** 頂部卡標題改「前往 X」／暫停時「已暫停 · 前往 X」（Pause 圖示原已有）；pill「暫停」（R6 已在執行模式顯示 pill）；warn toast 文案改 D10（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕，`route.resume`）；底部 76 pt 面板新增副標（`GoFlyResumePanel.subtitle`：「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」）＋「繼續路線」，無 TabBar。`GoFlyRoutePausedUITests` 以 gallery 驗證文案與 76 pt；實際暫停流程（含頂部卡、pill、關閉 toast 不影響面板）因模擬器無法執行路線，未做 UI 自動驗證。頂部卡的 5 km/h 以實際偏好值顯示（依「待決與 Figma 衝突」）。
+  - **D10 · 路線中斷 / 恢復（系統中斷）**：只有系統異常暫停／中斷時（`suspensionReason` 非空或 `interrupted`）才顯示 C1 warn toast（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕）；使用標準執行控制面板（進度列、來回／方向／時速控制列、結束＋「繼續」）。
+  - **D10.a · 路線中斷 / 恢復（使用者暫停）**：路線進行中由使用者主動按暫停時之畫面，無 warn toast；相對 D6 只換 StatusPill（暫停）、頂部卡文字與暫停圖示、主按鈕（play 圖示＋「繼續」），使用標準執行控制面板。
+- Figma D10／D10.a Light／Dark：頂部卡顯示暫停圖示＋「已暫停 · 前往 …」及 `StatusPill / 暫停`；四個面板均為 229 pt 標準執行面板，包含進度列、來回／方向／時速控制列與結束＋藍色「繼續」按鈕（play glyph）；不使用 76 pt 窄面板。D10 有獨立 warn toast，D10.a 無 toast；均無 TabBar。這是 2026-10-27 Figma 設計更新，取代舊的 76 pt 面板描述。
+- 驗收：淺深色（D10、D10.a、Dark D10、Dark D10.a）結構、229 pt 面板與控制列 1:1 對齊；只有 D10 顯示 warn toast；「重試」與「繼續」呼叫同一 resume；toast 關閉不影響面板。Play icon 向量座標（4.96, 2.83）與 disabled 狀態（D1 等）外框描邊色彩與填色一致（淺色 `#8E8E93`、深色 `#98989F`）。設計更新只同步 Figma 與規格，App panel 目前仍按 `GoFlyResumePanel` 既有 122 pt 路線恢復版面記錄，尚未因本次 Figma 修改而實作或裝置驗證。
+- **狀態：已實作，待審查；Figma 版面仍待 App 對齊。** 頂部卡標題改「前往 X」／暫停時「已暫停 · 前往 X」（Pause 圖示原已有）；pill「暫停」（R6 已在執行模式顯示 pill）；warn toast 文案改 D10（「路線模擬已暫停」＋「任務意外中斷，點選重試自中斷點恢復行進。」＋「重試」＋✕，`route.resume`）；`GoFlyResumePanel` 已有副標（「路線已暫停 · 45%」／「剩餘 1.2 km · 預估 14 分鐘」）與「繼續路線」按鈕，D10 content height 為 88 pt（面板另受 34 pt safe area 影響），E5 為 76 pt，無 TabBar。`GoFlyRoutePausedUITests` 以 gallery 驗證文案與 76 pt 狀態；實際暫停流程（含頂部卡、pill、關閉 toast 不影響面板）因模擬器無法執行路線，未做 UI 自動驗證。2026-10-27 Figma 已更新為 229 pt 標準控制面板，App 尚未依此靜態設計變更實作或裝置驗證。頂部卡的 5 km/h 以實際偏好值顯示（依「待決與 Figma 衝突」）。
 
 ### R8 回歸
 - 收合：拖曳／縮放地圖不改變面板高度；放 Pin 收合為 76 pt（D3：只剩標題與兩個圓鈕）；確認或關閉 Pin 卡回 D1。
@@ -111,7 +113,7 @@
 
 狀態：F3 已實作，待審查（`selectMode` 在最小高度時還原；`GoFlyTabRestoreUITests`）；F1、F2 已實作，待審查（最愛路線、最愛地點兩頁改整頁、移除 detents／drag indicator；新增共用 `GoFlyFavoritesBottomBar`＝搜尋區 88 pt＋刪除鍵在其上方 12 pt、snackbar 偏移 100 pt；`GoFlyActionStyle(fixedHeight:)`；`GoFlyFavoriteRoutesPageUITests` 量測 D19／D21／D22 間距；地點頁共用同一元件，未另寫 UI test）。路線列副標改單行「起訖・點位數」，D19 的距離（12.4 km）因紀錄沒有距離資料未顯示。R6 的程式已由使用者另行提交（`385a5ed`），其 UI test 在「dialog 開啟時下方按鈕不可操作」斷言上失敗，原因未釐清，仍待處理；R7、C3、C5、R8 仍待做。
 
-## 三個 mode panel 的預設與最小高度（2026-10-25，Figma 04 頁已更新）
+## 三個 mode panel 的預設與最小高度（2026-10-25；2026-10-27 Figma 對齊更新）
 
 高度以 TabBar 上緣以上的可視點數計（無 TabBar 的執行畫面計到螢幕底，含 34 pt 安全區）。
 
@@ -120,7 +122,7 @@
 | 瞬移 | 300（B2 半開 298） | 120（B1 收合 118） | `sheetPreferredHeight`；B8/B9 沿用標準瞬移收合面板與位置摘要 |
 | 路線 | 340（D1 339，2 列）；3 列 400；上限 416（D2 414，只有清單捲動） | 76（D3） | 內容定高（`GoFlyRoutePanel`），清單上限＝404 − 208 |
 | 搖桿 | 352（E1 350：列 20、搖桿 88×152、按鈕 264×52、距底 36） | 76（E1.a：標題「搖桿」＋時速 chip） | `GoFlyJoystickPanel` 重排，`isCollapsed` 為最小態 |
-| 執行／恢復（路線／漫步） | D6 218；D10 122（88＋34）；E5 76 | — | `GoFlyResumePanel.contentHeight`（D10 88，E5 76） |
+| 執行／恢復（路線／漫步） | D6 229；D10／D10.a 229；E5 76 | — | App `GoFlyResumePanel` 現有 D10 122（88＋34）／E5 76；Figma D6、D10／D10.a 已更新為 229 pt，App 尚未依本次靜態設計變更調整或裝置驗證 |
 
 狀態：已實作，待審查（`GoFlyBottomSheet.preferredHeight`／`grabberHeight`；輔助字級與恢復態改回內容定高；`GoFlyPanelHeightUITests` 量測三個 mode 的預設／最小高度與搖桿內部間距）。尚未對齊：漫步執行 E2（380）、E2.a／E4（122，皆無 TabBar；App 仍顯示 TabBar）、搖桿標題字級（E1 約 17 pt，現為 20 pt）。D2 的列高（55 pt）與 D1（60 pt）不一致，依 60 pt 並以 414 pt 為上限。
 

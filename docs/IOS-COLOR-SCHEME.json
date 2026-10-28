@@ -1,0 +1,226 @@
+{
+  "colors": {
+    "primitive": {
+      "white": "#FFFFFF",
+      "black": "#000000",
+      "transparent": "transparent",
+      "gray": {
+        "50": "#F9F9F9",
+        "100": "#F2F2F7",
+        "200": "#EEEEF0",
+        "300": "#D1D1D6",
+        "400": "#C7C7CC",
+        "500": "#BEBEC2",
+        "600": "#98989D",
+        "700": "#636366",
+        "800": "#48484A",
+        "900": "#2C2C2E",
+        "950": "#1C1C1E"
+      }
+    },
+    "themes": {
+      "light": {
+        "primary": {
+          "main": "#0071E3",
+          "hover": "#0071E3",
+          "active": "#0071E3",
+          "background": "#E5F1FC",
+          "text": "#0053A8",
+          "border": "#7FB8F1",
+          "contrastText": "#FFFFFF",
+          "scale": {
+            "100": "#E5F1FC",
+            "300": "#7FB8F1",
+            "500": "#0071E3",
+            "700": "#0053A8",
+            "900": "#00305F"
+          }
+        },
+        "secondary": {
+          "main": "#D1D1D6",
+          "hover": "#D1D1D6",
+          "active": "#D1D1D6",
+          "background": "#F2F2F7",
+          "text": "#1C1C1E",
+          "border": "#C7C7CC",
+          "contrastText": "#1C1C1E"
+        },
+        "success": {
+          "main": "#34C759",
+          "hover": "#34C759",
+          "active": "#34C759",
+          "background": "#EAF7EE",
+          "text": "#1E7A34",
+          "border": "#2E9E4F",
+          "contrastText": "#1C1C1E"
+        },
+        "warning": {
+          "main": "#FF9500",
+          "hover": "#FF9500",
+          "active": "#FF9500",
+          "background": "#FFF6E6",
+          "text": "#A35200",
+          "border": "#FF9500",
+          "contrastText": "#1C1C1E"
+        },
+        "error": {
+          "main": "#D92D20",
+          "hover": "#D92D20",
+          "active": "#D92D20",
+          "background": "#FFF0EE",
+          "text": "#B42318",
+          "border": "#D92D20",
+          "contrastText": "#FFFFFF"
+        },
+        "info": {
+          "main": "#475569",
+          "hover": "#475569",
+          "active": "#475569",
+          "background": "#E6EDF6",
+          "text": "#334155",
+          "border": "#64748B",
+          "contrastText": "#FFFFFF"
+        },
+        "background": {
+          "default": "#F2F2F7",
+          "inverse": "#1C1C1E"
+        },
+        "surface": {
+          "default": "#FFFFFF",
+          "control": "#E1E1E6",
+          "active": "#BCBCC2",
+          "mapOverlay": {
+            "card": "#FFFFFFF2",
+            "panel": "#E1E1E6F2",
+            "opacity": 0.95
+          },
+          "disabled": "#ECECF0"
+        },
+        "text": {
+          "primary": "#1C1C1E",
+          "secondary": "#6C6C70",
+          "tertiary": "#7B7B80",
+          "disabled": "#AEAEB2",
+          "inverse": "#FFFFFF",
+          "link": "#0066CC",
+          "statusSecondary": "#6C6C70"
+        },
+        "border": {
+          "default": "#C7C7CC",
+          "subtle": "#D8D8DC",
+          "strong": "#8E8E93",
+          "focus": "#0071E3"
+        },
+        "action": {
+          "disabled": "#ECECF0",
+          "disabledText": "#AEAEB2"
+        },
+        "overlay": {
+          "backdrop": "#00000080",
+          "scrim": "#00000033"
+        }
+      },
+      "dark": {
+        "primary": {
+          "main": "#005FC7",
+          "hover": "#005FC7",
+          "active": "#005FC7",
+          "background": "#002952",
+          "text": "#4DA3FF",
+          "border": "#00438F",
+          "contrastText": "#E5E5EA",
+          "scale": {
+            "100": "#E6F0FA",
+            "300": "#80B3E6",
+            "500": "#005FC7",
+            "700": "#00438F",
+            "900": "#002952"
+          }
+        },
+        "secondary": {
+          "main": "#505054",
+          "hover": "#505054",
+          "active": "#505054",
+          "background": "#2C2C2E",
+          "text": "#E5E5EA",
+          "border": "#636366",
+          "contrastText": "#E5E5EA"
+        },
+        "success": {
+          "main": "#2C7347",
+          "hover": "#2C7347",
+          "active": "#2C7347",
+          "background": "#1B2E22",
+          "text": "#6FC48B",
+          "border": "#52A072",
+          "contrastText": "#E5E5EA"
+        },
+        "warning": {
+          "main": "#8C5D26",
+          "hover": "#8C5D26",
+          "active": "#8C5D26",
+          "background": "#352A1B",
+          "text": "#DDA862",
+          "border": "#C48A3F",
+          "contrastText": "#E5E5EA"
+        },
+        "error": {
+          "main": "#B3352F",
+          "hover": "#B3352F",
+          "active": "#B3352F",
+          "background": "#4D272A",
+          "text": "#FF7A70",
+          "border": "#E0605A",
+          "contrastText": "#E5E5EA"
+        },
+        "info": {
+          "main": "#475569",
+          "hover": "#475569",
+          "active": "#475569",
+          "background": "#1F2A37",
+          "text": "#94A3B8",
+          "border": "#64748B",
+          "contrastText": "#E5E5EA"
+        },
+        "background": {
+          "default": "#1C1C1E",
+          "inverse": "#E5E5EA"
+        },
+        "surface": {
+          "default": "#2C2C2E",
+          "control": "#3A3A3C",
+          "active": "#505054",
+          "input": "#505054",
+          "mapOverlay": {
+            "card": "#2C2C2EF2",
+            "panel": "#3A3A3CF2",
+            "opacity": 0.95
+          }
+        },
+        "text": {
+          "primary": "#E5E5EA",
+          "secondary": "#98989D",
+          "tertiary": "#8A8A8E",
+          "disabled": "#6E6E73",
+          "inverse": "#000000",
+          "link": "#4DA3FF",
+          "statusSecondary": "#C7C7CC"
+        },
+        "border": {
+          "default": "#636366",
+          "subtle": "#404042",
+          "strong": "#8E8E93",
+          "focus": "#4DA3FF"
+        },
+        "action": {
+          "disabled": "#343437",
+          "disabledText": "#6E6E73"
+        },
+        "overlay": {
+          "backdrop": "#000000B3",
+          "scrim": "#00000066"
+        }
+      }
+    }
+  }
+}
