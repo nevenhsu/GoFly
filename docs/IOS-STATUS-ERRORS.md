@@ -142,3 +142,9 @@
 - `operationCancelled` 是正常取消，不列為 Error；首次未知、健康探測 pending、定位 ACK pending、使用者暫停／停止也不是錯誤。
 - 搜尋框的座標格式／範圍驗證及尚未提交的局部編輯提示維持在原欄位，未納入全域 session pill；啟動交接鎖定頁與 onboarding 也不屬於已進入正常 runtime 的 session pill。
 - 連線斷開是 Error 的其中一個原因；配對／資料／規劃錯誤不會因此被誤判為斷線或觸發 reset tunnel。只有運行中真正的可修復連線／服務故障沿既有共用修復入口處理。
+
+## Toast 與 Banner 的呈現
+
+- Toast／Banner 使用共用 overlay 容器，疊在導覽列或搜尋列下方、左右留 16 pt，不參與內容版面；多個通知以 8 pt 間距堆疊，並各自提供關閉按鈕。Toast 浮層陰影依 Figma 04：黑色 18%、y=4 pt、blur=16 pt。
+- 狀態語意與既有 `IssueCatalog`、恢復規則及操作語意不變。R04 連線失敗、地圖通知、設定首頁與設定子頁通知、搜尋輸入警告均使用懸浮層；VPN 檢查成功後自動再次確認並進入 B1，不顯示 success Toast。操作表單內的欄位驗證仍留在相關欄位或面板。
+- 此處描述 Figma／App 軟體呈現規則，不代表完成實機驗證。

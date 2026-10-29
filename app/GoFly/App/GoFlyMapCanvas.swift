@@ -79,6 +79,9 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var markerRoute: PlannedRoute? = nil
     var markerRouteDistance: Double? = nil
     var adjustsFocusForViewportChanges = true
+#if DEBUG && targetEnvironment(simulator)
+    var usesOfflineFixtureTiles = false
+#endif
     /// Keeps the Apple Maps logo and Legal link above the bottom panel, tab bar and cards.
     var attributionBottomInset: CGFloat = 0
     /// When set, tapping the route's destination node opens its card instead
@@ -99,6 +102,11 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         map.layoutMargins = .zero
         map.insetsLayoutMarginsFromSafeArea = false
         map.accessibilityIdentifier = "map.canvas"
+#if DEBUG && targetEnvironment(simulator)
+        if usesOfflineFixtureTiles {
+            map.addOverlay(GoFlyOfflineFixtureMapOverlay(isDark: colorScheme == .dark), level: .aboveRoads)
+        }
+#endif
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.mapTapped(_:)))
         tap.delegate = context.coordinator
         tap.cancelsTouchesInView = false
@@ -161,6 +169,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var routeNodeAnnotations: [RouteNodeAnnotation] = []
         private var appliedNodeDark: Bool?
         private var annotationLocaleIdentifier = ""
+        private var appliedMapDark: Bool?
 
         init(_ parent: GoFlyMapCanvas) { self.parent = parent }
 
@@ -174,6 +183,23 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             if map.overrideUserInterfaceStyle != style {
                 map.overrideUserInterfaceStyle = style
             }
+
+            let dark = colorScheme == .dark
+            guard appliedMapDark != dark else { return }
+            appliedMapDark = dark
+            let configuration = MKStandardMapConfiguration(
+                elevationStyle: .flat,
+                emphasisStyle: dark ? .muted : .default
+            )
+            configuration.pointOfInterestFilter = dark ? .excludingAll : .includingAll
+            map.preferredConfiguration = configuration
+#if DEBUG && targetEnvironment(simulator)
+            if parent.usesOfflineFixtureTiles {
+                let oldFixtureOverlays = map.overlays.compactMap { $0 as? GoFlyOfflineFixtureMapOverlay }
+                map.removeOverlays(oldFixtureOverlays)
+                map.addOverlay(GoFlyOfflineFixtureMapOverlay(isDark: dark), level: .aboveRoads)
+            }
+#endif
         }
 
         func refreshAppearance(on map: MKMapView) {
@@ -184,7 +210,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 appliedNodeDark = dark
                 for node in routeNodeAnnotations { map.view(for: node)?.image = node.kind.image(dark: dark) }
             }
-            let color = UIColor.label.resolvedColor(with: map.traitCollection).cgColor
+            let color = UIColor(GoFlyThemeColor.mapRoute).resolvedColor(with: map.traitCollection).cgColor
             if appliedRouteColor != color {
                 appliedRouteColor = color
                 routeRenderer?.strokeColor = UIColor(cgColor: color)
@@ -540,9 +566,10 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
+            if overlay is MKTileOverlay { return MKTileOverlayRenderer(overlay: overlay) }
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: line)
-            renderer.strokeColor = .label
+            renderer.strokeColor = UIColor(GoFlyThemeColor.mapRoute)
             renderer.lineWidth = 4
             renderer.lineCap = .round
             renderer.lineJoin = .round
@@ -553,6 +580,95 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         }
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Locally generated and network-free MapKit tiles for deterministic screenshots.
+/// The route polyline and annotations continue through the production MapKit path.
+private final class GoFlyOfflineFixtureMapOverlay: MKTileOverlay {
+    private let isDark: Bool
+
+    init(isDark: Bool) {
+        self.isDark = isDark
+        super.init(urlTemplate: "gofly-fixture://map/{z}/{x}/{y}")
+        canReplaceMapContent = true
+        tileSize = CGSize(width: 256, height: 256)
+    }
+
+    override func loadTile(at path: MKTileOverlayPath,
+                           result: @escaping (Data?, (any Error)?) -> Void) {
+        result(Self.png(isDark: isDark, tileX: path.x, tileY: path.y), nil)
+    }
+
+    private static func png(isDark: Bool, tileX: Int, tileY: Int) -> Data? {
+        let style = UITraitCollection(userInterfaceStyle: isDark ? .dark : .light)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 256, height: 256), format: format)
+        return renderer.pngData { image in
+            let context = image.cgContext
+            func fill(_ color: Color, _ rect: CGRect) {
+                context.setFillColor(UIColor(color).resolvedColor(with: style).cgColor)
+                context.fill(rect)
+            }
+            func stroke(_ color: Color, width: CGFloat, _ points: [CGPoint]) {
+                guard points.count > 1 else { return }
+                let path = UIBezierPath()
+                path.move(to: points[0])
+                for point in points.dropFirst() { path.addLine(to: point) }
+                path.lineCapStyle = .round
+                path.lineJoinStyle = .round
+                path.lineWidth = width
+                UIColor(color).resolvedColor(with: style).setStroke()
+                path.stroke()
+            }
+
+            fill(GoFlyThemeColor.mapCanvas, CGRect(x: 0, y: 0, width: 256, height: 256))
+
+            let phase = CGFloat((abs(tileX &* 31 &+ tileY &* 17) % 7)) * 5
+            if (tileX + tileY).isMultiple(of: 2) {
+                fill(GoFlyThemeColor.mapPark, CGRect(x: 146 + phase, y: 18, width: 126, height: 105))
+                fill(GoFlyThemeColor.mapPark, CGRect(x: 10, y: 152 + phase, width: 72, height: 80))
+            }
+
+            if (tileX - tileY).isMultiple(of: 3) {
+                let water = UIBezierPath()
+                water.move(to: CGPoint(x: 0, y: 214 + phase))
+                water.addLine(to: CGPoint(x: 256, y: 148 + phase))
+                water.addLine(to: CGPoint(x: 256, y: 256))
+                water.addLine(to: CGPoint(x: 0, y: 256))
+                water.close()
+                UIColor(GoFlyThemeColor.mapWater).resolvedColor(with: style).setFill()
+                water.fill()
+            }
+
+            for rect in [
+                CGRect(x: 30, y: 28, width: 50, height: 33),
+                CGRect(x: 100, y: 112, width: 60, height: 35),
+                CGRect(x: 172, y: 184, width: 48, height: 36),
+                CGRect(x: 18, y: 206, width: 33, height: 28)
+            ] {
+                fill(GoFlyThemeColor.mapBuilding, rect)
+            }
+
+            let localRoads: [[CGPoint]] = [
+                [CGPoint(x: 88, y: -12), CGPoint(x: 92 + phase / 3, y: 268)],
+                [CGPoint(x: 180, y: -12), CGPoint(x: 180, y: 268)],
+                [CGPoint(x: -12, y: 87), CGPoint(x: 268, y: 79 + phase / 2)],
+                [CGPoint(x: -12, y: 173), CGPoint(x: 268, y: 168)],
+                [CGPoint(x: -12, y: 14), CGPoint(x: 268, y: 230)]
+            ]
+            for road in localRoads {
+                stroke(GoFlyThemeColor.mapRoadEdge, width: 9, road)
+                stroke(GoFlyThemeColor.mapRoad, width: 6, road)
+            }
+
+            let arterial = [CGPoint(x: -12, y: 136 + phase), CGPoint(x: 268, y: 130 + phase)]
+            stroke(GoFlyThemeColor.mapArterialEdge, width: 15, arterial)
+            stroke(GoFlyThemeColor.mapArterial, width: 11, arterial)
+        }
+    }
+}
+#endif
 
 private final class LayoutMapView: MKMapView {
     var onLayout: (() -> Void)?
@@ -591,8 +707,9 @@ private final class RouteNodeAnnotation: NSObject, MKAnnotation {
         /// and a thick destination dot without a stem, centred on the route end.
         /// Dark mode inverts them like the `Dark · MapNode /` components.
         func image(dark: Bool) -> UIImage {
-            let ink: UIColor = dark ? .white : .black
-            let paper: UIColor = dark ? UIColor(red: 0.11, green: 0.11, blue: 0.118, alpha: 1) : .white
+            let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+            let ink = UIColor(GoFlyThemeColor.mapMarkerOutline).resolvedColor(with: traits)
+            let paper = UIColor(GoFlyThemeColor.mapMarker).resolvedColor(with: traits)
             switch self {
             case .start:
                 return Self.render(CGSize(width: 22, height: 22)) { rect in

@@ -12,32 +12,32 @@
 
 ## 視覺系統
 
-延續 GoFly 黑白、中性灰風格，地圖保持主體。中性表面、圖示按鈕、邊界、次要文字與停用文字統一由 `GoFlyGrayScale` 管理；App 既有主要 CTA 依深淺模式使用黑／白膠囊，04 共用元件設計則依 iOS theme token 呈現 Primary（Light 所有尺寸為 `#007AFF` 底／白字，Dark 沿用 Dark token），次要 CTA 使用灰階底。此 Figma 更新記錄設計準據，不表示 App 色彩實作已同步；錯誤使用高對比語意文字及既有警示圖示，不能單靠顏色辨識。2026-10-20 改版新增 danger／warning／success 語意狀態色，僅用於狀態，見文末。
+App 顏色使用 Figma 04 Theme Variables 的完整語意 token，由 `GoFlyThemeColor` 對應；`GoFlyStyle` 與 `GoFlyTextColor` 只提供元件角色別名。Light／Dark 值與 Common Color 原值保存於 [`IOS-COLOR-SCHEME.json`](IOS-COLOR-SCHEME.json) 的 `colors.figmaVariables`，舊 `colors.primitive`／`colors.themes` 是先前色票整理結構，不作為 Swift token 來源。主要動作使用 Figma Primary；Dark primary 按鈕文字與圖示使用純白，依 2026-10-29 使用者決定覆寫 Dark `color/action/primary/text` 的近白值。狀態色仍需搭配圖示與文字，不可單靠顏色辨識。
 
 | 角色 | 設計與實作 |
 | --- | --- |
 | 字體 | App 文字使用 [`IOS-TYPOGRAPHY.md`](IOS-TYPOGRAPHY.md) 的 `GoFlyFont` 語意 token；中文使用 iOS 系統字體。Figma 04 的 `Theme/<token>` 是共用字型、字級與字重樣式，文字顏色另綁 Light／Dark theme 變數；不以 Figma 樣式推定 App 已同步實作 |
 | 面板標題 | 路線 `.title3.bold`；狀態 `.headline`；一般內容 `.body`；說明 `.subheadline`／`.footnote` |
 | Sheet 標題 | 背景運行時間、新增最愛路線、編輯最愛（地點／路線）、設定移動時速四個 sheet 不顯示標題，僅保留左右操作按鈕與拖曳指示（2026-10-26 使用者指示） |
-| 底面 | `.systemGroupedBackground`；內容卡 `.systemBackground`；內嵌控制 `.secondarySystemBackground` |
-| 邊界 | 主面板 20 pt 連續圓角、0.5 pt 語意分隔線；搜尋／地點 14 pt；資料列及較小卡 12 pt |
-| 輸入區 | 搜尋／標籤欄位使用 `systemGray5` 底色與 `systemGray` 0.75 pt 常態邊線；聚焦 1.5 pt primary。這取代原先與頁面相近的 secondarySystemBackground＋淡邊線 |
-| 層次 | 一般頁面卡平面。地圖浮層只用 Figma 04 的三種陰影 token（`GoFlyShadow`，淺深色相同，2026-10-25 依 0 區元件核對）：`floating`＝9% y5 blur24＋6% y1 blur3（搜尋列、狀態 pill、Recenter、bottom sheet／面板、snackbar、頂部指示卡）；`card`＝14% y8 blur24（地點卡）；`chip`＝6% y1 blur4（時速 chip、36 pt 純 icon 鈕）。對話框、搖桿握柄、Pin 另依各自 Figma 元件 |
+| 底面 | `color/canvas`；卡片／Sheet `color/surface/card`；控制底 `color/surface/control`；停用面 `color/surface/disabled`；浮動控制使用 `color/surface/control/floating` |
+| 邊界 | 主面板 20 pt 連續圓角、`color/line/separator` 0.5 pt 分隔線；搜尋／地點 14 pt；資料列及較小卡 12 pt |
+| 輸入區 | 搜尋／標籤欄位使用 `color/surface/input`、`color/line/input/default`；聚焦使用 `color/icon/accent`。只有 UIKit 系統輸入／貼上控制保留原生色彩行為 |
+| 層次 | 一般頁面卡平面。地圖浮層只用 Figma 04 的陰影 token（`GoFlyShadow`，淺深色相同）：`floating`＝9% y5 blur24＋6% y1 blur3（搜尋列、面板、snackbar 等）；`toast`＝18% y4 blur16（Toast／Banner）；`card`＝14% y8 blur24（地點卡）；`chip`＝6% y1 blur4（時速 chip、36 pt 純 icon 鈕）。對話框、搖桿握柄、Pin 另依各自 Figma 元件 |
 | 主要按鈕 | 17 pt 語意 body semibold，最低內容高 44 pt，加上下各 6 pt；可因換行長高。僅地圖候選 Go 在無障礙字級取消額外上下留白，保留自然字高與至少 44 pt 操作範圍，避免鍵盤壓縮可視地圖 |
 | 次要按鈕 | 同主按鈕字級，最低內容高 44 pt，加上下各 2 pt、柔灰底與細邊界 |
-| 灰階色票 | `GoFlyGrayScale` 集中管理淺／深色中性灰；次要控制底 `#F2F2F7 / #2C2C2E`、邊線 `#E5E5EA / #38383A`、停用底 `#EEEEF0 / #2C2C2E`。文字與圖示另用次要、訊息、停用灰角色 |
+| 語意色彩 | `GoFlyThemeColor` 一對一對應 Figma Variable path；深色階梯 canvas／card／control／active 分別為 `#0B0B0D`／`#1A1A1C`／`#2C2C2F`／`#48484D`，淺色階梯為 `#EEEEF3`／`#FBFBFD`／`#DEDEE4`／`#B9B9BF` |
 | 圖示按鈕 | 最小 44 × 44 pt，圓形灰底；啟用圖示用主要色、停用圖示用 disabled 灰，停用底與啟用底使用不同灰階，停用時移除邊線。共用圖示隨字級有限度縮放至最大 24 pt，避免極大字級溢出圓形；設定圖示依容器使用 18–24 pt。標籤與目前可用狀態由原有 accessibility 說明提供 |
 | 留白 | 主面板內距 16 pt；頁面／詳情可用 24 pt；分組 20–24 pt；相關元素 8–12 pt |
 | 按壓 | 按鈕即時降低亮度／透明度；不移動點擊範圍、不以動畫拖延命令 |
 
-`GoFlyStyle` 是共用樣式來源；`goFlyCard(floating:radius:)` 統一卡片，`GoFlyEmptyState` 統一空白狀態。平台控制（導航、選單、滑桿、鍵盤、授權及確認框）保留原生行為。背景與卡片使用不透明語意底色，地圖內容不會透入文字區。
+`GoFlyStyle` 是元件共用角色來源；`goFlyCard(floating:radius:)` 統一卡片，`GoFlyEmptyState` 統一空白狀態。平台控制（導航、選單、滑桿、鍵盤、授權及確認框）保留原生互動行為。背景與卡片使用語意底色，地圖內容不會透入文字區。
 
 ## 畫面與狀態細節
 
 | 畫面／區域 | 實作細節與保留規則 |
 | --- | --- |
 | 首次歡迎／定位權限 | Logo 啟動銜接歡迎頁；背景檢查超過約 0.5 秒才顯示細進度條。引導顯示 1／2／3 步驟；定位區分尚未設定、已允許與已拒絕，主要動作分別為允許定位、下一步、前往設定；已允許不顯示略過，其餘可略過 |
-| VPN 引導／說明 | 檢查中為中性、失敗 danger、成功 success，圖示與文字並用。首次引導與設定共用連線說明頁及 LocalDevVPN／App Store fallback；下一步仍由真實可達狀態啟用 |
+| VPN 引導／說明 | R04 使用 canvas 背景、card 步驟清單（Wi‑Fi／開啟 LocalDevVPN／點 Connect／點重新檢查）、連線說明連結、中間 StatusPill 與單一底部 Primary CTA。VPN 檢查失敗時錯誤 Banner 由共用 Toast overlay 懸浮，不推動內容；檢查成功後自動再次確認並進入 B1 收合 sheet，不顯示 success Toast。R05 使用自訂返回列、三列步驟卡（下載／開啟 LocalDevVPN／點 Connect）及一張 troubleshooting 卡；沒有大標題、副標、底部 CTA 或本機網路權限列。R05 返回會重新檢查 VPN；前兩步仍保留 App Store 與 LocalDevVPN deep link fallback |
 | 地圖頂部 | 浮動搜尋列由兩張獨立浮動卡片組成（x: 16 pt，總寬 361 pt）：左側為縮短的搜尋輸入卡（301 × 50 pt，包含搜尋放大鏡、query 與貼上／清除圖示），右側為獨立的設定按鈕卡（50 × 50 pt，包含齒輪圖示）；下方狀態 pill；執行模式與全螢幕頁隱藏一般 chrome，頂部不放啟停 |
 | 模式列 | 底部瞬移／路線／搖桿三個等寬 tab（TabBar / 瞬移・路線・搖桿（等寬））；最愛由內容入口開啟。執行模式與全螢幕頁隱藏 bottom bar。選中模式無 filled color，僅純線框 line 變深（strokeWeight 2.29 pt、#000000 / #E5E5EA，文字 Medium 10 pt 加深），未選中維持 1.88 pt 細線與次要灰（#999999 / #8E8E93），完全對齊 B1 地圖首頁樣式 |
 | 搜尋 | 地圖首頁與全螢幕搜尋輸入欄在空 query 時顯示 44 pt 命中範圍的純 SF Symbol `doc.on.clipboard` 貼上圖示，無底色；首頁使用 20 pt 圖示，Light 為中度灰 `#6B6B6B`、Dark 使用 `#E5E5EA`，保持可辨識且不呈現 disabled 感。首頁 SearchBar / 浮動整體 361 × 50 pt：輸入卡 301 × 50 pt，右側另有獨立設定卡 50 × 50 pt，兩卡間距 10 pt；設定圖示採 Figma `Settings / 設定` 元件內 `icon / gear` 向量（22 pt），輸入框與 Settings 內層按鈕均採 14 pt 圓角與 1 pt 邊（Light Settings 白底／`#C7C7CC`；Dark Settings `#4C4C4F` 底／`#636366` 邊）；兩側 wrapper 各自保留雙層浮動陰影。輸入有文字時隱藏貼上並只顯示清除 ✕。貼上動作使用 iOS 系統 `UIPasteControl`（icon-only、capsule，由系統繪製剪貼簿圖示，前景色為上述灰／白、底色同欄位），query 為空時才可見。`UIPasteControl` 是安全控制：不得以透明度、隱藏或覆蓋自繪圖示偽裝，否則系統會忽略點擊（2026-10-26 修正：舊實作 alpha 0.01＋自繪圖示導致首頁貼上無反應）。首頁貼上的接收端直接讀取 `NSItemProvider` 文字並 trim，不經隱藏輸入欄。貼上來源為純文字時，在插入前移除該字串頭尾空白與換行（`.whitespacesAndNewlines`）；手動輸入及既有文字不額外 trim。首頁貼上後立即確認搜尋，不呼叫 `beginSearch` 或開啟全螢幕搜尋頁；有效經緯度立即建立候選地點卡，名稱則比對最愛標籤、名稱與地址，否則以 MapKit 搜尋後自動選取首筆結果。無效經緯度顯示「無效經緯度」warning toast，沒有搜尋結果顯示「找不到位置」，搜尋失敗顯示「搜尋失敗」；toast 約 2 秒自動消失，沒有 action 或關閉按鈕，以上錯誤皆不得建立候選或 location card。全螢幕輸入頁貼上只依目前文字游標／選取範圍插入並即時搜尋，保持該頁開啟。非純文字剪貼簿不貼入。系統控制避免程式直接讀取剪貼簿造成額外授權提示。驗收：剪貼簿值 `  25.03123, 121.55150\n` 貼入後 query 為 `25.03123, 121.55150` 並立即顯示候選地點卡；首頁貼上後 `showingSearch` 不變；無效經緯度、無搜尋結果及搜尋失敗只顯示對應無按鈕 toast 且不顯示 location card；輸入頁按貼上後文字及搜尋結果更新、該頁仍開啟且游標可繼續輸入；空 query 僅有無底色的 SF 貼上圖示，有文字時僅有清除按鈕。名稱搜尋將原始輸入交由 MapKit 搜尋，以目前可視地圖區域作搜尋提示、不改寫查詢文字；直接輸入有效座標。搜尋中 spinner 與「搜尋中…」同列不折行。空輸入搜尋頁顯示「最近搜尋」（右側「清空記錄」純文字按鈕；依 2026-10-23 Figma B3 移除最愛地點區塊）；沒有最近搜尋時頁面留白，不得顯示「找不到地點」空狀態（只在已輸入查詢且無結果時顯示）。路線選點全螢幕頁（D5）頂部 chip 顯示「選擇終點」／「選擇途經點 %ld」／「選擇起點」，同行最右側為 22 pt 空心星號搭配文字 `Favorite`（15 pt Medium），按鈕高度 44 pt；圖示與文字使用主文字色（Light `#000000`、Dark `#E5E5EA`），VoiceOver 名稱為 `Favorite`，點擊開啟最愛清單；「最近搜尋」同行配置「清空記錄」。選點清單不顯示「從地圖上選擇」（改由 D1 / D1.a 地圖直接釘選）。最近搜尋只在目前地圖 view 生命週期的記憶體保留，最多 8 筆；瞬移搜尋與 D5 共用同一份歷史，任一處清空會同步清空，D5 最愛與瞬移共用 `FavoritePlacesStore` |
@@ -192,7 +192,7 @@ App 偏好語言優先用於介面、marker 輔助標籤，以及點選地點的
 - 設定移動時速（D7 / E3，原 D13 / E4，2026-10-24 規格確認）：只有路線運行中（D6 路線執行模式）或搖桿／漫步（E1/E2）才有設定時速的 pill button（Speed chip「⏱ 9 ›」）；D7 背景正式統一為 D6 路線執行模式（點擊 D6 控制列右側時速膠囊滑出半開 sheet，覆蓋 40% Dim overlay 遮罩，不使用未執行的 D1 作為背景）。含 Grabber、「設定移動速度」、目前時速、原生 Slider 與「完成設定」。4 檔快選膠囊正式統一為 步行 5／單車 25／機車 50／汽車 100（單位 km/h，預設 25；2026-10-26 起以扁平圓潤風格的彩色向量插圖取代系統 emoji（透明背景，橘紅＋深藍＋芥末黃，original 渲染），App 現有資產 `SpeedPresetWalk/Bicycle/Scooter/Car`，淺深色與選中狀態皆不需換圖；2026-10-28 Figma 將四款重繪為無描線實心色塊插圖，D7／E3 改用 `speed/*` master instance，App 資產尚未同步）；Slider 範圍 1–120 km/h。本規格正式取代過往 5/15/40/60 舊註解與過渡版 5/20/60/120 畫面，Figma 中 D7、E3、Dark D7、Dark E3 之 UI frame、說明文字與預設選取狀態已全數同步更新完成。點擊快選或滑桿即時連動路線預估時間或漫步行進時速。路線與搖桿／漫步共用同一份已保存的移動速度偏好（預設 25 km/h，App 重開後保留）；任一處修改即同步另一處（2026-10-24 使用者確認）。Figma 衝突記錄：D6、D6.a、D10 頂部卡仍寫「5 km/h」、Speed chip 為「9」，與 D7 目前時速 25 不一致，屬示意數值，實作以實際偏好值顯示。程式實作狀態：App 目前仍為 5/20/60/120、預設 20，且路線與搖桿各自保存速度，待 Route Mode 任務更新。
 - 最愛清單（C1/C3）與編輯最愛（C2）：C1 右上角操作鈕為圓圈勾選圖示（`checkmark.circle`）；預設星號為實心；多選模式（C3 / Dark C3，2026-10-24 規格確認）右上角為「全選」按鈕，每列左側為勾選圈按鈕，多選狀態下每列不顯示星號按鈕（不會有 star button），每列文字與分隔線起始位置靠齊勾選圈（x: 43 pt，淺色與深色完全對齊），右側「⋯」隱藏；深色模式（Dark mode）未選取勾選按鈕底色（`secondarySystemBackground` `#2C2C2E`）與邊框（`#8E8E93`）均與 App 黑色背景相異且具備明確對比，Dark 選取狀態使用深色表面與藍色勾記 `#0066CC`；底部刪除按鈕具備垃圾桶圖示與批次計數（`Button / dangerFill / 刪除（2）`，寬 361 pt、高 48 pt、圓角 24 pt），**移出 search field section，獨立浮動於 search field section 上方（y: 670 pt，距下方 y: 730 pt 搜尋欄頂部維持 12 pt 間距），與 D21 完全一致**；底部搜尋列為標準單一搜尋欄（y: 730 pt，高 122 pt），具頂部 0.5 pt 分隔線。2026-10-24 Figma 元件庫更新：`Dark · 0 · 共用元件（按鈕）` 收納 `Button / Check · Selected`（Dark 深色表面與藍色勾記 `#0066CC`，24×24 pt）與 `Dark · Check button / off`（次要背景底加灰色細邊，24×24 pt）共用元件；Dark C3（最愛地點多選）、Dark D21（最愛路線多選）與 Dark D22（最愛路線刪除復原）中已選取項目的勾選圈已全面改用 `Dark · Check button / on` 共用元件實例（修正原先 Dark D21/D22 誤用黑底圈導致暗色對比缺失之問題，統一為深色表面與藍色勾記規範）。C2（編輯最愛 sheet）下方為「儲存」主要按鈕、右上角為「刪除」文字按鈕、左上角為「取消」文字按鈕；地點 sheet 與地圖點選 Favorite 星號新增最愛時彈出 C2 編輯標籤，點「儲存」後才真正保存。
 - 地點與搜尋（B4/B5，2026-10-23 使用者確認）：搜尋結果座標採 5 位小數且無星號圖示；地點選項左側圖示使用共用 `icon/pin`（不使用 SF Symbol `mappin.and.ellipse`）；全螢幕搜尋頁全面移除自明之「輸入地點或緯度、經度。」文字提示條；路線選點頁頂部 chip 標籤（如「選擇終點」badge）改為靠左對齊（置左），且空輸入清單中不再顯示「清空地點」或「在地圖上選擇」選項（2026-10-25 使用者確認移除後者），右側「最愛地點」文字按鈕使用 primary 文字色（不再用 secondary，避免看似 disabled）；App 現行地點選取／點地圖放 Pin（B5）使用獨立「地點卡」（LocationCard，寬 361 pt、固定高 188 pt、圓角 20 pt、雙層柔和陰影；與下方 Figma Route variant 的 361 × 180 pt 設計尺寸不同，App 尚待同步），覆蓋於底層 bottom bar 和 panel 上方（蓋在 bottom bar 與收合 panel 上面），不是取代 panel；底層 panel 維持收合狀態（呈現目前模擬位置與收藏／複製），bottom bar 亦維持在底層；地點卡右上角使用 B `Clear / Enabled / Large` 共用 icon button（44 × 44 pt，無底色／邊框），Close glyph 使用共用 `icon/close`，標題最多 1 行、地址最多 2 行並固定保留兩行空間，標題優先序為有效最愛標籤、地名、地址、經緯度（與瞬移收合面板位置標題共用 helper）；Light Figma `Light · LocationCard` 自 2026-10-28 僅保留 `Layout=Route`（361 × 180 pt、圓角 16 pt；文字 y=20／48／70、操作列 y=117–119），B5／B7／D4／E4 均使用此 variant；Floating 已刪除。內文左緣統一 16 pt；固定高度不隨內容增高，不因地址長短改變文字／按鈕錨點；座標列顯示經緯度與直線距離，下方橫排動作按鈕依 Light 共用 C／B variants 組裝：藍底白字 Go 置左、Star 與 Copy 純 icon 按鈕置右；卡片無邊框，fill 綁 `color/surface/overlay/card`（`#F9F9F9F2`，95% opacity），並使用 12 pt Background Blur；點擊「☆ 收藏」立即彈出 C2 編輯最愛 sheet 供使用者編輯標籤與保存；點擊 ✕ 關閉地點卡，保留底層原面板與 bottom bar 狀態。
-- 首次引導與連線（R02/R04/R05/R06/R07）：R02 置中排版，標題為「允許 GoFly 使用定位」，目前權限為膠囊 pill，底部具分隔線；R04 保留使用者更新的「設定 VPN 通道」版面與內容順序：標題／說明、三步驟卡、連線說明入口及底部「檢查連線」主按鈕；步驟編號使用 Light Primary 藍色，文字套用共用 Typography Theme，主按鈕使用 Light Primary Active。不得還原舊版錯誤 banner 排版；R05 標題為「四步完成連線」，步驟圈為黑底白字，底部主要按鈕為「返回並檢查連線」；R06（原 R04.a）為 VPN 通道失敗獨立 Toast UI（361 × 80 pt 居中，帶重試按鈕）；R07（原 R04.b）依 Figma 實際渲染顯示連接 Mac 完成配對頁，無操作按鈕，返回前景時更新 setup 狀態。
+- 首次引導與連線（R02/R04/R05/R06/R07）：R02 置中排版，標題為「允許 GoFly 使用定位」，目前權限為膠囊 pill，底部具分隔線；R04 依目前 04 渲染：canvas 背景、四列步驟 card（連上 Wi‑Fi／開啟 LocalDevVPN／點 Connect／點重新檢查）、連線說明入口、中間 StatusPill 及單一底部「檢查連線」主按鈕；步驟編號使用 Primary 藍色與白字。VPN 檢查錯誤由共用 Toast overlay 顯示；成功後 App 再次確認並直接進入 B1 收合 sheet，不顯示 success Toast；R05 依精簡渲染使用自訂「返回／連線說明」列、三列步驟卡及一張 troubleshooting 卡，沒有大標題、副標、逐步說明或底部按鈕；本機網路權限列移除後目前沒有替代直達設定入口，待產品決定。此段取代先前 R04 三步驟與 R05 舊版「四步完成連線」規格。；R06（原 R04.a）為 VPN 通道失敗獨立 Toast UI（361 × 80 pt 居中，帶重試按鈕）；R07（原 R04.b）依 Figma 實際渲染顯示連接 Mac 完成配對頁，無操作按鈕，返回前景時更新 setup 狀態。
 - 設定首頁（F1）：導覽返回鍵改為與 R02 定位權限完全一致的圓形返回 icon button（`<`）；設定項目使用對齊 Figma 的專屬 Badge 圖示；定位權限狀態文案對齊 HIG 與 Figma「使用期間」（英文為「While Using」），行內居中排版，不發生多行折行跑版；背景執行標籤對齊「背景 App 重新整理」。
 - 背景執行設定（F6 / F6.a，2026-10-26 使用者規格確認；2026-10-26 依 Figma 04 渲染畫面校正，App 已實作並通過 iOS Simulator build，未裝置驗證）：設定各子頁已移除不必要的小字說明（定位用途、背景說明、VPN 步驟、配對備註、重置通道提示），F6 與 F6.a 都不顯示說明小字。偏好設定 `backgroundRunSeconds`（預設 12 小時，範圍 1 分至 24 小時 59 分）驅動瞬移、路線來回、自動漫步之背景工作目標；背景時長倒數（2026-10-26 使用者確認，程式已實作並通過 core 測試，未裝置驗證）：只計算 App 在背景的時間；回到前景即取消倒數並歸零，模擬任務（瞬移維持、路線來回、漫步）繼續執行，前景再久也不會因時長到期而停止；下次進背景以當下設定重新倒數。因 iOS 只接受在前景提交 `BGContinuedProcessingTask`，回到前景時若上一段背景已計時，或在「設定 › 背景運行時間」關閉 sheet 後設定與已提交目標不同，會取消舊的背景工作並立即以當下設定提交新的（`MovementContinuationController.restartDurationCountdown`）；瞬移維持由 `PositionHoldController` 只在背景累計 ACK 時間，回前景歸零。背景中倒數到期仍依原規則暫停移動並提示「背景任務已完成」。
   - F6 · 設定 › 背景執行：第一群組兩列：「路線與漫步」（右側灰字「系統背景任務」）、「背景運行時間」（右側次要文字如「12 hr」／「30 min」／「12 hr 30 min」，三語都用 `hr`／`min`，加 chevron.right，點擊開 F6.a）。兩列間 0.5 pt 分隔線。第二群組獨立一張卡：「背景 App 重新整理」（右側狀態與 chevron，開 iPhone 系統設定）。群組下方沒有說明文字。
@@ -346,11 +346,11 @@ D · 路線 section 已大幅更新並改用以下共用元件實例；路線頁
 
 | Figma 元件 | 規格 | App 對應 |
 | :-- | :-- | :-- |
-| `Toast / 系統訊息 / danger｜warn｜success` | 361 pt 寬、高度隨內容、圓角 14、內距 12／14、間距 10；Light 底色沿用各 Light 狀態 surface；Dark 使用對應狀態 surface token 與同色語意邊線（不透明）。22 pt 狀態圖示使用 danger／warning／success icon token；標題 15 pt `Theme/subheadlineEmphasis`、說明 13 pt `Theme/footnote`，Dark 文字色依 primary／secondary token；動作為 56 × 32 pt 深色表面膠囊，15 pt `Theme/subheadlineEmphasis`；✕ 使用 secondary icon 色與 `Theme/footnote`。success 無動作按鈕 | `GoFlyStatusBanner`（已合併 `GoFlyWarningToast`） |
+| `Toast / 系統訊息 / danger｜warn｜success` | 361 pt 寬、高度隨內容、圓角 14、內距 12／14、間距 10；Light／Dark 底色使用各狀態 surface token。danger／warning 使用 22 pt outline alert icon，success 使用 22 pt outline check-circle；標題 15 pt `Theme/subheadlineEmphasis`、說明 13 pt `Theme/footnote`，文字走 primary／secondary token；動作為 56 × 32 pt 膠囊，邊線走狀態 token；✕ 視覺尺寸 20 pt，44 × 44 pt 命中區。Success 外框與圖示使用 `color/icon/success`（Dark `#6FC48B`），與 `color/line/status/success`（Dark `#52A072`）不同；依共用元件實際綁定及渲染採用 icon token | `GoFlyStatusBanner`（已合併 `GoFlyWarningToast`） |
 | `Snackbar / 2 秒自動消失` | 361 × 52 pt、圓角 14、內距 10／14、24 pt success icon、訊息 15 pt `Theme/subheadline`；Light 白底／`#C7C7CC` 1 pt 灰邊，Dark `#2C2C2E`／`#48484A` 1 pt 灰邊；兩主題皆使用兩層 floating shadow（9% y5 blur24、6% y1 blur3）；Dark icon 與文字使用 Dark semantic tokens | `GoFlySnackbar` |
 | `Snackbar / 可復原` | 同上並匹配同主題自動消失款的底色、灰邊與兩層陰影；右側「復原」action 使用 56 × 32 pt 深色表面膠囊及 15 pt `Theme/subheadlineEmphasis`；Dark 前景使用 primary text token；約 5 秒 | `GoFlySnackbar`（含 action） |
 | `StatusPill / 啟動｜模擬中｜暫停｜停止｜連線中斷` | 高 30 pt、圓角 15、Light 白底／Dark status surface、1 pt 邊（Light `#C7C7CC`／Dark `#48484A`）；8 pt 狀態點依 gray／success／warning／gray／danger icon token 著色；13 pt `Theme/footnoteEmphasis`，文字使用 theme primary text token | `GoFlyStatusPill` |
-| `Button / Icon`（04 Light／Dark 共用元件板） | Light `Type=Standard` 的視覺尺寸為 Large `44 × 44`、Medium `40 × 40`、Small `36 × 36`、Extra Small `32 × 32` pt，圖示依序為 22／20／18／16 pt。Enabled 使用白色 `color/surface/card` 底及 0.5 pt `color/line/separator` 邊（`#C6C6C8`）；Disabled 保留 `#EEEEF0` 停用底、`#9999A0` 圖示且無邊。Standard 圖示是 04 `0 · 共用元件（Icon）` 的可替換 instance。Light 其他類型維持 Large 44 × 44 pt；SearchBar Settings 維持獨立 48 × 48 pt。Light Route／Ghost、Dark 樣式與 D6 路線控制沿用各自既有規則；D1 專用 56 × 56 Favorite 星號仍是無邊 `#EEEEF0` 的獨立控制。App `GoFlyIconButtonChrome` 目前仍使用 `iconButtonSurface`／`iconButtonBorder`，尚未套用本次 Figma 視覺更新 | `GoFlyGrayScale`、`GoFlyIconStyle`、`goFlyIconButtonChrome` |
+| `Button / Icon`（04 Light／Dark 共用元件板） | Light `Type=Standard` 的視覺尺寸為 Large `44 × 44`、Medium `40 × 40`、Small `36 × 36`、Extra Small `32 × 32` pt，圖示依序為 22／20／18／16 pt。Enabled 使用 `color/surface/control/floating` 底及 0.5 pt `color/line/separator` 邊；Disabled 使用 `color/surface/disabled`／`color/icon/disabled` 且無邊。Standard 圖示是 04 `0 · 共用元件（Icon）` 的可替換 instance。尺寸、觸控範圍與 Dark 樣式依各自元件規格；D1 Favorite 保留獨立控制。App 共用角色由 `GoFlyStyle.iconButtonSurface`／`iconButtonBorder` 指向 Figma tokens | `GoFlyThemeColor`、`GoFlyIconStyle`、`goFlyIconButtonChrome` |
 | `SearchBar / 浮動` | 整體 361 × 50 pt；Light 輸入卡維持 301 × 50 pt。Dark 輸入卡直接使用 E `Text Field / Neutral / Icon + Text / Default` instance，301 × 48 pt、y=1；底色、邊框、14 pt 圓角、18 pt 搜尋 icon 與 15 pt `Theme/subheadline` 由 E 元件提供。Dark 貼上 icon 使用 Icon 目錄 `icon/paste`（18 pt，`color/icon/input/default`）置於 44 pt 無底命中區；Light／Dark Settings 使用 48 × 48 pt `Button / Icon` variant，22 pt gear 置中，與 48 pt 高的輸入框對齊；其 50 × 50 pt 外框與輸入卡間距 10 pt | 地圖頂部搜尋列 |
 | `SearchField / focused｜normal` | 361 × 48 pt；Dark focused／normal 分別直接使用 E `Text Field / Neutral / Icon + Text / Focused`／`Default` instance，提供共用 surface、border、搜尋 icon、caret 與 15 pt `Theme/subheadline`。focused 保留 44 pt `Button / Icon` Clear；normal 右側為 Icon 目錄 `icon/paste`（18 pt，`color/icon/input/default`）與 44 pt 無底命中區 | `GoFlySearchPanel`、路線節點列 |
 | `Slider / 原生黑白`、`Progress` | Slider 軌道 4 pt（`#E5E5EA`／黑）＋28 pt Light 白色、Dark `#E5E5EA` thumb；Progress 6 pt、圓角 3；Dark 軌道使用 `color/surface/card`（`#2C2C2E`），value 使用 `color/surface/control` | 原生 `Slider`、`ProgressView`；Switch 已不在目前 UI 使用範圍 |
@@ -430,7 +430,7 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 - iOS 維護自己的 theme 變數，不引用或共用 Mac 05 的變數。深色語意色值與 05 對齊：畫布 `#1E1E1E`、卡片／導覽表面 `#2C2C2E`、控制表面 `#3A3A3C`、輸入底 `#1C1C1E`、分隔線 `#38383A`、邊框 `#48484A`、主／次／停用文字 `#E5E5EA`／`#98989D`／`#636366`、accent `#0A84FF`、danger／warning／success `#FF453A`／`#FF9F0A`／`#30D158`。狀態底色延用 05 的 info `#182B40`、warning `#3A2B16`、success `#1D3225`；danger 底色 `#4D272A` 與地圖色票由 iOS 自行定義，05 沒有對應底色角色。地圖語意 token 保持 iOS 專屬。
 - Figma 04 使用 `GoFly iOS / Light Theme`、`GoFly iOS / Dark Theme` 兩組獨立變數集合；目前 Figma 每組集合限一個 mode，因此各自以 Light、Dark 集合承載。每組有 94 個色彩變數，涵蓋語意角色與畫面專用色票；2026-10-27 為 Primary 按鈕新增 `color/action/primary/filled-surface` 與 `color/action/primary/filled-text`。先前的變數綁定覆蓋率盤點沒有發現所有語意角色誤套到單一畫面的問題，因此舊 Dark 總數不再作為完成依據；本次以逐 frame 綁定檢查為主，並對發現的異常截圖讀回。
 - 2026-10-27 Dark frame-by-frame audit（速度插圖重繪前）：當次 04 `Dark` 區段 63 張完整 `393 × 852` frame、共 5,727 個圖層，5,170 個 paint properties 與 1,044 段文字填色均綁定 `GoFly iOS / Dark Theme`。其後速度插圖重繪使圖層數改變，舊數量不再視為目前統計；本輪已逐一確認 8 個 Dark 速度圖示使用 Dark `color/speed/*`。iOS Dark 變數獨立於 05 Mac collection。
-- 本次修正逐 frame 核對發現的顏色角色錯配：B10／D8 的錯誤 toast 與 D9／D22 的成功 snackbar 僅保留各自狀態元件色，畫面底層恢復中性深色；D8 路線列、拖曳及排序控制恢復一般元件色；R04／R05／R06 步驟號改為次要文字色；B3／B4 確認文字、狀態列及 Tab Bar 色彩恢復可讀的 Dark token；F1／F1.a 兩個未綁色文字層改綁次要文字 token。Dark 地圖專用色票為：canvas `#242426`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。
+- 本次修正逐 frame 核對發現的顏色角色錯配：B10／D8 的錯誤 toast 與 D9／D22 的成功 snackbar 僅保留各自狀態元件色，畫面底層恢復中性深色；D8 路線列、拖曳及排序控制恢復一般元件色；R04／R05／R06 步驟號改為次要文字色；B3／B4 確認文字、狀態列及 Tab Bar 色彩恢復可讀的 Dark token；F1／F1.a 兩個未綁色文字層改綁次要文字 token。Dark 地圖專用色票為：canvas `#131315`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。
 - 此變更更新的是靜態 Figma 線框與設計規格；App 色彩系統尚未據此修改，也沒有宣稱程式實作或實機驗證完成。已對修正畫面截圖讀回核對；本次沒有做裝置驗證。
 - 設計缺口：`B11 · 地圖首頁 / 連接中（建立 VPN tunnel）`（`239:15137`）目前只有 Light 畫面，沒有 Dark variant；保留缺口，不把其 Dark 設計標為完成。Light 畫面中的自訂 `StatusPill / 連接中` 暫未納入五態共用 StatusPill，底色使用 `color/surface/card`、文字使用 `color/text/primary` 與 `Theme/footnoteEmphasis`（13 pt），元件副本收在 04「未定義」供後續分類；Dark 對應樣式尚未設計。
 - 本次讀回取代前文 2026-10-23 的 Dark variant 歷史缺漏清單；該清單中的 D1.a、D17、D1b 已不再是目前缺漏，現行已確認缺口為 B11 Dark variant。
@@ -517,7 +517,7 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 ### 2026-10-28 搖桿刻度與方位字色調整
 
 - Figma 04 的 Light／Dark `Joystick / 重新設計` 共用元件與 E1 畫面引用元件已同步：24 個刻度綁定 `color/icon/secondary`，刻度圖層 opacity 50%（Light `#8A8A8E`、Dark `#98989D`）；N/E/S/W 綁定 `color/text/secondary`。外圈、握柄、尺寸與排版維持原樣。
-- App `GoFlyManualJoystickPad` 的刻度使用 `GoFlyGrayScale.secondaryLabel.opacity(0.5)`，方位字使用 `GoFlyTextColor.secondary`；兩者都隨 Light／Dark 主題變化。
+- App `GoFlyManualJoystickPad` 的刻度使用 `GoFlyTextColor.secondary.opacity(0.5)`，方位字使用相同次要文字語意 token；兩者都隨 Light／Dark 主題變化。
 - 驗收：Light／Dark 共用元件及 E1 待命畫面顯示次要灰刻度與方位字，刻度不再綁 primary icon 色，字不再綁 primary text 色；Figma 截圖已讀回核對。此為靜態設計與色彩實作更新，未做實機裝置驗證，也未新增 prototype wiring。
 
 ### 2026-10-28 04 Light／Dark 色彩分類與 Surface Overlay
@@ -613,3 +613,42 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 - 無法規劃路線（D8，Light／Dark）：toast 按鈕「重試」改「修正」。按下後系統自動重新安排**全部**地點順序（含起點）並重新規劃；找到可行順序即採用，找不到維持原順序與 toast。連線類錯誤仍用「重試」。App 待實作（issue 11）。
 - 設定服務卡（F1／F1.a／F1.b，Light／Dark）：永遠只有一顆主按鈕：正常已停止＝「啟動模擬」、運行中＝「停止服務」、停止失敗或服務卡住＝「重置連線」；重置成功後按鈕變「啟動模擬」，導覽列下方懸浮出現 success toast（疊在內容上方、不推動版面）（標題「已重置連線」、說明「可以重新啟動模擬」）。新增 Figma frame `F1.b · 設定首頁 / 重置成功`（Light `322:51696`、Dark `322:51847`，位於 F1.a 右側）；取代 2026-10-26 一節中獨立「重置」第二顆按鈕的描述。App 待實作（issue 17）。
 - 此為 Figma 設計與規格更新，App 尚未同步，未做實機驗證。
+
+## 2026-10-29 票 01：App Theme 色彩 token 對齊 Figma 04
+
+- **Figma 設計**：只讀回 04 的 `GoFly iOS / Light Theme`、`GoFly iOS / Dark Theme`、`GoFly iOS / Common Color` Variables，未修改 Figma。Light／Dark 各有 88 個同名 Theme tokens，Common Color 有 14 個；全部原名與值保存於 [`IOS-COLOR-SCHEME.json`](IOS-COLOR-SCHEME.json) `colors.figmaVariables`。Dark 四階 surface 為 `#0B0B0D`、`#1A1A1C`、`#2C2C2F`、`#48484D`；Light 為 `#EEEEF3`、`#FBFBFD`、`#DEDEE4`、`#B9B9BF`。
+- **App 實作**：`GoFlyCore/GoFlyColorTokens.swift` 保存每個 Figma path 的 Light／Dark／Common 值；`GoFlyThemeColor` 以 dynamic UIColor provider 轉成 SwiftUI Color，跟隨 `.preferredColorScheme`，`GoFlyStyle`／`GoFlyTextColor` 只提供語意角色別名。主要動作使用 Figma Primary surface。Dark primary 按鈕文字與圖示固定純白，依本輪使用者決定覆寫 Figma `color/action/primary/text` 的 `#E5E5EA`。
+- **系統色例外**：`GoFlySearchPanel.swift` 的 `UITextField` label／clear-button 色及 `UIPasteControl` 背景保留 UIKit 系統控制外觀；`GoFlyGPXPreview.swift` 的 MapKit route renderer／marker tint 保留 MapKit 原生色。GoFly 自繪介面、MapNode、路線線條、位置箭頭與陰影均使用 Theme/Common Color tokens。
+- **快照差異**：舊 `colors.primitive`／`colors.themes` 保留先前色票整理欄位，部分狀態 `main`、Info 與 overlay 欄位沒有現行 Figma Variable path，且數值與 Variables 不一致；不可作為 Swift token 來源。Dark Color Scheme 色票板部分表面值與現行 Theme Variables／本輪階梯決定不一致；本票不修改 Figma，後續色票板同步另行處理。
+- **外觀與驗收**：Appearance 偏好仍由 `GoFlyPreferences.colorScheme` 即時套用；token 測試逐項對照 88×2 Theme 與 14 Common values，並驗證切換 palette。此票不改命令、送點、ACK 或背景語意。UI fixture Light／Dark 截圖位置與比對結論見票單執行紀錄；**未做實機驗證**。
+
+## 2026-10-29 D5 新增「使用目前位置」列並改為輸入為空狀態（Figma 更新；App 既有行為）
+
+- 04 D5 Light／Dark（`121:52709`、`322:40581`）改為搜尋欄輸入為空：游標＋貼上鈕、無清除鈕（與 B3 同款），清單最上方新增一列「使用目前位置」（`icon/nav`），下方為「最近搜尋」與「清空記錄」；D5 說明文字同步。規則（使用者確認）：只有輸入為空時才顯示「使用目前位置」與「最近搜尋」；輸入文字後改顯示搜尋結果。App 已是此行為；未做實機驗證。
+
+## 2026-10-29 R05 連線說明精簡（Figma 渲染為準；App 已更新）
+
+- 04 R05 Light／Dark 渲染為精簡版：導覽列「返回／連線說明」、三列單行步驟卡（下載 LocalDevVPN ›、開啟 LocalDevVPN ›、點 Connect）、「仍然無法連線？」一則提示卡；無大標題、副標、步驟說明小字、底部主按鈕與「本機網路權限」列。原 R05 說明文字與渲染衝突，已依渲染更新。App 依三語文案與共用步驟列實作此結構；步驟 1／2 保留 App Store 與 LocalDevVPN 開啟 fallback，返回後自動重新檢查 VPN。App 未提供原本的「本機網路權限」直達系統設定入口，目前未找到其他直接入口，需產品決定是否另設；未做實機驗證。
+
+## 2026-10-29 Toast 一律懸浮（Figma 規格；App 已部分更新）
+
+- 所有 Toast／Banner 以共用 overlay 疊在導覽列或搜尋列下方（左右 16 pt）、不推動版面；Figma Light／Dark Toast 使用黑 18%、y 4、blur 16 浮層陰影；多筆提示垂直堆疊、個別關閉。App 已將地圖、首次引導、設定首頁與子頁及搜尋輸入警告放進浮層 overlay；操作面板內的操作狀態內容仍留在其所屬面板。Snackbar 維持底部懸浮；未做實機驗證。
+
+## 2026-10-29 R04、Dark Map 與 Toast 回讀（Figma 04 渲染為準）
+
+- **Figma 渲染**：只讀 Light／Dark R04（`121:51246`／`322:40124`）、R05（`123:56962`／`322:40160`）及 B1（`121:51314`／`322:40269`），沒有修改 Figma。R04 是四列單行步驟卡、中間狀態 pill、連線說明 link、單一底部「檢查連線」CTA；R05 是返回列、三列步驟卡與一張 troubleshooting 卡。
+- **App 實作**：R04 頁底 Light `canvas #EEEEF3`／card `#FBFBFD`，Dark `canvas #0B0B0D`／card `#1A1A1C`；VPN 檢查成功後沿用 controller 的再次檢查，成功即進入 B1 並收合 sheet，不顯示成功 Toast；失敗 Toast 疊在內容上方。R05 使用三列精簡說明並在返回後自動重查；步驟 1／2 保留原外部連結行為。
+- **Map**：Dark B1 的 Sheet 與 Tab Bar 在 App 中引用同一個 `surfaceOverlaySheet` token，Dark／Light 均採 95% alpha。MapKit Dark 設為 flat／muted 標準配置並排除 POI，Light 設回 default 標準配置；偏好外觀更新時重新套用。MapKit 沒有 API 將底圖每種地物精確設成 Figma `color/map/*`，故底圖為近黑低飽和近似；路線、Pin、箭頭與自繪標註維持 Dark tokens。
+- **設定缺口與驗證界線**：精簡 R05 移除唯一發現可直接開啟「本機網路權限」的列；App 目前沒有替代入口，需產品決定是否另設。UI fixture 截圖為 simulator 軟體驗證；未做實機驗證。R06 未見於目前 frame catalog；R07／R08 需要 Setup identity／pairing transaction，沒有宣稱截圖通過。
+
+## 2026-10-29 STATUS Toast 元件與首次設定成功流程更新
+
+- **Figma 設計（只讀）**：讀取 `Light · 0 · 共用元件: STATUS · BANNER / SNACKBAR / PILL` 的 Light／Dark Toast danger、warning、success 實例。Success 顯示 outline check-circle、14 pt 圓角、361 pt 寬、12／14 pt 內距、22 pt 圖示、15／13 pt 標題與說明、20 pt 關閉符號；陰影為黑 18%、y 4、blur 16。Dark success 的 surface 是 `#1B2E22`，外框與圖示為 Figma 綁定的 `color/icon/success` `#6FC48B`。這與 token `color/line/status/success` Dark `#52A072` 不同，未修改 Figma；App 依元件實際綁定與渲染使用 icon token。
+- **App 實作**：共用 `GoFlyStatusBanner` 改用 outline 狀態圖示、對應 token、14／12 pt 內距與 44 pt 關閉命中區；R04 VPN 成功時不顯示 success Toast，檢查成功後自動再次確認並進入 B1，首次進入時 sheet 收合。失敗通知仍用共用浮層。
+- **行為差異**：Figma R04 靜態畫面仍呈現「檢查連線」按鈕，沒有描述成功後自動導覽；自動進入 B1 是本輪使用者確認的 App 行為。Figma 保持不變。模擬器 screenshot fixture 用 deterministic VPN probe 驗證；未做實機驗證。
+
+## 2026-10-29 R04 標題位置與字體回饋
+
+- **Figma 設計（只讀）**：R04 Light 標題圖層 `121:51267` 位於 x=16、y=130，框 361×39 pt；文字樣式為 28 pt Semibold（`Theme/display`）。
+- **App 實作**：移除 R04 標題前多餘的垂直留白，標題回到 Figma y≈130 的位置，使用 28 pt Semibold 的共享 display role；UI test 檢查 Light／Dark 位置與標題框高度。字體限定為系統字體；02 Typography 票將把字級 token 全面統一到 `Font.system` 並與 Figma Theme 樣式對應。
+- **驗證界線**：更新後 Light／Dark 模擬器截圖為 `work/gofly-ios-figma04/screenshots/R04-light.png` 與 `R04-dark.png`；未做實機驗證。

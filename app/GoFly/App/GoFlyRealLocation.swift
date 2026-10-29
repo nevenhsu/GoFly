@@ -9,12 +9,26 @@ import GoFlyCore
 final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDelegate, RealLocationFixRequesting {
     @Published private(set) var observation: RealLocationObservation?
 
-    private let manager = CLLocationManager()
+    private let manager: CLLocationManager?
     private var awaitingPermission = false
     private lazy var refresher = RealLocationRefresher(source: self)
 
     override init() {
+        manager = CLLocationManager()
         super.init()
+        configure(manager)
+    }
+
+#if DEBUG && targetEnvironment(simulator)
+    init(uiTestFixture: Bool) {
+        manager = uiTestFixture ? nil : CLLocationManager()
+        super.init()
+        configure(manager)
+    }
+#endif
+
+    private func configure(_ manager: CLLocationManager?) {
+        guard let manager else { return }
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         if CLLocationManager.locationServicesEnabled(),
@@ -24,6 +38,7 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func start() {
+        guard let manager else { return }
         guard CLLocationManager.locationServicesEnabled() else { return }
         switch manager.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
@@ -39,6 +54,7 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func requestRecenter() {
+        guard let manager else { return }
         guard CLLocationManager.locationServicesEnabled() else {
             fail()
             return
@@ -71,21 +87,23 @@ final class GoFlyRealLocation: NSObject, ObservableObject, CLLocationManagerDele
 
     func requestFix() {
         guard isAuthorized else { return }
+        guard let manager else { return }
         manager.requestLocation()
     }
 
     private var isAuthorized: Bool {
-        CLLocationManager.locationServicesEnabled()
+        guard let manager else { return false }
+        return CLLocationManager.locationServicesEnabled()
             && (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways)
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            if self.awaitingPermission, self.manager.authorizationStatus != .notDetermined {
+            guard let self, let currentManager = self.manager else { return }
+            if self.awaitingPermission, currentManager.authorizationStatus != .notDetermined {
                 self.awaitingPermission = false
                 self.requestRecenter()
-            } else if self.manager.authorizationStatus == .authorizedWhenInUse || self.manager.authorizationStatus == .authorizedAlways {
+            } else if currentManager.authorizationStatus == .authorizedWhenInUse || currentManager.authorizationStatus == .authorizedAlways {
                 self.start()
             }
         }

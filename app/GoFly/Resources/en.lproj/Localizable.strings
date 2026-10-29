@@ -15,6 +15,8 @@
 "service.start" = "Start";
 "service.stop" = "Stop";
 "service.reset" = "Reset";
+"service.resetSucceeded.title" = "Connection reset";
+"service.resetSucceeded.message" = "You can restart the simulation.";
 "service.stopped" = "Stopped";
 "service.stoppedGPSPending" = "Stopped · GPS unconfirmed";
 "service.preparing" = "Preparing service…";
@@ -51,40 +53,26 @@
 "onboarding.location.authorized" = "Location access is already allowed.";
 "onboarding.location.denied" = "Location access is off. To show your real location on the map, turn it on in iPhone Settings. You can also continue without it.";
 "onboarding.location.openSettings" = "Settings";
-"onboarding.vpn.title" = "VPN tunnel";
+"onboarding.vpn.title" = "Connect VPN tunnel";
 "onboarding.vpn.stepsTitle" = "Connection steps";
 "onboarding.vpn.steps" = "Connect to Wi‑Fi → Open LocalDevVPN → Connect → Return to GoFly\nCellular data alone does not work.";
 "onboarding.vpn.open" = "Open";
 "onboarding.vpn.appStore" = "Go to App Store";
-"onboarding.vpn.help" = "Help";
-"onboarding.vpn.help.heading" = "Connect in four steps";
-"onboarding.vpn.help.intro" = "Set up the local tunnel first, then let GoFly confirm the connection.";
-"onboarding.vpn.help.step1.title" = "Connect to Wi‑Fi";
-"onboarding.vpn.help.step1.message" = "Turn on Wi‑Fi and join a network. It does not work over cellular (4G / 5G) alone.";
+"onboarding.vpn.help" = "Connection Guide";
+"onboarding.vpn.help.step1.title" = "Download LocalDevVPN";
 "onboarding.vpn.help.step2.title" = "Open LocalDevVPN";
-"onboarding.vpn.help.step2.message" = "If it is not installed, install it from the App Store first, then open it.";
-"onboarding.vpn.help.step3.title" = "Wait for Connected";
-"onboarding.vpn.help.step3.message" = "Tap Connect; allow the VPN configuration when iOS asks.";
-"onboarding.vpn.help.step4.title" = "Return to GoFly and check";
-"onboarding.vpn.help.step4.message" = "After “Connection successful” appears, tap “Next”.";
-"onboarding.vpn.help.confirmation" = "Connected in LocalDevVPN means its VPN is on. GoFly still needs to confirm that it can reach the local tunnel.";
+"onboarding.vpn.help.step3.title" = "Tap Connect";
 "onboarding.vpn.help.troubleshooting" = "Still unable to connect?";
-"onboarding.vpn.help.openSettings" = "Settings";
-"onboarding.vpn.help.permission" = "Allow “Local Network” when iOS asks. Tap here to open iPhone Settings.";
-"onboarding.vpn.help.reconnect" = "Make sure Wi‑Fi is connected, disconnect and reconnect in LocalDevVPN, then come back and check.";
-"onboarding.vpn.help.returnAndCheck" = "Check";
-"onboarding.vpn.help.notChecked" = "Not checked";
+"onboarding.vpn.help.reconnect" = "Make sure you are on Wi‑Fi. Disconnect and reconnect in LocalDevVPN, then come back and check again.";
+"onboarding.vpn.help.notChecked" = "Not connected";
 "onboarding.vpn.help.notReachable" = "Not reachable";
-"onboarding.vpn.helpMessage" = "Connect iPhone to Wi‑Fi; cellular data alone does not work. Install LocalDevVPN from the App Store. Open it, tap Connect, and allow its VPN configuration when iOS asks. Then return to GoFly. If the tunnel remains unavailable, disconnect and reconnect in LocalDevVPN, then check again here.";
 "onboarding.vpn.disconnected" = "Not connected";
 "onboarding.vpn.checking" = "Checking…";
-"onboarding.vpn.connected" = "Connection successful";
-"onboarding.vpn.check" = "Check";
+"onboarding.vpn.check" = "Check connection";
 "onboarding.vpn.unavailable" = "GoFly could not reach the local tunnel. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and check again.";
 "onboarding.vpn.timedOut" = "GoFly’s local tunnel check timed out. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and retry.";
 "onboarding.vpn.failureDetail" = "iOS reported";
 "onboarding.vpn.externalOpenFailed" = "The App Store could not be opened. Open the App Store manually and search for LocalDevVPN.";
-"onboarding.vpn.nextHint" = "Check the connection again before opening the map. The device service stays stopped.";
 "map.simulatedLocation" = "Confirmed simulated location";
 "map.simulatedLocationWaiting" = "Last simulated location. Waiting for a confirmed location.";
 "search.placeholder" = "Search places, addresses or coordinates";
@@ -598,14 +586,11 @@
 "onboarding.location.status.denied" = "Not allowed";
 "onboarding.location.status.authorized" = "While using the app";
 "onboarding.location.deniedTitle" = "Location permission is off";
-"onboarding.vpn.helpLink" = "Guide ›";
-"onboarding.vpn.step1" = "Open LocalDevVPN";
-"onboarding.vpn.step2" = "Tap Connect";
-"onboarding.vpn.step3" = "Return to GoFly to recheck automatically";
+"onboarding.vpn.helpLink" = "Connection Guide";
+"onboarding.vpn.step1" = "Connect to Wi‑Fi";
+"onboarding.vpn.step2" = "Open LocalDevVPN";
+"onboarding.vpn.step3" = "Tap Connect";
 "onboarding.vpn.unavailableTitle" = "Unable to connect to device service";
-"onboarding.vpn.complete" = "Next";
-"onboarding.vpn.help.permissionTitle" = "Local Network permission";
-"onboarding.vpn.help.reconnectTitle" = "Reconnect";
 
 "route.planTitle" = "Plan route";
 "route.roundTripShort" = "Round trip";
@@ -631,7 +616,6 @@
 
 "settings.deviceSection" = "Device";
 "onboarding.location.statusFormat" = "Current permission: %@";
-"onboarding.vpn.subtitle" = "GoFly talks to the device service through LocalDevVPN.";
 "route.addStop" = "Add";
 
 "route.viewList" = "View";
@@ -706,3 +690,6 @@
 "settings.background.duration.wheelUnit.minutes" = "min";
 "settings.background.systemTask" = "System background task";
 "common.cancel" = "Cancel";
+
+// Figma 04 VPN onboarding copy.
+"onboarding.vpn.step4" = "Tap Recheck";

@@ -15,6 +15,8 @@
 "service.start" = "启动";
 "service.stop" = "停止";
 "service.reset" = "重置";
+"service.resetSucceeded.title" = "已重置连接";
+"service.resetSucceeded.message" = "可以重新启动模拟";
 "service.stopped" = "已停止";
 "service.stoppedGPSPending" = "已停止・GPS 待确认";
 "service.preparing" = "准备服务中…";
@@ -51,40 +53,26 @@
 "onboarding.location.authorized" = "已允许定位。";
 "onboarding.location.denied" = "定位权限已关闭。要在地图上显示真实位置，请到 iPhone 设置开启；也可以直接继续。";
 "onboarding.location.openSettings" = "打开设置";
-"onboarding.vpn.title" = "VPN 通道";
+"onboarding.vpn.title" = "连接 VPN 通道";
 "onboarding.vpn.stepsTitle" = "连接步骤";
 "onboarding.vpn.steps" = "连上 Wi‑Fi → 打开 LocalDevVPN → Connect → 返回 GoFly\n只用蜂窝网络无法连接。";
 "onboarding.vpn.open" = "打开 LocalDevVPN";
 "onboarding.vpn.appStore" = "前往 App Store";
-"onboarding.vpn.help" = "说明";
-"onboarding.vpn.help.heading" = "四步完成连接";
-"onboarding.vpn.help.intro" = "先建立本机通道，再让 GoFly 确认连接。";
-"onboarding.vpn.help.step1.title" = "连上 Wi‑Fi";
-"onboarding.vpn.help.step1.message" = "打开 Wi‑Fi 并加入网络。只用蜂窝网络（4G / 5G）时无法连接。";
+"onboarding.vpn.help" = "连接说明";
+"onboarding.vpn.help.step1.title" = "下载 LocalDevVPN";
 "onboarding.vpn.help.step2.title" = "打开 LocalDevVPN";
-"onboarding.vpn.help.step2.message" = "尚未安装时，先从 App Store 安装再打开。";
-"onboarding.vpn.help.step3.title" = "等待显示 Connected";
-"onboarding.vpn.help.step3.message" = "点 Connect；iOS 询问时允许加入 VPN 设置。";
-"onboarding.vpn.help.step4.title" = "返回 GoFly 检查";
-"onboarding.vpn.help.step4.message" = "显示“连接成功”后即可点“下一步”。";
-"onboarding.vpn.help.confirmation" = "LocalDevVPN 显示 Connected，代表它的 VPN 已开启。GoFly 仍需要确认能否通过本机通道连接。";
+"onboarding.vpn.help.step3.title" = "点 Connect";
 "onboarding.vpn.help.troubleshooting" = "仍然无法连接？";
-"onboarding.vpn.help.openSettings" = "打开 iPhone 系统设置";
-"onboarding.vpn.help.permission" = "iOS 询问时请允许“本地网络”。点此打开 iPhone 系统设置。";
-"onboarding.vpn.help.reconnect" = "确认已连上 Wi‑Fi，在 LocalDevVPN 中断后重新连接，再回来检查。";
-"onboarding.vpn.help.returnAndCheck" = "返回并检查连接";
-"onboarding.vpn.help.notChecked" = "尚未检查";
+"onboarding.vpn.help.reconnect" = "确认已连接 Wi‑Fi，在 LocalDevVPN 中断后重新连接，再回来检查。";
+"onboarding.vpn.help.notChecked" = "尚未连接";
 "onboarding.vpn.help.notReachable" = "无法连接";
-"onboarding.vpn.helpMessage" = "请让 iPhone 连上 Wi‑Fi，只用蜂窝网络无法使用。从 App Store 安装 LocalDevVPN，打开后按 Connect，并在 iOS 询问时允许添加 VPN 配置，再返回 GoFly。若通道仍无法使用，请在 LocalDevVPN 断开后重新连接，再回到此处检查。";
 "onboarding.vpn.disconnected" = "未连接";
 "onboarding.vpn.checking" = "检查中…";
-"onboarding.vpn.connected" = "连接成功";
 "onboarding.vpn.check" = "检查连接";
 "onboarding.vpn.unavailable" = "GoFly 尚未连上本机通道。请确认 iPhone 已连上 Wi‑Fi，只用蜂窝网络（4G／5G）无法连接；再在 LocalDevVPN 断开后重新连接，回来检查。";
 "onboarding.vpn.timedOut" = "GoFly 检查本机通道已超时。请确认 iPhone 已连上 Wi‑Fi，只用蜂窝网络（4G／5G）无法连接；再在 LocalDevVPN 断开后重新连接，然后重试。";
 "onboarding.vpn.failureDetail" = "iOS 报告";
 "onboarding.vpn.externalOpenFailed" = "无法打开 App Store。请手动打开 App Store，搜索 LocalDevVPN。";
-"onboarding.vpn.nextHint" = "再次检查连接后进入地图，设备服务仍为停止。";
 "map.simulatedLocation" = "当前模拟位置";
 "map.simulatedLocationWaiting" = "最后模拟位置，等待位置确认。";
 "search.placeholder" = "搜索地点、地址或坐标";
@@ -598,14 +586,11 @@
 "onboarding.location.status.denied" = "未允许";
 "onboarding.location.status.authorized" = "使用 App 期间";
 "onboarding.location.deniedTitle" = "定位权限未开启";
-"onboarding.vpn.helpLink" = "连接说明 ›";
-"onboarding.vpn.step1" = "打开 LocalDevVPN";
-"onboarding.vpn.step2" = "点击 Connect";
-"onboarding.vpn.step3" = "回到 GoFly，自动重新检查";
+"onboarding.vpn.helpLink" = "连接说明";
+"onboarding.vpn.step1" = "连接 Wi‑Fi";
+"onboarding.vpn.step2" = "打开 LocalDevVPN";
+"onboarding.vpn.step3" = "点 Connect";
 "onboarding.vpn.unavailableTitle" = "无法连接到设备服务";
-"onboarding.vpn.complete" = "下一步";
-"onboarding.vpn.help.permissionTitle" = "本地网络权限";
-"onboarding.vpn.help.reconnectTitle" = "重新连接";
 
 "route.planTitle" = "规划路线";
 "route.roundTripShort" = "往返";
@@ -631,7 +616,6 @@
 
 "settings.deviceSection" = "设备";
 "onboarding.location.statusFormat" = "当前权限：%@";
-"onboarding.vpn.subtitle" = "GoFly 通过 LocalDevVPN 与设备服务通信。";
 "route.addStop" = "添加停靠点";
 
 "route.viewList" = "查看路线";
@@ -706,3 +690,6 @@
 "settings.background.duration.wheelUnit.minutes" = "分钟";
 "settings.background.systemTask" = "系统后台任务";
 "common.cancel" = "取消";
+
+// Figma 04 VPN onboarding copy.
+"onboarding.vpn.step4" = "点“重新检查”";

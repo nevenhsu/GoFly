@@ -34,6 +34,15 @@ final class GoFlySetupBootstrap: ObservableObject {
     var startupTask: Task<Void, Never>?
 
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if let frame = GoFlyUITestOverrides.frame {
+            if GoFlyUITestOverrides.frameNeedsMapRuntime {
+                runtime = GoFlyRuntimeAssembly()
+            }
+            phase = .ordinaryStartup
+            return
+        }
+        #endif
         start()
     }
 
@@ -562,7 +571,7 @@ struct GoFlyMacSetupOnboardingView: View {
             .padding(.top, 136)
             .padding(.bottom, 24)
         }
-        .background(GoFlyStyle.surface.ignoresSafeArea())
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
         .accessibilityIdentifier("setup.mac")
     }
 }
@@ -588,7 +597,7 @@ struct GoFlyStartupView: View {
             let midX = geometry.size.width / 2
             let midY = geometry.size.height / 2
             ZStack {
-                Color.white.ignoresSafeArea()
+                GoFlyThemeColor.commonWhite.ignoresSafeArea()
                 Image("GoFlyLogo")
                     .resizable()
                     .frame(width: 112, height: 112)
@@ -597,13 +606,13 @@ struct GoFlyStartupView: View {
 
                 Text("GoFly")
                     .font(GoFlyFont.display)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(GoFlyThemeColor.commonBlack)
                     .frame(width: 120, height: 34)
                     .position(x: midX, y: midY + 41)
 
                 if showsProgress {
                     ProgressView(value: 0.28)
-                        .tint(.black)
+                        .tint(GoFlyThemeColor.commonBlack)
                         .frame(width: 101)
                         .position(x: midX, y: midY + 96)
                         .accessibilityLabel(goFlyString("setup.preparing.message"))

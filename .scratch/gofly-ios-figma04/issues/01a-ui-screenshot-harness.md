@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** in progress
 
 **Assignee hint:** Luna
 
@@ -12,6 +12,7 @@
 - [ ] Fixture 提供下列離線、可預期的替身（僅 fixture 模式使用，不改正式程式路徑）：裝置服務與 session 狀態（已停止、啟動中、運行中、暫停、錯誤、停止失敗、重置成功）、VPN 通道可用／不可用、Wi‑Fi 連線／中斷、定位權限（使用期間／拒絕／尚未決定）與真實定位、模擬位置、MapKit 搜尋與地點解析（固定結果）、路線規劃器（成功、`planningFailed`、重排後成功）、最愛地點／最愛路線／匯入 GPX 的種子資料、背景運行時間。
 - [ ] 模擬器沒有網路時 MapKit 底圖是空白：fixture 模式以本地固定底圖（與 Figma `Map / Base` 的 Light／Dark 色票一致、滿版）取代底圖，讓含地圖的畫面可以截圖比對；路線線、Pin、箭頭仍用正式繪製程式。
 - [ ] 提供一個 UI test（例如 `GoFlyFigmaFrameScreenshots`）一次產生全部 frame × Light／Dark 的截圖，輸出到 `work/gofly-ios-figma04/screenshots/<frame>-<light|dark>.png`，並寫入 `manifest.json`（frame、主題、路徑、使用的 fixture 旗標）。`work/` 不進版控。
+- [ ] 同一資料夾產生 `index.html` 總覽頁：每個 frame 一列，左 Figma、右 App，Light 與 Dark 各一欄，可依 section 篩選，直接用瀏覽器開啟即可查看（`open work/gofly-ios-figma04/screenshots/index.html`）；每次重跑會覆蓋，並保留上一輪於 `screenshots/previous/`。資料夾已由根目錄 `.gitignore` 的 `work/` 忽略，不進版控；驗證 `git check-ignore` 命中。
 - [ ] 提供 Figma 對照圖的取得方式（以 Figma Console `figma_capture_screenshot` 讀取同名 frame，輸出到 `work/gofly-ios-figma04/figma/`），並寫成腳本或說明，後續每票的比對都用這兩個資料夾。
 - [ ] 驗證不外洩：Release 與真機（unsigned device）build 都能編譯，且不含這些旗標的實作（以單元測試或 build 檢查證明）；`check.sh` 通過。
 - [ ] 本票結束時，已知 Figma 有、但 fixture 暫時到不了的 frame 列成清單寫入『執行紀錄』，不得略過不報。
@@ -19,4 +20,9 @@
 
 ## 執行紀錄
 
-（執行者在此記錄：日期、完成項、frame 對照表、到不了的 frame 與原因。）
+### 2026-10-29 執行紀錄（Luna）
+
+- 已建立 Debug＋Simulator-only 的 `-gofly-ui-frame`／`-gofly-ui-appearance` 入口、`Figma04FrameCatalog.json`、兩外觀 screenshot UI test、HTML 並排頁與 previous-run 保存；Release／device target 不編譯 fixture view。Figma 參考只讀取，未修改。
+- 截圖已產生到 `work/gofly-ios-figma04/screenshots/`，目前支援 R01、R02、R03、R04、R04.a、R05、R07、R08、B1、B2、B5、B7、B10、D1、D6、D8、E1、F1、F1.b 的 Light／Dark 共 38 張；對照總覽：`work/gofly-ios-figma04/screenshots/index.html`，manifest 記錄 Figma node、fixture flags、不可達 frame 與缺口。R04 Light／Dark 標題位置修正已有更新截圖；其餘 frame 的全量逐張視覺驗收仍未完成。
+- 尚未支援的 45 個 frame 及原因已逐項列在 `manifest.json`：需要 deterministic MapKit search／command／recovery、最愛與路線種子資料、GPX／share 狀態、搖桿／漫步狀態或設定權限 fixture；逐票補齊後再重跑。B11 Dark 截圖目前列為 Figma 衝突證據，不算已核准設計。
+- **未完成**：ticket 要求的 A–F 全 frame fixture／截圖尚未達成，因此本票維持 `in progress`；需隨後續票補齊 fixture，不能以缺圖視為通過。`check.sh` 與現有 screenshot UI test 曾通過；未做實機驗證。

@@ -41,7 +41,7 @@ struct GoFlyVerticalArrowsIcon: View {
     var body: some View {
         Canvas { context, _ in
             let dark = isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled
-            let light = isEnabled ? GoFlyGrayScale.directionInactive
+            let light = isEnabled ? GoFlyStyle.directionInactive
                 : GoFlyTextColor.disabled
             let stroke = StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
             var down = Path()
@@ -117,11 +117,11 @@ struct GoFlyRouteControlRow: View {
             Button(action: onToggleRoundTrip) {
                 GoFlyRouteRepeatIcon(isOn: isRoundTrip, isEnabled: canToggleRoundTrip)
                     .frame(width: 36, height: 36)
-                    .background(canToggleRoundTrip ? GoFlyGrayScale.routeControlSurface : GoFlyGrayScale.disabledSurface,
+                    .background(canToggleRoundTrip ? GoFlyStyle.routeControlSurface : GoFlyStyle.disabledSurface,
                                 in: Circle())
                     .overlay {
                         if canToggleRoundTrip {
-                            Circle().strokeBorder(GoFlyGrayScale.routeControlBorder, lineWidth: 0.5)
+                            Circle().strokeBorder(GoFlyStyle.routeControlBorder, lineWidth: 0.5)
                         }
                     }
                     .contentShape(Circle())
@@ -136,11 +136,11 @@ struct GoFlyRouteControlRow: View {
                 Button(action: onToggleDirection) {
                     GoFlyVerticalArrowsIcon(isReversed: isReversed, isEnabled: canToggleDirection)
                         .frame(width: 36, height: 36)
-                        .background(canToggleDirection ? GoFlyGrayScale.routeControlSurface : GoFlyGrayScale.disabledSurface,
+                        .background(canToggleDirection ? GoFlyStyle.routeControlSurface : GoFlyStyle.disabledSurface,
                                     in: Circle())
                         .overlay {
                             if canToggleDirection {
-                                Circle().strokeBorder(GoFlyGrayScale.routeControlBorder, lineWidth: 0.5)
+                                Circle().strokeBorder(GoFlyStyle.routeControlBorder, lineWidth: 0.5)
                             }
                         }
                         .contentShape(Circle())

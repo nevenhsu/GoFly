@@ -72,7 +72,7 @@ struct GoFlyBottomSheet<Content: View>: View {
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(GoFlyStyle.cardSurface)
+        .background(GoFlyStyle.overlayPanelSurface)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: GoFlyStyle.sheetCornerRadius,
                                           topTrailingRadius: GoFlyStyle.sheetCornerRadius,
                                           style: .continuous))

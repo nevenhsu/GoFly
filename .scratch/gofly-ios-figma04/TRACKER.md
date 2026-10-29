@@ -5,6 +5,8 @@
 2. 無法規劃路線的 toast 按鈕『重試』改『修正』，系統自動調整**全部**地點順序（含起點）重新規劃。
 3. 設定服務卡只有一顆按鈕；重置成功後文字變『啟動模擬』，導覽列下方懸浮出現 success toast（『已重置連線』／『可以重新啟動模擬』）。
 
+補充（2026-10-29）：R04 VPN 檢查成功後沿用再次確認並自動進入 B1，sheet 收合；此成功不顯示 Toast。共用 Toast 視覺仍更新依 Figma `Light · 0 · 共用元件 / STATUS · BANNER / SNACKBAR / PILL` 的 Light／Dark 渲染。
+
 依賴：00（Figma，Claude）、01a（截圖驗證工具）→ 01 → 02 → 03／04 → 05 → 06–09、12–16、18（互不依賴，照 A→F 順序做）→ 10 → 11；16 → 17；全部 → 19。
 一票一檔，狀態寫在各票的 Status 與『執行紀錄』。Handoff prompt：`.scratch/prompts/05-ios-figma04-luna.md`。
 
@@ -37,3 +39,5 @@
 另：**圖示一律匯出成資產、不用 SF Symbol**（Figma『0 · 共用元件（Icon）』52 個 icon；票 03 建立 `GoFlyIcon`，05–18 驗收）。
 
 另：**每張票完成都要截圖驗證**（01a 的 fixture，不需網路／VPN／真機；Light 與 Dark，與 Figma 並排比對）。
+
+另：實機截圖回饋（B1 Dark Tab Bar／黑色地圖、R04 Light 層級、R05 精簡、Toast 懸浮）已併入票 05、06、07；執行用 prompt 見 `.scratch/prompts/06-ios-device-feedback-luna.md`，整體逐頁更新用 `.scratch/prompts/07-ios-figma04-page-by-page-luna.md`。

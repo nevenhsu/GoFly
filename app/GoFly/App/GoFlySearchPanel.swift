@@ -31,12 +31,6 @@ struct GoFlySearchPanel: View {
             if let roleTitle { roleChip(roleTitle) }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if let error = search.inputError {
-                        GoFlyStatusBanner(tone: .warning, title: goFlyString(error.rawValue),
-                                          identifier: "search.inputError")
-                            .padding(.horizontal, 20)
-                            .padding(.top, 12)
-                    }
                     if search.isSearching {
                         HStack(spacing: 8) {
                             ProgressView()
@@ -55,6 +49,12 @@ struct GoFlySearchPanel: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(GoFlyStyle.surface)
+        .goFlyToastOverlay(topInset: 72) {
+            if let error = search.inputError {
+                GoFlyStatusBanner(tone: .warning, title: goFlyString(error.rawValue),
+                                  identifier: "search.inputError")
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.panel")
         .onAppear { focused = true }
@@ -371,7 +371,7 @@ struct GoFlySearchPanel: View {
     private func iconTile(_ symbol: String, filled: Bool = false) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(filled ? GoFlyStyle.surface : GoFlyTextColor.primary)
+            .foregroundStyle(filled ? GoFlyTextColor.inverse : GoFlyTextColor.primary)
             .frame(width: 36, height: 36)
             .background(filled ? GoFlyStyle.primary : GoFlyStyle.secondarySurface, in: Circle())
             .accessibilityHidden(true)
@@ -589,7 +589,7 @@ private func addGoFlyPasteControl(
     to host: UIView,
     target: any UIPasteConfigurationSupporting,
     backgroundColor: UIColor,
-    symbolColor: UIColor = UIColor(GoFlyGrayScale.pasteSymbol),
+    symbolColor: UIColor = UIColor(GoFlyStyle.pasteSymbol),
     accessibilityLabel: String,
     accessibilityIdentifier: String
 ) -> UIPasteControl {

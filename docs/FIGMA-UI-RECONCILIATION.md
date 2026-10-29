@@ -213,7 +213,7 @@ Mac M2 I09／D14 的「中斷後重新開始」行為已與安裝交易同步：
 - 04 深色語意角色已對齊 05 的 Mac 深色值；變數仍由 iOS 自己管理，分別放在 `GoFly iOS / Light Theme` 與 `GoFly iOS / Dark Theme`，未共用 Mac 變數。地圖色票及 05 未定義的 danger 底色為 iOS 專屬。
 - 逐 frame 綁定檢查發現先前單看變數綁定數量仍會漏掉畫面層級的語意誤染；對異常畫面另行截圖讀回。速度插圖重繪前曾盤點 04 Dark 區段 63 張完整 `393 × 852` frame、5,727 個圖層；當時 3,050 個實心填色、2,120 個描邊及 1,044 段文字填色均綁定 `GoFly iOS / Dark Theme`。本輪速度插圖重繪改變圖層數，舊數量不再視為目前統計；8 個 Dark 速度圖示已逐一讀回，均綁定 Dark `color/speed/*`。
 - 已修正 B10／D8 錯誤 toast 與 D9／D22 成功 snackbar 把狀態色套到整張畫面的問題，現在狀態色只保留在 toast／snackbar 本身；D8 路線列與控制圖示恢復中性色。R04／R05／R06 步驟號、B3／B4 確認文字、狀態列、Tab Bar 與 F1／F1.a 未綁色文字亦已逐項對應 Dark token。Dark B1、B3／B4、D8／D9、R06、F1／F1.a 等修正畫面均已截圖讀回。
-- Dark 地圖 palette 維持 iOS 專用值：canvas `#242426`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。共用深色語意值仍與 05 對齊；Figma collection 保持 iOS 獨立。
+- Dark 地圖 palette 維持 iOS 專用值：canvas `#131315`、building `#313133`、park `#1E3322`、water `#1A2B3C`、road `#3A3A3E`、road-edge `#2C2C2E`、arterial-edge `#6E5C2C`、arterial `#5C4F2A`、label-area `#8E8E93`、label-water `#6FA3D6`。共用深色語意值仍與 05 對齊；Figma collection 保持 iOS 獨立。
 - 此為靜態 Figma 設計更新，App 實作與裝置驗證狀態另行追蹤。B11（`239:15137`）目前只有 Light 畫面，Dark variant 尚缺，列為設計缺口。
 - 後續驗收：Light／Dark 各自維持 iOS 變數來源；每張 Dark frame 的底色、邊線、文字及圖示需依語意 token 綁定，調整變數後引用畫面同步更新，並逐 frame 渲染讀回確認文字與元件對比。
 
@@ -547,3 +547,24 @@ Mac M2 I09／D14 的「中斷後重新開始」行為已與安裝交易同步：
 | 設定服務卡 | F1／F1.a／F1.b：單一主按鈕；F1.b 重置成功＋success toast | 「啟動／停止」＋失敗時第二顆「重置」 | 票 17 |
 
 Figma 設計更新，App 待實作，未做實機驗證。
+
+## 2026-10-29 iOS 實機回饋：B1 Dark、R04 Light／Dark、R05 精簡與 Toast
+
+- **Figma 設計依據**：重新只讀 04 渲染 Light／Dark R04（`121:51246`／`322:40124`）、R05（`123:56962`／`322:40160`）、B1（`121:51314`／`322:40269`）及共用元件。R04 目前畫面是四列步驟卡、連線說明、狀態 pill、單一底部檢查按鈕；R05 是返回導覽列、三列步驟卡、一張 troubleshooting 卡，沒有大標題／副標／步驟說明／本機網路權限列／底部 CTA。此渲染更新取代本文件先前 R05「保留舊說明列」與 R04 舊版位置敘述；未修改 Figma。
+- **App 實作**：R04/R05 使用 Light canvas `#EEEEF3`、card `#FBFBFD`，Dark canvas `#0B0B0D`、card `#1A1A1C`；R05 三語文案已精簡，前兩個連結保留原功能，返回後仍重新檢查 VPN。Tab Bar 與 bottom sheet 共用同一 95% overlay surface token。Dark MapKit 重新指定 flat/muted 標準地圖配置並排除 POI，Light 恢復 default 配置；外觀偏好變更時即時更新配置。MapKit 不提供將地物逐項設為 Figma `color/map/*` 的 API，深色底圖屬低飽和近似，Pin、路線、箭頭及自繪標註使用 Dark tokens。
+- **Toast／Banner**：地圖、首次引導與設定首頁通知共用浮層容器，水平留白 16 pt、通知可堆疊及個別關閉，採黑 18%、y 4、blur 16 陰影；不佔內容版面。Snackbar 維持底部浮動。
+- **2026-10-29 元件與行為更新**：`STATUS · BANNER / SNACKBAR / PILL` 成功 Toast 使用 outline check-circle 與 `icon/success` 外框；Dark 渲染 `#6FC48B`，雖 `line/status/success` token 為 `#52A072`，實際 Figma component 綁定前者。App R04 連線成功後不顯示 success Toast，沿用再次檢查並自動進入 B1 收合 sheet；這是使用者確認的 App 行為，Figma R04 靜態 CTA 未同步改畫。
+- **缺口與驗證**：R05 移除原「本機網路權限」列後，程式中未找到其他直接開啟本機網路設定的入口，需產品決定是否另設。R06 不在目前 Figma frame catalog；R07/R08 缺少可供 UI fixture 使用的 setup identity／配對交易。MapKit 原生圖資與 Figma 色值不能逐層完全一致。模擬器截圖及測試只代表 software verification，未做實機驗證。
+
+## 2026-10-29 App 色彩 token 回讀（票 01）
+
+- **Figma 設計**：透過 Figma Desktop Bridge 只讀 `GoFly iOS / Light Theme`（88）、`GoFly iOS / Dark Theme`（88）及 `GoFly iOS / Common Color`（14）Variables。Light／Dark 名稱完全對稱；沒有改 Variable、色票板或 wireframe。完整原名與 resolved HEX／alpha 已加入 [`IOS-COLOR-SCHEME.json`](IOS-COLOR-SCHEME.json) 的 `colors.figmaVariables`。
+- **App 實作**：新增 `GoFlyColorTokens` 精確 path 對照與 `GoFlyThemeColor` dynamic UIColor provider；所有 `GoFlyGrayScale` 自訂值及 App 自繪 UI 的散落 system colors 改走語意 token。原始 UIKit 色彩只保留在 `UITextField`／`UIPasteControl`，MapKit preview renderer／marker 保留原生色；詳列於 `IOS-UI-DESIGN.md` 票 01 小節。
+- **本輪覆寫與差異**：Dark Primary 按鈕文字／圖示依使用者決定採 Common White `#FFFFFF`；Figma `color/action/primary/text` 為 `#E5E5EA`。Dark Color Scheme 靜態色票板部分 surface 標示與現行 Variables 不同步；舊 JSON `primitive`／`themes` summary 也有非 Variable 對應值，現行程式只讀精確 `figmaVariables` snapshot。兩處不一致保留記錄，未修改 Figma。
+- **驗證狀態**：App token／文件更新屬 software implementation；Light／Dark UI fixture 截圖及檢視結果記於 `.scratch/gofly-ios-figma04/issues/01-theme-color-tokens.md`。未做實機驗證。
+
+## 2026-10-29 R04 標題位置／字級回饋
+
+- **Figma 設計依據**：只讀 R04 Light title node `121:51267`，位置 x=16、y=130 pt、框 361×39 pt，`Theme/display` 為 28 pt Semibold；沒有修改 Figma。
+- **App 實作**：移除標題區多餘的約 85 pt 垂直偏移，將標題改回 28 pt Semibold display role；Light／Dark UI test 驗證標題位置與高度，截圖為 `work/gofly-ios-figma04/screenshots/R04-light.png`、`R04-dark.png`。App 字型使用系統字體；票 02 將統一 `Font.system` text-style API。
+- **差異**：Figma 靜態畫面仍示意「檢查連線」按鈕；成功後自動進 B1 收合 sheet、不出 success Toast 是使用者確認的 App 行為，沒有修改 Figma。未做實機驗證。

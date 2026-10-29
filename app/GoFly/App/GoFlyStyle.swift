@@ -1,68 +1,23 @@
+import GoFlyCore
 import SwiftUI
 
-/// Shared neutral palette for text, icons, surfaces, and borders.
-/// The light/dark pairs follow the iOS 04 redesign; component styles alias
-/// these values instead of defining their own near-identical gray literals.
-enum GoFlyGrayScale {
-    static let iconButtonSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.173, 0.173, 0.180))
-    static let iconButtonBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.227))
-    static let routeControlSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
-    static let routeControlBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.220, 0.220, 0.227))
-    static let directionInactive = Color(red: 0.780, green: 0.780, blue: 0.800)
-    static let disabledSurface = adaptive(light: (0.933, 0.933, 0.941), dark: (0.173, 0.173, 0.180))
-    static let secondaryLabel = adaptive(light: (0.541, 0.541, 0.557), dark: (0.596, 0.596, 0.624))
-    static let messageLabel = adaptive(light: (0.235, 0.235, 0.263), dark: (0.820, 0.820, 0.839))
-    static let disabledLabel = adaptive(light: (0.600, 0.600, 0.627), dark: (0.420, 0.420, 0.447))
-    static let pasteSymbol = adaptive(light: (0.420, 0.420, 0.420), dark: (1, 1, 1))
-
-    static let fieldSurface = adaptive(light: (0.949, 0.949, 0.969), dark: (0.227, 0.227, 0.235))
-    static let fieldBorder = Color(red: 0.557, green: 0.557, blue: 0.576)
-    static let tabBarSurface = adaptive(light: (0.976, 0.976, 0.976), dark: (0.110, 0.110, 0.118))
-    static let tabInactive = Color(red: 0.600, green: 0.600, blue: 0.600)
-    static let startSecondarySurface = disabledSurface
-    static let dialogMessage = adaptive(light: (0.420, 0.420, 0.451), dark: (0.820, 0.820, 0.839))
-    static let checkboxOffBorder = adaptive(light: (0.780, 0.780, 0.800), dark: (0.557, 0.557, 0.576))
-    static let checkboxOffFill = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
-    static let progressTrack = adaptive(light: (0.898, 0.898, 0.918), dark: (0.173, 0.173, 0.180))
-    static let durationWheelSurface = adaptive(light: (0.976, 0.976, 0.984), dark: (0.141, 0.141, 0.149))
-    static let durationWheelBorder = adaptive(light: (0.898, 0.898, 0.918), dark: (0.220, 0.220, 0.231))
-    static let pillBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.329, 0.329, 0.345), lightAlpha: 0.45)
-    static let hairline = adaptive(light: (0.776, 0.776, 0.784), dark: (0.220, 0.220, 0.227))
-
-    static let toastDismiss = adaptive(light: (0.549, 0.549, 0.580), dark: (0.600, 0.600, 0.620))
-    static let toastActionSurface = adaptive(light: (1, 1, 1), dark: (0.173, 0.173, 0.180))
-    static let toastActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (0.282, 0.282, 0.290))
-    static let snackbarSurface = adaptive(light: (0.110, 0.110, 0.118), dark: (0.173, 0.173, 0.180))
-    static let snackbarActionSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
-    static let snackbarActionBorder = adaptive(light: (0.776, 0.776, 0.784), dark: (1, 1, 1),
-                                               lightAlpha: 0.45, darkAlpha: 0.18)
-    static let snackbarBorder = adaptive(light: (1, 1, 1), dark: (1, 1, 1), lightAlpha: 0, darkAlpha: 0.12)
-
-    private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
-                                 dark: (CGFloat, CGFloat, CGFloat),
-                                 lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
-        Color(uiColor: UIColor { traits in
-            let isDark = traits.userInterfaceStyle == .dark
-            let value = isDark ? dark : light
-            return UIColor(red: value.0, green: value.1, blue: value.2,
-                           alpha: isDark ? darkAlpha : lightAlpha)
-        })
-    }
-}
-
+/// Semantic color aliases used by shared controls and screens.
 enum GoFlyStyle {
-    static let surface = Color(uiColor: .systemBackground)
-    static let cardSurface = Color(uiColor: .secondarySystemGroupedBackground)
-    static let canvas = Color(uiColor: .systemGroupedBackground)
-    static let secondarySurface = GoFlyGrayScale.iconButtonSurface
-    static let primary = Color.primary
-    static let secondary = Color.secondary
-    static let disabledForeground = GoFlyGrayScale.disabledLabel
-    static let disabledSurface = GoFlyGrayScale.disabledSurface
-    static let errorForeground = Color(uiColor: .label)
-    static let errorSurface = Color(uiColor: .secondarySystemBackground)
-    static let border = GoFlyGrayScale.hairline
-    static let subtleBorder = GoFlyGrayScale.hairline.opacity(0.45)
+    static let surface = GoFlyThemeColor.surfaceCard
+    static let cardSurface = GoFlyThemeColor.surfaceCard
+    static let canvas = GoFlyThemeColor.canvas
+    static let secondarySurface = GoFlyThemeColor.surfaceControl
+    static let actionSecondarySurface = GoFlyThemeColor.actionSecondarySurface
+    static let primary = GoFlyThemeColor.actionPrimarySurface
+    /// User-confirmed exception to the Figma variable's near-white dark value.
+    static let primaryActionText = GoFlyThemeColor.commonWhite
+    static let secondary = GoFlyThemeColor.textSecondary
+    static let disabledForeground = GoFlyThemeColor.textDisabled
+    static let disabledSurface = GoFlyThemeColor.surfaceDisabled
+    static let errorForeground = GoFlyThemeColor.textDanger
+    static let errorSurface = GoFlyThemeColor.surfaceStatusDanger
+    static let border = GoFlyThemeColor.lineBorder
+    static let subtleBorder = GoFlyThemeColor.lineSeparator.opacity(0.45)
     static let cornerRadius: CGFloat = 20
     /// Longer than a heartbeat write; see `goFlySteadyDisabled`.
     static let admissionBlipDelay: Duration = .seconds(1)
@@ -73,44 +28,56 @@ enum GoFlyStyle {
     static let secondaryButtonHeight: CGFloat = 48
     static let smallButtonHeight: CGFloat = 40
 
-    // 2026-10-20 Google Maps redesign: status colors are semantic and always
-    // paired with an icon and text, never color alone.
-    static let danger = Color(uiColor: .systemRed)
-    static let warning = Color(uiColor: .systemOrange)
-    static let success = Color(uiColor: .systemGreen)
-    static let dangerForeground = adaptive(
-        light: (0.843, 0.000, 0.082), dark: (1.000, 0.412, 0.380))
-    static let warningForeground = adaptive(
-        light: (0.788, 0.204, 0.000), dark: (1.000, 0.702, 0.251))
-    static let successForeground = adaptive(
-        light: (0.141, 0.541, 0.239), dark: (0.188, 0.820, 0.345))
-    // Figma `Toast / 系統訊息` tokens (0 · 共用元件, light / Dark).
-    static let toastDangerSurface = adaptive(light: (1.000, 0.941, 0.933), dark: (0.302, 0.153, 0.165))
-    static let toastWarningSurface = adaptive(light: (1.000, 0.965, 0.902), dark: (0.322, 0.243, 0.106))
-    static let toastSuccessSurface = adaptive(light: (0.941, 0.980, 0.949), dark: (0.141, 0.294, 0.176))
-    static let toastMessage = GoFlyGrayScale.messageLabel
-    static let toastDismiss = GoFlyGrayScale.toastDismiss
-    static let toastActionSurface = GoFlyGrayScale.toastActionSurface
-    static let toastActionBorder = GoFlyGrayScale.toastActionBorder
-    static let snackbarSurface = GoFlyGrayScale.snackbarSurface
-    static let snackbarForeground = Color.white
-    /// Execution-mode instruction card: dark in both appearances, per the
-    /// redesign spec (light #1C1C1E, dark #2C2C2E) with white text.
+    static let danger = GoFlyThemeColor.actionDangerSurface
+    static let warning = GoFlyThemeColor.iconWarning
+    static let success = GoFlyThemeColor.iconSuccess
+    static let dangerForeground = GoFlyThemeColor.textDanger
+    static let warningForeground = GoFlyThemeColor.textWarning
+    static let successForeground = GoFlyThemeColor.textSuccess
+    static let toastDangerSurface = GoFlyThemeColor.surfaceStatusDanger
+    static let toastWarningSurface = GoFlyThemeColor.surfaceStatusWarning
+    static let toastSuccessSurface = GoFlyThemeColor.surfaceStatusSuccess
+    static let toastMessage = GoFlyThemeColor.textStatusSecondary
+    static let toastDismiss = GoFlyThemeColor.iconSecondary
+    static let toastActionSurface = GoFlyThemeColor.surfaceControlFloating
+    static let toastActionBorder = GoFlyThemeColor.lineBorder
+    static let snackbarSurface = GoFlyThemeColor.commonBlack
+    static let snackbarForeground = GoFlyThemeColor.commonWhite
     static let instructionSurface = snackbarSurface
-    static let instructionForeground = Color.white
+    static let instructionForeground = GoFlyThemeColor.commonWhite
     static let sheetCornerRadius: CGFloat = 20
-    /// Alias kept for existing call sites; see `GoFlyFont`.
     static let panelTitleFont = GoFlyFont.title
 
-    private static func adaptive(light: (CGFloat, CGFloat, CGFloat),
-                                 dark: (CGFloat, CGFloat, CGFloat),
-                                 lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
-        Color(uiColor: UIColor { traits in
-            let isDark = traits.userInterfaceStyle == .dark
-            let value = isDark ? dark : light
-            return UIColor(red: value.0, green: value.1, blue: value.2, alpha: isDark ? darkAlpha : lightAlpha)
-        })
-    }
+    // Component-specific roles alias the semantic token table above.
+    static let iconButtonSurface = GoFlyThemeColor.surfaceControlFloating
+    static let iconButtonBorder = GoFlyThemeColor.lineSeparator
+    static let routeControlSurface = GoFlyThemeColor.surfaceControlFloating
+    static let routeControlBorder = GoFlyThemeColor.lineSeparator
+    static let directionInactive = GoFlyThemeColor.iconSecondary
+    static let pasteSymbol = GoFlyThemeColor.iconInputDefault
+    static let fieldSurface = GoFlyThemeColor.surfaceInput
+    static let fieldBorder = GoFlyThemeColor.lineInputDefault
+    static let fieldFocus = GoFlyThemeColor.iconAccent
+    static let overlayPanelSurface = GoFlyThemeColor.surfaceOverlaySheet
+    static let tabBarSurface = overlayPanelSurface
+    static let tabSeparator = GoFlyThemeColor.lineSeparator
+    static let tabInactive = GoFlyThemeColor.iconSecondary
+    static let startSecondarySurface = GoFlyThemeColor.surfaceDisabled
+    static let dialogMessage = GoFlyThemeColor.textStatusSecondary
+    static let dialogCancelSurface = GoFlyThemeColor.surfaceControl
+    static let pillSurface = GoFlyThemeColor.surfaceControlFloating
+    static let checkboxOffBorder = GoFlyThemeColor.lineBorder
+    static let checkboxOffFill = GoFlyThemeColor.surfaceCard
+    static let progressTrack = GoFlyThemeColor.lineSeparator
+    static let durationWheelSurface = GoFlyThemeColor.surfaceControl
+    static let durationWheelBorder = GoFlyThemeColor.lineSeparator
+    static let pillBorder = GoFlyThemeColor.lineBorder
+    static let pillDotNeutral = GoFlyThemeColor.iconSecondary
+    static let pillDotWarning = GoFlyThemeColor.iconWarning
+    static let hairline = GoFlyThemeColor.lineSeparator
+    static let snackbarActionSurface = GoFlyThemeColor.surfaceControlFloating
+    static let snackbarActionBorder = GoFlyThemeColor.lineSeparator
+    static let snackbarBorder = GoFlyThemeColor.commonWhite.opacity(0.12)
 }
 
 /// Opaque content keeps labels readable over every map style and in Reduce Transparency.
@@ -220,7 +187,7 @@ struct GoFlyCardPrimaryStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(isEnabled ? GoFlyStyle.surface : GoFlyTextColor.disabled)
+            .foregroundStyle(isEnabled ? GoFlyStyle.primaryActionText : GoFlyTextColor.disabled)
             .background(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.75 : 1)
@@ -259,7 +226,7 @@ struct GoFlyActionStyle: ButtonStyle {
                     Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false)
                 }
             }
-            // Primary/destructive fills keep their color while pressed: a sheet drag also presses the button, and a lightened black fill reads as disabled.
+            // Primary/destructive fills keep their token color while pressed: a sheet drag also presses the button, and a lightened fill reads as disabled.
             .brightness(isEnabled && configuration.isPressed && !(primary || destructive) ? -0.04 : 0)
             .opacity(isEnabled && configuration.isPressed && !(primary || destructive) ? 0.82 : 1)
             .scaleEffect(isEnabled && configuration.isPressed && (primary || destructive) ? 0.98 : 1)
@@ -270,7 +237,7 @@ struct GoFlyActionStyle: ButtonStyle {
     private var background: Color {
         guard isEnabled else { return GoFlyStyle.disabledSurface }
         if destructive { return GoFlyStyle.danger }
-        return primary ? GoFlyStyle.primary : GoFlyStyle.secondarySurface
+        return primary ? GoFlyStyle.primary : GoFlyStyle.actionSecondarySurface
     }
 
     private var foreground: Color {
@@ -306,11 +273,11 @@ struct GoFlyIconStyle: ButtonStyle {
             .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
             .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
             .background(isEnabled
-                        ? (floating ? GoFlyStyle.cardSurface : GoFlyGrayScale.iconButtonSurface)
-                        : GoFlyGrayScale.disabledSurface, in: Circle())
+                        ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.iconButtonSurface)
+                        : GoFlyStyle.disabledSurface, in: Circle())
             .overlay {
                 if isEnabled {
-                    Circle().strokeBorder(floating ? GoFlyStyle.subtleBorder : GoFlyGrayScale.iconButtonBorder,
+                    Circle().strokeBorder(floating ? GoFlyStyle.subtleBorder : GoFlyStyle.iconButtonBorder,
                                           lineWidth: 0.5).allowsHitTesting(false)
                 }
             }
@@ -331,11 +298,11 @@ struct GoFlyIconButtonChrome: ViewModifier {
         content
             .frame(width: diameter, height: diameter)
             .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
-            .background(isEnabled ? enabledSurface : GoFlyGrayScale.disabledSurface,
+            .background(isEnabled ? enabledSurface : GoFlyStyle.disabledSurface,
                         in: Circle())
             .overlay {
                 if isEnabled && showsBorder {
-                    Circle().strokeBorder(GoFlyGrayScale.iconButtonBorder, lineWidth: 0.5)
+                    Circle().strokeBorder(GoFlyStyle.iconButtonBorder, lineWidth: 0.5)
                         .allowsHitTesting(false)
                 }
             }
@@ -345,7 +312,7 @@ struct GoFlyIconButtonChrome: ViewModifier {
 
 extension View {
     func goFlyIconButtonChrome(diameter: CGFloat, showsBorder: Bool = true,
-                               enabledSurface: Color = GoFlyGrayScale.iconButtonSurface) -> some View {
+                               enabledSurface: Color = GoFlyStyle.iconButtonSurface) -> some View {
         modifier(GoFlyIconButtonChrome(diameter: diameter, showsBorder: showsBorder,
                                        enabledSurface: enabledSurface))
     }
@@ -366,41 +333,11 @@ extension View {
     }
 }
 
-// Figma `SearchField / focused｜normal` and `Progress` (0 · 共用元件).
-extension GoFlyStyle {
-    static let fieldSurface = GoFlyGrayScale.fieldSurface
-    static let fieldBorder = GoFlyGrayScale.fieldBorder
-    static let fieldFocus = adaptive(light: (0.000, 0.478, 1.000), dark: (0.039, 0.518, 1.000))
-    static let tabBarSurface = GoFlyGrayScale.tabBarSurface.opacity(0.96)
-    static let tabSeparator = hairline
-    static let tabInactive = GoFlyGrayScale.tabInactive
-    static let startSecondarySurface = GoFlyGrayScale.startSecondarySurface
-    static let dialogMessage = GoFlyGrayScale.dialogMessage
-    static let dialogCancelSurface = GoFlyGrayScale.fieldSurface
-    static let pillSurface = adaptive(light: (1, 1, 1), dark: (0.227, 0.227, 0.235))
-    static let checkboxOffBorder = GoFlyGrayScale.checkboxOffBorder
-    static let checkboxOffFill = GoFlyGrayScale.checkboxOffFill
-    static let progressTrack = GoFlyGrayScale.progressTrack
-    /// Figma F6.a `TimePicker / Wheel` (04 · iOS Redesign).
-    static let durationWheelSurface = GoFlyGrayScale.durationWheelSurface
-    static let durationWheelBorder = GoFlyGrayScale.durationWheelBorder
-    /// Figma `StatusPill` stroke: #C6C6C8 at 45 % (light), #545458 1 pt (dark).
-    static let pillBorder = GoFlyGrayScale.pillBorder
-    /// Figma `StatusPill` dots for the neutral and paused states.
-    static let pillDotNeutral = Color(uiColor: .systemGray)
-    static let pillDotWarning = Color(red: 1.000, green: 0.624, blue: 0.039)
-    /// Opaque hairline (#C6C6C8 / #38383A): tab bar separator and small round controls.
-    static let hairline = GoFlyGrayScale.hairline
-    /// Figma `Snackbar / 可復原` action button.
-    static let snackbarActionSurface = GoFlyGrayScale.snackbarActionSurface
-    static let snackbarActionBorder = GoFlyGrayScale.snackbarActionBorder
-    static let snackbarBorder = GoFlyGrayScale.snackbarBorder
-}
-
+// Search, status, and surface roles alias Figma 04 semantic tokens.
 /// Figma 04 drop shadows. `floating`: search bar, status pill, map controls, panels,
 /// snackbar and instruction card. `card`: location cards. `chip`: speed chip and small icon buttons.
 enum GoFlyShadow {
-    case floating, card, chip
+    case floating, toast, card, chip
 }
 
 extension View {
@@ -409,12 +346,15 @@ extension View {
         switch shadow {
         case .floating:
             // SwiftUI radius is half the Figma blur.
-            self.shadow(color: .black.opacity(0.06), radius: 1.5, x: 0, y: 1)
-                .shadow(color: .black.opacity(0.09), radius: 12, x: 0, y: 5)
+            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.06), radius: 1.5, x: 0, y: 1)
+                .shadow(color: GoFlyThemeColor.commonBlack.opacity(0.09), radius: 12, x: 0, y: 5)
+        case .toast:
+            // Figma toast shadow: black 18%, y=4, blur=16 (SwiftUI radius is half the blur).
+            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.18), radius: 8, x: 0, y: 4)
         case .card:
-            self.shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 8)
+            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.14), radius: 12, x: 0, y: 8)
         case .chip:
-            self.shadow(color: .black.opacity(0.06), radius: 2, x: 0, y: 1)
+            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.06), radius: 2, x: 0, y: 1)
         case nil:
             self
         }
@@ -485,6 +425,8 @@ enum GoFlyFont {
     static let footnote = Font.footnote
     /// 13 semibold — status pill, small chips.
     static let footnoteEmphasis = Font.footnote.weight(.semibold)
+    /// 14 semibold — Figma `Theme/button/small`, including the R04 help link.
+    static let buttonSmall = Font.system(size: 14, weight: .semibold)
     /// 12 — role labels and axis labels.
     static let caption = Font.caption
     /// 12 semibold.
@@ -497,30 +439,19 @@ enum GoFlyFont {
 
 
 // MARK: - Text colors (docs/IOS-TYPOGRAPHY.md)
-extension GoFlyStyle {
-    fileprivate static let textSecondary = GoFlyGrayScale.secondaryLabel
-    fileprivate static let textMessage = GoFlyGrayScale.messageLabel
-    fileprivate static let textDisabled = GoFlyGrayScale.disabledLabel
-}
-
-/// The app's one text color set. Text and text-like icons use these roles, never raw colors.
+/// Text and text-like icons use semantic Figma tokens; action foreground uses
+/// pure common white per the confirmed Dark primary-button rule.
 enum GoFlyTextColor {
-    /// Titles, list text, primary labels (#000 / #FFF).
-    static let primary = Color.primary
-    /// Subtitles, captions, placeholders, inactive tab labels (#8A8A8E / #98989F).
-    static let secondary = GoFlyStyle.textSecondary
-    /// Text that explains a title inside a toast or dialog (#3C3C43 / #D1D1D6).
-    static let message = GoFlyStyle.textMessage
-    /// Disabled controls and unavailable rows.
-    static let disabled = GoFlyStyle.textDisabled
-    /// Text on a primary (black / white) fill: the page background color.
-    static let inverse = GoFlyStyle.surface
-    /// Text on fixed dark surfaces (snackbar, navigation card) and on danger fills.
-    static let onDark = Color.white
-    /// Error, warning and success wording.
-    static let danger = GoFlyStyle.dangerForeground
-    static let warning = GoFlyStyle.warningForeground
-    static let success = GoFlyStyle.successForeground
+    static let primary = GoFlyThemeColor.textPrimary
+    static let secondary = GoFlyThemeColor.textSecondary
+    static let message = GoFlyThemeColor.textStatusSecondary
+    static let disabled = GoFlyThemeColor.textDisabled
+    static let inverse = GoFlyThemeColor.commonWhite
+    static let onDark = GoFlyThemeColor.commonWhite
+    static let danger = GoFlyThemeColor.textDanger
+    static let warning = GoFlyThemeColor.textWarning
+    static let success = GoFlyThemeColor.textSuccess
+    static let accent = GoFlyThemeColor.textAccent
 }
 
 /// Page and sheet title row: the title stays centered on the page whatever the

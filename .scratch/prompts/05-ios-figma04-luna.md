@@ -24,7 +24,7 @@
 - 顏色與字級一律走 01、02 建立的 token；不得在 View 內寫顏色或字級字面值（地圖原生元件與系統控制例外並列清單）。
 - **圖示一律匯出成資產，不使用 SF Symbol**：Figma『0 · 共用元件（Icon）』的 52 個 `icon/*` 全部匯出為單色 template 資產，由單一 `GoFlyIcon` 入口提供；票 03 建立 `icon/*` ↔ 資產對照表並替換全部既有 SF Symbol（系統原生控制例外）；目錄沒有的圖示列出回報，不要自行新增或挑相近圖示。
 - 每個畫面使用共用元件，不留手刻副本；互動元件命中範圍 ≥ 44 × 44 pt、圖示按鈕有 accessibility label、最大 Dynamic Type 不裁切。
-- 驗證：`app/GoFly/scripts/check.sh`（核心測試＋unsigned simulator build）每票結束必過。**每票完成都要截圖驗證**：模擬器沒有網路、VPN、真機，所以票 01a 先建立 Debug＋模擬器專用的 fixture 層（沿用 `GoFlyUITestOverrides` 模式，Release／真機 build 無作用），可直接開到任一 Figma frame 的狀態；之後每票對自己涵蓋的每張 frame、Light 與 Dark 各截一張到 `work/gofly-ios-figma04/screenshots/`，與 `work/gofly-ios-figma04/figma/` 的 Figma 截圖並排比對，結論與路徑寫進票尾『執行紀錄』。沒有截圖的票不算完成；到不了的 frame 如實回報，不得略過。
+- 驗證：`app/GoFly/scripts/check.sh`（核心測試＋unsigned simulator build）每票結束必過。**每票完成都要截圖驗證**：模擬器沒有網路、VPN、真機，所以票 01a 先建立 Debug＋模擬器專用的 fixture 層（沿用 `GoFlyUITestOverrides` 模式，Release／真機 build 無作用），可直接開到任一 Figma frame 的狀態；之後每票對自己涵蓋的每張 frame、Light 與 Dark 各截一張到 `work/gofly-ios-figma04/screenshots/`，與 `work/gofly-ios-figma04/figma/` 的 Figma 截圖並排比對，結論與路徑寫進票尾『執行紀錄』；截圖資料夾由 `work/` 的 gitignore 忽略，01a 另產生 `screenshots/index.html` 總覽頁供使用者查看。沒有截圖的票不算完成；到不了的 frame 如實回報，不得略過。
 - 不要執行 Prettier；不要安裝到手機；不要 commit／push（使用者另行要求才做）；不修改 Mac App 與 `tools/`。實機驗證不在本任務範圍，回報時明講『未做實機驗證』。
 - 本地化：新增或改動文案要同步 `zh-Hant`、`zh-Hans`、`en` 三份，`EnglishButtonLabelTests` 與 `IssueCatalogTests` 要過。
 - 完成一票後：勾選票內 checkbox、填『執行紀錄』（日期、完成項、截圖位置、差異與 Figma 缺口）、把 Status 改為 `done: software-verified`；有文件需更新就同票更新（區分 Figma 設計、App 實作、實機驗證）。
@@ -36,6 +36,7 @@
 - 新增停靠點：新空欄位加在清單最後並成為終點，原終點降為停靠點（票 10）。
 - 無法規劃路線：按鈕『修正』，自動重排**全部**地點（含起點）後重新規劃；成功就採用新順序，失敗保留原順序與 toast（票 11）。
 - 服務卡：永遠只有一顆主按鈕。正常已停止＝『啟動模擬』、運行中＝『停止服務』、停止失敗／服務卡住＝『重置連線』；重置成功後按鈕變『啟動模擬』並在導覽列下方以懸浮方式顯示 success toast（疊在內容上方、不推動版面）（標題『已重置連線』、說明『可以重新啟動模擬』）；重置失敗不顯示錯誤、只保留『GPS 未確認』（票 17）。
+- **Toast 一律懸浮**：所有 Toast／Banner 疊在內容上方（導覽列或搜尋列下方、左右 16 pt）、帶浮層陰影（黑 18%、y 4、blur 16）、不推動版面；用共用 Toast 與單一 overlay 容器，不得各頁 inline 放置；Snackbar 維持底部懸浮。Figma Toast 元件（Light／Dark）已加上此陰影。
 - Dark 階梯：畫面底 `#0B0B0D`、Tab／Sheet／info card `#1A1A1C`、Sheet 上按鈕與 list `#2C2C2F`、active／focused `#48484D`；遮罩為黑色 40%；Primary 按鈕文字與圖示純白；Enabled 圓形 Icon Button 外框 `line/separator` 0.5 pt。
 - 路線停靠點選中列：primary 邊線、中性底（Light＝card、Dark＝active），不用 primary 底。
 - 遮罩、Sheet、清單層級：Sheet 上的 list／按鈕底色比 Sheet 亮兩階；active／focused 再亮三階。

@@ -73,7 +73,7 @@ struct GoFlySpeedSheet: View {
                                 Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 1)
                             }
                         }
-                        .foregroundStyle(isSelected ? GoFlyStyle.surface : GoFlyTextColor.primary)
+                        .foregroundStyle(isSelected ? GoFlyStyle.primaryActionText : GoFlyTextColor.primary)
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)

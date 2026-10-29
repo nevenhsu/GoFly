@@ -4,11 +4,12 @@
 
 **Blocked by:** 01, 02.
 
-**Status:** ready-for-agent
+**Status:** in progress
 
 **Assignee hint:** Luna
 
-- [ ] Toast 三個 tone 與 Figma Light／Dark 一致：標題 15 pt Semibold、說明 13 pt Regular、動作為膠囊按鈕、✕ 20 pt、高度隨內容。
+- [ ] Toast 三個 tone 與 Figma Light／Dark 一致：圓角 14、內距 12／14、間距 10；標題 15 pt Semibold、說明 13 pt Regular、22 pt outline 狀態圖示、動作為膠囊按鈕；✕ 視覺 20 pt，命中範圍 44 × 44 pt，高度隨內容。
+- [ ] **Toast 一律懸浮**：所有 Toast／Banner（danger、warning、success，含設定頁的 Wi‑Fi 與服務錯誤、首次引導的錯誤、瞬移／路線／搖桿的錯誤與中斷、重置成功）都以 overlay 疊在畫面最上層，位於導覽列或搜尋列下方、距左右 16 pt，不得放進頁面內容的版面流程（不推動標題、卡片或清單位置）；使用浮層陰影（Figma Toast 元件：黑色 18%、y 4、blur 16），多個同時出現時依序堆疊並可個別關閉；Snackbar 維持底部懸浮。實作用共用 Toast 元件與單一 overlay 容器，不得各頁自己 inline 放置。R04 VPN 檢查成功不顯示 success Toast，改為自動進入 B1。
 - [ ] Snackbar 與 StatusPill 對照 Figma；Dark 色不使用純白。
 - [ ] Overlay／Dim 在 Dark 為黑色遮罩（不得是淺色遮罩）；Sheet、ActionSheet、系統分享 sheet 後方畫面皆被壓暗。
 - [ ] Progress 與 Slider 可在展示頁互動，Slider 縮放寬度時進度比例不變。
@@ -19,4 +20,8 @@
 
 ## 執行紀錄
 
-（執行者在此記錄：日期、完成項、截圖路徑、未完成與原因、決策。）
+### 2026-10-29 執行紀錄（Luna）
+
+- 共用 `GoFlyStatusBanner`／overlay 已調整 outline 狀態 icon、Figma Toast 陰影與尺寸、44 pt 關閉命中區及多筆浮層；R04 VPN 成功不顯示 success Toast，改為確認後自動進 B1 收合 sheet。Snackbar 繼續使用底部浮層。重置成功 Toast 元件仍可供 F1.b 使用。
+- 抽查截圖路徑：`work/gofly-ios-figma04/screenshots/{R04.a,B7,B10,D8,F1.b}-light.png` 與各自 `-dark.png`；總覽 `work/gofly-ios-figma04/screenshots/index.html`。R04.a／B7／D8 顯示錯誤浮層，B10 顯示 Wi-Fi 提示，F1.b 顯示重置成功提示；未完成共用元件板所有 variant 的逐一截圖比對，且 01a 尚有 45 個 frame 不可達，故本票維持 `in progress`。
+- Figma success Toast 元件 outline 色實綁 `icon/success`（Dark `#6FC48B`），與 `line/status/success` token（Dark `#52A072`）不同；App 依渲染採 icon token，保留此 Figma token 綁定差異記錄。未修改 Figma；未做實機驗證。

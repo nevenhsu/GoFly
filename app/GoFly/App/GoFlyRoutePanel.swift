@@ -446,7 +446,7 @@ private struct GoFlyRoundTripControl: View {
             .overlay { if !controller.roundTripEnabled { Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 0.75) } }
             .contentShape(Capsule())
             .foregroundStyle(!controller.canSetRoundTrip ? GoFlyTextColor.disabled
-                             : (controller.roundTripEnabled ? GoFlyStyle.surface : GoFlyStyle.primary))
+                             : (controller.roundTripEnabled ? GoFlyTextColor.inverse : GoFlyStyle.primary))
         }
         .buttonStyle(.plain)
         .frame(minHeight: 44)

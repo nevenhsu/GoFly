@@ -20,6 +20,12 @@ final class GoFlyNetworkMonitor: ObservableObject {
 
     func start() {
         guard subscription == nil else { return }
+#if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.isFrameMode {
+            isWiFiConnected = !GoFlyUITestOverrides.contains("-gofly-ui-wifi-disconnected")
+            return
+        }
+#endif
         paths.start()
         isWiFiConnected = Self.evaluate(paths.currentPath)
         subscription = paths.changes.sink { [weak self] path in
@@ -54,6 +60,13 @@ final class GoFlyNetworkMonitor: ObservableObject {
 
     /// Re-reads the current path; the toast stays only while Wi-Fi is still missing.
     func recheck() {
+#if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.isFrameMode {
+            isWiFiConnected = !GoFlyUITestOverrides.contains("-gofly-ui-wifi-disconnected")
+            wifiNoticeDismissed = false
+            return
+        }
+#endif
         isWiFiConnected = Self.evaluate(paths.currentPath)
         wifiNoticeDismissed = false
     }

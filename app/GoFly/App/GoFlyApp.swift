@@ -7,8 +7,15 @@ struct GoFlyApp: App {
     @StateObject private var bootstrap: GoFlySetupBootstrap
 
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if !GoFlyUITestOverrides.isFrameMode {
+            Diagnostics.shared.start()
+            GoFlyPathMonitor.shared.start()
+        }
+        #else
         Diagnostics.shared.start()
         GoFlyPathMonitor.shared.start()
+        #endif
         _ = GoFlyPreferences.shared
         _bootstrap = StateObject(wrappedValue: GoFlySetupBootstrap())
     }
@@ -26,6 +33,7 @@ private struct GoFlySceneContent: View {
     @State private var preferences = GoFlyPreferences.shared
     @ObservedObject var bootstrap: GoFlySetupBootstrap
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
+    @State private var shouldCollapseMapAfterFirstOnboarding = false
 
     var body: some View {
             Group {
@@ -53,7 +61,9 @@ private struct GoFlySceneContent: View {
     @ViewBuilder
     private var galleryOrStartupContent: some View {
         #if DEBUG && targetEnvironment(simulator)
-        if GoFlyUITestOverrides.contains("-gofly-ui-gallery") {
+        if let frame = GoFlyUITestOverrides.frame {
+            GoFlyFigmaFrameFixture(frame: frame, runtime: bootstrap.runtime)
+        } else if GoFlyUITestOverrides.contains("-gofly-ui-gallery") {
             GoFlyComponentGallery()
         } else {
             startupContent
@@ -89,10 +99,12 @@ private struct GoFlySceneContent: View {
                     service: runtime.service,
                     recoveryStore: runtime.sessionRecovery,
                     movement: runtime.movement,
-                    setupMetadata: bootstrap.metadata
+                    setupMetadata: bootstrap.metadata,
+                    initialSheetDetent: shouldCollapseMapAfterFirstOnboarding ? .collapsed : nil
                 )
             } else {
                 GoFlyOnboardingView(controller: runtime.onboarding) {
+                    shouldCollapseMapAfterFirstOnboarding = true
                     onboardingComplete = true
                 }
             }

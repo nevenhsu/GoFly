@@ -12,50 +12,19 @@ struct ServiceSettingsView: View {
     @StateObject private var systemStatus = GoFlySystemStatus()
     @ObservedObject private var network = GoFlyNetworkMonitor.shared
     @State private var serviceNoticeDismissed = false
+    @State private var awaitingResetSuccessToast = false
+    @State private var resetSuccessToastVisible = GoFlyUITestOverrides.frame == "F1.b"
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if network.shouldShowWiFiError {
-                    GoFlyStatusBanner(
-                        tone: .danger,
-                        title: goFlyString("wifi.error.title"),
-                        message: goFlyString("wifi.error.message"),
-                        actionTitle: goFlyString("wifi.error.action"),
-                        onAction: { network.openWiFiSettings() },
-                        onDismiss: { network.dismissNotice() },
-                        identifier: "settings.wifiError",
-                        isFloating: true
-                    )
-                }
-                if let failure = bannerFailure, !serviceNoticeDismissed {
-                    GoFlyStatusBanner(
-                        tone: .danger,
-                        title: goFlyString(failure.rawValue),
-                        message: goFlyString("settings.vpn.failureGuide"),
-                        actionTitle: goFlyString("operation.retry"),
-                        onAction: retryBannerFailure,
-                        onDismiss: { serviceNoticeDismissed = true },
-                        identifier: "service.error",
-                        actionEnabled: !service.nativeBusy,
-                        isFloating: true
-                    )
-                }
-                if let key = continuation.noticeKey {
-                    GoFlyStatusBanner(
-                        tone: .warning,
-                        title: goFlyString(key),
-                        message: goFlyString("background.systemDecidesRuntime"),
-                        identifier: "background.notice.compact",
-                        isFloating: true
-                    )
-                }
                 serviceCard
                 settingsGroups
             }
             .padding(16)
         }
         .background(GoFlyStyle.canvas)
+        .goFlyToastOverlay(topInset: 8) { statusToasts }
         .navigationTitle(goFlyString("settings.title"))
         .navigationBarTitleDisplayMode(.large)
         .goFlyNativeBackTitle("settings.title")
@@ -67,9 +36,59 @@ struct ServiceSettingsView: View {
         .onChange(of: bannerFailure) { _, newFailure in
             if newFailure != nil { serviceNoticeDismissed = false }
         }
+        .onChange(of: service.clearConfirmedAt) { _, _ in resolveResetSuccessToast() }
+        .onChange(of: service.phase) { _, _ in resolveResetSuccessToast() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             systemStatus.refresh()
             recovery.requestForegroundCheck()
+        }
+    }
+
+    @ViewBuilder
+    private var statusToasts: some View {
+        if network.shouldShowWiFiError {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString("wifi.error.title"),
+                message: goFlyString("wifi.error.message"),
+                actionTitle: goFlyString("wifi.error.action"),
+                onAction: { network.openWiFiSettings() },
+                onDismiss: { network.dismissNotice() },
+                identifier: "settings.wifiError",
+                isFloating: true
+            )
+        }
+        if let failure = bannerFailure, !serviceNoticeDismissed {
+            GoFlyStatusBanner(
+                tone: .danger,
+                title: goFlyString(failure.rawValue),
+                message: goFlyString("settings.vpn.failureGuide"),
+                actionTitle: goFlyString("operation.retry"),
+                onAction: retryBannerFailure,
+                onDismiss: { serviceNoticeDismissed = true },
+                identifier: "service.error",
+                actionEnabled: !service.nativeBusy,
+                isFloating: true
+            )
+        }
+        if let key = continuation.noticeKey {
+            GoFlyStatusBanner(
+                tone: .warning,
+                title: goFlyString(key),
+                message: goFlyString("background.systemDecidesRuntime"),
+                identifier: "background.notice.compact",
+                isFloating: true
+            )
+        }
+        if resetSuccessToastVisible {
+            GoFlyStatusBanner(
+                tone: .success,
+                title: goFlyString("service.resetSucceeded.title"),
+                message: goFlyString("service.resetSucceeded.message"),
+                onDismiss: { resetSuccessToastVisible = false },
+                identifier: "service.resetSucceeded",
+                isFloating: true
+            )
         }
     }
 
@@ -254,7 +273,8 @@ struct ServiceSettingsView: View {
 
             if service.canForceReset {
                 Button {
-                    _ = service.forceReset()
+                    awaitingResetSuccessToast = service.forceReset()
+                    resetSuccessToastVisible = false
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: GoFlySymbols.reset)
@@ -289,6 +309,12 @@ struct ServiceSettingsView: View {
         }
         .padding(16)
         .goFlyCard(radius: 14)
+    }
+
+    private func resolveResetSuccessToast() {
+        guard awaitingResetSuccessToast, !service.nativeBusy, service.phase == .stopped else { return }
+        awaitingResetSuccessToast = false
+        resetSuccessToastVisible = service.clearConfirmedAt != nil
     }
 
     private var status: some View {

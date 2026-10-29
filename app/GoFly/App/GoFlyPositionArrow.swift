@@ -108,10 +108,10 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     }
 
     private func applyColors() {
-        let labelColor = (freshness == .waiting ? UIColor.secondaryLabel : UIColor.label)
-            .resolvedColor(with: traitCollection).cgColor
-        let bgColor = UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
-        let realGPSColor = UIColor.systemBlue.resolvedColor(with: traitCollection).cgColor
+        let labelToken = freshness == .waiting ? GoFlyThemeColor.textSecondary : GoFlyThemeColor.textPrimary
+        let labelColor = UIColor(labelToken).resolvedColor(with: traitCollection).cgColor
+        let bgColor = UIColor(GoFlyThemeColor.mapMarker).resolvedColor(with: traitCollection).cgColor
+        let realGPSColor = UIColor(GoFlyThemeColor.iconAccent).resolvedColor(with: traitCollection).cgColor
         contrast.fillColor = UIColor.clear.cgColor
         contrast.strokeColor = bgColor
         if source == .gps && freshness == .fresh {

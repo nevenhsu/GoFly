@@ -1,0 +1,777 @@
+{
+  "fileKey": "RtPV8PXCQJ2WXK3jk3kPrq",
+  "pageNodeId": "121:50359",
+  "pageName": "04 · iOS Redesign",
+  "capturedOn": "2026-10-29",
+  "frames": [
+    {
+      "id": "R01",
+      "name": "啟動畫面 / Logo",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51102",
+        "dark": "322:40091"
+      }
+    },
+    {
+      "id": "R02",
+      "name": "首次引導 2／3 · 定位權限",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51131",
+        "dark": "322:40106"
+      }
+    },
+    {
+      "id": "R04",
+      "name": "首次引導 3／3 · 設定 VPN 通道",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51246",
+        "dark": "322:40124"
+      }
+    },
+    {
+      "id": "R05",
+      "name": "連線說明（VPN 通道）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:56962",
+        "dark": "322:40160"
+      }
+    },
+    {
+      "id": "R03",
+      "name": "首次引導 2／3 · 定位已允許",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:62048",
+        "dark": "322:40189"
+      }
+    },
+    {
+      "id": "R04.a",
+      "name": "首次引導 3／3 · 連線錯誤",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:10410",
+        "dark": "322:40208"
+      }
+    },
+    {
+      "id": "R07",
+      "name": "首次引導 / 連接 Mac Setup（配對裝置簽名）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:11858",
+        "dark": "322:40246"
+      }
+    },
+    {
+      "id": "R08",
+      "name": "首次引導 / 需要重新設定（Setup 與 App 不相符）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "313:28214",
+        "dark": "322:40256"
+      }
+    },
+    {
+      "id": "B1",
+      "name": "地圖首頁 / sheet 收合",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51314",
+        "dark": "322:40269"
+      }
+    },
+    {
+      "id": "B2",
+      "name": "地圖首頁 / sheet 半開",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51416",
+        "dark": "322:40281"
+      }
+    },
+    {
+      "id": "B3",
+      "name": "全螢幕搜尋 / 空輸入",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51543",
+        "dark": "322:40293"
+      }
+    },
+    {
+      "id": "B4",
+      "name": "全螢幕搜尋 / 座標與結果",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51632",
+        "dark": "322:40338"
+      }
+    },
+    {
+      "id": "B5",
+      "name": "地點 sheet / 點地圖放 Pin",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51730",
+        "dark": "322:40383"
+      }
+    },
+    {
+      "id": "B6",
+      "name": "瞬移成功 / snackbar",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51860",
+        "dark": "322:40397"
+      }
+    },
+    {
+      "id": "B7",
+      "name": "瞬移失敗 / 頂部 toast 提示",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:51967",
+        "dark": "322:40410"
+      }
+    },
+    {
+      "id": "B8",
+      "name": "瞬移中斷 / 恢復（Resume UI）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "193:9013",
+        "dark": "322:40425"
+      }
+    },
+    {
+      "id": "B9",
+      "name": "瞬移中斷 / 最後模擬位置（無真實 GPS）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "202:10090",
+        "dark": "322:40440"
+      }
+    },
+    {
+      "id": "B10",
+      "name": "地圖首頁 / 未連接 Wi-Fi（error toast）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:11656",
+        "dark": "322:40457"
+      }
+    },
+    {
+      "id": "B11",
+      "name": "地圖首頁 / 連接中（建立 VPN tunnel）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "239:15137",
+        "dark": "322:40470"
+      }
+    },
+    {
+      "id": "C1",
+      "name": "最愛地點清單",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52111",
+        "dark": "322:40484"
+      }
+    },
+    {
+      "id": "C2",
+      "name": "編輯最愛 sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52228",
+        "dark": "322:40501"
+      }
+    },
+    {
+      "id": "C3",
+      "name": "多選模式 / 批次刪除",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52367",
+        "dark": "322:40527"
+      }
+    },
+    {
+      "id": "C4",
+      "name": "刪除後可復原",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52464",
+        "dark": "322:40544"
+      }
+    },
+    {
+      "id": "D1",
+      "name": "路線規劃 / 新增路線初始狀態",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52566",
+        "dark": "322:40561"
+      }
+    },
+    {
+      "id": "D5",
+      "name": "選擇終點 / 點選即回填",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52709",
+        "dark": "322:40581"
+      }
+    },
+    {
+      "id": "D6",
+      "name": "路線執行模式",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:52798",
+        "dark": "322:40626"
+      }
+    },
+    {
+      "id": "D10.a",
+      "name": "路線中斷 / 恢復（Resume UI）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "238:9101",
+        "dark": "322:40641"
+      }
+    },
+    {
+      "id": "D11",
+      "name": "已匯入路線（GPX）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:57386",
+        "dark": "322:40658"
+      }
+    },
+    {
+      "id": "D15",
+      "name": "匯入路線已載入 / 超過 10 點：摘要＋折疊點位",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:57737",
+        "dark": "322:40667"
+      }
+    },
+    {
+      "id": "D13",
+      "name": "查看全部點位（唯讀）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:60188",
+        "dark": "322:40681"
+      }
+    },
+    {
+      "id": "D16",
+      "name": "匯入 GPX / 系統檔案選擇器",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:60570",
+        "dark": "322:40705"
+      }
+    },
+    {
+      "id": "D17",
+      "name": "匯入成功 / snackbar",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:60674",
+        "dark": "322:40743"
+      }
+    },
+    {
+      "id": "D18",
+      "name": "匯入失敗 / toast 提示",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:60722",
+        "dark": "322:40753"
+      }
+    },
+    {
+      "id": "D14",
+      "name": "匯出 / 系統分享 sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:60820",
+        "dark": "322:40763"
+      }
+    },
+    {
+      "id": "D12",
+      "name": "點選路線 / 動作選單",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:61268",
+        "dark": "322:40800"
+      }
+    },
+    {
+      "id": "D7",
+      "name": "設定移動時速 / slider sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "158:6131",
+        "dark": "322:40812"
+      }
+    },
+    {
+      "id": "D19",
+      "name": "最愛路線清單",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "232:8717",
+        "dark": "322:40831"
+      }
+    },
+    {
+      "id": "D20",
+      "name": "新增最愛路線 sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "174:8027",
+        "dark": "322:40846"
+      }
+    },
+    {
+      "id": "D21",
+      "name": "最愛路線清單 / 多選模式",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "174:8161",
+        "dark": "322:40871"
+      }
+    },
+    {
+      "id": "D4",
+      "name": "路線規劃 / Pin 設定選中的路線地點",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "193:8693",
+        "dark": "322:40887"
+      }
+    },
+    {
+      "id": "D3",
+      "name": "路線規劃 / panel 收合（高度最窄）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "193:8857",
+        "dark": "322:40901"
+      }
+    },
+    {
+      "id": "D10",
+      "name": "路線中斷 / 恢復（Resume UI）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "193:9158",
+        "dark": "322:40917"
+      }
+    },
+    {
+      "id": "D8",
+      "name": "路線規劃 / 無法規劃路線（error toast）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:10536",
+        "dark": "322:40937"
+      }
+    },
+    {
+      "id": "D2",
+      "name": "路線規劃 / 新增路線初始狀態（多停靠點滑動）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:11484",
+        "dark": "322:40974"
+      }
+    },
+    {
+      "id": "D22",
+      "name": "最愛路線清單 / 刪除路線（success toast / 還原）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "222:11999",
+        "dark": "322:41008"
+      }
+    },
+    {
+      "id": "D2.a",
+      "name": "路線規劃 / 拖曳排序示意",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "309:27349",
+        "dark": "322:41022"
+      }
+    },
+    {
+      "id": "D23",
+      "name": "檢視路線 sheet（全部地點）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "313:27817",
+        "dark": "322:41058"
+      }
+    },
+    {
+      "id": "E1",
+      "name": "搖桿 tab / 待命",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:53058",
+        "dark": "322:41076"
+      }
+    },
+    {
+      "id": "E2",
+      "name": "漫步執行模式",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:53202",
+        "dark": "322:41094"
+      }
+    },
+    {
+      "id": "E3",
+      "name": "搖桿 / 設定時速 sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "158:6503",
+        "dark": "322:41117"
+      }
+    },
+    {
+      "id": "E4",
+      "name": "漫步目的地 / 點擊地圖 Pin 彈出獨立地點 card",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "163:7291",
+        "dark": "322:41139"
+      }
+    },
+    {
+      "id": "E5",
+      "name": "搖桿漫步中斷 / 恢復（Resume UI）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "193:9287",
+        "dark": "322:41160"
+      }
+    },
+    {
+      "id": "E1.a",
+      "name": "搖桿 tab / 手動待命（收合）",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "229:2560",
+        "dark": "322:41180"
+      }
+    },
+    {
+      "id": "E2.a",
+      "name": "漫步執行模式 (sheet 收合)",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "229:2688",
+        "dark": "322:41195"
+      }
+    },
+    {
+      "id": "F1",
+      "name": "設定首頁",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "121:53504",
+        "dark": "322:41217"
+      }
+    },
+    {
+      "id": "F4",
+      "name": "設定 › 定位權限",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:58508",
+        "dark": "322:41244"
+      }
+    },
+    {
+      "id": "F5",
+      "name": "設定 › VPN 通道",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:58641",
+        "dark": "322:41252"
+      }
+    },
+    {
+      "id": "F6",
+      "name": "設定 › 背景執行",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:58853",
+        "dark": "322:41268"
+      }
+    },
+    {
+      "id": "F7",
+      "name": "設定 › 語言",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:59019",
+        "dark": "322:41278"
+      }
+    },
+    {
+      "id": "F9",
+      "name": "設定 › 裝置與簽名",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "123:59200",
+        "dark": "322:41290"
+      }
+    },
+    {
+      "id": "F8",
+      "name": "設定 › 外觀",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "163:7175",
+        "dark": "322:41307"
+      }
+    },
+    {
+      "id": "F6.a",
+      "name": "設定 › 背景執行 / 背景運行時間 sheet",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "238:9408",
+        "dark": "322:41319"
+      }
+    },
+    {
+      "id": "F1.a",
+      "name": "設定首頁 / 停止失敗",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "239:15235",
+        "dark": "322:41346"
+      }
+    },
+    {
+      "id": "F1.b",
+      "name": "設定首頁 / 重置成功",
+      "size": {
+        "width": 393,
+        "height": 852
+      },
+      "nodeIds": {
+        "light": "322:51696",
+        "dark": "322:51847"
+      }
+    }
+  ]
+}
+

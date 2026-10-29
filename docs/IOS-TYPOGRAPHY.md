@@ -1,6 +1,6 @@
 # iOS 文字樣式規範：字級與文字顏色（2026-10-27）
 
-App 內所有文字只用 `GoFlyFont`（字級，14 個 token）與 `GoFlyTextColor`（文字顏色，9 個角色），定義在 `App/GoFlyStyle.swift`；表格列出目前規格目標。2026-10-27 Figma Dark 共用元件改用 `#E5E5EA` 前景，這是設計更新，App 色彩程式尚未同步。它們都是 iOS 文字樣式，所以 Dynamic Type 仍然有效；只用兩種字重（Regular、Semibold），不用 Medium、Bold、Light。Figma 的原始字級沒有精修（10／11／12／13／14／15／16／17／18／20），統一對應到下表。
+App 內所有文字只用 `GoFlyFont`（字級，15 個 token）與 `GoFlyTextColor`（文字顏色，9 個角色），定義在 `App/GoFlyStyle.swift`；表格列出目前規格目標。2026-10-27 Figma Dark 共用元件改用 `#E5E5EA` 前景，這是設計更新，App 色彩程式尚未同步。它們都是 iOS 文字樣式，所以 Dynamic Type 仍然有效；只用兩種字重（Regular、Semibold），不用 Medium、Bold、Light。Figma 的原始字級沒有精修（10／11／12／13／14／15／16／17／18／20），統一對應到下表。
 
 ## 字級表
 
@@ -16,6 +16,7 @@ App 內所有文字只用 `GoFlyFont`（字級，14 個 token）與 `GoFlyTextCo
 | `subheadlineEmphasis` | `.subheadline` | 15 | Semibold | 精簡按鈕（toast／snackbar／恢復列的按鈕）、toast 標題、chip |
 | `footnote` | `.footnote` | 13 | Regular | 副標、toast 說明、地址、百分比 |
 | `footnoteEmphasis` | `.footnote` | 13 | Semibold | 狀態 pill、小 chip |
+| `buttonSmall` | `Theme/button/small` | 14 | Semibold | 小型文字按鈕（R04 連線說明） |
 | `caption` | `.caption` | 12 | Regular | 角色小標（起點／終點）、座標、軸線標籤 |
 | `captionEmphasis` | `.caption` | 12 | Semibold | 需要強調的小標 |
 | `micro` | 固定 10 | 10 | Semibold | TabBar 標籤、羅盤方位字母（不隨 Dynamic Type 放大） |
@@ -119,8 +120,9 @@ App 的中性灰集中定義於 `GoFlyGrayScale`。元件依語意選 token，�
 | 18／20 Semibold／Bold、`.title2`、`.title3` | `title`（panel 與卡片標題）或 `headline`（dialog 標題、頁面標題） |
 | 16／17 Semibold、`.headline` | `headline` |
 | 17、`.body`；17 Medium／Semibold | `body`；`bodyEmphasis` |
-| 14／15 Regular | `subheadline` |
-| 14／15 Medium／Semibold | `subheadlineEmphasis` |
+| 15 Regular | `subheadline` |
+| 15 Semibold | `subheadlineEmphasis` |
+| 14 Semibold (`Theme/button/small`) | `buttonSmall` |
 | 13 Regular、`.footnote` | `footnote` |
 | 13 Medium／Semibold | `footnoteEmphasis` |
 | 11／12、`.caption`、`.caption2` | `caption`（強調時 `captionEmphasis`） |

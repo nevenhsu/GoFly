@@ -38,7 +38,7 @@ struct GoFlyResumePanel: View {
             Button(action: onResume) {
                 Text(ctaTitle)
                     .font(GoFlyFont.subheadlineEmphasis)
-                    .foregroundStyle(isEnabled ? GoFlyStyle.surface : GoFlyTextColor.disabled)
+                    .foregroundStyle(isEnabled ? GoFlyTextColor.inverse : GoFlyTextColor.disabled)
                     .padding(.horizontal, 16)
                     .frame(height: 40)
                     .background(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())

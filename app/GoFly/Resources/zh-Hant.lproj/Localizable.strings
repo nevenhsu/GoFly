@@ -15,6 +15,8 @@
 "service.start" = "啟動";
 "service.stop" = "停止";
 "service.reset" = "重置";
+"service.resetSucceeded.title" = "已重置連線";
+"service.resetSucceeded.message" = "可以重新啟動模擬";
 "service.stopped" = "已停止";
 "service.stoppedGPSPending" = "已停止・GPS 待確認";
 "service.preparing" = "準備服務中…";
@@ -62,43 +64,26 @@
 "onboarding.vpn.steps" = "連上 Wi‑Fi → 開啟 LocalDevVPN → Connect → 返回 GoFly\n只用行動網路無法連線。";
 "onboarding.vpn.open" = "開啟 LocalDevVPN";
 "onboarding.vpn.appStore" = "前往 App Store";
-"onboarding.vpn.help" = "說明";
-"onboarding.vpn.helpLink" = "連線說明 ›";
-"onboarding.vpn.step1" = "開啟 LocalDevVPN";
-"onboarding.vpn.step2" = "點 Connect";
-"onboarding.vpn.step3" = "回到 GoFly，自動重新檢查";
+"onboarding.vpn.help" = "連線說明";
+"onboarding.vpn.helpLink" = "連線說明";
+"onboarding.vpn.step1" = "連上 Wi‑Fi";
+"onboarding.vpn.step2" = "開啟 LocalDevVPN";
+"onboarding.vpn.step3" = "點 Connect";
 "onboarding.vpn.unavailableTitle" = "無法連線到裝置服務";
-"onboarding.vpn.complete" = "下一步";
-"onboarding.vpn.help.heading" = "四步完成連線";
-"onboarding.vpn.help.intro" = "先建立本機通道，再讓 GoFly 確認連線。";
-"onboarding.vpn.help.step1.title" = "連上 Wi‑Fi";
-"onboarding.vpn.help.step1.message" = "開啟 Wi‑Fi 並加入網路。只用行動網路（4G / 5G）時無法連線。";
+"onboarding.vpn.help.step1.title" = "下載 LocalDevVPN";
 "onboarding.vpn.help.step2.title" = "開啟 LocalDevVPN";
-"onboarding.vpn.help.step2.message" = "尚未安裝時，先從 App Store 安裝再開啟。";
-"onboarding.vpn.help.step3.title" = "等待顯示 Connected";
-"onboarding.vpn.help.step3.message" = "按 Connect；iOS 詢問時允許加入 VPN 設定。";
-"onboarding.vpn.help.step4.title" = "返回 GoFly 檢查";
-"onboarding.vpn.help.step4.message" = "顯示「連線成功」後即可按「下一步」。";
-"onboarding.vpn.help.confirmation" = "LocalDevVPN 顯示 Connected，代表它的 VPN 已開啟。GoFly 仍需要確認能否透過本機通道連線。";
+"onboarding.vpn.help.step3.title" = "點 Connect";
 "onboarding.vpn.help.troubleshooting" = "仍然無法連線？";
-"onboarding.vpn.help.openSettings" = "開啟 iPhone 系統設定";
-"onboarding.vpn.help.permissionTitle" = "本機網路權限";
-"onboarding.vpn.help.permission" = "iOS 詢問時請允許「本機網路」。點此開啟 iPhone 系統設定。";
-"onboarding.vpn.help.reconnectTitle" = "重新連接";
 "onboarding.vpn.help.reconnect" = "確認連著 Wi‑Fi，在 LocalDevVPN 中斷後重新連接，再回來檢查。";
-"onboarding.vpn.help.returnAndCheck" = "返回並檢查連線";
-"onboarding.vpn.help.notChecked" = "尚未檢查";
+"onboarding.vpn.help.notChecked" = "尚未連線";
 "onboarding.vpn.help.notReachable" = "無法連線";
-"onboarding.vpn.helpMessage" = "請讓 iPhone 連上 Wi‑Fi，只用行動網路無法使用。從 App Store 安裝 LocalDevVPN，開啟後按 Connect，並在 iOS 詢問時允許加入 VPN 設定，再返回 GoFly。若通道仍無法使用，請在 LocalDevVPN 中斷後重新連接，再回此處檢查。";
 "onboarding.vpn.disconnected" = "未連接";
 "onboarding.vpn.checking" = "檢查中…";
-"onboarding.vpn.connected" = "已連線";
 "onboarding.vpn.check" = "檢查連線";
 "onboarding.vpn.unavailable" = "LocalDevVPN 未連線，或連線逾時。";
 "onboarding.vpn.timedOut" = "LocalDevVPN 未連線，或連線逾時。";
 "onboarding.vpn.failureDetail" = "iOS 回報";
 "onboarding.vpn.externalOpenFailed" = "無法開啟 App Store。請手動開啟 App Store，搜尋 LocalDevVPN。";
-"onboarding.vpn.nextHint" = "再次檢查連線後進入地圖，裝置服務仍為停止。";
 "map.simulatedLocation" = "目前模擬位置";
 "map.simulatedLocationWaiting" = "最後模擬位置，等待位置確認。";
 "search.placeholder" = "搜尋地點、地址或座標";
@@ -630,7 +615,6 @@
 
 "settings.deviceSection" = "裝置";
 "onboarding.location.statusFormat" = "目前權限：%@";
-"onboarding.vpn.subtitle" = "GoFly 透過 LocalDevVPN 與裝置服務通訊。";
 "route.addStop" = "新增停靠點";
 
 "route.viewList" = "檢視路線";
@@ -705,3 +689,6 @@
 "settings.background.duration.wheelUnit.minutes" = "分鐘";
 "settings.background.systemTask" = "系統背景任務";
 "common.cancel" = "取消";
+
+// Figma 04 VPN onboarding copy.
+"onboarding.vpn.step4" = "點「重新檢查」";

@@ -410,7 +410,7 @@ struct GoFlyCheckboxIcon: View {
                     check.move(to: CGPoint(x: 7.0 * s, y: 11.2 * s))
                     check.addLine(to: CGPoint(x: 9.8 * s, y: 14.0 * s))
                     check.addLine(to: CGPoint(x: 15.0 * s, y: 8.4 * s))
-                    context.stroke(check, with: .color(GoFlyStyle.surface),
+                    context.stroke(check, with: .color(GoFlyStyle.primaryActionText),
                                    style: StrokeStyle(lineWidth: 2.0 * s, lineCap: .round, lineJoin: .round))
                 }
                 .frame(width: size, height: size)
@@ -446,7 +446,7 @@ struct GoFlySettingsBadgeIcon: View {
                 Canvas { context, canvasSize in
                 let s = min(canvasSize.width, canvasSize.height) / 16.0
                 let stroke = StrokeStyle(lineWidth: 1.47 * s, lineCap: .round, lineJoin: .round)
-                let color = GraphicsContext.Shading.color(GoFlyStyle.surface)
+                let color = GraphicsContext.Shading.color(GoFlyStyle.primaryActionText)
                 switch kind {
                 case .wifi:
                     break

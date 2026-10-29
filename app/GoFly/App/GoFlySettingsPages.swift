@@ -142,8 +142,11 @@ struct GoFlyLocationSettingsPage: View {
                 .accessibilityIdentifier("settings.location.status")
             }
 
+        }
+        .goFlyToastOverlay(topInset: 8) {
             if status.externalOpenFailed {
-                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"),
+                                  identifier: "settings.location.externalOpenFailed")
             }
         }
         .onAppear { status.refresh() }
@@ -220,15 +223,23 @@ struct GoFlyBackgroundSettingsPage: View {
                 GoFlyContinuationStatus(continuation: continuation)
             }
 
-            if status.externalOpenFailed {
-                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"))
-            }
         }
         .sheet(isPresented: $showingDuration, onDismiss: continuation.backgroundDurationDidChange) {
             GoFlyBackgroundDurationSheet(
                 seconds: preferences.backgroundRunSeconds,
                 onChange: { preferences.setBackgroundRunSeconds($0) },
                 onDismiss: { showingDuration = false })
+        }
+        .goFlyToastOverlay(topInset: 8) {
+            if status.externalOpenFailed {
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"),
+                                  identifier: "settings.background.externalOpenFailed")
+            }
+            if let key = continuation.noticeKey {
+                GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
+                                  message: goFlyString("background.systemDecidesRuntime"),
+                                  identifier: "background.notice")
+            }
         }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -305,16 +316,18 @@ struct GoFlyVPNSettingsPage: View {
                 .accessibilityIdentifier("settings.vpn.help")
             }
 
-            if status.externalOpenFailed {
-                GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"))
-            }
-
             if recovery.isChecking {
                 ProgressView()
                     .frame(maxWidth: .infinity, alignment: .center)
                     .accessibilityIdentifier("settings.vpn.progress")
             }
-
+        }
+        .navigationDestination(isPresented: $showingHelp) { GoFlyVPNHelpPage() }
+        .goFlyToastOverlay(topInset: 8) {
+            if status.externalOpenFailed {
+                GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"),
+                                  identifier: "settings.vpn.externalOpenFailed")
+            }
             if recovery.connectionState == .unavailable || recovery.connectionState == .timedOut {
                 GoFlyStatusBanner(tone: .danger,
                                   title: goFlyString(recovery.connectionState.settingsStatusKey),
@@ -324,7 +337,6 @@ struct GoFlyVPNSettingsPage: View {
                                   identifier: "settings.vpn.failure")
             }
         }
-        .navigationDestination(isPresented: $showingHelp) { GoFlyVPNHelpPage() }
         .onAppear {
             status.refresh()
             if recovery.canCheck { recovery.checkConnection() }
@@ -375,6 +387,14 @@ struct GoFlyDeviceSettingsPage: View {
         .sheet(item: $exportItem) { item in
             GoFlyShareSheet(url: item.url)
         }
+        .goFlyToastOverlay(topInset: 8) {
+            if exportFailed {
+                GoFlyStatusBanner(tone: .danger,
+                                  title: goFlyString("settings.diagnostics.exportFailed"),
+                                  onDismiss: { exportFailed = false },
+                                  identifier: "settings.diagnostics.exportFailed")
+            }
+        }
         .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             status.refresh()
@@ -396,9 +416,6 @@ struct GoFlyDeviceSettingsPage: View {
                 action: exportDiagnostics,
                 identifier: "settings.diagnostics.export"
             )
-            if exportFailed {
-                GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.diagnostics.exportFailed"))
-            }
         }
         .settingsCard()
     }
@@ -528,11 +545,6 @@ struct GoFlyContinuationStatus: View {
                 .accessibilityIdentifier("background.runtimeAvailable")
             }
 
-            if let key = continuation.noticeKey {
-                GoFlyStatusBanner(tone: .warning, title: goFlyString(key),
-                                  message: goFlyString("background.systemDecidesRuntime"),
-                                  identifier: "background.notice")
-            }
         }
         .padding(16)
         .goFlyCard(floating: true)

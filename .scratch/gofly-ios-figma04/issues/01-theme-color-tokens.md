@@ -4,7 +4,7 @@
 
 **Blocked by:** 01a.
 
-**Status:** ready-for-agent
+**Status:** in progress
 
 **Assignee hint:** Luna
 
@@ -20,4 +20,8 @@
 
 ## 執行紀錄
 
-（執行者在此記錄：日期、完成項、截圖路徑、未完成與原因、決策。）
+### 2026-10-29 執行紀錄（Luna）
+
+- 已新增 Figma variable path 對照的 `GoFlyColorTokens`／dynamic `GoFlyThemeColor`，更新 `GoFlyStyle` 語意別名與 `docs/IOS-COLOR-SCHEME.json` 精確快照，並新增 token Light／Dark 測試。外觀偏好轉換由 dynamic provider 更新；保留 UIKit 原生輸入／貼上控制與 MapKit renderer 色彩例外。Dark Primary 白字依使用者決定覆寫。
+- 目前以 fixture 截圖覆蓋色彩抽查：`work/gofly-ios-figma04/screenshots/{B1,B5,B7,B10,D1,D6,D8,E1,F1,F1.b,R02,R03,R04,R04.a,R05}-light.png` 與同名 `-dark.png`；並排頁 `work/gofly-ios-figma04/screenshots/index.html`。逐張全 frame 色彩驗收尚未完成，受 01a fixture 缺口限制，不能標記整票完成。
+- Figma 色票板個別 surface 與現行 Variables 快照有不一致；程式以目前可讀的 Variables 與使用者指定階梯為準，沒有修改 Figma。`app/GoFly/scripts/check.sh` 曾通過；未做實機驗證。

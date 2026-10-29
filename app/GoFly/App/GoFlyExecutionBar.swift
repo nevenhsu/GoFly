@@ -14,8 +14,8 @@ struct GoFlyExecutionHeader: View {
     private var iconBackground: Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor.white.withAlphaComponent(0.32)
-                : UIColor.white.withAlphaComponent(0.14)
+                ? UIColor(GoFlyThemeColor.commonWhite).withAlphaComponent(0.32)
+                : UIColor(GoFlyThemeColor.commonWhite).withAlphaComponent(0.14)
         })
     }
 

@@ -29,7 +29,7 @@ final class GoFlyRedesignScreenshots: XCTestCase {
             wait(app.buttons["onboarding.location.skip"])
             snapshot(app, "precision-onboarding-location-\(sample)")
             app.buttons["onboarding.location.skip"].tap()
-            wait(app.buttons["onboarding.vpn.next"])
+            wait(app.buttons["onboarding.vpn.check"])
             snapshot(app, "precision-onboarding-vpn-\(sample)")
             wait(app.descendants(matching: .any)["onboarding.vpn.failure"])
             app.swipeUp()
@@ -37,7 +37,7 @@ final class GoFlyRedesignScreenshots: XCTestCase {
             let help = app.buttons["onboarding.vpn.help.open"]
             wait(help)
             help.tap()
-            wait(app.staticTexts["onboarding.vpn.help.step1"])
+            wait(app.buttons["onboarding.vpn.help.step1.action"])
             Thread.sleep(forTimeInterval: 0.45)
             snapshot(app, "precision-vpn-help-\(sample)")
             app.terminate()

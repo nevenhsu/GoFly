@@ -28,8 +28,10 @@ final class GoFlyMovementModel: ObservableObject {
     let continuation: MovementContinuationController
     let positionHold: PositionHoldController
     let keepAlive: PositionKeepAlive
+    let placeSearch: any PlaceSearching
+    let placeResolver: any PlaceResolving
     /// Owned here so the map view uses it without observing every fix.
-    let location = GoFlyRealLocation()
+    let location: GoFlyRealLocation
     private let service: ServiceController
     private var subscriptions: [AnyCancellable] = []
     private var speedSynchronizer: MovementSpeedSynchronizer?
@@ -37,19 +39,49 @@ final class GoFlyMovementModel: ObservableObject {
 
     init(service: ServiceController, recoveryStore: SessionRecoveryStore) {
         self.service = service
+#if DEBUG && targetEnvironment(simulator)
+        location = GoFlyUITestOverrides.isFrameMode
+            ? GoFlyRealLocation(uiTestFixture: true)
+            : GoFlyRealLocation()
+#else
+        location = GoFlyRealLocation()
+#endif
+        let placeSearch: any PlaceSearching
+        let placeResolver: any PlaceResolving
+#if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.isFrameMode {
+            placeSearch = GoFlyUITestPlaceSearch()
+            placeResolver = GoFlyUITestPlaceResolver()
+        } else {
+            placeSearch = MapKitPlaceSearch()
+            placeResolver = MapKitPlaceResolver()
+        }
+#else
+        placeSearch = MapKitPlaceSearch()
+        placeResolver = MapKitPlaceResolver()
+#endif
+        self.placeSearch = placeSearch
+        self.placeResolver = placeResolver
         let snapshot = recoveryStore.initialSnapshot
-        presentationMode = snapshot.mode
+        presentationMode = GoFlyUITestOverrides.initialMode(for: GoFlyUITestOverrides.frame) ?? snapshot.mode
         route = RouteExecutionController(
             draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
-            commands: service, search: MapKitPlaceSearch()
+            commands: service, search: placeSearch
         )
         _ = route.setRoundTripEnabled(snapshot.roundTripEnabled)
         joystick = JoystickMovementController(commands: service, speed: GoFlyPreferences.shared.movementSpeed)
         positionHold = PositionHoldController(service: service)
         keepAlive = PositionKeepAlive(service: service)
+#if DEBUG && targetEnvironment(simulator)
+        let recoveryProbe: any TunnelProbing = GoFlyUITestOverrides.isFrameMode
+            ? GoFlyUITestOverrides.fixtureTunnelProbe(for: GoFlyUITestOverrides.frame)
+            : NetworkTunnelProbe()
+#else
+        let recoveryProbe: any TunnelProbing = NetworkTunnelProbe()
+#endif
         recovery = ConnectionRecoveryController(
             service: service, route: route, joystick: joystick,
-            probe: NetworkTunnelProbe(), positionHold: positionHold, retainedColdSnapshot: snapshot
+            probe: recoveryProbe, positionHold: positionHold, retainedColdSnapshot: snapshot
         )
         let routeForPresentation = route
         continuation = MovementContinuationController(
@@ -154,10 +186,20 @@ final class GoFlyMovementModel: ObservableObject {
         return true
     }
 
-    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft { saved }
+    private static func routeDraft(restoring saved: RouteDraft) -> RouteDraft {
+#if DEBUG && targetEnvironment(simulator)
+        if let draft = GoFlyUITestOverrides.routeDraft(for: GoFlyUITestOverrides.frame) { return draft }
+#endif
+        return saved
+    }
 
     private static func routePlanner() -> any RoutePlanning {
-        FallbackRoutePlanner(provider: MapKitRoutePathProvider())
+#if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.isFrameMode {
+            return GoFlyUITestRoutePlanner(outcome: GoFlyUITestOverrides.routePlanOutcome)
+        }
+#endif
+        return FallbackRoutePlanner(provider: MapKitRoutePathProvider())
     }
 
 }
@@ -168,21 +210,23 @@ struct GoFlyMapView: View {
     @ObservedObject var service: ServiceController
     let recoveryStore: SessionRecoveryStore
     let setupMetadata: GoFlySetupMetadata?
+    private let initialSheetDetent: GoFlySheetDetent?
     @ObservedObject private var route: RouteExecutionController
     @ObservedObject private var joystick: JoystickMovementController
     @ObservedObject private var recovery: ConnectionRecoveryController
     @ObservedObject private var continuation: MovementContinuationController
     @ObservedObject private var positionHold: PositionHoldController
+    private let uiTestFixtureFrame: String?
     private var mode: GoFlyMapMode {
         get { movement.presentationMode }
         nonmutating set { movement.setPresentationMode(newValue) }
     }
     @StateObject private var checkpoints: SessionCheckpointSaver
     private var location: GoFlyRealLocation { movement.location }
-    @StateObject private var search = CandidateController(search: MapKitPlaceSearch())
-    @StateObject private var wanderSearch = CandidateController(search: MapKitPlaceSearch())
+    @StateObject private var search: CandidateController
+    @StateObject private var wanderSearch: CandidateController
     @State private var cameraIntent: GoFlyCameraIntent?
-    private let mapPlaces = MapKitPlaceResolver()
+    private let mapPlaces: any PlaceResolving
     @State private var pendingGPSRecenter = false
     @State private var projection: GoFlyMapProjection?
     @State private var topFrame = CGRect.zero
@@ -191,6 +235,7 @@ struct GoFlyMapView: View {
     @State private var bottomCardFrame = CGRect.zero
     @State private var bottomContentHeight: CGFloat = 260
     @State private var sheetDetent: GoFlySheetDetent = .expanded
+    @State private var didApplyInitialSheetDetent = false
     @State private var sheetHeight: CGFloat = 320
     @State private var presentedSheet: GoFlyMapSheet?
     @State private var searchFocusRequest: UUID?
@@ -227,17 +272,24 @@ struct GoFlyMapView: View {
         service: ServiceController,
         recoveryStore: SessionRecoveryStore,
         movement: GoFlyMovementModel,
-        setupMetadata: GoFlySetupMetadata? = nil
+        setupMetadata: GoFlySetupMetadata? = nil,
+        uiTestFixtureFrame: String? = nil,
+        initialSheetDetent: GoFlySheetDetent? = nil
     ) {
         self.movement = movement
         _service = ObservedObject(wrappedValue: service)
         self.recoveryStore = recoveryStore
         self.setupMetadata = setupMetadata
+        self.uiTestFixtureFrame = uiTestFixtureFrame
+        self.initialSheetDetent = initialSheetDetent
         _route = ObservedObject(wrappedValue: movement.route)
         _joystick = ObservedObject(wrappedValue: movement.joystick)
         _recovery = ObservedObject(wrappedValue: movement.recovery)
         _continuation = ObservedObject(wrappedValue: movement.continuation)
         _positionHold = ObservedObject(wrappedValue: movement.positionHold)
+        _search = StateObject(wrappedValue: CandidateController(search: movement.placeSearch))
+        _wanderSearch = StateObject(wrappedValue: CandidateController(search: movement.placeSearch))
+        mapPlaces = movement.placeResolver
         let origin = JoystickOriginController(service: service, joystick: movement.joystick)
         _joystickOrigin = StateObject(wrappedValue: origin)
         _wander = StateObject(wrappedValue: WanderPlanningCoordinator(
@@ -333,6 +385,15 @@ struct GoFlyMapView: View {
         content
             .onAppear {
                 sceneActivity.isActive = scenePhase == .active
+#if DEBUG && targetEnvironment(simulator)
+                if let uiTestFixtureFrame {
+                    configureUITestFrame(uiTestFixtureFrame)
+                }
+#endif
+                if !didApplyInitialSheetDetent {
+                    didApplyInitialSheetDetent = true
+                    if let initialSheetDetent { sheetDetent = initialSheetDetent }
+                }
                 joystickOrigin.attach(JoystickOriginHost(
                     isJoystickMode: { mode == .joystick },
                     isSceneActive: { sceneActivity.isActive },
@@ -355,7 +416,11 @@ struct GoFlyMapView: View {
                     continuation.sceneDidBecomeActive()
                     movement.keepAlive.sceneDidBecomeActive()
                 }
+#if DEBUG && targetEnvironment(simulator)
+                if uiTestFixtureFrame == nil { recovery.requestForegroundCheck() }
+#else
                 recovery.requestForegroundCheck()
+#endif
                 service.warmupSession()
                 if isTeleportHoldRecovery { sheetDetent = .collapsed }
                 if dynamicTypeSize.isAccessibilitySize { sheetDetent = .expanded }
@@ -369,6 +434,53 @@ struct GoFlyMapView: View {
                 wander.cancelAll()
             }
     }
+
+#if DEBUG && targetEnvironment(simulator)
+    private func configureUITestFrame(_ frame: String) {
+        let places = GoFlyUITestOverrides.fixturePlaces
+        if let mode = GoFlyUITestOverrides.initialMode(for: frame) { movement.setPresentationMode(mode) }
+        sheetDetent = frame == "B2" ? .half : (["B1", "D3", "E1.a", "E2.a"].contains(frame) ? .collapsed : .expanded)
+        if let coordinate = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) {
+            cameraIntent = GoFlyCameraIntent(coordinate: coordinate, resetsZoom: true)
+        }
+
+        switch frame {
+        case "B3":
+            showingSearch = true
+        case "B4":
+            showingSearch = true
+            search.updateQuery("25.04776, 121.51706")
+        case "B5":
+            search.select(places[2])
+            presentedSheet = GoFlyMapSheet(content: .details(places[2]))
+        case "B6":
+            snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), places[0].title))
+        case "B7":
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                _ = service.teleport(to: TeleportCandidate(place: places[2]))
+            }
+        case "C1", "C2", "C3", "C4":
+            presentedSheet = GoFlyMapSheet(content: .favorites)
+        case "D5":
+            if let nodeID = route.draft.destination?.id { _ = route.openPicker(for: nodeID) }
+        case "D19", "D21", "D22":
+            showingFavoriteRoutes = true
+        case "E2", "E2.a":
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                _ = joystick.setWanderEnabled(true)
+            }
+        case "E4":
+            selectedWanderPlace = places[1]
+            joystick.applyWanderTarget(places[1])
+        case "F1", "F1.a", "F1.b", "F4", "F5", "F6", "F6.a", "F7", "F8", "F9":
+            showingSettings = true
+        default:
+            break
+        }
+    }
+#endif
 
     private func observeMapInputs<Content: View>(_ content: Content) -> some View {
         content
@@ -623,17 +735,16 @@ struct GoFlyMapView: View {
     }
 
     private func toastStack(topInset: CGFloat) -> some View {
-        GoFlyMapToastStack(
-            service: service, route: route, joystick: joystick, recovery: recovery,
-            continuation: continuation, positionHold: positionHold, joystickOrigin: joystickOrigin,
-            wander: wander, notices: $notices,
-            searchPasteWarning: $searchPasteWarning,
-            showingSettings: $showingSettings,
-            mode: mode, sceneSettled: sceneSettled, isResumeState: isResumeState)
-            .padding(.horizontal, 16)
-            .padding(.top, topInset)
-            .frame(maxWidth: .infinity)
-            .zIndex(50)
+        GoFlyToastOverlay(topInset: topInset) {
+            GoFlyMapToastStack(
+                service: service, route: route, joystick: joystick, recovery: recovery,
+                continuation: continuation, positionHold: positionHold, joystickOrigin: joystickOrigin,
+                wander: wander, notices: $notices,
+                searchPasteWarning: $searchPasteWarning,
+                showingSettings: $showingSettings,
+                mode: mode, sceneSettled: sceneSettled, isResumeState: isResumeState)
+        }
+        .zIndex(50)
     }
 
     @ViewBuilder
@@ -705,7 +816,7 @@ struct GoFlyMapView: View {
         let cameraViewport = activeCandidate == nil
             ? viewport
             : CGRect(origin: .zero, size: size)
-        return GoFlyMapCanvas(
+        var canvas = GoFlyMapCanvas(
             marker: movement.presentation.marker, candidate: activeCandidate,
             viewport: cameraViewport, cameraIntent: cameraIntent,
             route: mode == .route ? route.plannedRoute : (isWanderMap ? joystick.wanderRoute : nil),
@@ -742,6 +853,10 @@ struct GoFlyMapView: View {
                 if projection != $0 { projection = $0 }
             }
         )
+#if DEBUG && targetEnvironment(simulator)
+        canvas.usesOfflineFixtureTiles = uiTestFixtureFrame != nil
+#endif
+        return canvas
     }
 
     @ViewBuilder

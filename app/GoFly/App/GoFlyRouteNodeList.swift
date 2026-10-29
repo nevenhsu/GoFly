@@ -77,7 +77,7 @@ struct GoFlyRouteNodeList: View {
                 row(node)
                     .frame(width: listFrame.width, height: dragHeight)
                     .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
+                    .shadow(color: GoFlyThemeColor.commonBlack.opacity(0.18), radius: 10, y: 5)
                     .scaleEffect(1.02)
                     .position(x: listFrame.width / 2, y: pointer.y - listFrame.minY)
                     .allowsHitTesting(false)

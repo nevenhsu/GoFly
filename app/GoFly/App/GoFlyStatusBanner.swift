@@ -23,17 +23,17 @@ struct GoFlyStatusBanner: View {
     var messageIdentifier: String? = nil
     var isFloating = true
     @State private var isDismissedLocally = false
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if !isDismissedLocally {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: tone.symbol)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(tone.tint)
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: tone.toastSymbol)
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(tone.toastIcon)
+                    .frame(width: 22, height: 22)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(GoFlyFont.subheadlineEmphasis)
                         .foregroundStyle(GoFlyTextColor.primary)
@@ -45,8 +45,7 @@ struct GoFlyStatusBanner: View {
                     if let message {
                         Text(message)
                             .font(GoFlyFont.footnote)
-                            .foregroundStyle(GoFlyTextColor.message)
-                            .lineSpacing(2)
+                            .foregroundStyle(GoFlyTextColor.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier(messageIdentifier
                                 ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
@@ -62,7 +61,7 @@ struct GoFlyStatusBanner: View {
                             .padding(.horizontal, 12)
                             .frame(minWidth: 56, minHeight: 32)
                             .background(GoFlyStyle.toastActionSurface, in: Capsule())
-                            .overlay { Capsule().strokeBorder(GoFlyStyle.toastActionBorder.opacity(colorScheme == .dark ? 1 : 0.45), lineWidth: 0.5) }
+                            .overlay { Capsule().strokeBorder(tone.toastBorder, lineWidth: 0.5) }
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -82,25 +81,55 @@ struct GoFlyStatusBanner: View {
                     }) {
                         Image(systemName: GoFlySymbols.close)
                             .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
+                            .foregroundStyle(tone.toastDismiss)
+                            .frame(width: 20, height: 20)
+                            .frame(width: 44, height: 44, alignment: .trailing)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(goFlyString("common.dismiss"))
                     .accessibilityIdentifier(identifier.map { "\($0).dismiss" } ?? "statusBanner.dismiss")
-                    .padding(.horizontal, -6)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(tone.toastSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(tone.tint.opacity(colorScheme == .dark ? 1 : 0.35), lineWidth: 1)
+                    .strokeBorder(tone.toastBorder, lineWidth: 1)
             }
+            .goFlyShadow(isFloating ? .toast : nil)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier ?? "statusBanner")
+        }
+    }
+}
+
+/// Shared top overlay container for independently dismissible floating notices.
+/// The overlay does not participate in the page's layout, so it never pushes content down.
+struct GoFlyToastOverlay<Content: View>: View {
+    let topInset: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(topInset: CGFloat = 8, @ViewBuilder content: @escaping () -> Content) {
+        self.topInset = topInset
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(spacing: 8) { content() }
+            .padding(.horizontal, 16)
+            .padding(.top, topInset)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .accessibilityElement(children: .contain)
+    }
+}
+
+extension View {
+    func goFlyToastOverlay<Toast: View>(topInset: CGFloat = 8,
+                                        @ViewBuilder content: @escaping () -> Toast) -> some View {
+        overlay(alignment: .top) {
+            GoFlyToastOverlay(topInset: topInset, content: content)
+                .zIndex(50)
         }
     }
 }

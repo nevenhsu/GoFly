@@ -190,7 +190,7 @@ private struct GoFlyManualJoystickPad: View {
                 .padding(20)
             ForEach(0..<24) { direction in
                 Capsule()
-                    .fill(GoFlyGrayScale.secondaryLabel.opacity(0.5))
+                    .fill(GoFlyTextColor.secondary.opacity(0.5))
                     .frame(width: direction % 6 == 0 ? 2 : 1, height: direction % 6 == 0 ? 8 : 4)
                     .offset(y: -diameter / 2 + 12)
                     .rotationEffect(.degrees(Double(direction) * 15))
@@ -213,12 +213,12 @@ private struct GoFlyManualJoystickPad: View {
                         .fill(steadyEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
                         .frame(width: 20, height: 20)
                 }
-                .shadow(color: .black.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
+                .shadow(color: GoFlyThemeColor.commonBlack.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
                 .offset(thumbOffset)
                 .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
         }
         .frame(width: diameter, height: diameter)
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+        .shadow(color: GoFlyThemeColor.commonBlack.opacity(0.12), radius: 8, y: 4)
         .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .updating($touching) { _, touching, _ in touching = true }
