@@ -5,7 +5,7 @@ import Testing
 @Suite @MainActor
 struct JoystickOriginControllerTests {
     @Test func freshGPSAlreadyGivesTheJoystickAnOrigin() async {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let (origin, host) = controller(service)
 
@@ -15,7 +15,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func theOriginTeleportIsNeverReplacedAndSettlesOnlyForItsIntent() async throws {
-        let device = JoystickControlledDevice(), service = ServiceController(service: device)
+        let device = JoystickControlledDevice(), service = ServiceController(service: device); service.setMovementConnectionAvailable(true)
         let (origin, _) = controller(service)
 
         origin.ensure()
@@ -35,7 +35,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func withoutAPositionItAsksForAFixAndSendsTheAcceptedOne() async throws {
-        let device = JoystickControlledDevice(), service = ServiceController(service: device)
+        let device = JoystickControlledDevice(), service = ServiceController(service: device); service.setMovementConnectionAvailable(true)
         let (origin, host) = controller(service)
 
         origin.ensure()
@@ -50,7 +50,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func aMissingFixEndsTheRequestAndShowsTheHintUntilDismissed() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let (origin, _) = controller(service)
 
         origin.ensure()
@@ -67,7 +67,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func anInvalidAcceptedFixEndsAWaitingRequestWithoutTeleporting() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let (origin, _) = controller(service)
 
         origin.ensure()
@@ -77,7 +77,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func outsideJoystickModeNothingIsRequestedOrFlagged() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let (origin, host) = controller(service)
         host.joystickMode = false
 
@@ -89,7 +89,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func availabilityRetriesOnlyInAnActiveSceneWithNoRequest() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let (origin, host) = controller(service)
 
         host.sceneActive = false
@@ -106,7 +106,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func goInJoystickModeReplacesAnOriginWaitingForAFix() async throws {
-        let device = JoystickControlledDevice(), service = ServiceController(service: device)
+        let device = JoystickControlledDevice(), service = ServiceController(service: device); service.setMovementConnectionAvailable(true)
         let (origin, _) = controller(service)
 
         origin.ensure()
@@ -119,7 +119,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func goOutsideJoystickModeBecomesTheOriginOnlyWhileOneIsRequested() async throws {
-        let device = JoystickControlledDevice(), service = ServiceController(service: device)
+        let device = JoystickControlledDevice(), service = ServiceController(service: device); service.setMovementConnectionAvailable(true)
         let (origin, host) = controller(service)
 
         origin.ensure()
@@ -131,7 +131,7 @@ struct JoystickOriginControllerTests {
     }
 
     @Test func cancelDropsTheRequest() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let (origin, _) = controller(service)
         origin.ensure()
         origin.cancel()

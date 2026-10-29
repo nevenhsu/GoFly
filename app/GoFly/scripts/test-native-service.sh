@@ -23,7 +23,7 @@ xcrun swiftc -swift-version 6 -parse-as-library -I "$out" -I "$products" \
   "$out/idevice.o" -L "$products" -lGoFlyCore \
   -o "$out/native-service-tests"
 for scenario in missing-pairing preparation-failure clear-failure reset-failure success \
-  fresh-recovery one-extra second-prepare-failure known-nontransient \
-  explicit-gate-invalidated authority-gates fresh-identity-mismatch deadline-exhaustion; do
+  single-attempt-failure known-nontransient explicit-gate-invalidated \
+  authority-gates deadline-exhaustion; do
   "$out/native-service-tests" "$scenario"
 done

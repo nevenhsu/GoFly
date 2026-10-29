@@ -48,11 +48,12 @@ struct ConnectionRecoveryControllerTests {
         await wait { service.clearState == .confirmed && !service.nativeBusy }
         service.finishColdClear()
 
+        // The connection is still unconfirmed (`.connecting`): an active scene
+        // probes by itself, silently.
         recovery.sceneDidBecomeActive()
-        #expect(recovery.canCheck)
-        recovery.checkConnection()
-        await wait { await probe.count == 1 }
-        #expect(recovery.connectionState == .reachable)
+        await wait { await probe.count == 1 && recovery.connectionState == .reachable }
+        #expect(recovery.noticeKey == nil)
+        #expect(service.movementConnection == .available)
         #expect(!recovery.requiresColdConfirmation)
         #expect(service.canTeleport)
     }
@@ -87,9 +88,9 @@ struct ConnectionRecoveryControllerTests {
                                             search: RecoveryControllerSearch())
         let recovery = ConnectionRecoveryController(service: service, route: route,
             joystick: JoystickMovementController(commands: service), probe: probe)
-        recovery.sceneDidBecomeActive()
         #expect(service.restoreGPS())
         await wait { await device.clearStarted }
+        recovery.sceneDidBecomeActive()
         recovery.requestForegroundCheck()
         #expect(await probe.count == 0)
         await device.releaseClear()
@@ -130,7 +131,7 @@ struct ConnectionRecoveryControllerTests {
         await wait { await probe.count == 1 }
         #expect(recovery.connectionState == .timedOut)
         #expect(recovery.noticeKey == "recovery.connectionLost")
-        #expect(!service.movementConnectionAvailable)
+        #expect(service.movementConnection == .unavailable)
         #expect(service.error == nil)
         #expect(!route.canStart)
         #expect(!joystick.canBeginGesture)
@@ -141,6 +142,8 @@ struct ConnectionRecoveryControllerTests {
         let service = ServiceController(service: device)
         #expect(service.start())
         await wait { service.phase == .ready && !service.nativeBusy }
+        // Only re-checking a known failure shows the checking notice.
+        service.setMovementConnectionAvailable(false)
         let probe = RecoveryControllerProbe(hold: true)
         let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
                                                search: RecoveryControllerSearch())
@@ -182,7 +185,7 @@ struct ConnectionRecoveryControllerTests {
         #expect(recovery.unverifiedMovement == nil)
     }
 
-    @Test func stoppedColdHoldNeedsExplicitProbeInsteadOfAutomaticForegroundProbe() async throws {
+    @Test func stoppedColdHoldProbesAtLaunchBecauseTheConnectionIsUnconfirmed() async throws {
         let device = RecoveryControllerDevice()
         let service = ServiceController(service: device)
         let position = SessionDisplayPosition(coordinate: GeoCoordinate(latitude: 25, longitude: 121)!, source: .gps)
@@ -193,11 +196,9 @@ struct ConnectionRecoveryControllerTests {
         let joystick = JoystickMovementController(commands: service)
         let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick, probe: probe)
         recovery.sceneDidBecomeActive()
-        await Task.yield()
-        #expect(await probe.count == 0)
-        #expect(recovery.canCheck)
-        recovery.checkConnection()
-        await wait { await probe.count == 1 }
+        await wait { await probe.count == 1 && recovery.connectionState == .reachable }
+        #expect(recovery.noticeKey == nil)
+        #expect(service.movementConnection == .available)
     }
 
     @Test func acceptedStopInvalidatesLateProbeWithoutReopeningConnectionFence() async throws {
@@ -218,7 +219,7 @@ struct ConnectionRecoveryControllerTests {
         await wait { await device.clearStarted }
         await probe.release()
         await Task.yield()
-        #expect(!service.movementConnectionAvailable)
+        #expect(service.movementConnection == .unavailable)
         #expect(recovery.connectionState == .unknown)
         recovery.releaseForInactiveScene()
         await device.releaseClear()
@@ -292,7 +293,7 @@ struct ConnectionRecoveryControllerTests {
         #expect(!joystick.canResume)
         await device.releaseMove()
         await wait { joystick.phase == .neutral || joystick.phase == .unknown }
-        #expect(!service.movementConnectionAvailable)
+        #expect(service.movementConnection == .unavailable)
         #expect(await device.moveCount == 1)
         #expect(!joystick.canResume)
     }

@@ -8,6 +8,7 @@
 
 **Assignee hint:** Luna
 
+- [ ] **字型一律使用系統字型 `Font.system`**：所有文字（含 `GoFlyFont` 14 個 token、按鈕、Toast、輸入欄、Tab Bar 標籤、地圖標註以外的 UI）都由 `Font.system(...)`（或等價的系統 text style，如 `.body`、`.footnote`）取得，字級與字重依 Figma `Theme/*`；不得使用 `Font.custom`、任何字型檔或字型名稱字串。Figma 的 PingFang TC 即 iOS 系統中文字型，由系統字型自動對應。新增測試／靜態檢查：UI 原始碼沒有 `Font.custom`、`UIFont(name:`、`.custom(`。
 - [ ] 字級、字重與 `docs/IOS-TYPOGRAPHY.md` 表格一致；只使用 Regular／Semibold。
 - [ ] 文字色全部走 01 的 token；沒有 View 直接寫字級或顏色字面值。
 - [ ] `TypographyStandardTests` 更新並通過。

@@ -96,6 +96,22 @@ struct GoFlyFigmaFrameFixture: View {
             await runtime.prepareUITestData()
             await runtime.importedRoutes.load()
             await runtime.favoriteRoutes.load()
+            if frame == "F1.a" {
+                await prepareStopFailureState(runtime.service)
+            }
+        }
+    }
+
+    private func prepareStopFailureState(_ service: ServiceController) async {
+        guard service.start() else { return }
+        for _ in 0..<250 {
+            if service.phase == .ready && !service.nativeBusy { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard service.phase == .ready, service.stop() else { return }
+        for _ in 0..<250 {
+            if !service.nativeBusy { break }
+            try? await Task.sleep(for: .milliseconds(20))
         }
     }
 

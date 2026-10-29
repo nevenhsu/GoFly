@@ -14,6 +14,11 @@ public final class ConnectionRecoveryController: ObservableObject {
     private let joystick: JoystickMovementController
     private let positionHold: PositionHoldController?
     @Published public private(set) var automaticRepairInProgress = false
+    /// True while the repair was started automatically (not by the Retry button).
+    private var automaticRepairIsSilent = false
+    /// An automatic repair is running: the status pill shows connecting, but no
+    /// banner or toast is shown until it fails.
+    public var isSilentRepairInProgress: Bool { automaticRepairInProgress && automaticRepairIsSilent }
     private var automaticRepairTask: Task<Void, Never>?
     private var automaticRepairAttempted: MovementTaskLease?
     private var failedAutomaticRepair: MovementConnectionRecovery?
@@ -104,6 +109,7 @@ public final class ConnectionRecoveryController: ObservableObject {
 
     public var noticeKey: String? {
         if service.coldClearPending { return "recovery.coldClearPending" }
+        if isSilentRepairInProgress { return nil }
         if isChecking && checkNoticeVisible { return "recovery.connectionChecking" }
         if recoveredNotice { return "recovery.connectionRecovered" }
         switch connectionState {
@@ -214,14 +220,15 @@ public final class ConnectionRecoveryController: ObservableObject {
         return service.phase == .stopped || service.phase == .repairRequired
     }
 
-    /// Automatic checks require actual service readiness or an already-known
-    /// unavailable connection fence. A cold hold alone is display state, not
+    /// Automatic checks require actual service readiness, or a connection that
+    /// is not yet confirmed (app launch: `.connecting`) or known unavailable.
+    /// A cold hold alone is display state, not
     /// evidence that a probe should run.
     private var isAutomaticProbeEligible: Bool {
         guard !service.nativeBusy else { return false }
         if service.phase == .ready { return true }
         guard service.phase == .stopped || service.phase == .repairRequired else { return false }
-        return !service.movementConnectionAvailable
+        return service.movementConnection != .available
     }
 
     private var retainedSummaryAvailable: Bool {
@@ -277,7 +284,10 @@ public final class ConnectionRecoveryController: ObservableObject {
         let probe = probe
         probeStartedFromFailure = connectionState == .unavailable || connectionState == .timedOut
         recoveredNotice = false
-        checkNoticeVisible = showCheckingNotice
+        // Re-checking a connection that last succeeded is silent. The first probe
+        // after launch (`.connecting`) shows no toast either; only re-checking a
+        // known failure shows the checking notice.
+        checkNoticeVisible = showCheckingNotice && service.movementConnection == .unavailable
         isChecking = true
         if connectionState == .unknown { connectionState = .checking }
         let probeStartedAt = clock.now
@@ -369,6 +379,7 @@ public final class ConnectionRecoveryController: ObservableObject {
         } else { return false }
         guard suspended else { return false }
         automaticRepairAttempted = recovery.lease
+        automaticRepairIsSilent = !recovery.explicitlyRequested
         automaticRepairInProgress = true
         generation &+= 1
         checkTask?.cancel()
@@ -376,23 +387,9 @@ public final class ConnectionRecoveryController: ObservableObject {
         connectionState = recovery.failure == .operationTimedOut ? .timedOut : .unavailable
         checkNoticeVisible = false
         route.recoveryProbeDidFinish(); joystick.recoveryProbeDidFinish()
-        guard recovery.explicitlyRequested else {
-            automaticRepairTask = Task { [weak self] in
-                guard let self else { return }
-                // Let requestConnectionRecovery finish publishing before the
-                // service records the request as failed.
-                await Task.yield()
-                self.service.declineAutomaticConnectionRecovery(recovery)
-                self.failedAutomaticRepair = recovery
-                self.automaticRepairInProgress = false
-                self.automaticRepairTask = nil
-                self.lastProbeFinishedAt = self.clock.now
-                self.evaluateServiceState()
-            }
-            return true
-        }
-        // A Retry in flight replaces the earlier failure; Retry stays
-        // unavailable until this attempt settles.
+        // One automatic attempt per task lease runs silently; a Retry in flight
+        // replaces the earlier failure. Retry stays unavailable until this
+        // attempt settles, and a failed attempt waits for an explicit Retry.
         failedAutomaticRepair = nil
         automaticRepairTask = Task { [weak self] in
             guard let self else { return }
@@ -404,7 +401,7 @@ public final class ConnectionRecoveryController: ObservableObject {
                 self.route.finishConnectionRecovery(succeeded: true)
                 self.joystick.finishConnectionRecovery(succeeded: true)
                 self.positionHold?.finishConnectionRecovery(succeeded: true)
-            } else if !self.service.movementConnectionAvailable {
+            } else if self.service.movementConnection == .unavailable {
                 // Preserve the suspended logical task for the explicit retry
                 // action. Periodic probes never reset this attempt budget.
                 self.failedAutomaticRepair = recovery
@@ -412,10 +409,11 @@ public final class ConnectionRecoveryController: ObservableObject {
             self.automaticRepairInProgress = false
             self.automaticRepairTask = nil
             self.lastProbeFinishedAt = self.clock.now
-            if success || self.service.movementConnectionAvailable {
+            if success || self.service.movementConnection != .unavailable {
                 self.automaticRepairAttempted = nil
                 self.failedAutomaticRepair = nil
-                self.finishConnectionRecovery(recovered: true)
+                // An automatic repair recovers silently: no "recovered" notice.
+                self.finishConnectionRecovery(recovered: recovery.explicitlyRequested)
             }
             self.evaluateServiceState()
         }

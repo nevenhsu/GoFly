@@ -43,7 +43,7 @@ struct SessionRefreshTests {
     }
 
     @Test(arguments: ["fixed", "route", "wander"])
-    func runningTaskFailureWaitsForExplicitRetryThenRebuildsAndContinues(mode: String) async throws {
+    func failedSilentRepairWaitsForExplicitRetryThenRebuildsAndContinues(mode: String) async throws {
         let f = try fixture()
         try await start(mode, f)
         let originalLease = try #require(f.service.movementAuthority.snapshot.lease)
@@ -51,21 +51,39 @@ struct SessionRefreshTests {
         let target = f.joystick.wanderTarget
         try await failAndAwaitRetry(f, advance: .seconds(5))
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
         #expect(f.service.movementAuthority.snapshot.lease == originalLease)
-        #expect(f.service.movementConnectionAvailable)
+        #expect(f.service.movementConnection != .unavailable)
         #expect(f.service.displayPositionMarker?.freshness == .fresh)
         #expect(f.route.progress?.committedDistanceMeters == routeDistance)
         #expect(f.joystick.wanderTarget == target)
         #expect(mode == "route" ? f.route.phase == .running : mode == "wander" ? f.joystick.phase == .moving : f.hold.phase == .running)
         let operations = await f.device.operations
-        let reset = try #require(operations.firstIndex(of: "rebuild"))
+        let reset = try #require(operations.lastIndex(of: "rebuild"))
         #expect(Array(operations[reset...].prefix(3)) == ["rebuild", "prepare", "point"])
         let count = await f.device.points.count
         await wait { f.clock.sleepingCount > 0 }
         f.clock.advance(by: .seconds(5))
         await wait { await f.device.points.count > count }
-        #expect(await f.device.rebuilds == 1)
+        #expect(await f.device.rebuilds == 2)
+        #expect(f.service.stopSimulation())
+        f.recovery.releaseForInactiveScene()
+    }
+
+    @Test(arguments: ["fixed", "route", "wander"])
+    func runningTaskFailureRepairsSilentlyOnceAndContinuesWithoutRetry(mode: String) async throws {
+        let f = try fixture()
+        try await start(mode, f)
+        let originalLease = try #require(f.service.movementAuthority.snapshot.lease)
+        await f.device.failNextPoint()
+        f.clock.advance(by: .seconds(5))
+        await wait { await f.device.rebuilds == 1 && !f.recovery.automaticRepairInProgress && !f.service.nativeBusy }
+        #expect(!f.recovery.isSilentRepairInProgress)
+        #expect(!f.recovery.canRetryAutomaticRepair)
+        #expect(f.recovery.noticeKey == nil)
+        #expect(f.service.movementAuthority.snapshot.lease == originalLease)
+        #expect(f.service.movementConnection == .available)
+        #expect(mode == "route" ? f.route.phase == .running : mode == "wander" ? f.joystick.phase == .moving : f.hold.phase == .running)
         #expect(f.service.stopSimulation())
         f.recovery.releaseForInactiveScene()
     }
@@ -95,7 +113,7 @@ struct SessionRefreshTests {
         await f.probe.setFailure(.unavailable)
         f.recovery.networkPathDidChange()
         await wait { !f.recovery.isChecking && f.recovery.connectionState == .unavailable }
-        #expect(f.service.movementConnectionAvailable)
+        #expect(f.service.movementConnection != .unavailable)
         #expect(!f.service.isRecoveringConnection)
         #expect(!f.recovery.canRetryAutomaticRepair)
         #expect(mode == "route" ? f.route.phase == .running : mode == "wander" ? f.joystick.phase == .moving : f.hold.phase == .running)
@@ -217,7 +235,7 @@ struct SessionRefreshTests {
         try await failAndAwaitRetry(f, advance: .seconds(1))
         await f.device.setHoldRebuild()
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 }
+        await wait { await f.device.rebuilds == 2 }
         #expect(f.route.pause())
         await f.device.releaseRebuild()
         await wait { !f.recovery.automaticRepairInProgress }
@@ -237,16 +255,16 @@ struct SessionRefreshTests {
         try await failAndAwaitRetry(f, advance: .seconds(1))
         await f.device.failNextRebuild()
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 && f.recovery.canRetryAutomaticRepair && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 2 && f.recovery.canRetryAutomaticRepair && !f.recovery.automaticRepairInProgress }
         #expect(f.route.intent == intent)
-        #expect(!f.service.movementConnectionAvailable)
+        #expect(f.service.movementConnection == .unavailable)
         f.recovery.networkPathDidChange()
         await wait { !f.recovery.isChecking }
-        #expect(await f.device.rebuilds == 1, "probes never repair on their own")
+        #expect(await f.device.rebuilds == 2, "probes never repair on their own")
         f.recovery.checkConnection()
-        await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 3 && !f.recovery.automaticRepairInProgress }
         #expect(f.route.phase == .running && f.route.intent == intent)
-        #expect(f.service.movementConnectionAvailable)
+        #expect(f.service.movementConnection != .unavailable)
         #expect(f.service.stopSimulation())
         f.recovery.releaseForInactiveScene()
     }
@@ -259,7 +277,7 @@ struct SessionRefreshTests {
         #expect(mode == "route" ? f.route.pause() : f.joystick.pause())
         #expect(f.service.movementAuthority.snapshot.runState == .paused)
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
         #expect(mode == "route" ? f.route.phase == .paused : f.joystick.phase == .paused)
         #expect(f.service.currentJoystickOrigin != nil)
         #expect(mode == "route" ? f.route.resume() : f.joystick.resume())
@@ -275,7 +293,7 @@ struct SessionRefreshTests {
         await f.device.setHoldRebuild()
         let priorTimeouts = watchdog.requests.count
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 && watchdog.requests.count > priorTimeouts }
+        await wait { await f.device.rebuilds == 2 && watchdog.requests.count > priorTimeouts }
         watchdog.fireLatest()
         await wait { f.service.phase == .repairRequired }
         #expect(f.service.nativeBusy)
@@ -283,13 +301,13 @@ struct SessionRefreshTests {
         await wait { f.recovery.canRetryAutomaticRepair && !f.service.nativeBusy }
         #expect(!f.service.isRecoveringConnection)
         try await retry(f)
-        await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 3 && !f.recovery.automaticRepairInProgress }
         #expect(f.route.phase == .running)
         #expect(f.service.stopSimulation())
         f.recovery.releaseForInactiveScene()
     }
 
-    @Test func backgroundFailureWaitsForForegroundRetryWithoutNativeRepair() async throws {
+    @Test func backgroundFailureSilentRepairRunsOnceAndItsFailureWaitsForForegroundRetry() async throws {
         let f = try fixture()
         try await start("fixed", f)
         let intent = try #require(f.hold.intent)
@@ -299,11 +317,11 @@ struct SessionRefreshTests {
         f.recovery.releaseForInactiveScene(continuingLease: intent.lease)
         f.hold.releaseForInactiveScene(continuingLease: intent.lease)
         try await failAndAwaitRetry(f, advance: .seconds(5))
-        #expect(await f.device.rebuilds == 0)
+        #expect(await f.device.rebuilds == 1, "the one silent repair ran in the background and failed")
         #expect(!f.service.movementAuthority.permitsDispatch(for: intent.lease))
         f.service.setMovementSceneActive(true)
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 && !f.recovery.automaticRepairInProgress }
+        await wait { await f.device.rebuilds == 2 && !f.recovery.automaticRepairInProgress }
         #expect(f.hold.phase == .running)
         #expect(f.service.stopSimulation())
     }
@@ -314,13 +332,13 @@ struct SessionRefreshTests {
         try await failAndAwaitRetry(f, advance: .seconds(1))
         await f.device.setHoldRebuild()
         try await retry(f)
-        await wait { await f.device.rebuilds == 1 }
+        await wait { await f.device.rebuilds == 2 }
         #expect(f.service.stopSimulation())
         let points = await f.device.points.count
         await f.device.releaseRebuild()
         await wait { !f.recovery.automaticRepairInProgress && !f.service.nativeBusy }
         #expect(f.route.phase == .editing && f.route.intent == nil)
-        #expect(f.service.phase == .ready && f.service.movementConnectionAvailable)
+        #expect(f.service.phase == .ready && f.service.movementConnection != .unavailable)
         #expect(f.service.movementAuthority.snapshot.lease == nil)
         f.clock.advance(by: .seconds(10))
         for _ in 0..<20 { await Task.yield() }
@@ -366,14 +384,15 @@ struct SessionRefreshTests {
         let recovery = ConnectionRecoveryController(service: service, route: route, joystick: joystick, probe: probe, positionHold: hold, clock: monitorClock)
         return Fixture(service: service, route: route, joystick: joystick, hold: hold, recovery: recovery, clock: clock, monitorClock: monitorClock, device: device, probe: probe)
     }
-    /// A write failure after the device keeper's own reconnect: the task is
-    /// suspended for an explicit Retry and nothing is rebuilt automatically.
+    /// A write failure: the one silent automatic repair rebuilds once and fails
+    /// too, so the task stays suspended for an explicit Retry.
     private func failAndAwaitRetry(_ f: Fixture, advance: Duration) async throws {
         let rebuilds = await f.device.rebuilds
+        await f.device.failNextRebuild()
         await f.device.failNextPoint()
         f.clock.advance(by: advance)
         await wait { f.recovery.canRetryAutomaticRepair && !f.recovery.automaticRepairInProgress }
-        #expect(await f.device.rebuilds == rebuilds)
+        #expect(await f.device.rebuilds == rebuilds + 1)
     }
 
     private func retry(_ f: Fixture) async throws {

@@ -64,7 +64,6 @@ final class NativeDeviceService: DeviceService, @unchecked Sendable {
         try await perform("connection.rebuild") {
             self.closeSession()
             self.keeper.sessionDidClose()
-            self.keeper.reconnectWasRequested()
             try TunnelProbe.run()
         }
     }

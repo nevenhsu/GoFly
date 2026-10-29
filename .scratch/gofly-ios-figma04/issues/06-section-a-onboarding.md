@@ -16,6 +16,7 @@
 - [ ] **層級（實機回饋）**：Light 整頁背景為 `canvas`（`#EEEEF3`）、步驟清單與卡片為 `surface/card`（`#FBFBFD`），不得用灰色 control 當清單底（目前層級顛倒）；Dark 為 `#0B0B0D`／`#1A1A1C`；R02、R03、R04、R04.a、R05–R08 全部照此檢查。
 - [ ] **R05 連線說明精簡版**（Figma R05 渲染為準）：導覽列『返回／連線說明』；一張步驟卡三列單行（1 下載 LocalDevVPN ›、2 開啟 LocalDevVPN ›、3 點 Connect；藍圓白字數字；前兩列右側 chevron 保留原連結功能）；下方『仍然無法連線？』卡片一則提示（確認連著 Wi‑Fi，在 LocalDevVPN 中斷後重新連接，再回來檢查）。刪除大標題、副標、各步驟說明小字、『本機網路權限』列與底部『返回並檢查連線』主按鈕；導覽列返回後仍自動重新檢查連線；三語文案與無用字串、UI test 辨識碼同步清理。移除『本機網路權限』入口後若無其他路徑開啟系統設定，回報使用者決定，不自行保留舊列。
 - [ ] 首次引導的錯誤通知為懸浮 Toast（疊在內容上方、不推動標題與清單）；VPN 檢查成功後不顯示 success Toast，沿用再次檢查並自動進入 B1，首次進入時 sheet 收合。
+- [ ] 本票涵蓋畫面的文字一律 `Font.system`（依 `Theme/*`），圖示一律來自 Figma『0 · 共用元件（Icon）』（經 `GoFlyIcon`）；沒有 `Font.custom`、SF Symbol 或自繪替代。
 - [ ] **截圖驗證（必做，沒有截圖視為未完成）**：用 01a 的 fixture（不需網路、VPN、真機）對本票涵蓋的每一張 frame、Light 與 Dark 各截一張，存到 `work/gofly-ios-figma04/screenshots/`，並與 `work/gofly-ios-figma04/figma/` 的同名 Figma 截圖並排比對：無破版、無文字截斷、無缺漏元素、顏色與層級一致。把每張的結論（一致／有差異＋原因）與檔案路徑寫入票尾『執行紀錄』；到不了的 frame 如實列出，不略過。
 - [ ] 最大 Dynamic Type 與 Reduce Motion 下仍可操作；互動元件觸控命中範圍 ≥ 44 × 44 pt；每個圖示按鈕有 accessibility label。
 - [ ] 相關單元測試與 UI tests 更新並通過；`app/GoFly/scripts/check.sh` 通過。
@@ -29,3 +30,4 @@
 - R04 標題先前比 Figma 下移約 85 pt 且字級／字重不符；已移除多餘垂直留白並對齊 Figma `121:51267` 的 x=16、y=130、361×39 pt、28 pt Semibold。實作由共享 `GoFlyFont.display` 提供；接續 02 票會統一改為 `Font.system` text-style API 並保留 Figma 的 28 pt Semibold 對應。Light／Dark 標題位置由 `testR04TypographyAndPositionMatchFigmaInBothAppearances` 驗證，最新截圖為 `R04-light.png`、`R04-dark.png`。
 - R04 `已連線` 靜態 Figma 狀態與自動 B1 行為分開：`R04-connected-light.png`／`R04-connected-dark.png` 是連線狀態截圖；`R04-auto-B1-*` 驗證實際成功導覽。Figma 靜態 frame 仍有檢查 CTA，未修改 Figma。
 - R05 移除「本機網路權限」列後，程式中未找到替代的直接系統設定入口，保留為產品待決事項。R06 不在目前 frame catalog；A 區全量逐 frame／最大 Dynamic Type 驗收仍未完成，維持 `in progress`。未做實機驗證。
+- 使用者追加 A 區比對項（尚待本票實作／重截）：R01 progress 顏色按 Figma 修正；R04-connected 略過成功 Toast 並在連線成功後直接進入 B1（此行為已依先前決定實作）；R04.a 主按鈕文案改為「重新連線」，英文使用單字 `Reconnect`；R08 依 Figma 04 渲染全面整理 UI。對照截圖放在 `work/gofly-ios-figma04/screenshots/`。

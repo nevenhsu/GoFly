@@ -17,23 +17,13 @@ struct DeviceSessionKeeperTests {
     }
 
     @Test
-    func transientFailureBeforeDispatchRebuildsAndRetriesOnce() {
+    func transientFailureBeforeDispatchClosesTheSessionAndIsNotRetried() {
         let link = ScriptedLink([.notSent(.serviceUnavailable, dispatched: false), .ack], owned: true)
         let keeper = DeviceSessionKeeper()
 
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
-        #expect(link.attempts.map(\.recovering) == [false, false])
+        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .notSent(.serviceUnavailable))
+        #expect(link.attempts.map(\.recovering) == [false], "the one automatic repair is not the keeper's")
         #expect(link.closes == 1)
-    }
-
-    @Test
-    func secondTransientFailureBeforeDispatchIsReturnedWithoutAThirdAttempt() {
-        let link = ScriptedLink([.notSent(.tunnelUnavailable, dispatched: false),
-                                 .notSent(.tunnelUnavailable, dispatched: false)], owned: true)
-        let keeper = DeviceSessionKeeper()
-
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .notSent(.tunnelUnavailable))
-        #expect(link.attempts.count == 2)
         #expect(!link.ownsSession)
     }
 
@@ -57,28 +47,15 @@ struct DeviceSessionKeeperTests {
     }
 
     @Test
-    func unconfirmedWriteRecoversTheSamePointOnce() {
+    func unconfirmedWriteIsReturnedWithoutARecoveryAttempt() {
         let authority = MovementTaskAuthority()
         let lease = MovementTaskLease()
         let gate = PointDispatchGate(authority: authority, lease: lease, replacing: authority.snapshot)
         let link = ScriptedLink([.unconfirmed(.operationTimedOut), .ack], owned: true)
         let keeper = DeviceSessionKeeper()
 
-        #expect(keeper.deliver(coordinate, dispatch: gate, using: link) == .acknowledged)
-        #expect(link.attempts.map(\.recovering) == [false, true])
-        #expect(link.attempts.allSatisfy { $0.coordinate == coordinate })
-    }
-
-    @Test
-    func failedRecoveryKeepsTheOriginalUncertainty() {
-        let authority = MovementTaskAuthority()
-        let lease = MovementTaskLease()
-        let gate = PointDispatchGate(authority: authority, lease: lease, replacing: authority.snapshot)
-        let link = ScriptedLink([.unconfirmed(.operationTimedOut), .unconfirmed(.serviceUnavailable)], owned: true)
-        let keeper = DeviceSessionKeeper()
-
         #expect(keeper.deliver(coordinate, dispatch: gate, using: link) == .unconfirmed(.operationTimedOut))
-        #expect(link.attempts.count == 2)
+        #expect(link.attempts.map(\.recovering) == [false])
     }
 
     @Test
@@ -118,35 +95,6 @@ struct DeviceSessionKeeperTests {
         clock.value += 100
         try keeper.prepare(using: link)
         #expect(link.closes == 1)
-    }
-
-    @Test
-    func automaticReconnectHappensAtMostOncePerMinute() {
-        let clock = Clock()
-        let link = ScriptedLink([.notSent(.serviceUnavailable, dispatched: false), .ack,
-                                 .notSent(.serviceUnavailable, dispatched: false),
-                                 .notSent(.serviceUnavailable, dispatched: false), .ack], owned: true)
-        let keeper = DeviceSessionKeeper(now: clock.read)
-
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
-        clock.value += 59_000_000_000
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .notSent(.serviceUnavailable))
-        #expect(link.attempts.count == 3, "no second reconnect inside the minute")
-        clock.value += 1_000_000_000
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
-        #expect(link.attempts.count == 5)
-    }
-
-    @Test
-    func explicitRetryStartsAFreshReconnectWindow() {
-        let clock = Clock()
-        let link = ScriptedLink([.notSent(.serviceUnavailable, dispatched: false), .ack,
-                                 .notSent(.serviceUnavailable, dispatched: false), .ack], owned: true)
-        let keeper = DeviceSessionKeeper(now: clock.read)
-
-        _ = keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link)
-        keeper.reconnectWasRequested()
-        #expect(keeper.deliver(coordinate, dispatch: PointDispatchGate(), using: link) == .acknowledged)
     }
 
     @Test

@@ -7,9 +7,60 @@ import XCTest
 @MainActor
 final class GoFlyFigmaFrameScreenshots: XCTestCase {
     private let supportedFrames: Set<String> = [
-        "R01", "R02", "R03", "R04", "R04.a", "R05", "R07", "R08", "B1", "B2", "B5", "B7", "B10",
-        "D1", "D6", "D8", "E1", "F1", "F1.b"
+        "R01", "R02", "R03", "R04", "R04.a", "R05", "R07", "R08",
+        "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B10",
+        "D1", "D5", "D6", "D8", "D19",
+        "E1", "E1.a", "E2", "E2.a", "E4",
+        "F1", "F1.a", "F1.b", "F4", "F5", "F6", "F6.a", "F7", "F8", "F9"
     ]
+
+    func testF1aStopFailureFixtureShowsResetAction() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Figma frame fixtures run only in the iOS Simulator.")
+        #else
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-gofly-ui-frame", "F1.a",
+            "-gofly-ui-appearance", "light",
+            "-gofly-ui-device-state", "stop-failure",
+            "-gofly-ui-preferences-language", "zh-Hant",
+            "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+        ]
+        app.launch()
+        waitForFixture(app, frame: "F1.a")
+        XCTAssertTrue(app.buttons["service.reset"].waitForExistence(timeout: 10))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "F1.a-light-stop-failure"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        #endif
+    }
+
+    func testAdditionalConfiguredFrameFixturesOpenExpectedSurface() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Figma frame fixtures run only in the iOS Simulator.")
+        #else
+        for frame in ["B3", "B4", "B6", "D5", "D19", "E1.a", "E2", "E2.a", "E4"] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "-gofly-ui-frame", frame,
+                "-gofly-ui-appearance", "light",
+                "-gofly-ui-session-store", UUID().uuidString,
+                "-gofly-ui-favorites-store", UUID().uuidString,
+                "-gofly-ui-imports-store", UUID().uuidString,
+                "-gofly-ui-favorite-routes-store", UUID().uuidString,
+                "-gofly-ui-preferences-store", UUID().uuidString,
+                "-gofly-ui-preferences-language", "zh-Hant",
+                "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+            ]
+            if frame == "B10" { app.launchArguments.append("-gofly-ui-wifi-disconnected") }
+            if frame == "E2" || frame == "E2.a" { app.launchArguments += ["-gofly-ui-device-state", "normal"] }
+            app.launch()
+            waitForFixture(app, frame: frame)
+            app.terminate()
+        }
+        #endif
+    }
 
     func testCaptureSupportedFigmaFramesInBothAppearances() throws {
         #if !targetEnvironment(simulator)
@@ -48,8 +99,18 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                 if frame.id == "D8" {
                     app.launchArguments += ["-gofly-ui-route-outcome", "planningFailed"]
                 }
+                if frame.id == "F1.a" {
+                    app.launchArguments += ["-gofly-ui-device-state", "stop-failure"]
+                }
                 app.launch()
                 waitForFixture(app, frame: frame.id)
+
+                if ["F4", "F5", "F6", "F6.a", "F7", "F8", "F9"].contains(frame.id) {
+                    openSettingsFrame(app, frame: frame.id)
+                }
+                if frame.id == "F1.a" {
+                    XCTAssertTrue(app.buttons["service.reset"].waitForExistence(timeout: 10))
+                }
 
                 if frame.id == "R05" {
                     let help = app.buttons["onboarding.vpn.help.open"]
@@ -248,8 +309,56 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.buttons["setup.retry"].waitForExistence(timeout: 10))
         case "B1", "B2", "B5", "B10", "D1", "D6", "E1":
             XCTAssertTrue(app.otherElements["map.canvas"].waitForExistence(timeout: 10))
+        case "B3":
+            XCTAssertTrue(app.otherElements["search.panel"].waitForExistence(timeout: 10))
+        case "B4":
+            XCTAssertTrue(app.otherElements["search.panel"].waitForExistence(timeout: 10))
+            let result = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "search.result.")).firstMatch
+            XCTAssertTrue(result.waitForExistence(timeout: 10))
+        case "B6":
+            XCTAssertTrue(app.descendants(matching: .any)["snackbar"].waitForExistence(timeout: 10))
+        case "D5":
+            XCTAssertTrue(app.descendants(matching: .any)["search.panel"].waitForExistence(timeout: 10))
+        case "D19":
+            XCTAssertTrue(app.descendants(matching: .any)["favoriteRoutes.content"].waitForExistence(timeout: 10))
+        case "E1.a":
+            XCTAssertTrue(app.descendants(matching: .any)["joystick.panel"].waitForExistence(timeout: 10))
+        case "E2":
+            XCTAssertTrue(app.buttons["joystick.stopWander"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.staticTexts["漫步中"].exists)
+        case "E2.a":
+            XCTAssertTrue(app.descendants(matching: .any)["joystick.panel"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["漫步中"].waitForExistence(timeout: 10))
+        case "E4":
+            XCTAssertTrue(app.descendants(matching: .any)["map.wander.locationCard"].waitForExistence(timeout: 10))
         default:
             break
+        }
+    }
+
+    private func openSettingsFrame(_ app: XCUIApplication, frame: String) {
+        let settingsID: String
+        let pageID: String
+        switch frame {
+        case "F4": settingsID = "settings.location"; pageID = "settings.location.page"
+        case "F5": settingsID = "settings.vpn"; pageID = "settings.vpn.page"
+        case "F6", "F6.a": settingsID = "settings.background"; pageID = "settings.background.page"
+        case "F7": settingsID = "settings.language"; pageID = "settings.language.page"
+        case "F8": settingsID = "settings.appearance"; pageID = "settings.appearance.page"
+        default: settingsID = "settings.device"; pageID = "settings.device.page"
+        }
+        let row = app.descendants(matching: .any)[settingsID]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "settings entry missing: \(settingsID)")
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)[pageID].waitForExistence(timeout: 10),
+                      "settings page missing: \(pageID)")
+
+        if frame == "F6.a" {
+            let duration = app.descendants(matching: .any)["settings.background.duration"]
+            XCTAssertTrue(duration.waitForExistence(timeout: 10))
+            duration.tap()
+            XCTAssertTrue(app.buttons["settings.background.duration.confirm"].waitForExistence(timeout: 10))
         }
     }
 

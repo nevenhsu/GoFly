@@ -430,7 +430,7 @@ public final class MovementContinuationController: ObservableObject {
             return true
         }
         guard owner.lease == demand.lease, owner.health == .confirmedHealthy,
-              owner.runState == .running, service.movementConnectionAvailable,
+              owner.runState == .running, service.movementConnection != .unavailable,
               !service.coldClearPending else { return false }
         switch demand.kind {
         case .finiteRoute, .roundTrip:

@@ -38,6 +38,19 @@ struct GoFlyMapToastStack: View {
         mode == .route && route.phase == .paused && route.suspensionReason == nil
     }
 
+    /// The person paused the wander: same as a route, no toast. A recovery
+    /// suspension is covered by `recovery.isSilentRepairInProgress` instead.
+    /// One connection-lost banner (with Retry) owns the notice while a silent
+    /// repair runs and after it failed: no second service-error or pause toast.
+    private var repairOwnsNotice: Bool {
+        recovery.isSilentRepairInProgress || recovery.canRetryAutomaticRepair
+    }
+
+    private var isUserPausedWander: Bool {
+        mode == .joystick && joystick.wanderEnabled && joystick.phase == .paused
+            && joystick.suspensionReason == nil
+    }
+
     /// The one toast button for an error key. Retry stays in the current mode:
     /// teleport retries its prepared operation, route its planning, wander its
     /// stream. Only when none applies does it reconnect the device.
@@ -125,7 +138,8 @@ struct GoFlyMapToastStack: View {
                     isFloating: true
                 )
             }
-            if let error = service.error, SessionStatusErrors.reportsFailure(error.rawValue), !notices.isDismissed(.serviceError) {
+            if let error = service.error, !repairOwnsNotice,
+               SessionStatusErrors.reportsFailure(error.rawValue), !notices.isDismissed(.serviceError) {
                 GoFlyStatusBanner(
                     tone: .danger,
                     title: goFlyString(error.rawValue),
@@ -225,8 +239,8 @@ struct GoFlyMapToastStack: View {
                     isFloating: true
                 )
             }
-            if sceneSettled,
-               !isUserPausedRoute, (continuation.noticeKey != nil && !notices.isDismissed(.continuation)) || isResumeState {
+            if sceneSettled, !repairOwnsNotice,
+               !isUserPausedRoute, !isUserPausedWander, (continuation.noticeKey != nil && !notices.isDismissed(.continuation)) || isResumeState {
             let routePaused = mode == .route && (route.phase == .paused || route.phase == .interrupted)
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
             let wanderPaused = mode == .joystick && joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase)

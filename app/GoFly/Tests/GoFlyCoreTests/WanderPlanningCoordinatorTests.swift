@@ -5,7 +5,7 @@ import Testing
 @Suite @MainActor
 struct WanderPlanningCoordinatorTests {
     @Test func startTeleportsToThePlannedStartAndStartsWanderOnItsACK() async throws {
-        let device = JoystickControlledDevice(), service = ServiceController(service: device)
+        let device = JoystickControlledDevice(), service = ServiceController(service: device); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let origin = try #require(service.currentJoystickOrigin)
         let target = WanderTarget(place: place(destination))
@@ -37,7 +37,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func aResultArrivingAfterCancelAllNeverTeleportsOrFails() async throws {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let planner = ScriptedWanderPlanner([.hold]), host = RecordingWanderHost()
         let joystick = JoystickMovementController(commands: service, clock: RouteTestClock())
@@ -55,7 +55,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func everyFailedOriginEndsInOnePlanningFailureThatRetryClears() async throws {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let planner = ScriptedWanderPlanner([.fail, .fail, .fail, .hold]), host = RecordingWanderHost()
         let joystick = JoystickMovementController(commands: service, clock: RouteTestClock())
@@ -73,7 +73,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func startDuringAnInFlightOriginWaitsForThatOriginsOutcome() async throws {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let planner = ScriptedWanderPlanner([.hold]), host = RecordingWanderHost()
         let joystick = JoystickMovementController(commands: service, clock: RouteTestClock())
@@ -97,7 +97,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func anUnconfirmedOriginDropsTheDeferredStart() async throws {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let planner = ScriptedWanderPlanner([.hold]), host = RecordingWanderHost()
         let joystick = JoystickMovementController(commands: service, clock: RouteTestClock())
@@ -114,7 +114,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func interruptedStartupResumesWithItsOriginAndTargetOnlyInAnActiveScene() async throws {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let origin = try #require(service.currentJoystickOrigin)
         let target = WanderTarget(place: place(destination))
@@ -145,7 +145,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func startOutsideJoystickModeDoesNothing() async {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         service.observeRealLocation(location())
         let planner = ScriptedWanderPlanner([.route]), host = RecordingWanderHost()
         host.joystickMode = false
@@ -158,7 +158,7 @@ struct WanderPlanningCoordinatorTests {
     }
 
     @Test func aDetachedCoordinatorIsInactive() {
-        let service = ServiceController(service: JoystickControlledDevice())
+        let service = ServiceController(service: JoystickControlledDevice()); service.setMovementConnectionAvailable(true)
         let joystick = JoystickMovementController(commands: service)
         let wander = WanderPlanningCoordinator(service: service, joystick: joystick,
                                                origin: JoystickOriginController(service: service, joystick: joystick),

@@ -78,7 +78,6 @@ final class NativeDeviceSession: DeviceSession {
     }
     func deviceIdentifier() throws -> String {
         try requireBudget()
-        if scenario == "fresh-identity-mismatch" && sessionID > 1 { return "other-device" }
         return "test-device"
     }
     func isSupportPrepared() throws -> Bool { try requireBudget(); return true }
@@ -86,9 +85,6 @@ final class NativeDeviceSession: DeviceSession {
     func validateLocationService() throws {
         try requireBudget()
         if scenario == "preparation-failure" { throw DeviceServiceFailure.devicePreparationRequired }
-        if scenario == "second-prepare-failure" && sessionID > 1 {
-            throw DeviceServiceFailure.devicePreparationRequired
-        }
     }
     func clearLocation() throws {
         if scenario == "clear-failure" { throw DeviceServiceFailure.operationTimedOut }
@@ -100,10 +96,7 @@ final class NativeDeviceSession: DeviceSession {
             HarnessState.shared.fireFirstSetHook()
         }
         switch scenario {
-        case "fresh-recovery" where sessionID == 1,
-             "fresh-identity-mismatch" where sessionID == 1,
-             "one-extra" where sessionID <= 2,
-             "second-prepare-failure" where sessionID == 1,
+        case "single-attempt-failure" where sessionID == 1,
              "explicit-gate-invalidated" where sessionID == 1:
             throw DeviceServiceFailure.serviceUnavailable
         case "known-nontransient" where sessionID == 1:
@@ -221,9 +214,8 @@ private func expectAuthorityGateRules() {
             try await expectFailure(.serviceUnavailable) { try await service.resetClientConnection() }
             try await service.clearLocation()
             try await service.resetClientConnection()
-        case "fresh-recovery", "one-extra", "second-prepare-failure",
-             "known-nontransient", "explicit-gate-invalidated", "fresh-identity-mismatch",
-             "deadline-exhaustion":
+        case "single-attempt-failure", "known-nontransient",
+             "explicit-gate-invalidated", "deadline-exhaustion":
             let service = NativeDeviceService()
             let authority: MovementTaskAuthority
             let lease: MovementTaskLease
@@ -235,19 +227,11 @@ private func expectAuthorityGateRules() {
             let result = await service.movePoint(to: coordinate, dispatch: gate)
             let observed = HarnessState.shared.snapshot()
             switch scenario {
-            case "fresh-recovery":
-                precondition(result == .acknowledged, "fresh recovery did not acknowledge")
-                precondition(observed.coordinates == [coordinate, coordinate], "recovery changed coordinate")
-                precondition(observed.sessions == 2, "recovery reused the suspect session")
+            case "single-attempt-failure":
+                precondition(result == .unconfirmed(.serviceUnavailable), "native service retried a dispatched point")
+                precondition(observed.coordinates == [coordinate], "native service sent more than one point")
+                precondition(observed.sessions == 1, "native service rebuilt inside the point attempt")
                 precondition(gate.hasDispatched && authority.snapshot.lease == lease)
-            case "one-extra":
-                precondition(result == .unconfirmed(.serviceUnavailable))
-                precondition(observed.coordinates.count == 2 && observed.sessions == 2,
-                             "more than one extra write was attempted")
-            case "second-prepare-failure":
-                precondition(result == .unconfirmed(.serviceUnavailable),
-                             "repair preparation failure replaced original uncertainty")
-                precondition(observed.coordinates == [coordinate] && observed.sessions == 2)
             case "known-nontransient":
                 precondition(result == .unconfirmed(.devicePreparationRequired))
                 precondition(observed.coordinates == [coordinate] && observed.sessions == 1)
@@ -255,20 +239,14 @@ private func expectAuthorityGateRules() {
                 precondition(result == .unconfirmed(.serviceUnavailable),
                              "invalidated outer gate allowed replay")
                 precondition(observed.coordinates == [coordinate])
-            case "fresh-identity-mismatch":
-                precondition(result == .unconfirmed(.serviceUnavailable),
-                             "fresh identity mismatch replaced original uncertainty")
-                precondition(observed.coordinates == [coordinate] && observed.sessions == 2)
             case "deadline-exhaustion":
                 precondition(result == .notSent(.operationTimedOut))
-                precondition(observed.sessions == 2 && observed.deadlineChecks > 0,
-                             "deadline was reset or bypassed")
-                precondition(observed.constructorDeadlines.count == 2,
-                             "constructor deadline was not supplied for both attempts")
+                precondition(observed.sessions == 1 && observed.deadlineChecks > 0,
+                             "point attempt did not enforce its deadline")
+                precondition(observed.constructorDeadlines.count == 1,
+                             "native service opened more than one session for a point")
                 precondition(observed.constructorDeadlines.allSatisfy { $0 != nil },
                              "constructor started without the point budget")
-                precondition(observed.constructorDeadlines[0] == observed.constructorDeadlines[1],
-                             "repair constructor received a reset deadline")
             default:
                 fatalError("unreachable")
             }

@@ -178,9 +178,29 @@ struct GoFlyUITestDeviceService: DeviceService {
         if scenario == "rebuild-failure" { throw DeviceServiceFailure.serviceUnavailable }
     }
     func movePoint(to coordinate: GeoCoordinate, dispatch: PointDispatchGate) async -> PointDeliveryOutcome {
+        guard dispatch.claim() else { return .notSent(.operationCancelled) }
         if scenario == "unconfirmed-point" { return .unconfirmed(.operationTimedOut) }
         return .acknowledged
     }
+}
+
+@MainActor
+final class GoFlyUITestContinuedProcessingDriver: ContinuedProcessingDriving {
+    func register() -> Bool { true }
+
+    func submit(_ request: ContinuedProcessingRequest,
+                onEvent: @escaping @MainActor @Sendable (ContinuedProcessingEvent) -> Void) async throws {
+        onEvent(.launched(ContinuedProcessingGrant(
+            requestID: request.requestID, movementID: request.movementID, lease: request.lease)))
+    }
+
+    func update(requestID: UUID, progress: ContinuedProcessingProgress, title: String, subtitle: String) {}
+
+    func finish(requestID: UUID, success: Bool) -> ContinuedProcessingCompletionOutcome? {
+        success ? .success : .failed
+    }
+
+    func cancel(requestID: UUID) {}
 }
 
 enum GoFlyUITestRoutePlanOutcome: String, Sendable {

@@ -25,3 +25,4 @@
 - 共用 `GoFlyStatusBanner`／overlay 已調整 outline 狀態 icon、Figma Toast 陰影與尺寸、44 pt 關閉命中區及多筆浮層；R04 VPN 成功不顯示 success Toast，改為確認後自動進 B1 收合 sheet。Snackbar 繼續使用底部浮層。重置成功 Toast 元件仍可供 F1.b 使用。
 - 抽查截圖路徑：`work/gofly-ios-figma04/screenshots/{R04.a,B7,B10,D8,F1.b}-light.png` 與各自 `-dark.png`；總覽 `work/gofly-ios-figma04/screenshots/index.html`。R04.a／B7／D8 顯示錯誤浮層，B10 顯示 Wi-Fi 提示，F1.b 顯示重置成功提示；未完成共用元件板所有 variant 的逐一截圖比對，且 01a 尚有 45 個 frame 不可達，故本票維持 `in progress`。
 - Figma success Toast 元件 outline 色實綁 `icon/success`（Dark `#6FC48B`），與 `line/status/success` token（Dark `#52A072`）不同；App 依渲染採 icon token，保留此 Figma token 綁定差異記錄。未修改 Figma；未做實機驗證。
+- 使用者追加 Toast 比對項（2026-10-29，待實作／重截）：B7 title 與說明各最多兩行、action button 靠右；B10 action button 背景依 Figma；F1.b Toast 上移。各頁細項另記於票 07、16。R04-connected 成功後不顯示 success Toast，依票 06 執行。

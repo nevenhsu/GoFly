@@ -1,6 +1,11 @@
 import Combine
 import Foundation
 
+public enum MovementConnectionState: Equatable, Sendable {
+    /// No real probe/repair result yet.
+    case connecting, available, unavailable
+}
+
 @MainActor
 public final class ServiceController: ObservableObject, RouteCommanding, JoystickCommanding {
     @Published public private(set) var phase: ServicePhase = .stopped
@@ -21,7 +26,11 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     @Published public private(set) var preparedOperation: PreparedOperationSnapshot?
     /// TCP reachability is an admission signal only. It never claims native
     /// service health or changes the current task lease.
-    @Published public private(set) var movementConnectionAvailable = true
+    /// `.connecting` until a real tunnel probe or repair reports a result.
+    @Published public private(set) var movementConnection: MovementConnectionState = .connecting
+    // While `.connecting`, admission stays open (the result is neither success
+    // nor failure yet), so no error is surfaced. Automatic actions that need the
+    // tunnel compare against `.available` instead.
     @Published public private(set) var coldClearPending = false
     private var coldClearAttempt = false
 
@@ -218,7 +227,12 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     /// linearized before available gates are invalidated so a queued native
     /// head cannot claim between the two operations.
     public func setMovementConnectionAvailable(_ available: Bool) {
-        guard movementConnectionAvailable != available else { return }
+        let wasAvailable = movementConnection != .unavailable
+        let newState: MovementConnectionState = available ? .available : .unavailable
+        guard wasAvailable != available else {
+            if movementConnection != newState { movementConnection = newState }
+            return
+        }
         diagnose("tunnel.admission", category: .tunnel, level: .notice,
                  ["available": .flag(available), "phase": .text(phase.rawValue)])
         movementAuthority.setAdmissionFence(connectionBlocked: !available, coldRecoveryHeld: false)
@@ -229,7 +243,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         }
         // Published observers see the already-closed authority fence. This
         // avoids an admission race from an objectWillChange callback.
-        movementConnectionAvailable = available
+        movementConnection = newState
         routeSubject.send(.availabilityChanged)
         joystickSubject.send(.availabilityChanged)
     }
@@ -437,7 +451,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
     public var displayPositionMarker: PositionMarker? {
         guard let marker = positionMarker else { return nil }
         if marker.source == .simulation, marker.freshness == .waiting,
-           simulationDisplayVerified, movementConnectionAvailable, phase == .ready,
+           simulationDisplayVerified, movementConnection != .unavailable, phase == .ready,
            error == nil, movementAuthority.snapshot.runState == .running,
            movementAuthority.snapshot.health == .confirmedHealthy {
             return PositionMarker(coordinate: marker.coordinate, source: .simulation, freshness: .fresh)
@@ -453,7 +467,7 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
             fresh = confirmedSimulatedLocation == nil && realLocation?.coordinate == position.coordinate
         case .simulation:
             fresh = confirmedSimulatedLocation == position.coordinate && simulationDisplayVerified
-                && movementConnectionAvailable && phase != .repairRequired
+                && movementConnection != .unavailable && phase != .repairRequired
         }
         return PositionMarker(coordinate: position.coordinate, source: position.source,
                               freshness: fresh ? .fresh : .waiting)
@@ -831,20 +845,6 @@ public final class ServiceController: ObservableObject, RouteCommanding, Joystic
         if let owner = joystickOwners[recovery.executionID] {
             owner.paused = true; owner.neutral = false; owner.disposition = nil
         }
-    }
-
-    /// Records an automatic recovery request as failed without native work:
-    /// the device keeper already spent the automatic reconnect. The suspended
-    /// task waits for an explicit Retry, exactly as after a failed repair.
-    public func declineAutomaticConnectionRecovery(_ recovery: MovementConnectionRecovery) {
-        guard connectionRecovery == recovery, !recovery.explicitlyRequested else { return }
-        connectionRecovery = nil
-        connectionRecoveryGate = nil
-        isRecoveringConnection = false
-        failedConnectionRecovery = recovery
-        phase = .repairRequired
-        error = recovery.failure
-        markSimulationPositionUnverified()
     }
 
     /// Runs behind existing native work; never clears GPS or replaces the
@@ -1395,7 +1395,7 @@ extension ServiceController {
         deviceMayHoldSimulation = true
         confirmedSimulatedLocation = coordinate
         lastDisplayedPosition = DisplayedPosition(coordinate: coordinate, source: .simulation)
-        simulationDisplayVerified = displayEpoch == simulationDisplayEpoch && movementConnectionAvailable &&
+        simulationDisplayVerified = displayEpoch == simulationDisplayEpoch && movementConnection != .unavailable &&
             (movementAuthority.isSceneActive || hasBackgroundSimulationRuntime)
     }
     private func routeTickIsCurrent(_ owner: RouteOwner, _ tick: RouteTick) -> Bool {
@@ -1545,7 +1545,7 @@ extension ServiceController {
     }
 
     /// Resends the held position without changing the task, its lease or the
-    /// displayed position. The device keeper may reconnect once inside it.
+    /// displayed position. A failed write requests the one silent repair.
     @discardableResult
     public func sendKeepAlive() async -> Bool {
         guard let target = keepAliveTarget else { return false }

@@ -63,7 +63,11 @@ final class GoFlyMovementModel: ObservableObject {
         self.placeSearch = placeSearch
         self.placeResolver = placeResolver
         let snapshot = recoveryStore.initialSnapshot
+#if DEBUG && targetEnvironment(simulator)
         presentationMode = GoFlyUITestOverrides.initialMode(for: GoFlyUITestOverrides.frame) ?? snapshot.mode
+#else
+        presentationMode = snapshot.mode
+#endif
         route = RouteExecutionController(
             draft: Self.routeDraft(restoring: snapshot.draft), planner: Self.routePlanner(),
             commands: service, search: placeSearch
@@ -84,9 +88,16 @@ final class GoFlyMovementModel: ObservableObject {
             probe: recoveryProbe, positionHold: positionHold, retainedColdSnapshot: snapshot
         )
         let routeForPresentation = route
+#if DEBUG && targetEnvironment(simulator)
+        let continuedProcessingDriver: any ContinuedProcessingDriving = GoFlyUITestOverrides.isFrameMode
+            ? GoFlyUITestContinuedProcessingDriver()
+            : GoFlyContinuedProcessingDriver.shared
+#else
+        let continuedProcessingDriver: any ContinuedProcessingDriving = GoFlyContinuedProcessingDriver.shared
+#endif
         continuation = MovementContinuationController(
             service: service, route: route, joystick: joystick, recovery: recovery, positionHold: positionHold,
-            driver: GoFlyContinuedProcessingDriver.shared,
+            driver: continuedProcessingDriver,
             presentation: { kind, progress in
                 if kind != .finiteRoute {
                     let percent = min(100, max(0, Int(progress.cumulativeAcknowledgedDurationSeconds / BackgroundRunDuration.shared.seconds * 100)))
@@ -124,12 +135,15 @@ final class GoFlyMovementModel: ObservableObject {
             let paused = self.route.phase == .paused || self.joystick.phase == .paused || self.positionHold.phase == .paused
                 || self.route.phase == .interrupted || self.joystick.phase == .interrupted
                 || self.route.phase == .unknown || self.joystick.phase == .unknown || self.positionHold.phase == .unknown
-            let errors = SessionStatusErrors(connection: self.recovery.connectionState,
-                service: self.service.error, route: self.route.error, joystick: self.joystick.error,
+            // A silent automatic repair shows the connecting pill, not an error;
+            // only its failure becomes one.
+            let silentRepair = self.recovery.isSilentRepairInProgress
+            let errors = SessionStatusErrors(connection: silentRepair ? .checking : self.recovery.connectionState,
+                service: silentRepair ? nil : self.service.error, route: self.route.error, joystick: self.joystick.error,
                 wander: self.joystick.wanderError, wifiAvailable: self.network.isWiFiConnected,
                 dataErrors: self.dataErrorKeys())
             let hasError = !errors.isEmpty
-            let connecting = self.recovery.isChecking || self.recovery.automaticRepairInProgress || !self.service.movementConnectionAvailable
+            let connecting = self.service.movementConnection != .available
             let next = GoFlyMovementPresentation(
                 status: GoFlySessionStatus(hasError: hasError, connecting: connecting, running: running, paused: paused,
                     hasSimulated: self.service.hasSimulated),
@@ -300,6 +314,20 @@ struct GoFlyMapView: View {
     }
 
     private var isWanderMap: Bool { mode == .joystick && joystick.wanderEnabled && route.picker == nil }
+    private var shouldAutoResolveJoystickOrigin: Bool {
+#if DEBUG && targetEnvironment(simulator)
+        !GoFlyUITestOverrides.isFrameMode
+#else
+        true
+#endif
+    }
+    /// Single entry for the automatic joystick origin: joystick mode, not a
+    /// fixture, and the movement connection (VPN/tunnel) is available.
+    private func autoResolveJoystickOrigin() {
+        guard mode == .joystick else { return }
+        guard shouldAutoResolveJoystickOrigin, service.movementConnection == .available else { return }
+        joystickOrigin.ensure()
+    }
     private var activeSearch: CandidateController {
         route.picker?.candidates ?? (isWanderMap ? wanderSearch : search)
     }
@@ -403,7 +431,7 @@ struct GoFlyMapView: View {
                     !showingSettings && !showingSearch && !showingRouteList && presentedSheet == nil && route.picker == nil
                 }
                 location.start()
-                if mode == .joystick { joystickOrigin.ensure() }
+                autoResolveJoystickOrigin()
                 if cameraIntent == nil {
                     if mode == .route, let planned = route.plannedRoute {
                         cameraIntent = GoFlyCameraIntent(route: planned)
@@ -469,15 +497,74 @@ struct GoFlyMapView: View {
         case "E2", "E2.a":
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(350))
-                _ = joystick.setWanderEnabled(true)
+                await startWanderUITestFixture(target: places[1], showLocationCard: false)
             }
         case "E4":
-            selectedWanderPlace = places[1]
-            joystick.applyWanderTarget(places[1])
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                await startWanderUITestFixture(target: places[1], showLocationCard: true)
+            }
         case "F1", "F1.a", "F1.b", "F4", "F5", "F6", "F6.a", "F7", "F8", "F9":
             showingSettings = true
         default:
             break
+        }
+    }
+
+    private func startWanderUITestFixture(target: MapPlace, showLocationCard: Bool) async {
+        guard let origin = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) else { return }
+        // A cold-recovery marker is display-only. Establish a confirmed
+        // simulator position first so the fixture follows the same admission
+        // contract as a real wander start without using GPS or network access.
+        for _ in 0..<250 {
+            if !service.nativeBusy { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        for _ in 0..<250 {
+            if sceneActivity.isActive, !recovery.isChecking, service.movementConnection != .unavailable { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard sceneActivity.isActive, !recovery.isChecking, service.movementConnection != .unavailable else { return }
+        if service.phase != .ready {
+            guard service.phase == .stopped, service.start() else {
+                return
+            }
+            for _ in 0..<250 {
+                if service.phase == .ready && !service.nativeBusy { break }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        guard service.phase == .ready, !service.nativeBusy else { return }
+        joystickOrigin.cancel()
+        let originPlace = MapPlace(id: .coordinate(origin), title: "台北車站", coordinate: origin)
+        guard service.teleport(to: TeleportCandidate(place: originPlace)) else { return }
+        for _ in 0..<250 {
+            if case .acknowledged(let point) = service.pointState,
+               point.candidate.place.coordinate == origin { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard service.currentJoystickOrigin == origin else { return }
+        for _ in 0..<250 {
+            if service.phase == .ready, !service.nativeBusy, joystick.canStartWanderPlanning { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard service.phase == .ready, !service.nativeBusy, joystick.canStartWanderPlanning,
+              sceneActivity.isActive, !recovery.isChecking else { return }
+        guard let planned = try? await movement.route.planWanderSegment(from: origin, to: target.coordinate) else {
+            return
+        }
+        guard joystick.installWanderRoute(target: WanderTarget(place: target), route: planned) else {
+            return
+        }
+        guard joystick.setWanderEnabled(true) else {
+            return
+        }
+        for _ in 0..<250 {
+            if joystick.wanderEnabled && joystick.phase == .moving { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        if showLocationCard, joystick.wanderEnabled {
+            selectedWanderPlace = target
         }
     }
 #endif
@@ -506,7 +593,7 @@ struct GoFlyMapView: View {
                 if mode != .joystick { wander.cancelAll() }
                 if mode == .joystick {
                     service.warmupSession()
-                    joystickOrigin.ensure()
+                    autoResolveJoystickOrigin()
                     if !recovery.isChecking { wander.resumePending() }
                 }
                 if mode == .teleport && (positionHold.phase == .paused || positionHold.phase == .completed) {
@@ -555,11 +642,11 @@ struct GoFlyMapView: View {
             .onChange(of: recovery.isChecking) { _, checking in
                 if !checking && scenePhase == .active { wander.resumePending() }
             }
-            .onChange(of: service.movementConnectionAvailable) { _, available in
-                if available {
+            .onChange(of: service.movementConnection) { _, state in
+                if state == .available {
                     // The movement permission (tunnel) just opened: a launch-time
                     // origin that was waiting for it can now be established.
-                    joystickOrigin.ensure()
+                    autoResolveJoystickOrigin()
                     if scenePhase == .active && !recovery.isChecking { wander.resumePending() }
                 } else {
                     wander.cancelUncommitted()
@@ -572,7 +659,9 @@ struct GoFlyMapView: View {
 
     private func observeMapMovement<Content: View>(_ content: Content) -> some View {
         content
-            .onReceive(service.joystickEvents) { joystickOrigin.receive($0) }
+            .onReceive(service.joystickEvents) { event in
+                if shouldAutoResolveJoystickOrigin { joystickOrigin.receive(event) }
+            }
             .onReceive(GoFlyPathMonitor.shared.changes) { _ in recovery.networkPathDidChange() }
             .onChange(of: joystick.wanderEnabled) { _, enabled in
                 if !enabled { wanderSearch.resetSelection() }
@@ -716,7 +805,11 @@ struct GoFlyMapView: View {
             if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
             bottomChrome(in: geometry)
         }
-        .goFlySnackbar($snackbar, bottomPadding: snackbarBottomOffset(in: geometry))
+        .goFlySnackbar(
+            $snackbar,
+            bottomPadding: snackbarBottomOffset(in: geometry),
+            duration: uiTestFixtureFrame == "B6" ? .seconds(30) : nil
+        )
         .onChange(of: joystick.error) { _, newError in notices.reopen(.joystickError, ifPresent: newError) }
         .onChange(of: service.clearState) { _, state in
             // Real GPS can be observed again once the simulated location is cleared.

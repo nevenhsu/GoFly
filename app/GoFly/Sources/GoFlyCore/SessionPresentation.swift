@@ -34,8 +34,9 @@ public struct MovementConnectionRecovery: Equatable, Sendable {
     public let coordinate: GeoCoordinate
     public let failure: DeviceServiceFailure
     public let resumesTask: Bool
-    /// Only a user Retry repairs at this level. An automatic request means the
-    /// device keeper's own reconnect already failed or is out of budget.
+    /// A user Retry is explicit. An automatic request (false) is the one silent
+    /// repair attempt per task lease, made after the device keeper's own
+    /// reconnect failed or ran out of budget; a failure then waits for Retry.
     public let explicitlyRequested: Bool
 }
 

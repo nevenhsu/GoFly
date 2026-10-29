@@ -12,6 +12,7 @@
 - [ ] Primary 按鈕文字與圖示為純白；Enabled 圓形 Icon Button 外框為 0.5 pt `line/separator`。
 - [ ] Text Field 三態：Default 使用 control 色、Focused 使用 active 色並有 primary 外框、Disabled 對照 Figma。
 - [ ] 展示頁 Light／Dark 截圖與按鈕板一致；既有畫面改用共用元件，不留重複手刻副本。
+- [ ] **圖示一律使用 Figma『0 · 共用元件（Icon）』**：每個畫面的圖示都對應該目錄的 `icon/*` 共用元件（匯出的資產經 `GoFlyIcon` 使用），不得用 SF Symbol 或自繪圖形替代；目錄沒有的圖示列出回報。
 - [ ] **圖示一律匯出成資產，不使用 SF Symbol**：Figma『0 · 共用元件（Icon）』的 52 個 `icon/*` 全部匯出為單色 template 資產（`.imageset`，向量 PDF 或 SVG，命名與 Figma 一致，例如 `icon/star` → `icon-star`），由單一 `GoFlyIcon` 入口（enum 或等價型別）統一提供，可著色、尺寸可指定、隨 Dynamic Type 縮放的容器內使用。App 內既有的 `GoFlySymbols` 與所有 `Image(systemName:)`、`Label(systemImage:)` 全數改用 `GoFlyIcon`，完成後 UI 層沒有殘留 SF Symbol（系統原生控制，如導覽返回鈕、原生鍵盤、分享 sheet，不在範圍）。建立並維護對照表（寫入票尾）：每個 `icon/*` ↔ 資產名；App 用了但目錄沒有的圖示，列出清單回報，不自行新增、不挑相近圖示。新增單元測試：52 個資產都存在且為 template 渲染，`GoFlyIcon` 無遺漏 case。
 - [ ] **截圖驗證（必做，沒有截圖視為未完成）**：用 01a 的 fixture（不需網路、VPN、真機）對本票涵蓋的每一張 frame、Light 與 Dark 各截一張，存到 `work/gofly-ios-figma04/screenshots/`，並與 `work/gofly-ios-figma04/figma/` 的同名 Figma 截圖並排比對：無破版、無文字截斷、無缺漏元素、顏色與層級一致。把每張的結論（一致／有差異＋原因）與檔案路徑寫入票尾『執行紀錄』；到不了的 frame 如實列出，不略過。
 - [ ] 最大 Dynamic Type 與 Reduce Motion 下仍可操作；互動元件觸控命中範圍 ≥ 44 × 44 pt；每個圖示按鈕有 accessibility label。

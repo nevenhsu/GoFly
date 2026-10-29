@@ -57,7 +57,7 @@ public final class JoystickOriginController: ObservableObject {
 
     /// No real GPS and no last simulated position: the person must pin one.
     public var needsPinHint: Bool {
-        host.isJoystickMode() && fetchFailed && !hintDismissed
+        host.isJoystickMode() && service.movementConnection == .available && fetchFailed && !hintDismissed
             && !request.isSetting && request.intentID == nil
             && joystick.requiresOrigin && service.displayPositionMarker == nil && service.canTeleport
     }

@@ -98,6 +98,8 @@ public final class WanderPlanningCoordinator: ObservableObject {
     /// Plans a road segment before enabling the existing joystick movement
     /// owner. A stale or failed planner result cannot start a wander task.
     public func start(preselectedOrigin: GeoCoordinate? = nil, preselectedTarget: WanderTarget? = nil) {
+        // Automatic wander only starts after a real connection success.
+        guard service.movementConnection == .available else { return }
         guard host.isJoystickMode(), !joystick.wanderEnabled, canRequestStart else { return }
         guard pendingStart == nil else { return }
         let originRequest = joystickOrigin.request
@@ -155,7 +157,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                     return
                 } catch is CancellationError { return }
                 catch {
-                    if !service.movementConnectionAvailable { return }
+                    if service.movementConnection == .unavailable { return }
                     continue
                 }
             }
@@ -175,7 +177,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
               joystick.canSetWanderEnabled, joystick.canStartWanderPlanning,
               joystick.installWanderRoute(target: target, route: planned),
               joystick.setWanderEnabled(true) else {
-            if !host.isSceneActive() || host.isRecoveryChecking() || !service.movementConnectionAvailable { return false }
+            if !host.isSceneActive() || host.isRecoveryChecking() || service.movementConnection == .unavailable { return false }
             failPlanning(plannerID)
             return false
         }
@@ -265,7 +267,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                 failReplanning(planningID)
                 return
             }
-            guard service.movementConnectionAvailable else { return }
+            guard service.movementConnection != .unavailable else { return }
             guard let origin = service.currentJoystickOrigin else { failReplanning(planningID); return }
             for attempt in 0..<2 {
                 guard !Task.isCancelled, replanningID == planningID,
@@ -278,7 +280,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                 do {
                     let planned = try await planSegment(origin, target.coordinate)
                     guard !Task.isCancelled, replanningID == planningID,
-                          service.movementConnectionAvailable, host.isSceneActive(),
+                          service.movementConnection != .unavailable, host.isSceneActive(),
                           host.isJoystickMode(), joystick.wanderEnabled,
                           let currentOrigin = service.currentJoystickOrigin,
                           JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) <= 1,
@@ -292,7 +294,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                 catch { continue }
             }
             guard !Task.isCancelled, replanningID == planningID else { return }
-            guard service.movementConnectionAvailable else { return }
+            guard service.movementConnection != .unavailable else { return }
             failReplanning(planningID)
         }
     }
@@ -357,21 +359,21 @@ public final class WanderPlanningCoordinator: ObservableObject {
                   replanningID == planningID, host.isJoystickMode(),
                   host.isSceneActive(), let origin = service.currentJoystickOrigin else {
                 guard !Task.isCancelled, replanningID == planningID else { return }
-                guard service.movementConnectionAvailable else { return }
+                guard service.movementConnection != .unavailable else { return }
                 failReplanning(planningID)
                 return
             }
             let target = destination.map { WanderTarget(place: $0) }
                 ?? joystick.selectWanderTarget(from: origin)
             guard let target else {
-                if service.movementConnectionAvailable { failReplanning(planningID) }
+                if service.movementConnection != .unavailable { failReplanning(planningID) }
                 return
             }
             activeCheckpoint = Checkpoint(purpose: .replacement, origin: origin, target: target)
             do {
                 let planned = try await planSegment(origin, target.coordinate)
                 guard !Task.isCancelled, replanningID == planningID,
-                      service.movementConnectionAvailable, host.isJoystickMode(),
+                      service.movementConnection != .unavailable, host.isJoystickMode(),
                       let currentOrigin = service.currentJoystickOrigin,
                       host.isSceneActive(),
                       JoystickGeodesy.distanceMeters(from: currentOrigin, to: origin) <= 1,
@@ -380,7 +382,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                         ? joystick.installNextWanderRouteAndResume(target: target, route: planned)
                         : joystick.replaceWanderRouteAndResume(target: target, route: planned)) else {
                     guard !Task.isCancelled, replanningID == planningID else { return }
-                    guard service.movementConnectionAvailable else { return }
+                    guard service.movementConnection != .unavailable else { return }
                     failReplanning(planningID)
                     return
                 }
@@ -393,7 +395,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
                 return
             } catch {
                 guard !Task.isCancelled, replanningID == planningID else { return }
-                guard service.movementConnectionAvailable else { return }
+                guard service.movementConnection != .unavailable else { return }
                 failReplanning(planningID)
             }
         }
@@ -447,7 +449,7 @@ public final class WanderPlanningCoordinator: ObservableObject {
     /// Resumes planning interrupted by the scene, recovery or the connection.
     public func resumePending() {
         guard host.isSceneActive(), host.isJoystickMode(), !host.isRecoveryChecking(),
-              service.movementConnectionAvailable else { return }
+              service.movementConnection == .available else { return }
         if let pending = pendingStart, pending.originAcknowledged,
            pending.plannerID == planningID,
            joystick.canSetWanderEnabled, joystick.canStartWanderPlanning {

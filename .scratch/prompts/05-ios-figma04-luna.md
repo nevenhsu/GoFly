@@ -37,6 +37,7 @@
 - 無法規劃路線：按鈕『修正』，自動重排**全部**地點（含起點）後重新規劃；成功就採用新順序，失敗保留原順序與 toast（票 11）。
 - 服務卡：永遠只有一顆主按鈕。正常已停止＝『啟動模擬』、運行中＝『停止服務』、停止失敗／服務卡住＝『重置連線』；重置成功後按鈕變『啟動模擬』並在導覽列下方以懸浮方式顯示 success toast（疊在內容上方、不推動版面）（標題『已重置連線』、說明『可以重新啟動模擬』）；重置失敗不顯示錯誤、只保留『GPS 未確認』（票 17）。
 - **Toast 一律懸浮**：所有 Toast／Banner 疊在內容上方（導覽列或搜尋列下方、左右 16 pt）、帶浮層陰影（黑 18%、y 4、blur 16）、不推動版面；用共用 Toast 與單一 overlay 容器，不得各頁 inline 放置；Snackbar 維持底部懸浮。Figma Toast 元件（Light／Dark）已加上此陰影。
+- **字型一律 `Font.system`、圖示一律用 Figma『0 · 共用元件（Icon）』**：文字只用系統字型（不得 `Font.custom` 或字型檔），字級字重依 `Theme/*`；圖示只用 Figma Icon 共用元件（匯出資產經 `GoFlyIcon`），不用 SF Symbol 或自繪替代。
 - Dark 階梯：畫面底 `#0B0B0D`、Tab／Sheet／info card `#1A1A1C`、Sheet 上按鈕與 list `#2C2C2F`、active／focused `#48484D`；遮罩為黑色 40%；Primary 按鈕文字與圖示純白；Enabled 圓形 Icon Button 外框 `line/separator` 0.5 pt。
 - 路線停靠點選中列：primary 邊線、中性底（Light＝card、Dark＝active），不用 primary 底。
 - 遮罩、Sheet、清單層級：Sheet 上的 list／按鈕底色比 Sheet 亮兩階；active／focused 再亮三階。

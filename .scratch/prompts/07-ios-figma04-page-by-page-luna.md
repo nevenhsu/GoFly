@@ -49,6 +49,7 @@ Figma section（Light／Dark 同名，Dark 加前綴 `Dark · `）：
 ## 四、共同規則
 
 - 只改 UI／UX 與票內指定行為，**不改命令、送點、ACK、背景執行語意**。
+- 字型一律 `Font.system`（不得 `Font.custom`／字型檔），字級字重依 `Theme/*`；圖示一律使用 Figma『0 · 共用元件（Icon）』（匯出資產經 `GoFlyIcon`），不用 SF Symbol 或自繪替代。
 - 互動元件命中範圍 ≥ 44 × 44 pt；圖示按鈕有 accessibility label；最大 Dynamic Type 不裁切。
 - 本地化三語（zh-Hant、zh-Hans、en）同步；`EnglishButtonLabelTests`、`IssueCatalogTests`、`TypographyStandardTests` 要過。
 - 每票結束 `app/GoFly/scripts/check.sh` 必過；相關單元測試與 UI tests 更新。

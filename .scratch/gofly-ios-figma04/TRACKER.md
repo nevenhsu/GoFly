@@ -41,3 +41,5 @@
 另：**每張票完成都要截圖驗證**（01a 的 fixture，不需網路／VPN／真機；Light 與 Dark，與 Figma 並排比對）。
 
 另：實機截圖回饋（B1 Dark Tab Bar／黑色地圖、R04 Light 層級、R05 精簡、Toast 懸浮）已併入票 05、06、07；執行用 prompt 見 `.scratch/prompts/06-ios-device-feedback-luna.md`，整體逐頁更新用 `.scratch/prompts/07-ios-figma04-page-by-page-luna.md`。
+
+另：**字型一律 `Font.system`；圖示一律使用 Figma『0 · 共用元件（Icon）』**（票 02、03 建立並檢查，05–18 驗收）。

@@ -414,7 +414,7 @@ public final class PositionHoldController: ObservableObject {
         case .availabilityChanged:
             guard !isRecoveringConnection else { return }
             guard phase == .running || phase == .preparing else { return }
-            if !service.movementConnectionAvailable { pause(reason: .userPaused) }
+            if service.movementConnection == .unavailable { pause(reason: .userPaused) }
         }
     }
 
@@ -488,7 +488,7 @@ public final class PositionHoldController: ObservableObject {
 
     private func isEligible(_ operation: JoystickMovementIntent, allowUnknownHealth: Bool = false) -> Bool {
         let snapshot = service.movementAuthority.snapshot
-        guard service.movementConnectionAvailable,
+        guard service.movementConnection != .unavailable,
               snapshot.lease == operation.lease,
               snapshot.runState == .running else { return false }
         if allowUnknownHealth {

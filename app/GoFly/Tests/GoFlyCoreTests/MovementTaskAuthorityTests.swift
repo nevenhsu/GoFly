@@ -91,7 +91,7 @@ struct MovementTaskAuthorityTests {
         let oldLease = MovementTaskLease()
         #expect(authority.install(oldLease, replacing: authority.snapshot))
         let observation = service.objectWillChange.sink { _ in
-            if service.movementConnectionAvailable {
+            if service.movementConnection != .unavailable {
                 fenceWasClosedDuringPublication = !service.canTeleport &&
                     !service.movementAuthority.permitsDispatch(for: oldLease)
             }
