@@ -28,7 +28,7 @@
 - ❌ 不得使用 Prettier；不得 commit／push（除非使用者另行要求）。
 
 ### 3. 已確定的設計決策（不要再問）
-- 視覺準據＝04 頁現行渲染；Light App 背景＝`canvas`（`#F2F2F7`），卡片／sheet＝`surface/card`（`#FFFFFF`）；層次：canvas → card → control（`#E1E1E6`）→ active（`#BCBCC2`）。sheet／bottom panel 用 card 級，疊地圖用 `surface/overlay/sheet`；Panel 用 control 級。
+- 視覺準據＝04 頁現行渲染；Light App 背景＝`canvas`（`#EEEEF3`），卡片／sheet＝`surface/card`（近白 `#FBFBFD`，Light 表面不使用純白 `#FFFFFF`）；層次：canvas → card → control（`#DEDEE4`）→ active（`#B9B9BF`）。浮動控制項（地圖控制鈕、Speed chip、icon 按鈕）用 `surface/control/floating`。sheet／bottom panel 用 card 級，疊地圖用 `surface/overlay/sheet`；Panel 用 control 級。
 - 主要按鈕 `action/primary/surface` `#0071E3`；連結 `#0066CC`；文字 `text/primary/secondary/tertiary/disabled`。
 - **Home indicator 用系統內建**：刪除 Light frame 內手刻 Home indicator 圖層，內容底距依安全區（下緣 34 pt）預留。
 - **B10 未連 Wi-Fi：StatusPill 為「錯誤」（紅）**。
@@ -37,6 +37,8 @@
 - R08（Setup 與 App 不相符）、D23（檢視路線 sheet）、R07 icon 已完成，不要重做（只在票單要求時微調）。
 - 外緣內容距 frame 16 pt（地圖、系統列、鍵盤、全螢幕 overlay 例外）；間距用 8／12／16／24。
 - 文字一律綁 `Theme/*`（字級表見 `IOS-TYPOGRAPHY.md`），顏色綁 Light Theme token；icon 只用 `0 · 共用元件（Icon）` 的 `icon/*`。
+
+- **浮動控制項（H 系列）**：地圖控制鈕、Speed chip、icon 按鈕底色一律用 `surface/control/floating`（Light＝近白，Dark＝control）。CS token 與共用 master（Light／Dark）已由 Claude 改好，Luna 只處理票單 H-01～H-03、H-07（Light 部分）；H-06 為 Dark，Light 驗收後才做（frame 內手刻副本與 override），H-04 需使用者決策、不要先改。
 
 ### 4. 執行順序
 1. **G 系列**（共用元件／token 綁定）：G01 Map/Base 元件化、G02 Status Bar 元件＋移除 Home indicator、G03 Speed chip、G04 Permission/Role/Preset/ActionSheet/Group row 等、G05（E 區頂卡已修，D 區確認即可）、G06 Overlay/Dim 與底層母畫面（D12、D14、D16、C2、D20、E3、F6.a）、G07 TextField/Label、G08 清空「未定義」、G09 Button/Icon 尺寸 variant、G10 Typography 補洞。

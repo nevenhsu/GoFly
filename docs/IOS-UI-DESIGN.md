@@ -494,6 +494,7 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 ### 2026-10-27 Dark／Light wireframe 對齊
 
 - 04 Dark 成對畫面依 Light 的結構與元件位置同步，保留獨立的 `GoFly iOS / Dark Theme` 色票，不改用 Mac 05 變數。完成範圍：R02／R06、B1／B10、D6／D8／D10／D10.a／D15、E4；D10 系列保留 Dark 中性色面板與藍色「繼續」主動作。B11 Dark variant 仍是缺少的設計，不以 Light 推定補畫。
+- 2026-10-29 Figma 更新（僅 Figma 設計，App 尚未同步、未裝置驗證）：Dark D15 點位清單卡下緣到「取消／開始」按鈕上緣改為 40 pt（原 56 pt）；Dark `Button / Icon / 已匯入路線` 底色對齊 `Button / Icon / 最愛路線清單`（Dark 控制底 `#1A1A1C`，原 `#2C2C2F`），涵蓋 Dark D1、D15 與窄版 sheet 所有實例；Dark Button Theme board「B · ICON BUTTONS」所有 Enabled 填色 variant（Standard 各尺寸、Route、MapControls、Copy）母元件底色同步改為同一 token，與最愛路線清單按鈕一致。Light 已匯入路線按鈕底色同樣對齊 `color/surface/card`；Light D15 清單卡下緣到「取消／開始」按鈕上緣同樣改為 40 pt。
 - Dark SearchBar 輸入區直接使用 E `Text Field / Neutral / Icon + Text / Default`，301 × 48 pt、y=1；底色使用 `color/surface/control/active` `#4C4C4F`，與 Light 301 × 50 pt 輸入卡保持各自設計。D8／D15 路線 sheet、D6／D10／D10.a 操作面板及 B1 收合 sheet 均依 Light 結構更新，並以 Dark token 重綁文字、底色與狀態色。B10 Toast 高度為 85 pt，內容換行與 Light 一致。
 - 驗收：成對 frame 的主結構、元件尺寸與位置一致；Dark 填色、描邊、文字及 icon 維持 iOS Dark variables 並可讀；SearchBar 使用 E Neutral Default 的 Dark control surface；Light／Dark 成對畫面均經 Figma Console 截圖讀回。此為靜態 Figma 設計更新，未表示 App 已實作或完成裝置驗證。
 
@@ -605,3 +606,10 @@ Figma 內部不一致（記錄、不視為已設計）：`StatusPill / 連線中
 - 新增 Light／Dark `D2 · 路線規劃 / 拖曳排序示意` 靜態 wireframe，呈現被抓取列、一般清單列及 strong 新順序位置框。它只補充 D1／D2 面板中的 grip UI，不代表全螢幕可編輯路線清單已有 wireframe；沒有新增 prototype wiring。
 - 驗收：Light 色票文字與色塊值一致；一般列框為 `#C7C7CC`、抓取列為 `#007AFF`、新順序位置框為 `#8E8E93`，strong 與 default 可直接分辨；外卡為 `#E5E5EA`。Dark 一般列框為 `#48484A`、新順序位置框為 `#8E8E93`，strong 與 default 有明顯差異，並使用對應 Dark token。D1／D2／D8／D9 與 Light／Dark D2 拖曳排序示意均已截圖讀回核對。
 - App SwiftUI 尚未套用這次色彩角色映射，未做裝置驗證。
+
+## 2026-10-29 Route Mode 與設定 UX 更新（Figma 更新；App 待實作，無實機驗證）
+
+- 路線「＋ 新增停靠點」：新空欄位加在清單**最後**並成為終點，原終點降為最後一個停靠點（取代先前「插在終點前」）。規劃面板與全部點位清單頁行為相同。App 待實作（`.scratch/gofly-ios-figma04/issues/10`）。
+- 無法規劃路線（D8，Light／Dark）：toast 按鈕「重試」改「修正」。按下後系統自動重新安排**全部**地點順序（含起點）並重新規劃；找到可行順序即採用，找不到維持原順序與 toast。連線類錯誤仍用「重試」。App 待實作（issue 11）。
+- 設定服務卡（F1／F1.a／F1.b，Light／Dark）：永遠只有一顆主按鈕：正常已停止＝「啟動模擬」、運行中＝「停止服務」、停止失敗或服務卡住＝「重置連線」；重置成功後按鈕變「啟動模擬」，導覽列下方懸浮出現 success toast（疊在內容上方、不推動版面）（標題「已重置連線」、說明「可以重新啟動模擬」）。新增 Figma frame `F1.b · 設定首頁 / 重置成功`（Light `322:51696`、Dark `322:51847`，位於 F1.a 右側）；取代 2026-10-26 一節中獨立「重置」第二顆按鈕的描述。App 待實作（issue 17）。
+- 此為 Figma 設計與規格更新，App 尚未同步，未做實機驗證。

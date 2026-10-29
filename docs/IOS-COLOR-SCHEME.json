@@ -40,7 +40,7 @@
           "main": "#D1D1D6",
           "hover": "#D1D1D6",
           "active": "#D1D1D6",
-          "background": "#F2F2F7",
+          "background": "#DEDEE4",
           "text": "#1C1C1E",
           "border": "#C7C7CC",
           "contrastText": "#1C1C1E"
@@ -82,37 +82,38 @@
           "contrastText": "#FFFFFF"
         },
         "background": {
-          "default": "#F2F2F7",
+          "default": "#EEEEF3",
           "inverse": "#1C1C1E"
         },
         "surface": {
-          "default": "#FFFFFF",
-          "control": "#E1E1E6",
-          "active": "#BCBCC2",
+          "default": "#FBFBFD",
+          "control": "#DEDEE4",
+          "active": "#B9B9BF",
           "mapOverlay": {
-            "card": "#FFFFFFF2",
-            "panel": "#E1E1E6F2",
+            "card": "#FBFBFDF2",
+            "panel": "#DEDEE4F2",
             "opacity": 0.95
           },
-          "disabled": "#ECECF0"
+          "disabled": "#E7E7EC",
+          "floating": "#FBFBFD"
         },
         "text": {
           "primary": "#1C1C1E",
-          "secondary": "#6C6C70",
-          "tertiary": "#7B7B80",
+          "secondary": "#6A6A6F",
+          "tertiary": "#77777C",
           "disabled": "#AEAEB2",
           "inverse": "#FFFFFF",
           "link": "#0066CC",
-          "statusSecondary": "#6C6C70"
+          "statusSecondary": "#6A6A6F"
         },
         "border": {
           "default": "#C7C7CC",
-          "subtle": "#D8D8DC",
+          "subtle": "#D6D6DC",
           "strong": "#8E8E93",
           "focus": "#0071E3"
         },
         "action": {
-          "disabled": "#ECECF0",
+          "disabled": "#E7E7EC",
           "disabledText": "#AEAEB2"
         },
         "overlay": {
@@ -138,10 +139,10 @@
           }
         },
         "secondary": {
-          "main": "#505054",
-          "hover": "#505054",
-          "active": "#505054",
-          "background": "#2C2C2E",
+          "main": "#2C2C2F",
+          "hover": "#2C2C2F",
+          "active": "#2C2C2F",
+          "background": "#1A1A1C",
           "text": "#E5E5EA",
           "border": "#636366",
           "contrastText": "#E5E5EA"
@@ -183,19 +184,20 @@
           "contrastText": "#E5E5EA"
         },
         "background": {
-          "default": "#1C1C1E",
+          "default": "#0B0B0D",
           "inverse": "#E5E5EA"
         },
         "surface": {
-          "default": "#2C2C2E",
-          "control": "#3A3A3C",
-          "active": "#505054",
-          "input": "#505054",
+          "default": "#1A1A1C",
+          "control": "#2C2C2F",
+          "active": "#48484D",
+          "input": "#2C2C2F",
           "mapOverlay": {
-            "card": "#2C2C2EF2",
-            "panel": "#3A3A3CF2",
+            "card": "#1A1A1CF2",
+            "panel": "#2C2C2FF2",
             "opacity": 0.95
-          }
+          },
+          "floating": "#2C2C2F"
         },
         "text": {
           "primary": "#E5E5EA",
@@ -208,12 +210,12 @@
         },
         "border": {
           "default": "#636366",
-          "subtle": "#404042",
+          "subtle": "#48484D",
           "strong": "#8E8E93",
           "focus": "#4DA3FF"
         },
         "action": {
-          "disabled": "#343437",
+          "disabled": "#242427",
           "disabledText": "#6E6E73"
         },
         "overlay": {

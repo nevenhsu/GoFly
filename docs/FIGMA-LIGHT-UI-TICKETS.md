@@ -1,7 +1,7 @@
 # Light UI 逐 frame 優化票單（交 GPT 執行）
 
-盤點日期：2026-10-28。範圍：Figma 04 · iOS Redesign 的 **Light** A–F（62 張 App frame + F2／F3 規則參考）。Dark 不在本輪；Light 驗收後以同一份票單比照 Dark。
-資料來源：Figma Desktop Bridge 逐 frame 讀取（instance 清單、未套 Typography 的文字層、手刻控制項、座標）＋各 section 渲染截圖。**「已量測」＝由圖層資料確認；「目視」＝由截圖判讀，執行前請先放大確認。** 本文件只列任務，未修改 Figma 與 App。
+原始盤點日期：2026-10-28。範圍：Figma 04 · iOS Redesign 的 **Light** A–F；目前為 64 張 App frame（A8、B11、C4、D25、E7、F9）＋ F2／F3 兩張規則參考。Dark 不在本輪；Light 驗收後以同一份票單比照 Dark。
+資料來源：Figma Desktop Bridge 逐 frame 讀取（instance 清單、未套 Typography 的文字層、手刻控制項、座標）＋各 section 渲染截圖。**「已量測」＝由圖層資料確認；「目視」＝由截圖判讀。** 本文件保留原始票單並記錄 Figma 執行狀態；App 未修改。
 
 ## 執行規則（所有票共用）
 
@@ -15,7 +15,7 @@
 
 已確認屬實：B3／B4／D5 搜尋欄右緣被裁切（清除 ✕ 半截、貼上 icon 貼邊）；C1（及 C4、D5、D19）列左側為黑色實心圓；E2.a（及 E4、E5）頂卡只有「A」箭頭、無標題副標；E2 頂卡黑方塊＋近白字不可讀、「停止漫步」文字貼邊；D6.a 已由使用者刪除（不再需要「確認結束」dialog），僅剩孤立說明文字 `222:16535`。
 
-## 全檔現況數據（已量測）
+## 原始全檔現況數據（2026-10-28 執行前盤點）
 
 | 項目 | 數值 |
 | :-- | :-- |
@@ -30,7 +30,7 @@
 ## G 系列：共用元件／token／Typography 票（先做）
 
 ### G01 · 地圖底圖元件化（Map / Base）
-- **現況**：B／D／E 共 ~36 張地圖畫面，各自手刻道路、建築、公園、水域，且各有 3 個未套 style 的地圖標籤文字（中山區、大同區、淡水河）。
+- **現況**：B／D／E 共 28 張地圖畫面，各自手刻道路、建築、公園、水域，且各有 3 個未套 Theme style 的地圖標籤文字（中山區、大同區、淡水河）。
 - **做法**：建 `Map / Base` 元件（顏色全綁 `color/map/*`；標籤文字套 `Theme/caption`／`Theme/footnote`＋`color/map/label-area`／`label-water`），所有地圖畫面改 instance，地圖上的 route、pin、箭頭疊在上層。
 - **驗收**：36 張畫面的 `textStyleId` 空值僅剩 9:41；改 `color/map/*` 一次連動全部。
 
@@ -124,7 +124,7 @@
 | :-- | :-- | :-- | :-- | :-- |
 | C-01 | C1 `121:52111` | **列左側為黑色實心圓**（占位感，未見星／pin icon；文件稱「純 icon」）；「⋯」與右緣距 16 OK；列高 54 與 B2 列不同；Snackbar 與底部搜尋欄間距緊（僅 ~8）。 | 黑圓 → `icon/star`＋`color/icon/primary`（或 `icon/pin`）置於 32 pt 淺灰圓底；列 → `List rows`；Snackbar 距搜尋欄 12。 | 無純黑圓；列高統一 56。 |
 | C-02 | C2 `121:52228` | **上半部整片空白**（G06）；「標籤」欄為 SearchField（含搜尋 icon＋貼上 icon，且 placeholder 寫「搜尋最愛地點」）→ 語意錯誤（G07）；「取消／刪除」文字按鈕字級小；儲存藍鈕距底緣 ~34 OK。 | 底層用 C1＋Dim；欄位 → `TextField / Label`（placeholder「標籤」）；取消／刪除 → `Button / Text`（Neutral／Danger）。 | 欄位無搜尋 icon；上方可見 C1。 |
-| C-03 | C3 `121:52367` | 多選圈未選／已選（已為 `Button / Check`，良好）；列文字起點 x:43 與 C1 的 x 不同屬刻意；「刪除（2）」紅鈕全寬 361 OK，與底部搜尋欄間距 ~12。 | 刪除鈕 → `Button / Text` Danger Large instance；確認 `color/action/danger/surface`。 | 與 D21 刪除鈕尺寸／位置一致。 |
+| C-03 | C3 `121:52367` | 多選圈未選／已選（已為 `Button / Check`，良好）；列文字起點 x:43 與 C1 的 x 不同屬刻意；「刪除（2）」紅鈕全寬 361 OK，與底部搜尋欄間距 ~12。 | 刪除鈕 → `Button / Text` Danger Medium instance（48 pt，符合 04 現行渲染）；確認 `color/action/danger/surface`。 | 與 D21 刪除鈕 361×48 尺寸／位置一致。 |
 | C-04 | C4 `121:52464` | 與 C1 同黑圓問題；Snackbar「復原」按鈕為 pill 手刻外框（目視比 Snackbar variant 大）。 | 同 C-01；Snackbar 可復原款 instance 檢查按鈕高 32。 | 與 C1 僅 Snackbar／列數差異。 |
 
 ## D · 路線
@@ -158,7 +158,7 @@
 | E-02 | **E2 `121:53202`** | **頂卡失效**（G05）：黑方塊＋近白字不可讀；左下「停止漫步」灰鈕**文字被裁切**（68 pt 寬、「停止漫步」4 字滿框，目視文字貼邊）；右「更換地點」藍鈕比例過大。 | Top → G05；按鈕 → `Button / Text` Neutral Large（寬 fill、1:2）；文字 `Theme/bodyEmphasis`。 | 文字不貼邊、頂卡可讀。 |
 | E-03 | E3 `158:6503` | **上方空白**（G06）；StatusPill「啟動」手刻（90×30）；Preset 同 D7。 | G06／G04；與 D7 sheet 共用元件。 | 與 D7 sheet 視覺相同。 |
 | E-04 | **E4 `163:7291`** | 頂卡只剩「A」glyph（G05）；地點卡下方出現第二層 sheet 邊（目視：LocationCard 與底板重疊，卡片與底緣間距不一）；「確認」pin 氣泡 OK；卡片 star／copy 為 Button instance。 | Top → G05；LocationCard 位置固定、底板收至最小高度（規則已定）；Go → B-05。 | 頂卡有內容、卡片不與底板重疊。 |
-| E-05 | E5 `193:9287` | 頂部黑色深底 toast 形（`Top / 暫停`）＋橘 toast 並存，**雙層提示**；底部恢復列 OK（「恢復漫步」藍鈕）。 | 兩者擇一（暫停 pill＋warn toast），頂卡用 G05 `Paused` variant；色綁 token（「執行提示底色」G08）。 | 同時只一層提示。 |
+| E-05 | E5 `193:9287` | Paused Top 與 warning Toast 並存，屬於刻意保留的雙層提示；底部恢復列 OK（「恢復漫步」藍鈕）。 | 保留 `Top / 執行指示（Paused）` 與 warning Toast 兩者；各用共用元件 instance、間距 8 pt、互不重疊，文字套 Theme。 | Top 與 Toast 皆保留、不重疊。 |
 | E-06 | E1.a `229:2560` | 手動待命收合；Speed chip 手刻。 | G03。 | 與 E1 同母版。 |
 | E-07 | E2.a `229:2688` | 頂卡只剩「A」（G05）；底部「漫步中」收合列。 | G05。 | 同 E2。 |
 
@@ -269,22 +269,160 @@
   - **色票庫**：`GoFly iOS / Common Color` collection 新增（white／black／transparent／gray 50–950，共 14 個，Common Color 色票板已綁定）；Light／Dark 各 86 個 CS 語意 token（含 `map/*`、`speed/*`，保留因為 04 畫面仍引用）；已移除非 CS 色票：`color/legacy/*`（每主題 23 個）、`canvas/button-board`、`surface/button-board`，以及舊 `LocalGo / Wireframe` collection（19 個，影響 00／01 舊頁與 04 少量舊節點，綁定改為原值，畫面不變）。
   - **仍待處理**：G06 底層空白／純黑（D12、D14、D16、C2、D20、E3、F6.a）、Dark B2 道路亮白／B5 藍塊、B11 StatusPill 舊 master、Home indicator 改系統內建（G02）、R07 pill 換 instance、各 frame 票（A–F）與 G01／G03／G04／G07–G10 尚未執行。
 
-## 建議執行順序
+## H 系列：Light 浮動控制項近白統一（2026-10-28，使用者要求）
 
-0. **CS-01 → CS-05**（先改 token，再做 frame 票；否則 G／各區票的色彩綁定會重工），CS-06／CS-07 需 Dark 先行確認，CS-08／CS-09 收尾。
-1. G01–G03、G05、G06（底圖、系統元件、Speed chip、Top、Overlay）。
-2. G04、G07、G08、G09、G10（其餘共用元件、輸入語意、未定義清理、Typography）。
-3. 阻斷：D-05（D6.a 清理）、B-03／B-04／D-03（搜尋欄右緣裁切）、E-02／E-04（頂卡與文字裁切）、C-01（黑圓占位）。
-4. A → B → C → D → E → F 逐 frame 套用與驗收。
-5. 全部 Light 驗收後，同票單建立 Dark 版並補 B11 Dark。
+**使用者回饋**（App 截圖，路線暫停 sheet）：地圖控制鈕、Speed chip、icon 按鈕底色太灰、太顯眼；要全部靠近白，sheet 底色也靠近白。
+
+**已由 Claude 完成（CS 與共用元件，Luna 不要再改）**
+- CS 新增語意 token `surface/control/floating`（浮動控制項底色）：Light alias `surface/card`（近白 `#FBFBFD`），Dark alias `surface/control`（`#3A3A3C`）；[IOS-COLOR-SCHEME.json](IOS-COLOR-SCHEME.json) `surface.floating` 同步。sheet／bottom panel 綁 `surface/card`（近白 `#FBFBFD`）。
+- 共用元件 master 改綁 `surface/control/floating`：`Recenter`（`222:13228`）、`FitRoute`（`222:13229`）、`Button / Speed chip` Default（`313:29165`）、`Light · Button / Icon` 的 Standard Enabled（Large／Medium／Small／Extra Small）與 Route Enabled Large。D6 截圖確認 Light 地圖控制鈕與 Speed chip 為近白。
+- 控制項在白色 sheet 上靠既有邊框（`line/separator`／`line/border`）與地圖上的陰影區分；若 Luna 發現白底在 sheet 上看不出輪廓，記錄為待決策，不要自行改 token。
+
+**交給 Luna 逐一修正（只動 frame，不動 CS／master）**
+| 票 | Frame | 問題（已量測） | 修正 | 驗收 |
+| :-- | :-- | :-- | :-- | :-- |
+| H-01 | D6 `121:52798`、D7 `158:6131`、D10 `193:9158`、D10.a `238:9101` | 控制列「來回」「方向」為手刻 `Button / icon / 來回｜方向`（36×36，底 `action/secondary/surface` `#D1D1D6`，描邊 `icon/primary` 黑），仍是灰底黑框，是截圖中最突兀的一項。 | 改為 `Light · Button / Icon`（Type=Route 或 Standard、Size 36 對應 variant；沒有 36 時用 Medium 40 並回報）instance，圖示用 `icon/repeat`、`icon/direction-forward`；移除手刻副本，必要時把「Controls row / 來回·方向·時速」收進「未定義」並標註已取代（G08）。 | 底色為 `surface/control/floating`，邊框 `line/separator`，與 Speed chip 同一視覺；4 張一致。 |
+| H-02 | D10 `193:9158` | FitRoute、Recenter 與整個 `Panel / 執行模式控制`（`238:9223`）、手刻按鈕全綁 `map/route`（`#33608F` 深藍），整塊 panel 變深藍（目視確認，與 D6 完全不同）。 | Panel 改綁 `surface/card`；FitRoute／Recenter 清除 override，回到 master（`surface/control/floating`）；panel 內「結束」「繼續」改 `Light · Button / Text` Neutral／Primary instance；文字用 `text/*`。 | D10 與 D10.a 僅差「是否有頂部 toast」，panel 與控制項完全相同。 |
+| H-03 | D10.a、D8 `222:10536`、D9 `222:10849`、B10 `222:11656` | `Recenter`／`FitRoute` instance 在這些 frame 有 local 覆蓋，底色綁 `surface/control`（`#E1E1E6`），與 master 不一致（D8 2、D9 2、B10 1、D10.a 2 個）。 | 對這些 instance 執行 Reset overrides（或把 fills 重綁 `surface/control/floating`）。 | 全部 Light FitRoute／Recenter 皆為 `surface/control/floating`（目前 33 個中 9 個以外已一致）。 |
+| H-04 | D6、D10、D10.a、D7 | 進度條 `Progress`（`#D1D1D6` `action/secondary/surface`）與「結束」Neutral 按鈕（`#D1D1D6`）仍偏灰。 | **需使用者決策**，Luna 不要先改：是否把 Neutral 按鈕與 Progress 軌道也改為近白＋邊框，或維持灰作為次要強度。回報截圖對照兩案。 | 使用者選定後才改。 |
+| H-05 | B3、B4、D5、C1–C4、D19–D22 | 搜尋欄、輸入欄在白色 sheet／頁面上的底色是否也需近白（目前 Light input alias `surface/card`，已近白）。 | 只核對，不改；若有 frame 手刻輸入底色偏灰，列入回報。 | 回報清單。 |
+
+> 備註：H 系列不涉及 Dark（Dark 浮動控制項維持 `#3A3A3C`）。Dark 版同樣的手刻控制列（H-01、H-02 對應 Dark D6／D7／D10／D10.a）待 Light 驗收後另開票。
+
+### 2026-10-28 Codex 執行狀態（Figma Desktop Bridge）
+
+本輪核對 `GoFly · UI 線框討論`（`RtPV8PXCQJ2WXK3jk3kPrq`）04 頁。Light A–F 共 66 張 393×852 frame：64 張 App frame、F2／F3 兩張規則參考。F2／F3 沒有系統列；其餘 64 張都使用 `System / StatusBar` instance。已從 66 張 Light frame（含 sheet）移除 69 個手刻 Home indicator；讀回為 0 個殘留。
+
+| 共用票 | 狀態 | 本輪結果／未完成項 |
+| :-- | :-- | :-- |
+| G01 | 已完成 | 新增 `Map / Base` `313:29422`；B 9 張、D 12 張、E 7 張，共 28 張改為 instance。D10 原先包在底圖內的 MapControls／Panel 已移至地圖上層。底圖色彩 paint 全綁既有 map token；中山區／大同區套 `Theme/caption`，淡水河套 `Theme/footnote` 並保留既有 map label token。逐張截圖讀回。 |
+| G02 | 已完成 | 新增 `System / StatusBar` `313:28295`；64 個 Light App frame 為該元件 instance，移除 69 個手刻 Home indicator。 |
+| G03 | 已完成 | 新增 `Button / Speed chip` `313:29179`（Default `313:29165`、Disabled `313:29172`）；D6、D7、D10、D10.a、E1、E1.a、E2、E2.a、E3、E4 共 10 張皆讀回為 68×36 instance，值分別為 9／25。 |
+| G04 | 未完成 | StatusPill、Preset、Role、D10／D10.a 按鈕、D12 ActionSheet 已完成並沿用既有元件；Group row 的 With value／With chevron／Status variants 尚未建立。 |
+| G05 | 已完成 | 核對 E2、E2.a、E4、E5、D10、D10.a 六張皆為 `Light · Top / 執行指示` instance；未改 master。 |
+| G06 | 已完成 | 新增綁既有 Light `color/text/primary`、opacity 40% 的 `Overlay / Dim` `313:29274`；C2、D12、D14、D16、D20、E3、F6.a 均為 instance，母畫面在 sheet 後方可見。D7 原手刻白色遮罩也改為 instance `313:30421`，圖層順序修正後 D6 母畫面與設定 sheet 內容皆可見。 |
+| G07 | 已完成 | 新增 `TextField / Label` `313:29286`（Placeholder property、右側 Clear）；C2／D20 已替換，無搜尋圖示。B3／B4／D5 另換 321 pt compact SearchField instance，清除鈕與欄寬已對齊。 |
+| G08 | 未完成 | 本輪已刪除兩組「色彩待確認」色票及 label／hex，且 A–F 無對應裸色 paint；其餘 20 組元件副本仍待整理，未新增 token。 |
+| G09 | 未完成 | 本輪 H-01 四張已用既有 Standard／Small 36×36 Button/Icon instances 替換來回／方向控制；D 區其他手刻 icon 控制尚待替換，未改 master／尺寸 variants。 |
+| G10 | 已完成 | F2／F3 原有文字已套 Theme；本輪在 B5、B7、B8、B9 將 4 個 Go 字層補為 `Theme/captionEmphasis`，讀回 A–F（排除 9:41／原生鍵盤）無未套樣式文字。 |
+
+逐 frame 票狀態（「未完成」表示本輪有部分修正或尚未執行，但仍有驗收項未完成）：
+
+| 票 | 狀態 | 本輪結果／未完成項 |
+| :-- | :-- | :-- |
+| A-01 | 已完成 | 使用者更新 R01：改用 `Light · Progress` instance、icon 底色改 grey50；截圖／讀回確認 Logo 居中、token 填色及 Progress instance。 |
+| A-02 | 已完成 | 使用者調整 R02 文字字級；截圖確認標題 28 pt、Theme style、說明與 permission pill 間距及底部 CTA 完整。 |
+| A-03 | 已完成 | 使用者依 R02 調整 R03 文字字級；截圖確認標題 28 pt、Theme style，狀態 pill 與 CTA 可讀且未裁切。 |
+| A-04 | 未完成 | R04／R04.a 已重排步驟卡、連線說明與狀態 pill；4 步編號修正為 1–4，錯誤 toast 移到標題上方。Steps card 共用化與連線說明 link 改用共用按鈕仍待完成。 |
+| A-05 | 未完成 | R05 步驟列改為 52 pt，三列 `Steps card` 高 156 pt；Troubleshooting card 與其相隔 16 pt。2–4 編號、藍色數字底與分隔線清楚，空白佔位列已清除。導覽列與 list row 共用化仍待完成。 |
+| A-06 | 未完成 | R06 pill 已換 instance；Steps card 與 toast 間距未處理。 |
+| A-07 | 已完成 | 使用者標示 R07 設計更新完成；截圖複核 Hero icon、標題、說明、StatusPill 層級清楚，內容未裁切。 |
+| B-01 | 已完成 | B1／B2 的 `Map / Base` 與 `System / StatusBar` 均為 instance；兩張 Favorite／Copy 控制各為 44×44 pt instances。改後截圖確認收合／半開 sheet 的標題卡位置一致，內容無裁切。 |
+| B-02 | 未完成 | List row 與文字連結未元件化。 |
+| B-03 | 未完成 | 自適應 SearchField 已消除右緣裁切；空欄僅顯示貼上、隱藏清除 X。頁面底為 canvas，最近搜尋列表區為 card；截圖確認。歷史列尚未元件化；鍵盤內「確認」依例外保留。 |
+| B-04 | 未完成 | 自適應 SearchField 已消除右緣裁切；有值時顯示清除 X。頁面底為 canvas，座標／附近地點列表區為 card；截圖確認。結果列 variant 尚未統一。 |
+| B-05 | 已完成 | B5 為共用 `LocationCard / Route` instance；卡片 Go 為 Primary Inline 77×40 pt，Star／Copy／Close 命中區均為 44×44 pt instances。截圖確認 SearchBar／StatusPill 未遮 Pin／Go，卡片與按鈕完整可見。 |
+| B-06 | 已完成 | 截圖讀回確認 snackbar 未遮「目前模擬位置」標題。 |
+| B-07 | 已完成 | Go 氣泡與 Pin 下移 24 pt；改後截圖完整可見。 |
+| B-08 | 未完成 | 已核對 Pause StatusPill 與 warn Toast 均為共用 instance、間距 8 pt 且不重疊；保留現況。List row／母版整理仍未完成。 |
+| B-09 | 未完成 | 已核對 Pause StatusPill 與 warn Toast 均為共用 instance、間距 8 pt 且不重疊；保留現況。List row／母版整理仍未完成。 |
+| B-10 | 已完成 | 改為紅點「錯誤」StatusPill instance；截圖與 Wi-Fi error toast 一致。 |
+| B-11 | 已完成 | 改為灰點 `StatusPill / 啟動` instance，覆蓋「連接中」；依本輪決策不新增 spinner variant。 |
+| C-01 | 未完成 | 7 列 56 pt 灰圓底＋`icon/star` 已取代黑圓，截圖複核無黑圓；List rows instance 未完成。 |
+| C-02 | 未完成 | G06 underlay 與 G07 TextField 已完成；取消／刪除按鈕未換共用 variant。 |
+| C-03 | 已完成 | C3 `286:24717` 與 D21 `286:24751` 均讀回為 `Type=Danger, State=Active, Size=Medium` Button/Text instances，361×48，綁既有 Danger surface token；截圖確認兩頁位置與尺寸一致。原票單「Large」與 04 現行渲染的 48 pt 高度不符，依視覺準據改列 Medium。 |
+| C-04 | 未完成 | 5 列 56 pt 灰圓底＋`icon/star` 已取代黑圓，截圖複核無黑圓；Snackbar action 尚未元件化。 |
+| D-01 | 未完成 | RoutePanel、Stop row、按鈕與 icon 尺寸未處理。 |
+| D-02 | 未完成 | RoutePanel／Stop row 與 B5 Go 尺寸未處理。 |
+| D-03 | 未完成 | 搜尋欄裁切、history icon 背景已修；Role chip 已換 `Chip / Role` instance。Favorite action、清空記錄鈕未元件化。 |
+| D-04 | 未完成 | Speed chip 已換 instance；Controls row 與主按鈕比例未處理。 |
+| D-05 | 已完成 | D6.a 不重建；孤立 Light 說明 `222:16535` 已由 Claude 刪除，本輪只讀回狀態，未改 frame 外說明或 Dark。 |
+| D-06 | 已完成 | D7 已使用 `Map / Base`＋40% `Overlay / Dim` instance；Speed chip 與四顆 Preset chip 為 instance，25 為 Selected；Slider 軌道／已選軌道／thumb 分別綁既有 `color/surface/control`、`color/action/primary/surface`、`color/canvas` token，文字套 `Theme/captionEmphasis`。完成設定為共用 Button/Text instance；改後截圖確認底圖、sheet、滑桿與按鈕完整可見，Preset 外觀與 E3 一致。 |
+| D-07 | 已完成 | D8／D9 的 Start 按鈕讀回為 `Type=Primary, State=Disabled, Size=Large` instance（`303:26789`／`303:26793`）；D8、D9 截圖確認停用色為中性灰，非 success／error 狀態色。 |
+| D-08 | 已完成 | D10／D10.a 的 Neutral／Primary 已換 Large Button/Text instance，尺寸為 120×56／221×56；兩張截圖與 variant／文字讀回一致。 |
+| D-09 | 未完成 | D11／D17／D18 的 List row 尚未元件化。 |
+| D-10 | 已完成 | G06 底層與 dim 已完成；D12 取消鈕為 Neutral Large instance；動作選單為共用 `ActionSheet / 路線動作` instance，改後截圖確認底層 D11 與四個動作列可見。 |
+| D-11 | 未完成 | 唯讀點位表格列與匯出連結未處理。 |
+| D-12 | 未完成 | G06 底層與 dim 已完成；系統 share sheet 字級／說明未核對。 |
+| D-13 | 未完成 | 清空路線按鈕與 Route row 未元件化。 |
+| D-14 | 未完成 | G06 底層與 dim 已完成；系統檔案選擇器樣式未核對。 |
+| D-15 | 未完成 | D17／D18 toast 位置與遮擋尚未處理。 |
+| D-16 | 未完成 | D19 6 列黑圓已換星號並調為 56 pt；D20 的 G06／G07 已完成；D21 刪除鈕與其餘列未處理。 |
+| E-01 | 未完成 | Speed chip 已換 instance；CTA instance 與其餘驗收未完成。 |
+| E-02 | 已完成 | Top instance 與 Speed chip 已修；Neutral／Primary CTA 調為 120×56／221×56，座標 x=16／156、底距 34 pt；改後截圖確認「停止漫步」未裁切，CTA 比例與 D6 一致。 |
+| E-03 | 已完成 | StatusPill、Dim、Preset chip 已換 instance；速度 25 為 Selected。改後截圖確認設定 sheet 與 D7 相同且底層可見。 |
+| E-04 | 未完成 | Top instance 與 Speed chip 已修；LocationCard／底板重疊尚未修。 |
+| E-05 | 已完成 | E5 的 Paused Top 與 warning Toast 均為共用 instance，y=58／138、間距 8 pt、互不重疊；文字為 Theme styles。截圖讀回，兩層均保留。 |
+| E-06 | 已完成 | E1.a Speed chip 已換 68×36 共用 instance 並讀回。 |
+| E-07 | 未完成 | Top instance 與 Speed chip 已修；收合列其餘驗收未完成。 |
+| F-01 | 未完成 | Service card、Group row 與 Button 未元件化。 |
+| F-02 | 已完成 | F2 文字與編號 Badge 已改 Theme／instance，改後截圖可讀。 |
+| F-03 | 已完成 | F3 七個未套樣式文字層已套 Theme，改後截圖無裁切。 |
+| F-04 | 未完成 | F4–F6 導覽列、Group row 與值文字對比未處理。 |
+| F-05 | 未完成 | G06 underlay／dim 已完成；wheel style 與按鈕尚未驗收。 |
+| F-06 | 未完成 | F7–F9 List rows 與腳註邊距未處理。 |
+
+本輪新增／替換的共用元件 node：`313:28295`、`313:29179`（variants `313:29165`／`313:29172`）、`313:29274`、`313:29286`、`313:29304`、`313:29386`、`313:29422`、`313:30237`、`313:30375`、`313:30389`。D7 Dim instance 為 `313:30421`；D12 ActionSheet instance 為 `313:30405`；E2 CTA instances `286:24765`／`286:24767` 調整為 120×56／221×56。主要 frame 範圍：R02／R03／R04／R06／R07、B1／B2／B5／B6／B7／B8／B9／B10／B11、B3／B4、C1／C2／C3／C4、D1／D2／D3／D4／D5／D6／D7／D8／D9／D10／D10.a／D12／D14／D15／D16／D19／D20／D21、E1／E1.a／E2／E2.a／E3／E4／E5、F2／F3／F6.a；G02 另覆蓋全部 64 張 App frame。Map/Base instances 為 B `313:29423`–`313:29615`、D `313:29639`–`313:29903`、E `313:29927`–`313:30071`（各以 24 為序號間隔）；未再有手刻 `Map / Apple Maps 淺色` frame。
+
+其他新增／替換 instance node：StatusPill `313:29250`、`313:29253`、`313:29256`、`313:29259`、`313:29262`、`313:29265`、`313:29268`、`313:29271`；TextField `313:29292`／`313:29298`；Compact SearchField `313:29315`／`313:29326`／`313:29337`；Badge `313:29388`／`313:29390`／`313:29392`／`313:29394`／`313:29396`；Role chip `313:30378`；D10 buttons `313:30383`／`313:30385`；D12 cancel `313:30387`。Preset variants 為 `313:30098`／`313:30116`／`313:30134`／`313:30154`／`313:30174`／`313:30190`／`313:30206`／`313:30223`；D7／E3 Preset instances 分別為 `313:30238`／`313:30255`／`313:30274`／`313:30289` 與 `313:30305`／`313:30322`／`313:30341`／`313:30356`。StatusBar instances 為 `313:28308` 至 `313:29127`（每個 ID 間隔 13，共 64）。未修改 Variable／Variable collection、色票板、Dark、App，未 commit；未做裝置驗證或 prototype。
+
+**H 系列追加（2026-10-28，使用者：Light card 不可純白、Dark 也統一 floating）**
+- **Light CS 不再有純白表面**：canvas `#EEEEF3`、card／floating `#FBFBFD`、control `#DEDEE4`、active `#B9B9BF`，Map overlay card／sheet／tab-panel `#FBFBFDF2`、panel `#DEDEE4F2`；同步微調相近色：停用底 `#E7E7EC`、`text/secondary`／`icon/secondary` `#6A6A6F`、`text/tertiary` `#77777C`、`line/separator` `#D6D6DC`、色票板 Secondary Background `#DEDEE4`。純白只保留在「彩色按鈕上的文字／icon」（`text/inverse`、`icon/inverse`、`action/primary|danger/text`）與地圖道路／marker，屬前景色，非表面。Light A–F frame 無未綁定的純白填色（已掃描）。
+- **Dark 已統一**：`surface/control/floating` Dark alias `surface/control`（`#3A3A3C`）；已改綁 Dark 共用元件 `Dark · Recenter`、`Dark · FitRoute`、`Button / Icon` Standard／Route／MapControls／Copy Enabled，另 5 個 instance override 重綁。**Dark 的 Standard／Route 圖示按鈕因此由 `#505054` 變 `#3A3A3C`**。
+- 追加給 Luna：**H-06**（Dark，Light 驗收後再做）Dark D6／D7／D10／D10.a 手刻 `Speed chip`、`Controls row` 來回／方向按鈕、`MapControls` 框，改為共用元件並綁 `surface/control/floating`；**H-07** Light／Dark 掃描 frame 內仍直接綁 `surface/control`／`control/active` 的浮動控制項（Light 3 處、Dark 約 58 個 instance override）逐一改綁或 Reset overrides。
+
+**決策更新（2026-10-28，使用者）**：① **E-05**：保留 `Top / 執行指示`（Paused）與 warning Toast，兩者皆留，驗收改為「兩者皆為共用元件 instance、間距 8 pt、不重疊」，取代「同時只一層提示」。② **G08 兩個待確認色**（`#1C1C1E` 執行提示底色、`#6B6B73` dialog 說明字）**捨棄**，只用現有 CS token（卡片底 `surface/card`／`surface/overlay/card`，文字 `text/primary`／`text/secondary`），不新增 token；清除「未定義」區對應色票。
+
+**自適應寬度元件（2026-10-28，Claude 完成）**：Slider（Value 0–100 variants，Light／Dark）與 `Text Field / Neutral`（Auto Layout，Light／Dark）、`SearchField`／`SearchBar`（constraints）改為可自適應寬度；Light D7／E3 滑桿已換 instance。第二輪已修正 B3 空欄貼上／清除重疊；Dark D7／E3 滑桿另票處理。
+
+## 第二輪執行順序
+
+1. P0：D10 H-02、B3／B4 搜尋欄與背景核對、未套 Theme 文字讀回。
+2. P1：H-01、H-03、H-07 浮動控制；H-05 輸入欄核對；H-04 保留待決策。
+3. P2：G04／G09 與 A → B → C → D → E → F 逐票處理；每個 section 完成後截圖回歸。
+4. P3：依使用者已決定事項執行 G08-1／G08-2 清理及 E-05 保留雙層提示，並更新驗收準則。
+5. Dark frame 不在本輪；Dark Slider／控制項後續另票處理。
 
 ## 已決定事項（2026-10-28 使用者）
 
 - Light `action/primary/surface` 改 `#0071E3`。
 - B10 未連 Wi-Fi：StatusPill 為 **錯誤（Error，紅）**。
 - Home indicator 用系統內建，不自訂（G02）。
-- CS 系列可執行，接受全檔畫面連動，須逐 section 截圖回歸。
+- CS／色票已由 Claude 完成，本輪不得再改 Variable 定義或色票板。
 
 ## 未確認事項
 
-- G08 兩個「色彩待確認」顏色（執行提示底色 `#1C1C1E`、dialog 說明字 `#6B6B73`）的語意歸屬。
+- H-04：Neutral 按鈕與 Progress 軌道是否改為近白＋邊框，或維持目前次要灰。
+
+### 2026-10-28 第二輪 Light 執行狀態（Figma Desktop Bridge）
+
+| 票 | 狀態 | 執行結果／未完成項 |
+| :-- | :-- | :-- |
+| G11 | 已完成（Claude；本輪只讀回） | Light Slider set `313:30644` 為 21 個 Value 0–100、每 5 一檔的 variants；D7／E3 使用 Value=20、361 pt instance。未重做，也未碰 Dark Slider。 |
+| P0 · D10 H-02 | 已完成 | D10 Panel `238:9223` 綁 `surface/card`；FitRoute／Recenter `238:9632`／`238:9222` 綁回 floating master 的 fills／strokes；panel 的結束／繼續本來就是 Button/Text instances。D10 截圖確認已無整塊深藍。 |
+| P0 · B3／B4 | 已完成 | B3 空欄只顯示 Paste，隱藏 Clear X；B4 有輸入時只顯示 Clear X。兩張截圖確認搜尋欄右緣完整。採「頁面底＝canvas、列表區＝card」；列表區以既有 `surface/card` 綁色，原生鍵盤區維持 card。 |
+| P0 · Theme 文字 | 已完成 | 全 A–F 讀回只有 4 個未套 Theme 的 `Go`（不是原估 7 個），均設為 `Theme/captionEmphasis`；再次掃描排除 9:41／原生鍵盤後為 0 個未套樣式層。 |
+| P1 · H-01 | 已完成 | D6／D7／D10／D10.a 的 repeat／direction controls 換為 8 個 Standard／Enabled／Small（36×36）Button/Icon instances，圖示為 `icon/repeat`／`icon/direction-forward`；刪除手刻按鈕並逐張截圖。 |
+| P1 · H-03 | 已完成 | D8、D9、B10 的 Recenter／FitRoute 視覺 overrides 清回 floating surface 與 separator；D10.a 讀回已符合 master。D8／D9／B10／D10.a 截圖複核。 |
+| P1 · H-05 | 已完成（只核對） | B3／B4／D5／C1–C4／D19–D22 輸入欄均是近白 `#FBFBFD` token instance，無偏灰手刻輸入底。 |
+| P1 · H-07 | 已完成（掃描） | Light 浮動 FitRoute／Recenter／Button/Icon／Speed chip 均綁 floating；未發現仍以 `surface/control` 或 `control/active` 作為浮動控制底色的節點。其他非浮動用途未改。 |
+| P1 · H-04 | 未完成（待使用者決策） | 未改 Neutral 按鈕與 Progress 軌道；需決定是否近白加邊框，或維持目前次要灰。 |
+| P3 · G08-1／G08-2 | 已完成 | 刪除「未定義 · 執行提示卡底色」及「未定義 · Dialog 說明字色」兩組 swatches、label、hex；A–F 未找到其對應裸色 paint，未新增 token。其餘 20 組未定義元件副本仍待 G08 完整整理。 |
+| P3 · E-05 | 已完成 | E5 Paused Top 與 warning Toast 均為共用 instance，y=58／138、垂直間距 8 pt，兩層保留且無重疊，文字皆為 Theme。B8／B9 的 Pause pill＋warn Toast 亦為 instances、間距 8 pt，不拆除。 |
+| P2 · G04／G09 | 未完成 | Group row variants 尚未新增；H-01 使用既有 36 pt variant，但 D 區其他手刻 icon 控制尚未全部替換。 |
+| P2 · A-01–A-07、B-02–B-04、B-08–B-09、C-01–C-02、C-04、D-01–D-04、D-09、D-11–D-16、E-01、E-04、E-07、F-01、F-04–F-06 | 未完成 | 逐票狀態見上方 frame 表。B3／B4 右緣裁切及 C1／C4 黑圓視覺已修正／複核；Group/List row、按鈕與其他各票驗收尚未全部完成。 |
+
+**A 區後續更新（2026-10-28）**：R08（`313:28214`）由使用者標示設計更新完成，本輪截圖核對，未修改。R01／R02／R03／R07 僅讀回使用者已完成的設計；R04、R04.a、R05 本輪有排版更新。
+
+**第二輪改動 node IDs**：
+- D10：`238:9223`、`238:9632`、`238:9222`。
+- H-01 新 Button/Icon instances：D6 `313:30788`／`313:30795`；D7 `313:30803`／`313:30810`；D10 `313:30818`／`313:30825`；D10.a `313:30833`／`313:30840`。
+- B3：空欄 value text `I313:29315;313:29305;268:22301`、隱藏 Clear instance `I313:29315;313:29306`。
+- B3／B4 列表底：`313:30848`、`313:30849`（card surface，綁 `surface/card`）。
+- Theme text：`I303:26673;303:26660`、`I303:26677;303:26660`、`I303:26681;303:26660`、`I303:26685;303:26660`。
+- H-03 map controls：`238:9620`、`227:17099`、`238:9626`、`227:17108`、`222:13816`。
+- G08 swatches／labels 刪除：`295:26456`–`295:26462`。
+
+**A 區本輪變更 node IDs**：R04 `121:51277`、`121:51278`、`121:51279`、`121:51281`、`121:51284`、`121:51286`、`121:51289`、`121:51291`、`121:51293`、`286:24701`、`313:29256`、`315:31182`；R04.a `222:10431`、`222:12361`、`315:31187`、`315:31188`、`315:31191`、`315:31201`、`315:31206`、`315:31208`、`315:31209`、`315:31215`、`315:31194`、`315:31189`、`315:31199`、`315:31204`；R05 `123:57062`、`123:57097`、`123:57098`、`123:57099`、`123:57100`、`123:57102`、`123:57103`、`123:57104`、`123:57105`、`123:57106`、`123:57108`、`123:57109`、`123:57110`、`123:57111`、`123:57112`、`123:57115`；刪除空白佔位 `123:57147`、`123:57148`。
+
+未修改 Variable／Variable collection、色票板、Dark frame、App，未 commit；未新增 prototype；本輪無 App 行為或裝置驗證。

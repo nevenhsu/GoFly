@@ -2,6 +2,16 @@
 
 核對日期：2026-10-28。核對方式：本機 Figma Desktop Bridge（WebSocket）讀取文件樹、畫面註記及代表性畫面；本次依使用者指示在 04 建立 Dark UI／按鈕板的 Light 版本、移除舊正式版 token 區、保留既有畫面元件引用，並將 Light／Dark SearchBar Settings 按鈕更新為 48 × 48 pt；Icon 與 Typography 目錄亦位於 04。這份文件記錄目前 Figma 頁面與開發規格的對應、差異和缺漏。**視覺衝突以對應 Figma 畫面為準，並在同一工作更新規格；行為、交易安全、無障礙及已實作狀態仍須分開記錄。**
 
+### 2026-10-28 Light A–F 票單執行（Codex，Figma Desktop Bridge）
+
+- **Figma 設計更新**：只在 04 的 Light A–F 與允許的 Light 共用元件區修改。新增 `System / StatusBar`（`313:28295`），套用至 64 張 Light App frame；66 張 Light frame 中移除 69 個手刻 Home indicator。新增 `Button / Speed chip`（`313:29179`，Default／Disabled variants `313:29165`／`313:29172`），替換 D6、D7、D10、D10.a、E1、E1.a、E2、E2.a、E3、E4 十張 frame 的速度膠囊。另新增 `Map / Base`（`313:29422`），將 B、D、E 共 28 張底圖改為 instance；地圖區域／水域標籤分別套 `Theme/caption`／`Theme/footnote`，保留既有 `map/*` token。
+- **Figma 設計更新**：狀態 pill 依使用者決定改用既有 Light StatusPill instance 覆蓋文字；B10 顯示紅點「錯誤」，B11 使用灰點「連接中」。新增 `Overlay / Dim`（`313:29274`，綁既有 Light `color/text/primary`，opacity 40%），套用 C2、D12、D14、D16、D20、E3、F6.a；新增 `TextField / Label`（`313:29286`）供 C2／D20 使用，並以 compact SearchField instance 修正 B3／B4／D5 的 321 pt 搜尋欄裁切。F2／F3 27 個文字層已套 Theme styles；F2 五個編號改用 `Badge / Number`（`313:29386`）instance。
+- **Figma 設計更新**：新增 `Chip / Preset`（`313:30237`，8 variants）供 D7／E3 使用，將 25 設為 Selected；新增 `Chip / Role`（`313:30375`）並套用至 D5。D10／D10.a 的 Neutral／Primary 按鈕及 D12「取消」改用既有 Large Button/Text instances。G04 Group row 與完整 ActionSheet 尚未完成。
+- **Figma 設計更新**：B7 的 Go 氣泡與候選 Pin 向下移 24 pt；C1、C4、D19 的黑色圓點改為灰色圓底與 `icon/star` instance，列高調至 56 pt。D5 歷史 icon 的圓底改綁既有 `surface/control`。改後 frame 截圖已讀回；完整票號狀態與未完成項目見 [FIGMA-LIGHT-UI-TICKETS.md](FIGMA-LIGHT-UI-TICKETS.md)「2026-10-28 Codex 執行狀態」。
+- **App 行為**：未修改 `app/` 或 App 行為規格；這些改動只代表 Figma 靜態 wireframe 設計，不代表 App 已實作。
+- **裝置驗證**：未安裝、未執行實機操作，無裝置驗證結果。未加入 prototype wiring。
+- **未修改**：本輪未修改 Variable／Variable collection、色票板、Dark UI、App；未 commit。工作樹另有 `FIGMA-TICKETS-HANDOFF-PROMPT.md` 與 `IOS-COLOR-SCHEME.json` 的並行未提交變更，本輪未編輯或回復。G04 Group row、G08、G09 及多數 A–F frame 票仍未完成；D-05 孤立說明文字 `222:16535` 在 frame 外，本輪依範圍限制保留。
+
 ## Figma 頁面對應
 
 | Figma 頁面 | 對應文件 | 用途與結論 |
@@ -69,6 +79,10 @@ Light App 畫面共 63 張（A 7、B 11、C 4、D 25、E 7、F 9），另有 F2�
 - **色票庫第二次整理（2026-10-28）**：新增 `GoFly iOS / Common Color` collection（`common/white`、`common/black`、`common/transparent`、`common/gray/50…950`，共 14 個，值對應 [IOS-COLOR-SCHEME.json](IOS-COLOR-SCHEME.json) `primitive`），04 `Common Color` 色票板 13 個實色已改綁此 collection。移除不在 Color Scheme 的色票：每主題 23 個 `color/legacy/*`、`canvas/button-board`、`surface/button-board`，以及舊 `LocalGo / Wireframe` collection（19 個；舊 00／01 頁與 04 少量舊節點的綁定轉為原值，渲染不變）。`map/*`、`speed/*` 不在 CS 色票板但仍被 04 畫面引用，予以保留。目前 collection：Light 86、Dark 86、Common 14。
 - **Dark CS 優化（2026-10-28，使用者確認全做）**：① 色票板補同步：Active `#505054`、Secondary Main `#505054`、ACTION disabled `#343437`；② Success／Warning Main 調到與 `#E5E5EA` 文字 ≥ 4.5（`#2C7347` 4.58、`#8C5D26` 4.51），Border、Text 不變；③ 連結／accent／focus 邊框 `#0A84FF`→`#4DA3FF`（對卡片 5.31、canvas 6.48），Primary 組 Text 同步，只剩一個藍色文字；④ `text/tertiary` `#7C7C80`→`#8A8A8E`（對卡片 4.05）；⑤ Error Text／icon `#FF453A`→`#FF7A70`（對卡片 5.49、對錯誤底 5.05）、Border `#E0605A`，與 Success／Warning 調性一致。Error Main `#B3352F`、Info 組不變（Info Main 對卡片 1.84，屬自訂值，僅作填色；若用作按鈕需加外框）。
 - **搖桿（Joystick）握柄色（使用者調整，2026-10-28 讀回）**：`Light／Dark · Joystick / 重新設計`（`268:21738`／`222:13253`）中央握柄 `Knob / 握柄` 與內圈 `grip` 改綁 Common Color collection 的灰階：Light 握柄 `common/gray/200`（`#EEEEF0`）、grip `common/gray/300`（`#D1D1D6`）；Dark 握柄 `common/gray/800`（`#48484A`）、grip `common/gray/700`（`#636366`）。外盤 `surface/card`、外框／內環 `line/border`、刻度 `icon/secondary`、方位字 `text/secondary` 仍為 Theme token。握柄不使用 CS 的 control／active 階，因為要與外盤 card 保持立體感；Common Color 為單一 mode，Light／Dark 各自綁不同灰階。這是 Figma 靜態設計，App `GoFlyJoystickPanel.swift` 尚未同步，亦未做裝置驗證。
+- **Light 浮動控制項近白（2026-10-28，使用者回饋）**：新增 CS token `surface/control/floating`（Light alias `surface/card` `#FFFFFF`；Dark alias `surface/control`，外觀不變）。`Recenter`、`FitRoute`、`Button / Speed chip` Default、`Light · Button / Icon` Standard／Route Enabled 改綁此 token，Light 這些控制項由灰（`#E1E1E6`）改白；sheet 維持 `surface/card`。剩餘 frame 層級修正（手刻「來回／方向」按鈕、D10 面板誤綁 `map/route`、instance override）記為 [票單 H 系列](FIGMA-LIGHT-UI-TICKETS.md)。這是 Figma 設計更新；App 截圖中的灰色控制項需另行對照 `GoFlyStyle`／`GoFlyGrayScale` 調整，尚未實作、未做裝置驗證。
+- **Light 無純白表面＋Dark floating 統一（2026-10-28，使用者）**：Light `surface/card` `#FFFFFF`→`#FBFBFD`，canvas `#F2F2F7`→`#EEEEF3`（card／canvas 1.12），control `#DEDEE4`、active `#B9B9BF`、Map overlay `#FBFBFDF2`／`#DEDEE4F2`；相近色微調：停用底 `#E7E7EC`、secondary `#6A6A6F`、tertiary `#77777C`、separator `#D6D6DC`。`Light · Color Scheme` 色票板整份同步（BACKGROUND／SURFACE 標籤 Default／Card／Floating／MAP OVERLAY／ACTION／TEXT／BORDER）。Dark `surface/control/floating`（alias control `#3A3A3C`）綁定 Dark `Recenter`、`FitRoute`、Icon 按鈕 master，Dark 的 Standard／Route 圖示按鈕由 `#505054` 變 `#3A3A3C`。剩餘 frame 層級工作見票單 H-01～H-07。App 色彩程式未同步、無裝置驗證。
+- **自適應寬度共用元件（2026-10-28，使用者要求）**：`Slider / 原生黑白`（Light／Dark）改為 Component set，`Value` 0–100（每 5 一檔），軌道／進度／Thumb 隨寬度等比縮放；`Text Field / Neutral`（Light／Dark）六個 variant 改 Auto Layout（文字 Fill、Focused 游標跟隨文字）；`SearchField`、`SearchBar` 以 constraints 自適應，placeholder 單行截斷。Light D7、E3 滑桿換成 `Value=20` instance。靜態 wireframe 元件更新；App 對應控制（`Slider`、`TextField`）未同步，無裝置驗證。
+- **Speed chip 修正（2026-10-28，使用者）**：`Light · Button / Speed chip`（`313:29179`）Default 與 Disabled 兩個 variant 原本疊在同一位置，板上只看到灰色 Disabled（誤以為未改白底）；已左右排開並改為 Auto Layout：背景寬度依內容自適應（hug）、文字置中（可隨 instance 拉寬維持置中）、速度 icon 靠左、chevron 靠右（SPACE_BETWEEN，左右 padding 12）。Default 底 `surface/control/floating`（近白），寬約 75 pt。
 - 04 頁 section 底色：Light A–F、`Light · 0 · 共用元件`（含按鈕）、`Light · Color Scheme` 為 `#202020`；Dark A–F、`Dark · 0 · 共用元件`（含按鈕）、`Dark · Color Scheme` 為 `#0E0E0E`；Light section 內標題與說明文字改淺色以維持可讀。Icon、Typography、Common Color、未定義 section 未動。
 - 新增 A 區 R08「首次引導 / 需要重新設定（Setup 與 App 不相符）」Light `313:28214`／Dark `313:28242`：以 R07 版面為底，齒輪圖示（沿用 Icon 目錄 `icon/gear`，語意為「設定」）、標題「需要完成設定」、說明「此 GoFly App 與設定套件不相符。請將這支 iPhone 連接 GoFly Mac App，以修復設定。」、主要按鈕「重試」（位置同 R02／R03）。依 App 實機畫面；靜態 wireframe，未驗證行為。
 - 新增 D23「檢視路線 sheet（全部地點）」Light／Dark，對應 App `GoFlyRouteListView`（可編輯節點卡＋新增停靠點／反轉順序）；取代文件中「可編輯路線清單沒有 wireframe」的缺口，D13 仍為 GPX 唯讀清單。D6.a 確認結束 dialog 已由使用者刪除。
@@ -348,3 +362,188 @@ Mac M2 I09／D14 的「中斷後重新開始」行為已與安裝交易同步：
 - Light／Dark D1、D2、D8、D9 路線清單外卡沿用 subtle；一般列框使用 default，被 grip 抓取的列使用 focus。D8 原紅色選中框改用 focus。
 - 新增 Light `D2 · 路線規劃 / 拖曳排序示意`（frame `309:27349`）與 Dark 對應 frame（`309:27509`）。兩者示範 `台北 101` 抓取列、一般列及空出的新順序位置框；位置框使用 2 pt strong 描邊，Light `#8E8E93` 與 default `#C7C7CC` 有明顯差異，Dark `#8E8E93` 與 `#48484A` 有明顯差異。D2 拖曳排序示意是靜態討論 wireframe，沒有 prototype wiring，且只涵蓋面板 route list grip UI；全螢幕可編輯清單仍沒有對應 wireframe。
 - Light／Dark Color Scheme 與 Light／Dark D1、D2、D2 拖曳排序、D8、D9 渲染截圖已核對，並讀回兩主題 D1／D2／D8／D9 的 row border roles。此為靜態 Figma／規格更新；未修改 App SwiftUI、未做裝置驗證。
+
+### 2026-10-28 Light 票單執行補記
+
+- D12 `123:61268` 的手刻 `ActionSheet / 路線動作` 已搬入 Light 共用元件板：新增 master `313:30389`，D12 使用 instance `313:30405`。保留既有尺寸、Light card token、標題與四個動作列；底層 D11、Dim 與取消按鈕維持原層次。D12 與共用元件板改後截圖已檢查。
+- E2 `121:53202` 的「停止漫步／更換地點」按鈕維持既有 Neutral／Primary variant，調整為 120×56／221×56，x=16／156、底距 34 pt；改後截圖確認文字完整，比例與 D6 一致。D8／D9 停用 Start 按鈕回讀為 Primary Disabled Large instances，D8／D9 截圖確認使用中性停用態，沒有套用 Error／Success 狀態色。
+- D7 `158:6131` 的舊白色遮罩改用既有 `Overlay / Dim` instance `313:30421`，並把設定 sheet 維持在遮罩上方。Slider 三個 paint 改綁既有 Light token：底軌 `color/surface/control`、已選軌 `color/action/primary/surface`、thumb `color/canvas`；min/max 標籤仍使用 `Theme/captionEmphasis`。改後截圖確認地圖母畫面與 sheet 內容同時可見，藍色進度線可辨。
+- C3 `121:52367` 與 D21 `174:8161` 的刪除按鈕已讀回為同一 `Type=Danger, State=Active, Size=Medium` instance variant（361×48）；截圖確認外觀一致。將票單原「Danger Large」要求更新為 Medium，以符合 04 當前渲染的 48 pt 高度。
+- B1／B2 讀回確認 Favorite／Copy 各為 44×44 pt instances，兩張 `Map / Base`／`System / StatusBar` 均為 instance；截圖確認收合／半開資訊卡對齊。B5 的 `LocationCard / Route` instance 使用 77×40 pt Primary Inline Go 與 44×44 pt Star／Copy／Close instances；截圖確認 Pin／Go 未被 SearchBar 或 StatusPill 遮擋。
+- 尚未完成：G04 `Group row` variants、G08「未定義」區整理、G09 icon button 使用點替換，以及票單中其他標為未完成／阻礙的 Light frame 項目。D-05 的孤立說明於第二輪開始前已由 Claude 刪除；下方補記更新其狀態。
+- 本次只更新 Figma 靜態 wireframe 與票單／對照文件；App 行為未更新、App 程式未修改、未新增 prototype wiring，未做裝置驗證。未編輯 Variable／collection、色票板或 Dark 畫面。
+
+### 2026-10-28 第二輪 Light UI 票單執行（Figma Desktop Bridge）
+
+#### Figma 設計更新與驗收
+
+- D10 `193:9158` 的 `Panel / 執行模式控制` `238:9223` 綁回 Light `surface/card`；FitRoute `238:9632` 與 Recenter `238:9222` 回到 floating fill／separator stroke。panel 內「結束」「繼續」已是 Button/Text instances。截圖確認深藍整塊底色已消失。
+- D6、D7、D10、D10.a 的「來回／方向」控制改用既有 `Light · Button / Icon` Standard／Enabled／Small 36×36 instance，分別置入 `icon/repeat` 與 `icon/direction-forward`；刪除手刻控制並逐 frame 截圖核對。
+- B3 空輸入只顯示貼上按鈕並隱藏清除 X；B4 有值時顯示清除 X。兩張截圖確認 SearchField 右緣完整。採「頁面底＝canvas、列表區＝card」：新增列表底 `313:30848`／`313:30849`，綁既有 `surface/card`；原生鍵盤區維持 card。列表內容外緣保持 16 pt。
+- A–F Theme 樣式讀回找到 4 個、非 7 個未綁文字層，均為 B5／B7／B8／B9 的「Go」，套用既有 `Theme/captionEmphasis`。再掃描後，排除 9:41 與原生鍵盤示意，未綁 Theme 的文字層為 0。
+- H-03 清回 D8／D9／B10 的 Recenter／FitRoute 局部底色覆蓋，回到浮動控制樣式；D10.a 原已符合 master。D8、D9、B10、D10.a 截圖複核。H-07 檢視 Light 浮動 FitRoute／Recenter／Button/Icon／Speed chip，未發現仍以 `surface/control` 或 `control/active` 作為控制底色的實例。
+- H-05 核對 B3／B4／D5／C1–C4／D19–D22：輸入欄皆為近白 `#FBFBFD` token instance，未發現需修的灰色手刻欄位。B3／B4 的結果列採 canvas 背景、鍵盤為 card。
+- E5 `193:9287` Paused Top 與 warning Toast 兩層均保留，皆為共用 instance，y=58／138、相隔 8 pt、無重疊，文字已綁 Theme。B8／B9 保持 Pause pill 與 warn Toast instance，間距 8 pt；D10 的 Top／pill／Toast 均保留且互不重疊。沒有新增 Top 到原本只有 pill＋Toast 的 B8／B9。
+- G08-1／G08-2 已移除「未定義 · 執行提示卡底色」及「未定義 · Dialog 說明字色」兩組色票、label、hex；讀回未發現 A–F frame 使用對應的裸色 paint，亦未新增 token。G08 其餘元件副本整理仍未完成。
+- G11 由 Claude 先前完成，本輪只讀回 Light 21 個 Slider Value variants 與 D7／E3 Value=20 instances，沒有重做或修改 Dark。D6.a `222:16535` 已於本輪開始前刪除；沒有重建。
+- H-04 未改 Neutral 按鈕及 Progress 軌道，等待決定是否改近白＋邊框。P2 G04 Group row、G09 其他 icon 使用點及表格內尚未完成票仍維持未完成；P2 詳細逐票狀態見 `FIGMA-LIGHT-UI-TICKETS.md`。
+
+第二輪改動／刪除的主要 Figma node IDs：`238:9223`、`238:9632`、`238:9222`、`313:30788`、`313:30795`、`313:30803`、`313:30810`、`313:30818`、`313:30825`、`313:30833`、`313:30840`、`313:30848`、`313:30849`、`I313:29315;313:29305;268:22301`、`I313:29315;313:29306`、`I303:26673;303:26660`、`I303:26677;303:26660`、`I303:26681;303:26660`、`I303:26685;303:26660`、`238:9620`、`227:17099`、`238:9626`、`227:17108`、`222:13816`；G08 刪除 `295:26456`–`295:26462`。
+
+#### App 行為
+
+- 本輪只更新 Figma 靜態 wireframe；沒有修改 App 程式，也沒有同步或驗證 App 行為。這些設計調整不代表 App 已實作。
+
+#### 裝置驗證
+
+- 本輪沒有執行 iOS 裝置驗證。
+
+未修改 Variable／Variable collection、色票板、Dark frame、App；未新增 prototype wiring，未 commit。
+
+### 2026-10-28 A 區啟動／首次引導排版更新（Figma Desktop Bridge）
+
+#### Figma 設計更新
+
+- 依使用者確認，R01 使用 `Light · Progress` instance `315:31179`，Logo 居中，icon 底色為使用者選定的 grey50 token；R02／R03 使用者已調整標題字級，本輪讀回 28 pt 並截圖核對；R07／R08 使用者標示設計更新完成，本輪只截圖檢視，未修改。
+- R04 將連線步驟標題與 card 收到一致的 8／24 pt 間距；4 個步驟維持原文字並改為正確順序 1–4。連線說明 link、chevron 與 `尚未連線` StatusPill 對齊，底部 Primary CTA 維持安全區位置。
+- R04.a 將 danger Toast 放在標題上方，避免遮住「連接 VPN 通道」；沿用 R04 的 4 步 card 與編號，連線說明、錯誤 StatusPill 與底部 CTA 排齊。
+- R05 保留使用者現有 3 條說明與編號 2–4，移除 card 上方空白；步驟列改為 52 pt，三列 `Steps card` 高 156 pt。數字底綁既有 primary surface token，分隔線綁 `line/separator` 並保留 16 pt 右側留白。Troubleshooting card 放在步驟卡下方 16 pt；移除空白且被裁切的佔位 row／divider，保留可見文字。更新後截圖確認卡片高度與列內容吻合。
+- R04、R04.a、R05 改後截圖已逐張檢查；R01、R02、R03、R07、R08 也已截圖核對。R04/R05 尚有共用 Steps／List row、連線說明按鈕或 NavBar 元件化工作，因此票單 A-04／A-05 保持未完成。
+
+#### App 行為
+
+- 本次只調整 Figma wireframe 與設計稿票單；沒有修改 App 程式，也沒有驗證 App 行為。
+
+#### 裝置驗證
+
+- 本次未執行 iOS 裝置驗證。
+
+本次未修改 Variable 定義／collection、色票板、Dark frame、App；未新增 prototype wiring，未 commit。主要修改節點與刪除節點已列於 `FIGMA-LIGHT-UI-TICKETS.md` 的 A 區後續更新及 node ID 清單。
+
+### 2026-10-29 清理按鈕庫 Size=Inline 冗餘 Variants（Figma Desktop Bridge）
+
+#### Figma 設計更新
+
+- **刪除 Inline 特化尺寸**：
+  - 在標準 iOS 按鈕尺寸階梯中，`Size=Small` 高度即為 40 pt、圓角 20 pt、字級 14 pt，與原 `Size=Inline`（高 40 pt、圓角 20 pt、字級 14 pt）在樣式與尺寸規格上 100% 一致；77 pt（Go）或 86 pt（Confirm）僅為針對特定卡片版面縮短之自訂寬度，無需額外建立特化 Variant。
+  - **刪除之 Variants**：
+    - `Light · Button / Icon + Text`（`268:22020`）：刪除 `Type=Primary, State=Active, Size=Inline`（`309:26875`）與 `Type=Primary, State=Disabled, Size=Inline`（`309:26879`）。
+    - `Light · Button / Text`（`268:22197`）：刪除 `Type=Neutral, State=Active, Size=Inline`（`309:26883`）與 `Type=Neutral, State=Disabled, Size=Inline`（`309:26885`）。
+    - Dark `Button / Icon + Text`（`249:16511`）：同步刪除 `Type=Primary, State=Active, Size=Inline`（`309:27187`）與 `Type=Primary, State=Disabled, Size=Inline`（`309:27191`）。
+    - 清理按鈕展示板上 4 個已無對應元件的說明文字標籤（`Inline Go · Active/Disabled`、`Inline Confirm · Active/Disabled`）。
+  - **按鈕庫規格純化**：
+    - `Light · Button / Icon + Text` 與 `Light · Button / Text` 之 `Size` 屬性選項回歸標準 4 階：`Large`（56 pt）、`Medium`（48 pt）、`Small`（40 pt）、`Extra Small`（32 pt）。
+    - 兩元件集各縮減至對稱精確的 40 個 variants（5 Types × 2 States × 4 Sizes）。
+- **實例切換（Instance Re-linking）**：
+  - `Light · LocationCard`（`309:26979`）之 Go 按鈕改為 `Type=Primary, State=Active, Size=Small`，寬度維持 77 pt、高度 40 pt；B5、B7、D4、E4 畫面自動同步繼承。
+  - `Dark · LocationCard`（`309:27200`）同步改為 `Size=Small`（77 × 40 pt）。
+  - B8、B9 歷史 instance 同步切換為 `Size=Small, State=Disabled`。
+
+#### 驗收
+
+- 截圖及節點讀回核對：各畫面 LocationCard 與按鈕板外觀 100% 吻合原設計，無任何 detached 或遺留的 Inline variant 引用。
+- 此為 Figma 靜態 wireframe 與元件庫維護，未修改 App 程式碼、未新增 prototype wiring，未執行裝置驗證。
+
+### 2026-10-29 Map Pin (with button) 統一共用元件、按鈕清理與選中停靠點樣式更新（Figma Desktop Bridge）
+
+#### Figma 設計更新
+
+1. **Pin (with button) 統一共用元件**：
+   - 在 04 `Light · 0 · 共用元件` 新增 component set **`Light · Map Pin (with button)`**（`322:36580`），包含兩個 variants：
+     - `Action=Confirm`（52 × 78 pt）：上方為「確認」膠囊按鈕（52 × 28 pt，圓角 14 pt，綁定 `color/action/primary/surface` 與投影），正下方 6 pt 間距置中連接 `CandidatePin`（30 × 44 pt），針尖對齊底端正中（x: 26, y: 78）。
+     - `Action=Go`（56 × 78 pt）：上方為「Go」膠囊按鈕（56 × 28 pt，圓角 14 pt，含 16 × 16 pt `icon/play` 白色三角形圖示與 14 pt Bold "Go" 文字），正下方 6 pt 間距置中連接 `CandidatePin`，針尖對齊底端正中（x: 28, y: 78）。
+   - **畫面引用替換**：
+     - `E4 · 漫步目的地 / 點擊地圖 Pin 彈出獨立地點 card`（`163:7291`）：移除原散落之 `PinConfirm / 小確認` 與 `CandidatePin / 候選目的地`，替換為 `Light · Map Pin (with button)` instance（`Action=Confirm`，x: 249, y: 284），針尖精確對齊原點位（275, 362）。
+     - `D4 · 路線規劃 / Pin 設定選中的路線地點`（`193:8693`）：移除原散落之 `PinConfirm / 小確認` 與 `CandidatePin / 候選 Pin`，替換為 `Light · Map Pin (with button)` instance（`Action=Confirm`，x: 170, y: 266），針尖精確對齊原點位（196, 344）。
+     - `B5 · 地點 sheet / 點地圖放 Pin`（`121:51730`）：移除手刻之 `map/candidate-pin` 槽與 `Light · Button / Icon + Text`，替換為 `Light · Map Pin (with button)` instance（`Action=Go`，x: 237, y: 348），針尖精確對齊原點位（265, 426）。
+     - `B7 · 瞬移失敗 / 頂部 toast 提示`：同步替換為 `Light · Map Pin (with button)` instance（`Action=Go`，x: 237, y: 348）。
+   - 在 `Components board` 補上標題 `HEADING / MAP PIN (WITH BUTTON)`（`322:36581`，x: 480, y: 785），並於圖層面板排入第 28–29 層。
+
+2. **刪除重複按鈕元件並換用標準按鈕庫**：
+   - 刪除 `Light Button Theme board` 中的單一特化主件 `Light · Button / Icon + Text · Primary / 暫停`（`322:35148`）。
+   - `Light · Panel / 執行模式控制`（`322:33019`）之「暫停」按鈕改為引用標準 `Light · Button / Icon + Text` component set（`268:22020`）之 `Type=Primary, State=Active, Size=Large` variant（`268:22021`），尺寸調整為 221 × 56 pt，透過 instance properties 綁定 `icon/pause`（`256:19022`）與「暫停」標籤。
+
+3. **路線停靠點（選中）樣式更新**：
+   - `Light · Row / 路線停靠點（選中）`（`322:33183`）：
+     - 淺色底色：套用 `color/primary/100`（`VariableID:277:22528`，`#E5F1FC`）；
+     - 藍色外框：補上 `color/primary/500`（`VariableID:277:22530`，`#0071E3`），邊框寬度 1.5 pt，`strokeAlign: INSIDE`；
+     - 游標（caret）同步調整為 `color/primary/500` 藍色，確保淺藍底色上的視覺對比。
+
+#### 驗收
+
+- 截圖及 Figma 節點讀回核對：
+  - E4、D4、B5、B7 四個畫面中的地圖 Pin 均已成功鏈結至同一共用元件主件，視覺與針尖錨點完全無偏位；
+  - `Light · Panel / 執行模式控制` 外觀無跑版，已解耦獨立暫停按鈕主件；
+  - `Light · Row / 路線停靠點（選中）` 呈現清晰的淺藍底與藍色邊框，符合 Light CS 規範。
+- 此為 Figma 靜態 wireframe 設計規範整理，未修改 App 程式碼、未新增 prototype wiring，未執行裝置驗證。
+
+### 2026-10-29 Light · 0 · 共用元件 排序與排版整理（Figma Desktop Bridge）
+
+#### Figma 設計更新
+
+- **對象**：04 頁面 Section `Light · 0 · 共用元件`（`268:21633`）及其內元件板 `Components board`（`268:21636`）。
+- **元件位置與對齊修復**：
+  - `Light · Sheet / 設定移動時速`（`322:35257`）：原先位於 x=0, y=4176 凸出版面邊緣，調整至 `BOTTOMSHEET & PANELS` 區塊第三欄（x=880, y=3668），與 `匯入路線摘要`（x=40）及 `Panel / 執行模式控制`（x=460）橫向對齊，並對齊上方 `Sheet header` 之第三欄佈局。
+  - `Light · Settings / Row`（`322:35534`）與 `Light · Button / Icon + Text · Ghost Primary / 連線說明`（`322:35590`）：原先散落於 y=4086、x=532 / 1043 且無標題，整理至新區段 `SETTINGS & ONBOARDING`，分別排列於 x=40, y=4180 與 x=440, y=4186，垂直置中對齊。
+- **區塊標題補全**：
+  - 補全原先缺失之區段標題（套用既有 `Inter Bold 13pt` 與 `color/text/secondary` token）：
+    - `HEADING / MAP · LOCATION CARD`（x=40, y=666）
+    - `HEADING / TOP · EXECUTION GUIDANCE`（x=480, y=666）
+    - `HEADING / SLIDER · SPEED CONTROL`（x=1289, y=666）
+    - `HEADING / SETTINGS & ONBOARDING`（x=40, y=4150）
+- **圖層面板層次（Layer Order）重構**：
+  - 依照由上至下、由左至右之視覺閱讀與功能分組順序，全數 68 個圖層重新插入排序：
+    1. `STATUS · BANNER / SNACKBAR / PILL`（標題與 9 個 Toast / Snackbar / StatusPill）
+    2. `NAVIGATION · TAB BAR`（標題與 TabBar 元件集）
+    3. `Light · SearchBar`（標題與 4 個 SearchBar / SearchField）
+    4. `PROGRESS INDICATOR`（標題與 Progress）
+    5. `LIST · SEARCH RESULTS` 與 `SIMULATION · JOYSTICK`（標題與 List rows、Joystick）
+    6. `MAP · LOCATION CARD`、`TOP · EXECUTION GUIDANCE`、`SLIDER · SPEED CONTROL`、Speed chip、Badge、StatusBar、Map Base、Chips、ActionSheet
+    7. `LIST ROWS · SEARCH & PLACES`（標題與 3 個搜尋／地點結果列）
+    8. `LIST ROWS · FAVORITES`（標題與 4 個最愛地點／路線列）
+    9. `LIST ROWS · ROUTE PLANNING & GPX`（標題與 4 個 GPX／停靠點列）
+    10. `NAVIGATION & HEADERS`（標題與 返回、多選 NavBar、Sheet header）
+    11. `INFO CARDS`（標題與 Place info、Route info）
+    12. `BOTTOMSHEET & PANELS`（標題與 收合、展開、規劃路線、匯入路線摘要、執行模式控制、設定移動時速 Sheet）
+    13. `SETTINGS & ONBOARDING`（標題與 Settings Row、連線說明 Button）
+- **外框尺寸收斂**：
+  - `Components board` 由 2269 × 5013 收斂為 2269 × 4300 pt，消除底部多餘空白；
+  - Section `Light · 0 · 共用元件` 高度由 4409 pt 調整為 4552 pt，完整包覆內部 board（留有 64 pt 底部 padding），徹底解決原先 board 超出 Section 邊界的破版問題。
+
+#### 驗收
+
+- 截圖及節點讀回核對：全數 68 個圖層順序與座標皆已就位，無重疊或裁切。
+- 此為 Figma 靜態 wireframe 設計整理，未修改 App 程式碼、未新增 prototype wiring，未執行裝置驗證。
+
+### 2026-10-29 B · ICON BUTTONS 縮放與圓形邊框修正（Figma Desktop Bridge）
+
+#### Figma 設計更新
+
+- 針對 04 `Light · 0 · 共用元件（按鈕）` 的 `B · ICON BUTTONS / Type × State × Size`（component set `Light · Button / Icon` `268:21882`，合計 20 個 variants）：
+  - **保持圓形（All Circular）**：所有 20 個 variants 的 `cornerRadius` 統一設為 `999`（取代原先 Large 22、Medium 20、Small 18、Extra Small 16 及 MapControls 0 pt 的固定值），並開啟 `clipsContent: true`。在 Figma 中此設定確保按鈕在任何等比縮放尺寸下（如 64×64、32×32、20×20 pt），圓角均自動 clamp 至半徑，永遠維持 100% 完美圓形。
+  - **邊框隨外框縮放（Border scales with frame）**：
+    - `MapControls`（`309:26898`）：移除原先固定且未設邊框的子層 `Surface / white circle`（ELLIPSE），改由 variant 本身承載 fill（綁定 `surface/control/floating` `313:29348`）與 stroke（綁定 `line/border` `248:16131`，0.5 pt，Inside）。此舉使 MapControls 的邊框直接附著於元件邊框，縮放時完全同步跟隨。
+    - `Copy`（`309:26887`）：納入 `Light · Button / Icon` component set 作為第 20 個 variant（`Type=Copy, State=Enabled, Size=Large`，x: 1470），component set 寬度擴展至 1530 pt。同樣套用 `cornerRadius: 999`、floating fill 與 border stroke（0.5 pt，Inside）。
+    - 具備邊框的 variants（Standard Enabled 各尺寸、Route Enabled、MapControls Enabled、Copy Enabled）均維持 0.5 pt `line/border` Inside 描邊。
+  - **圖示等比縮放（Icon scale constraints）**：所有 variants 內部之 icon instance / frame 均設定 constraints 為 `horizontal: "SCALE", vertical: "SCALE"` 並維持正中對齊。當元件外框拉伸或縮放時，圖示保持正中並與圓形邊框等比縮放。
+- `Dark · Button / Icon`（`249:16344`，14 個 variants）同步套用 `cornerRadius: 999`、`clipsContent: true` 與子圖示 `SCALE / SCALE` constraints，確保淺深兩色設計邏輯一致。
+
+#### 驗收
+
+- 執行自動化縮放測試：將 `Light · Button / Icon` 全數 20 個 variants 放大至 64×64 pt 與縮小至 32×32 pt：
+  - 64×64 pt 時，`cornerRadius: 999` 自動呈現 32 pt 圓角（`radius >= width / 2`，100% 圓形），圖示由 22×22 pt 等比縮放至 32×32 pt 且 x=16、y=16 居中；
+  - 32×32 pt 時，呈現 16 pt 圓角（100% 圓形），圖示等比縮放至 16×16 pt 且 x=8、y=8 居中；
+  - 測試完成後全數還原回各 variant 原始設計尺寸（Large 44×44、Medium 40×40、Small 36×36、Extra Small 32×32 pt）。
+- 截圖及節點讀回確認：`Light · Button / Icon` 外觀完整無跑版，MapControls 與 Copy 皆具備標準 0.5 pt 邊框與白色浮動底色。
+- 此為 Figma 靜態 wireframe 設計規範調整，未修改 App 原始碼、未新增 prototype wiring，未執行裝置驗證。
+
+
+## 2026-10-29 Route Mode／設定 UX 對照更新
+
+| 項目 | Figma（已更新） | App 現況 | 追蹤 |
+| :-- | :-- | :-- | :-- |
+| 新增停靠點位置 | D1／D2 說明：加在最後並成為終點 | 插在終點前 | `.scratch/gofly-ios-figma04` 票 10 |
+| 無法規劃路線按鈕 | D8 Light／Dark：「修正」 | 「重試」，只重跑規劃 | 票 11 |
+| 設定服務卡 | F1／F1.a／F1.b：單一主按鈕；F1.b 重置成功＋success toast | 「啟動／停止」＋失敗時第二顆「重置」 | 票 17 |
+
+Figma 設計更新，App 待實作，未做實機驗證。

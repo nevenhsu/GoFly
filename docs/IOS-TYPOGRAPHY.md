@@ -25,7 +25,7 @@ App 內所有文字只用 `GoFlyFont`（字級，14 個 token）與 `GoFlyTextCo
 
 Figma 04 使用一套跨 Light／Dark 共用的本機文字樣式：`Theme/<token>`，其中 14 個 core styles 對應上表 `GoFlyFont` token（例如 `Theme/body`、`Theme/bodyEmphasis`、`Theme/footnote`）。為保留 Dark 按鈕矩陣既有 16／14 pt 字級，另加 `Theme/button/medium`（16 pt Semibold）與 `Theme/button/small`（14 pt Semibold）；它們與 core styles 同屬 Theme 家族，也不拆 Light／Dark。所有 Theme styles 只定義 PingFang TC 字型、字級與字重，不負責文字顏色。每個文字圖層仍獨立綁定 `GoFly iOS / Light Theme` 或 `GoFly iOS / Dark Theme` 中相應的文字色變數；套用文字樣式時須保留這個顏色綁定。兩個按鈕尺寸 style 是 Figma 設計補充，App `GoFlyFont` 未在本次修改。
 
-2026-10-28 D10 的五個輔助文字層套用現有 Theme styles：`Theme/footnoteEmphasis`（百分比／狀態文字）及 `Theme/bodyEmphasis`（主要動作文字），小型按鈕使用 `Theme/button/small`。字體樣式與顏色各自維護；套用 style 時保留 Light Theme 的文字色 variable binding。其餘尚未整理為 Theme style 的系統時間、地圖標籤與原生鍵盤示意文字不推定為 App 文字樣式。
+2026-10-28 D10 的五個輔助文字層套用現有 Theme styles：`Theme/footnoteEmphasis`（百分比／狀態文字）及 `Theme/bodyEmphasis`（主要動作文字），小型按鈕使用 `Theme/button/small`。同日 Light `Map / Base` 的區域標籤套用 `Theme/caption`，水域標籤套用 `Theme/footnote`；文字色仍獨立綁既有 `map/label-area`／`map/label-water` token。這是 Figma 標籤樣式整理，不代表 App `GoFlyFont` 已同步。系統時間與原生鍵盤示意文字仍不推定為 App 文字樣式。
 
 `LIST · SEARCH RESULTS` 的最近搜尋列地點名稱使用 `Theme/body`；座標結果主標使用 `Theme/bodyEmphasis`；附近地點名稱使用 `Theme/body`；地址／座標提示使用 `Theme/footnote`。B3／B4 的「最近搜尋」與「附近地點」區段標題使用 `Theme/subheadlineEmphasis`。同一套文字樣式可同時套用於 Light 與 Dark 畫面，文字色由各自 theme 變數決定。
 
