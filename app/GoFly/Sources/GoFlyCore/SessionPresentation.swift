@@ -68,7 +68,10 @@ public struct SessionStatusErrors: Equatable, Sendable {
         messages += dataErrors
         var seen: Set<String> = []
         keys = messages.filter {
-            Self.reportsFailure($0) && !IssueCatalog.isValidation($0)
+            // D8 presents failed route planning in its floating page toast;
+            // Figma keeps the shared session pill at Started for this case.
+            $0 != RouteExecutionFailure.planningFailed.localizationKey
+                && Self.reportsFailure($0) && !IssueCatalog.isValidation($0)
                 && seen.insert($0).inserted
         }
     }

@@ -27,7 +27,7 @@ struct GoFlyRecoveryView: View {
                 }
                 if hasSummary {
                     Text(goFlyString("recovery.previousTask"))
-                        .font(GoFlyFont.headline)
+                        .goFlyFont(GoFlyFont.headline)
                         .accessibilityIdentifier("recovery.summary.title")
                     summary
                     action("recovery.discard", id: "recovery.discard") {
@@ -43,7 +43,7 @@ struct GoFlyRecoveryView: View {
                 }
                 if hasContent && store.isSaving {
                     ProgressView(goFlyString("recovery.saving"))
-                        .font(GoFlyFont.footnote)
+                        .goFlyFont(GoFlyFont.footnote)
                 }
             }
             .padding(16)
@@ -97,7 +97,7 @@ struct GoFlyRecoveryView: View {
     @ViewBuilder private var summary: some View {
         switch recovery.unverifiedMovement {
         case .route(let route):
-            Text(goFlyString("mode.route")).font(GoFlyFont.subheadlineEmphasis)
+            Text(goFlyString("mode.route")).goFlyFont(GoFlyFont.subheadlineEmphasis)
             Text(goFlyLocalizedFormat(goFlyString("recovery.routeProgress"),
                 route.progress.fraction.formatted(.percent.precision(.fractionLength(0)).locale(GoFlyPreferences.shared.locale))))
                 .accessibilityIdentifier("recovery.routeProgress")
@@ -107,7 +107,7 @@ struct GoFlyRecoveryView: View {
                     Spacer(minLength: 8)
                     Text(goFlyString("route.axis.destination")).multilineTextAlignment(.trailing)
                 }
-                .font(GoFlyFont.caption)
+                .goFlyFont(GoFlyFont.caption)
             }
             Text(goFlyString("route.direction.\(route.heading.rawValue)"))
                 .accessibilityIdentifier("recovery.routeHeading")

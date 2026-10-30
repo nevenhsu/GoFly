@@ -108,10 +108,17 @@ enum GoFlyThemeColor {
     static let commonWhite = color("common/white")
 
     private static func color(_ name: String) -> Color {
+        Color(uiColor: uiColor(named: name))
+    }
+
+    /// UIKit controls need a dynamic UIColor directly. Bridging a SwiftUI
+    /// dynamic Color through UIColor(Color) can resolve it to the light value
+    /// before the hosted control receives its dark trait collection.
+    static func uiColor(named name: String) -> UIColor {
         guard let token = GoFlyColorTokens.token(named: name) else {
             preconditionFailure("Missing GoFly color token: \(name)")
         }
-        return Color(uiColor: UIColor { traits in
+        return UIColor { traits in
             let appearance: GoFlyColorAppearance = traits.userInterfaceStyle == .dark ? .dark : .light
             let hex = token.hex(for: appearance)
             let digits = String(hex.dropFirst())
@@ -123,7 +130,7 @@ enum GoFlyThemeColor {
             let blue = CGFloat((value >> (hex.count == 9 ? 8 : 0)) & 0xFF) / 255
             let alpha = hex.count == 9 ? CGFloat(value & 0xFF) / 255 : 1
             return UIColor(red: red, green: green, blue: blue, alpha: alpha)
-        })
+        }
     }
 }
 

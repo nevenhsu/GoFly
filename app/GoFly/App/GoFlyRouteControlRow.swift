@@ -7,27 +7,9 @@ struct GoFlyRouteRepeatIcon: View {
     var isEnabled = true
 
     var body: some View {
-        Canvas { context, _ in
-            let color = isEnabled
-                ? (isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
-                : GoFlyTextColor.disabled
-            let stroke = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
-            var path = Path()
-            path.move(to: CGPoint(x: 7.2, y: 5)); path.addLine(to: CGPoint(x: 17.5, y: 5))
-            path.move(to: CGPoint(x: 14.17, y: 1.67)); path.addLine(to: CGPoint(x: 17.5, y: 5))
-            path.addLine(to: CGPoint(x: 14.17, y: 8.33))
-            path.move(to: CGPoint(x: 12.8, y: 15)); path.addLine(to: CGPoint(x: 2.5, y: 15))
-            path.move(to: CGPoint(x: 5.83, y: 11.67)); path.addLine(to: CGPoint(x: 2.5, y: 15))
-            path.addLine(to: CGPoint(x: 5.83, y: 18.33))
-            context.stroke(path, with: .color(color), style: stroke)
-            if !isOn {
-                var slash = Path()
-                slash.move(to: CGPoint(x: 2.5, y: 2.5)); slash.addLine(to: CGPoint(x: 17.5, y: 17.5))
-                context.stroke(slash, with: .color(color), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
-            }
-        }
-        .frame(width: 20, height: 20)
-        .accessibilityHidden(true)
+        GoFlyIcon(isOn ? .repeat : .repeatOff, size: 20, maximumSize: 28)
+            .foregroundStyle(isEnabled ? (isOn ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
+                             : GoFlyTextColor.disabled)
     }
 }
 
@@ -39,24 +21,8 @@ struct GoFlyVerticalArrowsIcon: View {
     var isEnabled = true
 
     var body: some View {
-        Canvas { context, _ in
-            let dark = isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled
-            let light = isEnabled ? GoFlyStyle.directionInactive
-                : GoFlyTextColor.disabled
-            let stroke = StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
-            var down = Path()
-            down.move(to: CGPoint(x: 5, y: 3)); down.addLine(to: CGPoint(x: 5, y: 17))
-            down.move(to: CGPoint(x: 2, y: 14)); down.addLine(to: CGPoint(x: 5, y: 17))
-            down.addLine(to: CGPoint(x: 8, y: 14))
-            var up = Path()
-            up.move(to: CGPoint(x: 15, y: 17)); up.addLine(to: CGPoint(x: 15, y: 3))
-            up.move(to: CGPoint(x: 12, y: 6)); up.addLine(to: CGPoint(x: 15, y: 3))
-            up.addLine(to: CGPoint(x: 18, y: 6))
-            context.stroke(down, with: .color(isReversed ? dark : light), style: stroke)
-            context.stroke(up, with: .color(isReversed ? light : dark), style: stroke)
-        }
-        .frame(width: 20, height: 20)
-        .accessibilityHidden(true)
+        GoFlyIcon(isReversed ? .directionReverse : .directionForward, size: 20, maximumSize: 28)
+            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
     }
 }
 
@@ -75,12 +41,12 @@ struct GoFlySpeedChip: View {
             HStack(spacing: 4) {
                 GoFlySpeedIcon(size: 16)
                 Text("\(speed)")
-                    .font(GoFlyFont.footnoteEmphasis)
+                    .goFlyFont(GoFlyFont.footnoteEmphasis)
                     .monospacedDigit()
                     .lineLimit(1)
                 if showsChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                    GoFlyIcon(.chevronRight)
+                        .goFlyIconSize(size: 10, maximum: 14)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .accessibilityHidden(true)
                 }

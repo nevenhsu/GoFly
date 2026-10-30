@@ -8,14 +8,21 @@ struct GoFlyStatusPill: View {
     let tone: GoFlyStatusTone
     var action: (() -> Void)?
     var identifier: String = "map.statusPill"
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if let action {
-            Button(action: action) { label }
-                .buttonStyle(.plain)
-                .accessibilityHint(goFlyString("map.statusPill.hint"))
-                .accessibilityIdentifier(identifier)
+            Button(action: action) {
+                // Keep the Figma capsule at 30 pt while giving the button
+                // the required 44 pt accessibility hit target. A flexible
+                // clear layer here expands to the full map height inside a
+                // ZStack, which also corrupts the top inset used by Toasts.
+                label
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(goFlyString("map.statusPill.hint"))
+            .accessibilityIdentifier(identifier)
         } else {
             label
                 .accessibilityElement(children: .combine)
@@ -24,27 +31,26 @@ struct GoFlyStatusPill: View {
     }
 
     private var label: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(tone.pillDot)
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(text)
-                .font(GoFlyFont.footnoteEmphasis)
+                .goFlyFont(GoFlyFont.footnoteEmphasis)
                 .foregroundStyle(GoFlyTextColor.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 16)
         .frame(minHeight: 30)
         .background(GoFlyStyle.pillSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(GoFlyStyle.pillBorder, lineWidth: colorScheme == .dark ? 1 : 0.5)
+                .strokeBorder(GoFlyStyle.pillBorder, lineWidth: 1)
                 .allowsHitTesting(false)
         }
-        .goFlyShadow(.floating)
-        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .goFlyShadow(tone.pillUsesFloatingShadow ? .floating : nil)
         .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }

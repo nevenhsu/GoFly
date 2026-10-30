@@ -17,7 +17,7 @@ struct GoFlyBottomBar: View {
                     VStack(spacing: 1) {
                         GoFlyTabIcon(mode: mode, selected: selection == mode, size: 25)
                         Text(goFlyString("mode.\(mode.rawValue)"))
-                            .font(GoFlyFont.micro)
+                            .goFlyFont(GoFlyFont.micro)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -43,11 +43,4 @@ struct GoFlyBottomBar: View {
         .accessibilityIdentifier("map.bottomBar")
     }
 
-    private func symbol(for mode: SessionMapMode) -> String {
-        switch mode {
-        case .teleport: "mappin.circle"
-        case .route: GoFlySymbols.route
-        case .joystick: GoFlySymbols.joystick
-        }
-    }
 }

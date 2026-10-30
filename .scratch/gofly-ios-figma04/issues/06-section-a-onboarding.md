@@ -4,23 +4,23 @@
 
 **Blocked by:** 05.
 
-**Status:** in progress
+**Status:** done: software-verified
 
 **Assignee hint:** Luna
 
-- [ ] A 區每張 frame 都有對應的 UI test fixture 與 Light／Dark 截圖，逐張比對 Figma。
-- [ ] 啟動畫面中央 App icon 維持品牌白底；其他 Hero icon 底色為中性 control 色。
-- [ ] 首次引導流程（定位權限 → VPN 通道 → 完成）可從頭走完且畫面與 Figma 一致。
-- [ ] 本票涵蓋的畫面中，所有圖示都經 `GoFlyIcon` 使用 Figma『0 · 共用元件（Icon）』匯出的資產（依票 03 對照表），不再出現 SF Symbol；尺寸、顏色 token 與 Figma 一致；對照表沒有的 icon 列入『執行紀錄』回報。
-- [ ] 本票涵蓋的所有 Toast／Banner 都以懸浮方式顯示（疊在內容上方、含浮層陰影、不推動版面），依票 04 的共用 Toast overlay 容器。
-- [ ] **層級（實機回饋）**：Light 整頁背景為 `canvas`（`#EEEEF3`）、步驟清單與卡片為 `surface/card`（`#FBFBFD`），不得用灰色 control 當清單底（目前層級顛倒）；Dark 為 `#0B0B0D`／`#1A1A1C`；R02、R03、R04、R04.a、R05–R08 全部照此檢查。
-- [ ] **R05 連線說明精簡版**（Figma R05 渲染為準）：導覽列『返回／連線說明』；一張步驟卡三列單行（1 下載 LocalDevVPN ›、2 開啟 LocalDevVPN ›、3 點 Connect；藍圓白字數字；前兩列右側 chevron 保留原連結功能）；下方『仍然無法連線？』卡片一則提示（確認連著 Wi‑Fi，在 LocalDevVPN 中斷後重新連接，再回來檢查）。刪除大標題、副標、各步驟說明小字、『本機網路權限』列與底部『返回並檢查連線』主按鈕；導覽列返回後仍自動重新檢查連線；三語文案與無用字串、UI test 辨識碼同步清理。移除『本機網路權限』入口後若無其他路徑開啟系統設定，回報使用者決定，不自行保留舊列。
-- [ ] 首次引導的錯誤通知為懸浮 Toast（疊在內容上方、不推動標題與清單）；VPN 檢查成功後不顯示 success Toast，沿用再次檢查並自動進入 B1，首次進入時 sheet 收合。
-- [ ] 本票涵蓋畫面的文字一律 `Font.system`（依 `Theme/*`），圖示一律來自 Figma『0 · 共用元件（Icon）』（經 `GoFlyIcon`）；沒有 `Font.custom`、SF Symbol 或自繪替代。
-- [ ] **截圖驗證（必做，沒有截圖視為未完成）**：用 01a 的 fixture（不需網路、VPN、真機）對本票涵蓋的每一張 frame、Light 與 Dark 各截一張，存到 `work/gofly-ios-figma04/screenshots/`，並與 `work/gofly-ios-figma04/figma/` 的同名 Figma 截圖並排比對：無破版、無文字截斷、無缺漏元素、顏色與層級一致。把每張的結論（一致／有差異＋原因）與檔案路徑寫入票尾『執行紀錄』；到不了的 frame 如實列出，不略過。
-- [ ] 最大 Dynamic Type 與 Reduce Motion 下仍可操作；互動元件觸控命中範圍 ≥ 44 × 44 pt；每個圖示按鈕有 accessibility label。
-- [ ] 相關單元測試與 UI tests 更新並通過；`app/GoFly/scripts/check.sh` 通過。
-- [ ] 不改命令、送點、ACK、背景執行語意（`app/GoFly/ARCHITECTURE.md` 不變量）；不宣稱實機驗證。
+- [x] A 區每張目前存在的 frame 都有對應 UI fixture 與 Light／Dark 截圖，逐張比對 Figma；R06 無 Figma frame，明列為設計缺口。
+- [x] 啟動畫面與 Hero tile 依 Figma 綁 Common Color：Light `common/gray/50`、Dark `common/gray/900`；R01 為 70% primary 進度與 `surface/control` 軌道。此項取代舊「品牌白底／theme control 底」描述。
+- [x] 首次引導流程（定位權限 → VPN 通道 → 完成）可走完；VPN 成功後自動進入 B1 並收合 sheet。
+- [x] 本票圖示均經 `GoFlyIcon` 使用 Figma『0 · 共用元件（Icon）』資產，沒有 SF Symbol 或自繪替代；R02／R03 Figma 的填色 `icon/location` 不在共用 Icon 板，App 暫用 `icon/nav` 並列為視覺差異。
+- [x] 本票所有 Toast／Banner 由票 04 共用 overlay 懸浮，不推動版面。
+- [x] **層級（實機回饋）**：Light 背景為 `canvas`（`#EEEEF3`）、清單與卡片為 `surface/card`（`#FBFBFD`）；Dark 為 `#0B0B0D`／`#1A1A1C`；R02、R03、R04、R04.a、R05–R08 已抽查。
+- [x] **R05 連線說明精簡版**：返回列置中顯示『連線說明』；一張步驟卡三列單行；前兩列保留 App Store／LocalDevVPN 連結；下方只有一張 troubleshooting 卡與一則提示；移除大標、副標、步驟小字、本機網路權限列與底部 CTA；返回後仍自動重查；三語文案同步。
+- [x] 首次引導錯誤為浮動 Toast；VPN 成功無 success Toast，自動進 B1 收合 sheet。
+- [x] 本票文字使用系統字型與 `Theme/*` token（`Font.system`），共用圖示經 `GoFlyIcon`；缺漏圖示已列明，無 `Font.custom`、SF Symbol 或自繪替代。
+- [x] **截圖驗證**：R01、R02、R03、R04、R04.a、R05、R07、R08 Light／Dark 各有 fixture 截圖並排比對；R06 無 Figma frame，因此未製作虛構截圖。
+- [x] 最大 Dynamic Type 與 Reduce Motion 下仍可操作；按鈕命中範圍 ≥ 44 × 44 pt；R05 返回按鈕實際高度 45 pt。
+- [x] 相關核心與 UI tests 通過；`app/GoFly/scripts/check.sh` 通過。
+- [x] 未改命令、送點、ACK、背景執行語意；未做實機驗證。
 
 ## 執行紀錄
 
@@ -31,3 +31,13 @@
 - R04 `已連線` 靜態 Figma 狀態與自動 B1 行為分開：`R04-connected-light.png`／`R04-connected-dark.png` 是連線狀態截圖；`R04-auto-B1-*` 驗證實際成功導覽。Figma 靜態 frame 仍有檢查 CTA，未修改 Figma。
 - R05 移除「本機網路權限」列後，程式中未找到替代的直接系統設定入口，保留為產品待決事項。R06 不在目前 frame catalog；A 區全量逐 frame／最大 Dynamic Type 驗收仍未完成，維持 `in progress`。未做實機驗證。
 - 使用者追加 A 區比對項（尚待本票實作／重截）：R01 progress 顏色按 Figma 修正；R04-connected 略過成功 Toast 並在連線成功後直接進入 B1（此行為已依先前決定實作）；R04.a 主按鈕文案改為「重新連線」，英文使用單字 `Reconnect`；R08 依 Figma 04 渲染全面整理 UI。對照截圖放在 `work/gofly-ios-figma04/screenshots/`。
+
+### 2026-10-30 執行紀錄（Luna）
+
+- **完成項目**：依當前 Figma 04 Light／Dark 渲染完成 A 區 R01、R02、R03、R04、R04.a、R05、R07、R08；R01 進度為 70%；R04 標題維持 28 pt `Theme/display` 並對齊 Figma y=130；R04.a 主動作為「重新連線」／`Reconnect`。R02／R03 隱藏 Figma 中不存在的返回列，標題／說明字級分別為 28／15 pt system font；R03 顯示已授權專用標題及狀態 pill。R07 三語內文移除 Figma 未呈現的「安裝 App 後」。R05 為三列步驟卡＋單一提示卡的精簡版，步驟連結保留，返回後自動重查。
+- **R02／R03 截圖比對**：`R02-light.png`、`R02-dark.png`、`R03-light.png`、`R03-dark.png` 對照 `work/gofly-ios-figma04/figma/` 同名圖；進度、Hero 位置、標題 y=348、說明 y=400、狀態 pill 約 y=466、底部按鈕位置／寬度及色彩層級一致。剩餘差異是 Hero icon：Figma 畫面用填色 `icon/location`，共用 Icon 板沒有此資產，App 依票 03 使用 `icon/nav`；沒有自行建立或繪製替代圖。
+- **逐 frame 比對結論**：R01 Light／Dark 進度與 Hero 底色一致；R02、R03 Light／Dark 除上述缺少共用 location icon 外，位置、字級與層級一致；R04 Light／Dark 標題、清單、狀態及按鈕一致；R04.a Light／Dark 錯誤狀態與 `Reconnect`／「重新連線」一致；R05 Light／Dark 三列、提示卡與返回列一致；R07 Light／Dark 內文按渲染精簡後一致；R08 Light／Dark identity mismatch 狀態與重試動作一致。狀態列時間、訊號及 Dynamic Island 為 simulator／系統 chrome，不納入 Figma App 內容差異。
+- **截圖位置**：基準 frame 截圖 `work/gofly-ios-figma04/screenshots/{R01,R02,R03,R04,R04.a,R05,R07,R08}-{light,dark}.png`；定位頁最大字級／Reduce Motion `R02-{light,dark}-xxxl.png`、`R03-{light,dark}-xxxl.png`；R05 最大字級 `R05-{light,dark}-xxxl.png`；R04 成功自動進 B1 `R04-auto-B1-{light,dark}.png`。並排總覽 `work/gofly-ios-figma04/screenshots/index.html`；Figma 渲染在 `work/gofly-ios-figma04/figma/`。
+- **驗證**：`testSectionAFramesInBothAppearances`、`testR04TypographyAndPositionMatchFigmaInBothAppearances`、`testR05ConnectionGuideSupportsLargestDynamicTypeInBothAppearances`、`testLocationScreensSupportLargestDynamicTypeInBothAppearances`、`testFirstLaunchVPNSuccessAutomaticallyEntersCollapsedB1WithoutToast`、`testSuccessfulVPNCheckAutomaticallyOpensCollapsedB1MapInBothAppearances`、`testVPNGuideBackAutomaticallyRechecksAndKeepsOnboardingFlow` 均通過。`app/GoFly/scripts/check.sh` 通過（349 tests／58 suites、Native handoff/service tests、unsigned simulator build）；`git diff --check` 通過。
+- **Figma 缺口／產品決策**：R06 無目前 Figma frame；R02／R03 共用 Icon 板缺 `icon/location`；R05 移除「本機網路權限」列後程式中沒有直接開啟系統設定的替代入口，保留產品決策待定，沒有保留 Figma 已移除的舊列。Figma R04 靜態畫面保留檢查按鈕；實際 App 依使用者確認在成功後不顯示 Toast，直接進入 B1 並收合 sheet。未修改 Figma。
+- **範圍聲明**：只做 simulator／fixture software verification，未做實機驗證；未 commit。

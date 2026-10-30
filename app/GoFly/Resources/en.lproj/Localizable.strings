@@ -47,6 +47,7 @@
 "onboarding.welcome.title" = "Welcome to GoFly";
 "onboarding.next" = "Next";
 "onboarding.location.title" = "Allow GoFly to use location";
+"onboarding.location.title.authorized" = "Location access allowed";
 "onboarding.location.message" = "Show your real location on the map and use it as the start of routes and wandering. Only “While Using the App” is needed.";
 "onboarding.location.allow" = "Allow";
 "onboarding.location.skip" = "Skip";
@@ -65,12 +66,13 @@
 "onboarding.vpn.help.troubleshooting" = "Still unable to connect?";
 "onboarding.vpn.help.reconnect" = "Make sure you are on Wi‑Fi. Disconnect and reconnect in LocalDevVPN, then come back and check again.";
 "onboarding.vpn.help.notChecked" = "Not connected";
-"onboarding.vpn.help.notReachable" = "Not reachable";
+"onboarding.vpn.help.notReachable" = "Connection error";
 "onboarding.vpn.disconnected" = "Not connected";
 "onboarding.vpn.checking" = "Checking…";
 "onboarding.vpn.check" = "Check connection";
-"onboarding.vpn.unavailable" = "GoFly could not reach the local tunnel. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and check again.";
-"onboarding.vpn.timedOut" = "GoFly’s local tunnel check timed out. Make sure iPhone is connected to Wi‑Fi; cellular data alone does not work. Then disconnect and reconnect in LocalDevVPN and retry.";
+"onboarding.vpn.reconnect" = "Reconnect";
+"onboarding.vpn.unavailable" = "LocalDevVPN is disconnected or the connection timed out. Check the tunnel in Settings.";
+"onboarding.vpn.timedOut" = "LocalDevVPN is disconnected or the connection timed out. Check the tunnel in Settings.";
 "onboarding.vpn.failureDetail" = "iOS reported";
 "onboarding.vpn.externalOpenFailed" = "The App Store could not be opened. Open the App Store manually and search for LocalDevVPN.";
 "map.simulatedLocation" = "Confirmed simulated location";
@@ -92,6 +94,19 @@
 "teleport.moving" = "Moving…";
 "teleport.unconfirmed" = "Location unconfirmed";
 "teleport.positionUnconfirmed" = "The location change is unconfirmed. Stop the service before using Go again.";
+"teleport.failure.toast.title" = "Teleport failed";
+"teleport.failure.toast.message" = "Could not update the simulated location. Check the connection in Settings › VPN Channel.";
+"figma.fixture.b2.position" = "No. 45, Sec. 2, Zhongshan N. Rd.";
+"figma.fixture.b1.position" = "No. 45, Sec. 2, Zhongshan N. Rd.";
+"figma.fixture.b4.coordinate" = "Go to coordinate";
+"figma.fixture.b4.result1.title" = "Taipei Main Station";
+"figma.fixture.b4.result1.address" = "No. 3, Beiping W. Rd., Zhongzheng Dist. · 40 m";
+"figma.fixture.b4.result2.title" = "Taipei Bus Station";
+"figma.fixture.b4.result2.address" = "No. 209, Sec. 1, Civic Blvd., Datong Dist. · 210 m";
+"figma.fixture.b4.result3.title" = "Q Square";
+"figma.fixture.b4.result3.address" = "No. 1, Sec. 1, Chengde Rd., Datong Dist. · 260 m";
+"figma.fixture.b4.result4.title" = "National Taiwan Museum";
+"figma.fixture.b4.result4.address" = "No. 2, Xiangyang Rd., Zhongzheng Dist. · 650 m";
 "error.operationCancelled" = "The operation was cancelled.";
 "operation.preparingService" = "Preparing service";
 "operation.preparingMove" = "Preparing location change";
@@ -166,7 +181,7 @@
 "route.error.missingStart" = "Choose an origin.";
 "route.error.missingDestination" = "Choose a destination.";
 "route.error.currentLocationUnavailable" = "Current location is unavailable. Choose a place on the map or in search for the node using current location.";
-"route.error.planningFailed" = "No route could be obtained. Check the places or network connection and retry.";
+"route.error.planningFailed" = "No drivable route found. Check the start point or select Fix.";
 "route.error.invalidPath" = "The planned route is invalid. Choose different places and try again.";
 "route.phase.editing" = "Edit route";
 "route.phase.planning" = "Planning route…";
@@ -215,6 +230,10 @@
 "imports.import" = "Import";
 "imports.export" = "Export";
 "imports.load" = "Load";
+"imports.action.loadRoute" = "Load";
+"imports.action.viewAllPoints" = "View";
+"imports.action.exportRoute" = "Export";
+"imports.action.deleteRoute" = "Delete";
 "imports.empty" = "No imported routes yet.";
 "imports.loading" = "Loading imported routes…";
 "imports.working" = "Processing file…";
@@ -232,7 +251,8 @@
 "imports.execution.disconnectedSegments" = "The segments do not share exact endpoints. This route can be previewed or exported, but cannot be loaded for movement.";
 "imports.execution.zeroDistance" = "This route has no travel distance. It can be previewed or exported, but cannot be loaded for movement.";
 "imports.file.unavailable" = "The file could not be opened or saved. Try again.";
-"imports.file.tooLarge" = "The GPX file exceeds the 2 MiB size limit.";
+"imports.error.title" = "Cannot import GPX";
+"imports.file.tooLarge" = "The GPX file exceeds 2 MiB. Choose a smaller file.";
 "imports.file.unsupported" = "Choose a GPX or XML file.";
 "imports.error.corruptArchive" = "The imported-routes list is damaged and cannot be changed.";
 "imports.error.unsupportedSchema" = "This imported-routes list version is not supported.";
@@ -266,20 +286,21 @@
 "favoriteRoutes.remove" = "Remove favorite route";
 "favoriteRoutes.editLabel" = "Edit route label";
 "favoriteRoutes.empty" = "No favorite routes yet.";
-"favoriteRoutes.searchSaved" = "Search favorite routes";
+"favoriteRoutes.searchSaved" = "Search favorite places";
 "favoriteRoutes.noMatches" = "No matching favorite routes.";
 "favoriteRoutes.loading" = "Loading favorite routes…";
 "favoriteRoutes.validating" = "Checking selected route…";
 "favoriteRoutes.working" = "Updating favorite routes…";
 "favoriteRoutes.deleted" = "Route deleted";
-"favoriteRoutes.deletedCount" = "Deleted %ld favorite routes";
+"favoriteRoutes.deletedCount" = "Deleted %ld items";
 "favoriteRoutes.undo" = "Undo";
 "favoriteRoutes.return" = "Back";
 "favoriteRoutes.delete" = "Delete %@";
 "favoriteRoutes.deleteSingle" = "Delete";
 "favoriteRoutes.pointCount" = "%ld points";
-"favoriteRoutes.placeCount" = "%ld places";
-"favoriteRoutes.label" = "Label (optional)";
+"favoriteRoutes.placeCount" = "%ld points";
+"favoriteRoutes.label" = "Route label";
+"favoriteRoutes.namePlaceholder" = "Route name";
 "favoriteRoutes.cancel" = "Cancel";
 "favoriteRoutes.save" = "Save";
 "favoriteRoutes.done" = "Done";
@@ -448,12 +469,12 @@
 "setup.waiting.title" = "Continue setup on Mac";
 "setup.waiting.message" = "Finish setup in the GoFly Mac app, then return to this iPhone.";
 "setup.mac.title" = "Connect to Mac to finish pairing";
-"setup.mac.message" = "After installing the app, connect this iPhone to your Mac with a USB cable. Complete device pairing and signing in GoFly on Mac.";
+"setup.mac.message" = "Connect this iPhone to your Mac with a USB cable, then complete device pairing and signing authorization in GoFly on your Mac.";
 "setup.mac.unpaired" = "Not paired";
 "setup.completed.title" = "Setup complete";
 "setup.completed.message" = "GoFly is ready.";
 "setup.blocked.title" = "Setup is required";
-"setup.blocked.identity" = "This GoFly app does not match the setup package. Connect this iPhone to the GoFly Mac app to repair setup.";
+"setup.blocked.identity" = "GoFly App and its setup package do not match. Connect this iPhone to the Mac app to repair setup.";
 "setup.blocked.pairing" = "Pairing data is missing or does not match this setup. Connect this iPhone to the GoFly Mac app to repair setup.";
 "setup.blocked.artifact" = "The device support package is incomplete or does not match setup. Connect this iPhone to the GoFly Mac app to repair setup.";
 "setup.blocked.input" = "The setup package is invalid. Connect this iPhone to the GoFly Mac app to retry setup.";
@@ -482,10 +503,14 @@
 "sheet.detent.expanded" = "Expanded";
 "execution.end" = "End";
 "common.undo" = "Undo";
-"gallery.warningTitle" = "Location is limited";
-"gallery.warningMessage" = "GoFly only asks for location while the app is open.";
-"gallery.successTitle" = "Moved to this place";
-"gallery.showSnackbar" = "Show snackbar";
+"common.continue" = "Continue";
+"gallery.warningTitle" = "Background task stopped";
+"gallery.warningMessage" = "Return to GoFly to continue walking.";
+"gallery.successTitle" = "VPN channel available";
+"gallery.successMessage" = "You can continue to the next step.";
+"gallery.showSnackbar" = "Show";
+"gallery.presentationDim.show" = "Show sheet dim";
+"gallery.slider.resize" = "Resize";
 "gallery.snackbarText" = "Deleted 1 item";
 "gallery.executionTitle" = "Heading to 台北 101";
 "gallery.executionDetail" = "1.2 km left · 4 min";
@@ -493,7 +518,8 @@
 "gallery.sheetBody" = "25.033, 121.565";
 "gallery.sheetRow" = "Recent or favorite place";
 
-"gallery.dangerTitle" = "Device service unavailable";
+"gallery.dangerTitle" = "Can't connect to device service";
+"gallery.dangerMessage" = "Make sure LocalDevVPN is connected, then try again.";
 
 "map.searchHint" = "Search places, addresses or coordinates.";
 "placeDetails.copied" = "Coordinates copied";
@@ -521,6 +547,8 @@
 "route.summary" = "%.1f km · %d min · %d km/h";
 
 "imports.points.middle" = "%d intermediate points";
+"imports.points.title" = "All points";
+"imports.points.readOnly" = "Read only";
 
 "imports.points.allCount" = "View all %d points";
 
@@ -532,7 +560,6 @@
 
 "imports.imported" = "Imported “%@”";
 
-"imports.error.guidance" = "Choose a valid GPX or XML file up to 2 MiB. Your existing routes are unchanged.";
 
 "favorites.noMatches" = "No matching favorite places";
 
@@ -584,7 +611,7 @@
 "onboarding.location.currentStatus" = "Current permission";
 "onboarding.location.status.notDetermined" = "Not set";
 "onboarding.location.status.denied" = "Not allowed";
-"onboarding.location.status.authorized" = "While using the app";
+"onboarding.location.status.authorized" = "While using the app · Allowed";
 "onboarding.location.deniedTitle" = "Location permission is off";
 "onboarding.vpn.helpLink" = "Connection Guide";
 "onboarding.vpn.step1" = "Connect to Wi‑Fi";
@@ -603,7 +630,8 @@
 "route.duration" = "%d min";
 "route.noRouteYet" = "Choose two places to see the distance";
 "route.speedUnit" = "km/h";
-"route.error.shortTitle" = "Unable to get route";
+"route.error.shortTitle" = "Unable to plan route";
+"route.fixing" = "Fixing route";
 "joystick.wanderDetail" = "Walks to a random destination automatically";
 "joystick.currentDestinationLabel" = "Current destination";
 "joystick.endWander" = "End";
@@ -620,7 +648,7 @@
 
 "route.viewList" = "View";
 
-"route.list.title" = "All Points";
+"route.list.title" = "All Locations";
 
 "route.exchange" = "Reverse";
 "route.speedShort" = "%ld km/h";
@@ -644,8 +672,8 @@
 "background.activity.durationProgress" = "%ld%% · background task";
 "background.activity.routeProgress" = "%ld%% of route";
 "background.durationCompleted" = "Background task complete";
-"background.positionPaused" = "Position hold paused";
-"background.positionPaused.message" = "Retry to keep this location.";
+"background.positionPaused" = "Teleport simulation paused";
+"background.positionPaused.message" = "Connection or background interruption. Select Continue to resume location.";
 "background.positionRetry" = "Retry";
 "common.confirm" = "Confirm";
 "common.retry" = "Retry";
@@ -664,8 +692,42 @@
 "status.pill.paused" = "Paused";
 "status.pill.stopped" = "Stopped";
 "status.pill.error" = "Error";
+"status.pill.disconnected" = "Connection lost";
 "gallery.fieldFocused" = "Search places";
 "gallery.fieldNormal" = "Search favorite places";
+"gallery.component.iconButtons" = "Icon Buttons";
+"gallery.component.iconTextButtons" = "Icon + Text Buttons";
+"gallery.component.textButtons" = "Text Buttons";
+"gallery.component.checkButtons" = "Check Buttons";
+"gallery.component.statusActions" = "Status Actions";
+"gallery.component.textFields" = "Text Fields";
+"gallery.component.sample" = "Component preview";
+"gallery.component.enabled" = "Enabled";
+"gallery.component.disabled" = "Disabled";
+"gallery.component.selected" = "Selected";
+"gallery.component.unselected" = "Unselected";
+"gallery.iconButton.variant.standard" = "Standard";
+"gallery.iconButton.variant.route" = "Route";
+"gallery.iconButton.variant.ghostStandard" = "Ghost Standard";
+"gallery.iconButton.variant.ghostRoute" = "Ghost Route";
+"gallery.iconButton.variant.clear" = "Clear";
+"gallery.iconButton.variant.more" = "More";
+"gallery.iconButton.variant.mapControls" = "Map Controls";
+"gallery.iconButton.variant.copy" = "Copy";
+"gallery.iconButton.size.large" = "Large · 44";
+"gallery.iconButton.size.medium" = "Medium · 40";
+"gallery.iconButton.size.small" = "Small · 36";
+"gallery.iconButton.size.extraSmall" = "Extra Small · 32";
+"gallery.button.variant.primary" = "Primary";
+"gallery.button.variant.neutral" = "Neutral";
+"gallery.button.variant.danger" = "Danger";
+"gallery.button.variant.ghostPrimary" = "Ghost Primary";
+"gallery.button.variant.ghostSecondary" = "Ghost Secondary";
+"gallery.button.size.large" = "Large";
+"gallery.button.size.medium" = "Medium";
+"gallery.button.size.small" = "Small";
+"gallery.button.size.extraSmall" = "Extra Small";
+"gallery.button.size.inline" = "Inline";
 "wander.error.planningFailed" = "Unable to plan route";
 "wander.planning" = "Planning route";
 "route.pausedToast.title" = "Route simulation paused";
@@ -678,6 +740,7 @@
 
 /* Shared error toast buttons (IssueAction) */
 "issue.action.retry" = "Retry";
+"issue.action.fix" = "Fix";
 "issue.action.settings" = "Settings";
 "issue.action.chooseFile" = "Choose File";
 
@@ -693,3 +756,10 @@
 
 // Figma 04 VPN onboarding copy.
 "onboarding.vpn.step4" = "Tap Recheck";
+
+// Figma D2 route list fixture.
+"figma.fixture.route.taipei101" = "Taipei 101";
+"figma.fixture.route.palaceMuseum" = "National Palace Museum";
+"figma.fixture.route.daanPark" = "Daan Forest Park";
+"figma.fixture.route.huashan1914" = "Huashan 1914 Creative Park";
+"figma.fixture.route.songshanAirport" = "Songshan Airport";

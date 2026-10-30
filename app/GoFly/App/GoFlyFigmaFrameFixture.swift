@@ -118,10 +118,10 @@ struct GoFlyFigmaFrameFixture: View {
     private var unavailableFrame: some View {
         VStack(spacing: 8) {
             Text("Figma frame \(frame)")
-                .font(GoFlyFont.headline)
+                .goFlyFont(GoFlyFont.headline)
                 .foregroundStyle(GoFlyTextColor.primary)
             Text("This frame does not have a deterministic simulator fixture yet.")
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .multilineTextAlignment(.center)
         }

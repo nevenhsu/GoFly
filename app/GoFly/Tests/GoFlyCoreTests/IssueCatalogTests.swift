@@ -9,6 +9,12 @@ struct IssueCatalogTests {
         }
     }
 
+    @Test func routePlanningFailureRepairsOrderInsteadOfRetrying() {
+        #expect(IssueCatalog.info(for: "route.error.planningFailed").action == .fix)
+        #expect(IssueCatalog.info(for: "error.tunnelUnavailable").action == .retry)
+        #expect(IssueCatalog.info(for: "wifi.error.title").action == .retry)
+    }
+
     @Test func setupErrorsOpenSettings() {
         for key in ["error.pairingRequired", "error.identityMismatch", "error.developerModeRequired",
                     "error.devicePreparationRequired", "error.storageUnavailable"] {
@@ -43,7 +49,8 @@ struct IssueCatalogTests {
         let errors = SessionStatusErrors(connection: .reachable, route: .missingStart,
                                          dataErrors: ["imports.error.busy"])
         #expect(errors.isEmpty)
-        #expect(!SessionStatusErrors(connection: .reachable, route: .planningFailed).isEmpty)
+        #expect(SessionStatusErrors(connection: .reachable, route: .planningFailed).isEmpty,
+                "D8 owns route-planning failure in its floating toast, not the shared session pill")
     }
 
     @Test func modeErrorsAreScopedToTheirMode() {

@@ -64,6 +64,7 @@ extension View {
         toolbar(.hidden, for: .navigationBar)
             .background(GoFlyEdgeSwipeBack().frame(width: 0, height: 0))
     }
+
 }
 
 /// A hidden navigation bar disables `interactivePopGestureRecognizer`; re-enable it for pushed pages.

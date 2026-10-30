@@ -11,9 +11,59 @@ struct GoFlyComponentGallery: View {
     @State private var endResult = "idle"
     @State private var detent: GoFlySheetDetent = .half
     @State private var mode: SessionMapMode = .teleport
+    @State private var sliderValue = 40.0
+    @State private var sliderWidth: CGFloat = 240
+    @State private var showingSystemDimPreview = false
     @StateObject private var joystick = JoystickMovementController(commands: GalleryJoystickCommands())
 
     var body: some View {
+        if GoFlyUITestOverrides.contains("-gofly-ui-feedback-components") {
+            feedbackComponentsBody
+        } else if GoFlyUITestOverrides.contains("-gofly-ui-shared-components") {
+            sharedComponentsBody
+        } else {
+            regularGalleryBody
+        }
+    }
+
+    private var feedbackComponentsBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                Button(goFlyString("gallery.showSnackbar")) {
+                    snackbar = GoFlySnackbarMessage(
+                        text: goFlyString("gallery.snackbarText"),
+                        actionTitle: goFlyString("common.undo"),
+                        action: {})
+                }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .accessibilityIdentifier("gallery.feedback.snackbar.show")
+                Button(goFlyString("gallery.presentationDim.show")) {
+                    showingSystemDimPreview = true
+                }
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("gallery.systemDim.show")
+                bannerSection
+                pillSection
+                feedbackSnackbarSection
+                fieldSection
+            }
+            .padding(16)
+        }
+        .background(GoFlyStyle.canvas)
+        .goFlySnackbar($snackbar)
+        .goFlyTracksSystemPresentation(showingSystemDimPreview, id: "gallery.systemDim")
+        .sheet(isPresented: $showingSystemDimPreview) {
+            GoFlySpeedSheet(
+                speed: RouteSpeed(kilometersPerHour: 25)!,
+                canEdit: false,
+                onSpeedChanged: { _ in },
+                onDismiss: { showingSystemDimPreview = false }
+            )
+        }
+        .accessibilityIdentifier("gallery.feedbackComponents")
+    }
+
+    private var regularGalleryBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 bannerSection
@@ -34,13 +84,188 @@ struct GoFlyComponentGallery: View {
         .accessibilityIdentifier("gallery")
     }
 
+    private var sharedComponentsBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                iconButtonSection
+                iconTextButtonSection
+                textButtonSection
+                checkButtonSection
+                statusActionSection
+                fieldSection
+            }
+            .padding(16)
+        }
+        .background(GoFlyStyle.canvas)
+        .statusBarHidden()
+        .accessibilityIdentifier("gallery.sharedComponents")
+    }
+
+    private var iconButtonSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(goFlyString("gallery.component.iconButtons"))
+                .accessibilityIdentifier("gallery.iconButtons.heading")
+            ForEach(GoFlyIconButtonVariant.allCases) { variant in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(goFlyString(variant.galleryTitleKey))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                    ForEach(GoFlyIconButtonSize.allCases) { size in
+                        HStack(spacing: 8) {
+                            Text(goFlyString(size.galleryTitleKey))
+                                .goFlyFont(GoFlyFont.caption)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                                .frame(width: 78, alignment: .leading)
+                            iconButtonSample(variant, size: size, disabled: false)
+                            iconButtonSample(variant, size: size, disabled: true)
+                        }
+                    }
+                }
+                .padding(12)
+                .goFlyCard(radius: GoFlyStyle.cardRadius)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("gallery.iconButtons.\(variant.id)")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gallery.iconButtons")
+    }
+
+    private func iconButtonSample(_ variant: GoFlyIconButtonVariant,
+                                  size: GoFlyIconButtonSize,
+                                  disabled: Bool) -> some View {
+        Button {} label: {
+            GoFlyIcon(variant.galleryIcon, size: size.glyph, maximumSize: size.glyph)
+        }
+        .buttonStyle(GoFlyIconStyle(variant: variant, size: size))
+        .disabled(disabled)
+        .accessibilityLabel(goFlyString("gallery.component.sample"))
+        .accessibilityValue("\(goFlyString("gallery.iconButton.variant.\(variant.id)")), \(goFlyString(size.galleryTitleKey)), \(goFlyString(disabled ? "gallery.component.disabled" : "gallery.component.enabled"))")
+        .accessibilityIdentifier("gallery.iconButton.\(variant.id).\(size.id).\(disabled ? "disabled" : "enabled")")
+    }
+
+    private var iconTextButtonSection: some View {
+        textButtonSamples(includeIcon: true,
+                          heading: goFlyString("gallery.component.iconTextButtons"),
+                          identifier: "gallery.iconTextButtons")
+    }
+
+    private var textButtonSection: some View {
+        textButtonSamples(includeIcon: false,
+                          heading: goFlyString("gallery.component.textButtons"),
+                          identifier: "gallery.textButtons")
+    }
+
+    private func textButtonSamples(includeIcon: Bool, heading: String, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle(heading)
+                .accessibilityIdentifier("\(identifier).heading")
+            ForEach(GoFlyButtonVariant.allCases) { variant in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(goFlyString(variant.galleryTitleKey))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                    ForEach(GoFlyButtonSize.allCases) { size in
+                        HStack(spacing: 8) {
+                            Text(goFlyString(size.galleryTitleKey))
+                                .goFlyFont(GoFlyFont.caption)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                                .frame(width: 78, alignment: .leading)
+                            textButtonSample(variant, size: size, includeIcon: includeIcon, disabled: false)
+                            textButtonSample(variant, size: size, includeIcon: includeIcon, disabled: true)
+                        }
+                    }
+                }
+                .padding(12)
+                .goFlyCard(radius: GoFlyStyle.cardRadius)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("\(identifier).\(variant.id)")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func textButtonSample(_ variant: GoFlyButtonVariant,
+                                  size: GoFlyButtonSize,
+                                  includeIcon: Bool,
+                                  disabled: Bool) -> some View {
+        let title = goFlyString(variant.galleryActionKey)
+        return Button {} label: {
+            GoFlyIconLabel(title: title, icon: includeIcon ? variant.galleryIcon : nil,
+                           iconSize: size == .extraSmall ? 14 : 18, spacing: 6)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .buttonStyle(GoFlyButtonStyle(variant: variant, size: size))
+        .disabled(disabled)
+        .accessibilityIdentifier("gallery.\(includeIcon ? "iconText" : "text")Button.\(variant.id).\(size.id).\(disabled ? "disabled" : "enabled")")
+    }
+
+    private var checkButtonSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(goFlyString("gallery.component.checkButtons"))
+                .accessibilityIdentifier("gallery.checkButtons.heading")
+            HStack(spacing: 20) {
+                Button {} label: {
+                    HStack(spacing: 8) {
+                        GoFlyCheckboxIcon(selected: true)
+                        Text(goFlyString("gallery.component.selected"))
+                            .goFlyFont(GoFlyFont.subheadline)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("gallery.component.selected"))
+                .accessibilityIdentifier("gallery.check.selected")
+
+                Button {} label: {
+                    HStack(spacing: 8) {
+                        GoFlyCheckboxIcon(selected: false)
+                        Text(goFlyString("gallery.component.unselected"))
+                            .goFlyFont(GoFlyFont.subheadline)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(goFlyString("gallery.component.unselected"))
+                .accessibilityIdentifier("gallery.check.unselected")
+            }
+            .foregroundStyle(GoFlyTextColor.primary)
+            .goFlyCard(radius: GoFlyStyle.cardRadius)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gallery.checkButtons")
+    }
+
+    private var statusActionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(goFlyString("gallery.component.statusActions"))
+                .accessibilityIdentifier("gallery.statusActions.heading")
+            HStack(spacing: 12) {
+                Button(goFlyString("operation.retry")) {}
+                    .buttonStyle(GoFlyStatusActionStyle(tone: .danger))
+                    .accessibilityIdentifier("gallery.statusAction.danger")
+                Button(goFlyString("common.continue")) {}
+                    .buttonStyle(GoFlyStatusActionStyle(tone: .warning))
+                    .accessibilityIdentifier("gallery.statusAction.warning")
+                Button(goFlyString("common.undo")) {}
+                    .buttonStyle(GoFlyStatusActionStyle(tone: .success))
+                    .accessibilityIdentifier("gallery.statusAction.success")
+            }
+            .goFlyCard(radius: GoFlyStyle.cardRadius)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gallery.statusActions")
+    }
+
     private var bannerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("StatusBanner")
             GoFlyStatusBanner(
                 tone: .danger,
                 title: goFlyString("gallery.dangerTitle"),
-                message: goFlyString("statusBanner.repairHint"),
+                message: goFlyString("gallery.dangerMessage"),
                 actionTitle: goFlyString("operation.retry"),
                 onAction: {},
                 onDismiss: {},
@@ -50,7 +275,7 @@ struct GoFlyComponentGallery: View {
                 tone: .warning,
                 title: goFlyString("gallery.warningTitle"),
                 message: goFlyString("gallery.warningMessage"),
-                actionTitle: goFlyString("operation.retry"),
+                actionTitle: goFlyString("common.continue"),
                 onAction: {},
                 onDismiss: {},
                 identifier: "gallery.banner.warning"
@@ -58,6 +283,7 @@ struct GoFlyComponentGallery: View {
             GoFlyStatusBanner(
                 tone: .success,
                 title: goFlyString("gallery.successTitle"),
+                message: goFlyString("gallery.successMessage"),
                 identifier: "gallery.banner.success"
             )
         }
@@ -66,11 +292,11 @@ struct GoFlyComponentGallery: View {
     private var pillSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("StatusPill")
-            let statuses: [GoFlySessionStatus] = [.started, .connecting, .simulating, .paused, .stopped, .error]
+            let statuses: [GoFlySessionStatus] = [.started, .simulating, .paused, .error]
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading, spacing: 8) {
                 ForEach(statuses, id: \.textKey) { status in
                     GoFlyStatusPill(text: goFlyString(status.textKey), tone: status.tone,
-                                    identifier: "gallery.pill." + status.textKey)
+                                    action: {}, identifier: "gallery.pill." + status.textKey)
                 }
             }
         }
@@ -95,34 +321,55 @@ struct GoFlyComponentGallery: View {
         }
     }
 
+    private var feedbackSnackbarSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Snackbar")
+            GoFlySnackbar(message: GoFlySnackbarMessage(text: goFlyString("gallery.snackbarText")))
+                .accessibilityIdentifier("gallery.snackbar.automatic")
+            GoFlySnackbar(message: GoFlySnackbarMessage(
+                text: goFlyString("gallery.snackbarText"),
+                actionTitle: goFlyString("common.undo"),
+                action: {}))
+                .accessibilityIdentifier("gallery.snackbar.undo")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gallery.feedbackSnackbars")
+    }
+
     private var fieldSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("SearchField")
-            HStack(spacing: 8) {
-                Image(systemName: GoFlySymbols.search).accessibilityHidden(true)
-                Text(goFlyString("gallery.fieldFocused"))
-                Spacer()
+            sectionTitle(goFlyString("gallery.component.textFields"))
+                .accessibilityIdentifier("gallery.textFields.heading")
+            ForEach([GoFlyTextFieldState.default, .focused, .disabled], id: \.self) { state in
+                HStack(spacing: 8) {
+                    GoFlyIcon(.search, size: 16)
+                        .foregroundStyle(state == .disabled ? GoFlyTextColor.disabled : GoFlyThemeColor.iconInputDefault)
+                    Text(goFlyString(state == .focused ? "gallery.fieldFocused" : "gallery.fieldNormal"))
+                        .goFlyFont(GoFlyFont.subheadline)
+                        .foregroundStyle(state == .default ? GoFlyTextColor.secondary : (state == .disabled ? GoFlyTextColor.disabled : GoFlyTextColor.primary))
+                    Spacer(minLength: 8)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .goFlyTextField(state: state)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("gallery.field.\(state.identifier)")
             }
-            .padding(.horizontal, 12).frame(minHeight: 48)
-            .goFlySearchField(isFocused: true)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("gallery.field.focused")
-            HStack(spacing: 8) {
-                Image(systemName: GoFlySymbols.search).accessibilityHidden(true)
-                Text(goFlyString("gallery.fieldNormal")).foregroundStyle(GoFlyTextColor.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 12).frame(minHeight: 48)
-            .goFlySearchField(isFocused: false)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("gallery.field.normal")
             ProgressView(value: 0.35, total: 1)
                 .progressViewStyle(GoFlyProgressStyle())
                 .accessibilityIdentifier("gallery.progress")
-            Slider(value: .constant(40), in: 1...120)
+            Slider(value: $sliderValue, in: 1...120)
                 .tint(GoFlyStyle.primary)
+                .frame(width: sliderWidth, alignment: .leading)
                 .accessibilityIdentifier("gallery.slider")
+            Button(goFlyString("gallery.slider.resize")) {
+                sliderWidth = sliderWidth == 240 ? 320 : 240
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("gallery.slider.resize")
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gallery.textFields")
     }
 
     private var bottomBarSection: some View {
@@ -166,7 +413,7 @@ struct GoFlyComponentGallery: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("gallery.routeRunning")
             Text(endResult)
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .accessibilityIdentifier("gallery.endResult")
         }
     }
@@ -214,13 +461,13 @@ struct GoFlyComponentGallery: View {
             sectionTitle("BottomSheet")
             GoFlyBottomSheet(detent: $detent, availableHeight: 520, collapsedHeight: 96) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(goFlyString("gallery.sheetTitle")).font(GoFlyFont.headline)
+                    Text(goFlyString("gallery.sheetTitle")).goFlyFont(GoFlyFont.headline)
                     Text(goFlyString("gallery.sheetBody"))
-                        .font(GoFlyFont.subheadline)
+                        .goFlyFont(GoFlyFont.subheadline)
                         .foregroundStyle(GoFlyTextColor.secondary)
                     ForEach(0..<6, id: \.self) { index in
                         Text(goFlyString("gallery.sheetRow"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         Divider()
                     }
@@ -232,7 +479,7 @@ struct GoFlyComponentGallery: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(GoFlyFont.title)
+            .goFlyFont(GoFlyFont.title)
             .accessibilityAddTraits(.isHeader)
     }
 }

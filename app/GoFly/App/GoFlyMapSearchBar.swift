@@ -14,11 +14,11 @@ struct GoFlyMapSearchBar: View {
             HStack(spacing: 0) {
                 Button(action: onSearch) {
                     HStack(spacing: 10) {
-                        Image(systemName: GoFlySymbols.search)
-                            .goFlyControlSymbol(size: 20, maximum: 20, weight: .medium)
+                        GoFlyIcon(GoFlySymbols.search)
+                            .goFlyIconSize(size: 20, maximum: 20)
                             .foregroundStyle(GoFlyTextColor.secondary)
                         Text(text)
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                             .foregroundStyle(hasContent ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
@@ -35,8 +35,8 @@ struct GoFlyMapSearchBar: View {
 
                 if hasContent {
                     Button(action: onClear) {
-                        Image(systemName: GoFlySymbols.clearSearch)
-                            .goFlyControlSymbol(size: 16, maximum: 18, weight: .medium)
+                        GoFlyIcon(GoFlySymbols.clearSearch)
+                            .goFlyIconSize(size: 16, maximum: 18)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -46,30 +46,24 @@ struct GoFlyMapSearchBar: View {
                     .accessibilityIdentifier("map.searchClear")
                     .padding(.trailing, 6)
                 } else {
-                    GoFlyPasteControl(accessibilityLabel: goFlyString("search.paste"),
-                                      accessibilityIdentifier: "map.searchPaste",
-                                      backgroundColor: UIColor(GoFlyStyle.cardSurface),
-                                      symbolColor: UIColor(GoFlyStyle.pasteSymbol),
-                                      onPaste: onPaste)
-                        .frame(width: 44, height: 44)
+                    GoFlyPasteButton(accessibilityLabel: goFlyString("search.paste"),
+                                     accessibilityIdentifier: "map.searchPaste",
+                                     onPaste: onPaste)
                         .padding(.trailing, 6)
                 }
             }
             .frame(height: 50)
             .frame(maxWidth: .infinity)
-            .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(GoFlyThemeColor.surfaceInput, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+                    .strokeBorder(GoFlyStyle.fieldBorder, lineWidth: 1)
             }
             .goFlyShadow(.floating)
 
             Button(action: onSettings) {
                 // Figma 04 · Settings / 設定 > icon / gear.
-                Image("SettingsGear")
-                    .renderingMode(.template)
-                    .resizable()
-                    .frame(width: 22, height: 22)
+                GoFlyIcon(.gear, size: 22)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 50, height: 50)
                     .contentShape(Rectangle())
@@ -77,10 +71,10 @@ struct GoFlyMapSearchBar: View {
             .buttonStyle(.plain)
             .accessibilityLabel(goFlyString("settings.title"))
             .accessibilityIdentifier("map.settings")
-            .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(GoFlyStyle.iconButtonSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+                    .strokeBorder(GoFlyStyle.iconButtonBorder, lineWidth: 0.5)
             }
             .goFlyShadow(.floating)
         }

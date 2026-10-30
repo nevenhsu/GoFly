@@ -5,9 +5,8 @@ import SwiftUI
 /// A position has an arrow silhouette, never the place pin's round head.
 /// Both layers share one path, so the contrast keyline cannot drift from the fill.
 final class GoFlyPositionArrowView: MKAnnotationView {
-    private let contrast = CAShapeLayer()
-    private let arrow = CAShapeLayer()
     private let drawing = CALayer()
+    private let glyph = CALayer()
     private var source = PositionSource.gps
     private var freshness = PositionFreshness.waiting
     private var targetRotation: CGFloat?
@@ -17,17 +16,10 @@ final class GoFlyPositionArrowView: MKAnnotationView {
         frame = CGRect(x: 0, y: 0, width: 34, height: 34)
         drawing.frame = bounds
         layer.addSublayer(drawing)
-        for shape in [contrast, arrow] {
-            shape.frame = bounds
-            shape.lineCap = .butt
-            shape.lineJoin = .miter
-            shape.miterLimit = 4
-            shape.contentsScale = traitCollection.displayScale
-            drawing.addSublayer(shape)
-        }
-        let path = Self.path(in: bounds)
-        contrast.path = path
-        arrow.path = path
+        glyph.frame = bounds.insetBy(dx: 5, dy: 5)
+        glyph.contentsScale = traitCollection.displayScale
+        glyph.contentsGravity = .resizeAspect
+        drawing.addSublayer(glyph)
         isAccessibilityElement = true
         accessibilityIdentifier = "map.positionMarker"
         canShowCallout = false
@@ -52,6 +44,16 @@ final class GoFlyPositionArrowView: MKAnnotationView {
         accessibilityLabel = goFlyString(key)
         accessibilityValue = marker.coordinate.displayText
     }
+
+#if DEBUG && targetEnvironment(simulator)
+    /// Screenshot fixture only: B8 is designed with a confirmed GPS glyph, but
+    /// simulator fixtures do not create real Core Location fixes.
+    func applyFixtureRealLocationStyle(bearingDegrees: Double?, cameraHeadingDegrees: Double) {
+        applyAppearance(source: .gps, freshness: .fresh,
+                        bearingDegrees: bearingDegrees, cameraHeadingDegrees: cameraHeadingDegrees)
+        accessibilityLabel = goFlyString("map.realLocation")
+    }
+#endif
 
     /// The preview exercises these same production layers without inventing a GPS fix or ACK.
     func applyAppearance(source: PositionSource, freshness: PositionFreshness,
@@ -108,36 +110,15 @@ final class GoFlyPositionArrowView: MKAnnotationView {
     }
 
     private func applyColors() {
-        let labelToken = freshness == .waiting ? GoFlyThemeColor.textSecondary : GoFlyThemeColor.textPrimary
-        let labelColor = UIColor(labelToken).resolvedColor(with: traitCollection).cgColor
-        let bgColor = UIColor(GoFlyThemeColor.mapMarker).resolvedColor(with: traitCollection).cgColor
-        let realGPSColor = UIColor(GoFlyThemeColor.iconAccent).resolvedColor(with: traitCollection).cgColor
-        contrast.fillColor = UIColor.clear.cgColor
-        contrast.strokeColor = bgColor
-        if source == .gps && freshness == .fresh {
-            arrow.fillColor = realGPSColor
-            arrow.strokeColor = bgColor
-            arrow.lineWidth = 1.5
-            contrast.lineWidth = 3.5
-        } else if source == .simulation || freshness == .waiting {
-            arrow.fillColor = labelColor
-            arrow.strokeColor = bgColor
-            arrow.lineWidth = 1.5
-            contrast.lineWidth = 3.5
+        let dark = traitCollection.userInterfaceStyle == .dark
+        let asset: GoFlyIconAsset
+        switch (source, freshness, dark) {
+        case (.gps, _, _): asset = .mapRealLocation
+        case (.simulation, .fresh, false): asset = .mapSimulationLight
+        case (.simulation, .fresh, true): asset = .mapSimulationDark
+        case (.simulation, .waiting, false): asset = .mapSimulationWaitingLight
+        case (.simulation, .waiting, true): asset = .mapSimulationWaitingDark
         }
-    }
-
-    private static func path(in rect: CGRect) -> CGPath {
-        let arrowWidth: CGFloat = 24
-        let arrowHeight: CGFloat = 27
-        let originX = rect.midX - arrowWidth / 2
-        let originY = rect.midY - arrowHeight / 2
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: originX + 12, y: originY + 0))
-        path.addLine(to: CGPoint(x: originX + 24, y: originY + 27))
-        path.addLine(to: CGPoint(x: originX + 12, y: originY + 21))
-        path.addLine(to: CGPoint(x: originX + 0, y: originY + 27))
-        path.closeSubpath()
-        return path
+        glyph.contents = GoFlyIcon.uiImage(asset)?.cgImage
     }
 }

@@ -1,6 +1,9 @@
 import GoFlyCore
 import GoFlyTransport
 import SwiftUI
+#if DEBUG && targetEnvironment(simulator)
+import UIKit
+#endif
 
 @main
 struct GoFlyApp: App {
@@ -8,6 +11,9 @@ struct GoFlyApp: App {
 
     init() {
         #if DEBUG && targetEnvironment(simulator)
+        if let pasteboardText = GoFlyUITestOverrides.value("-gofly-ui-pasteboard") {
+            UIPasteboard.general.string = pasteboardText
+        }
         if !GoFlyUITestOverrides.isFrameMode {
             Diagnostics.shared.start()
             GoFlyPathMonitor.shared.start()
@@ -29,15 +35,34 @@ struct GoFlyApp: App {
 }
 
 private struct GoFlySceneContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var preferences = GoFlyPreferences.shared
+    @StateObject private var systemPresentationDim = GoFlySystemPresentationDimState()
     @ObservedObject var bootstrap: GoFlySetupBootstrap
     @AppStorage("gofly.onboarding.complete") private var onboardingComplete = false
     @State private var shouldCollapseMapAfterFirstOnboarding = false
+    @State private var uiTestOnboardingComplete = false
+
+    private var shouldShowMapAfterOnboarding: Bool {
+#if DEBUG && targetEnvironment(simulator)
+        if GoFlyUITestOverrides.isFirstLaunchFixture { return uiTestOnboardingComplete }
+#endif
+        return onboardingComplete
+    }
 
     var body: some View {
             Group {
                 galleryOrStartupContent
+            }
+            .environmentObject(systemPresentationDim)
+            .overlay {
+                if systemPresentationDim.isPresented {
+                    GoFlyStyle.systemPresentationDimSupplement(for: colorScheme)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .environment(\.locale, preferences.locale)
             .preferredColorScheme(preferences.colorScheme)
@@ -94,7 +119,7 @@ private struct GoFlySceneContent: View {
     @ViewBuilder
     private func normalRuntimeView(_ runtime: GoFlyRuntimeAssembly) -> some View {
         Group {
-            if onboardingComplete {
+            if shouldShowMapAfterOnboarding {
                 GoFlyMapView(
                     service: runtime.service,
                     recoveryStore: runtime.sessionRecovery,
@@ -105,7 +130,15 @@ private struct GoFlySceneContent: View {
             } else {
                 GoFlyOnboardingView(controller: runtime.onboarding) {
                     shouldCollapseMapAfterFirstOnboarding = true
+#if DEBUG && targetEnvironment(simulator)
+                    if GoFlyUITestOverrides.isFirstLaunchFixture {
+                        uiTestOnboardingComplete = true
+                    } else {
+                        onboardingComplete = true
+                    }
+#else
                     onboardingComplete = true
+#endif
                 }
             }
         }

@@ -35,15 +35,23 @@ struct GoFlyFavoritesView: View {
                             .accessibilityIdentifier("favorites.empty")
                     }
                     ForEach(visible) { favorite in
-                        row(favorite)
-                        Divider().padding(.leading, 48)
+                        let showsSeparator = favorite.id != visible.last?.id
+                        GoFlyListRow(minimumHeight: 64,
+                                     separatorLeadingInset: showsSeparator ? 60 : nil,
+                                     separatorTrailingInset: 12) {
+                            row(favorite)
+                                .padding(.horizontal, 8)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
                 .frame(maxWidth: .infinity, minHeight: 0, alignment: .top)
+                .goFlyCard(radius: GoFlyStyle.cardRadius)
+                .padding(.horizontal, 16)
+                .padding(.top, GoFlyStyle.favoriteListTopSpacing)
             }
             .scrollDismissesKeyboard(.immediately)
             .goFlyDismissesKeyboardOnTap()
+            .accessibilityIdentifier("favorites.content")
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 GoFlyFavoritesBottomBar(
                     placeholder: goFlyString("favorites.searchSaved"), query: $query,
@@ -54,8 +62,9 @@ struct GoFlyFavoritesView: View {
                     onDelete: { delete(selected); selecting = false })
             }
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas)
         .goFlySnackbar($snackbar, bottomPadding: GoFlyFavoritesBottomBar.snackbarOffset)
+        .goFlyTracksSystemPresentation(editing != nil, id: "favorites.editor")
         .sheet(item: $editing) { favorite in
             GoFlyFavoriteEditorSheet(place: favorite.place, initialLabel: favorite.label, onDismiss: { editing = nil }) {
                 delete([favorite.key])
@@ -75,12 +84,14 @@ struct GoFlyFavoritesView: View {
                 Group {
                     if selecting {
                         Text(goFlyString("favorites.cancel"))
+                            .goFlyFont(GoFlyFont.subheadlineEmphasis)
                     } else {
-                        Label(goFlyString("common.back"), systemImage: "chevron.backward")
-                            .labelStyle(.titleAndIcon)
+                        GoFlyIconLabel(title: goFlyString("common.back"), icon: .chevronLeft)
+                            .goFlyFont(GoFlyFont.subheadlineEmphasis)
                     }
                 }
-                .frame(minHeight: 44)
+                .foregroundStyle(GoFlyTextColor.accent)
+                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("favorites.dismiss")
@@ -92,7 +103,9 @@ struct GoFlyFavoritesView: View {
                     else { selected.formUnion(keys) }
                 } label: {
                     Text(goFlyString("favorites.selectAll"))
-                        .frame(minHeight: 44)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.accent)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -103,9 +116,10 @@ struct GoFlyFavoritesView: View {
                     selecting = true
                     selected.removeAll()
                 } label: {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 21))
-                        .frame(width: 44, height: 44)
+                    Text(goFlyString("favorites.select"))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.accent)
+                        .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -135,16 +149,20 @@ struct GoFlyFavoritesView: View {
     }
 
     private func row(_ favorite: FavoritePlace) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             if selecting {
                 Button {
                     toggleSelection(favorite.key)
                 } label: {
                     GoFlyCheckboxIcon(selected: selected.contains(favorite.key), size: 22)
                         .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 .accessibilityLabel(goFlyString("favorites.select"))
+                .accessibilityAddTraits(selected.contains(favorite.key) ? .isSelected : [])
                 .accessibilityIdentifier("favorites.checkbox.\(favorite.place.coordinate.displayText)")
             } else {
                 // Same editor as ⋯ (2026-10-26).
@@ -163,10 +181,10 @@ struct GoFlyFavoritesView: View {
                 else { onSelect(favorite.place) }
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(favorite.displayTitle).font(GoFlyFont.body)
+                    Text(favorite.displayTitle).goFlyFont(GoFlyFont.body)
                     if let subtitle = favoriteSubtitle(favorite) {
                         Text(subtitle)
-                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
+                            .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
                 .padding(.vertical, 8)
@@ -181,7 +199,7 @@ struct GoFlyFavoritesView: View {
                 Button {
                     editing = favorite
                 } label: {
-                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                    GoFlyIcon(.more).frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(goFlyString("favorites.editLabel"))

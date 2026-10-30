@@ -13,10 +13,10 @@ public enum IssueKind: Equatable, Sendable {
     case blocking, validation
 }
 
-/// The only three toast buttons. `retry` is the shared "reset session and try
-/// again"; the others need the person to act.
+/// Toast actions are explicit so route planning repair stays separate from
+/// connection retry, even though both appear in the same shared banner.
 public enum IssueAction: String, Equatable, Sendable, CaseIterable {
-    case retry, settings, chooseFile
+    case retry, fix, settings, chooseFile
 
     public var localizationKey: String { "issue.action.\(rawValue)" }
 }
@@ -41,7 +41,10 @@ public enum IssueCatalog {
         DeviceServiceFailure.serviceUnavailable.rawValue,
         DeviceServiceFailure.tunnelUnavailable.rawValue,
         DeviceServiceFailure.operationTimedOut.rawValue,
-        "wifi.error.title", "route.error.planningFailed", "joystick.error.noCandidate",
+        "wifi.error.title", "joystick.error.noCandidate",
+    ]
+    private static let fixKeys: Set<String> = [
+        "route.error.planningFailed",
     ]
     private static let chooseFileKeys: Set<String> = [
         "imports.error.unsafeFile", "imports.error.invalidFilename",
@@ -76,6 +79,7 @@ public enum IssueCatalog {
     private static func action(for key: String) -> IssueAction? {
         if kind(of: key) == .validation { return nil }
         if settingsKeys.contains(key) { return .settings }
+        if fixKeys.contains(key) { return .fix }
         if retryKeys.contains(key) { return .retry }
         if chooseFileKeys.contains(key) || key.hasPrefix("gpx.error.") { return .chooseFile }
         if scope(of: key) == .data, key.hasSuffix(".unavailable") || key.hasSuffix(".writeFailed") {

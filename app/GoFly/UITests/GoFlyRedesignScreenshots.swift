@@ -4,6 +4,78 @@ import XCTest
 /// multiplying operation states, languages, permissions, or device conditions.
 @MainActor
 final class GoFlyRedesignScreenshots: XCTestCase {
+    func testCaptureSharedButtonComponentsLightAndDark() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Shared component gallery screenshots run on the simulator.")
+        #else
+        continueAfterFailure = false
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchArguments = [
+                "-gofly-ui-gallery", "-gofly-ui-shared-components",
+                "-gofly-ui-preferences-store", UUID().uuidString,
+                "-gofly-ui-preferences-language", "zh-Hant",
+                "-gofly-ui-preferences-appearance", appearance,
+                "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+            ]
+            app.launch()
+            let scroll = app.scrollViews["gallery.sharedComponents"]
+            wait(scroll)
+
+            let iconButtons = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "gallery.iconButton."))
+            XCTAssertEqual(iconButtons.count, 64)
+            let iconTextButtons = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "gallery.iconTextButton."))
+            XCTAssertEqual(iconTextButtons.count, 50)
+            let textButtons = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "gallery.textButton."))
+            XCTAssertEqual(textButtons.count, 50)
+            XCTAssertTrue(app.buttons["gallery.statusAction.danger"].exists)
+            XCTAssertTrue(app.buttons["gallery.statusAction.warning"].exists)
+            XCTAssertTrue(app.buttons["gallery.statusAction.success"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["gallery.field.default"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["gallery.field.focused"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["gallery.field.disabled"].exists)
+
+            for position in 0...8 {
+                if position > 0 { scroll.swipeUp() }
+                Thread.sleep(forTimeInterval: 0.2)
+                snapshot(app, "shared-button-components-\(appearance)-\(position)")
+            }
+            app.terminate()
+        }
+        #endif
+    }
+
+    func testSharedIconButtonsKeepFortyFourPointTargetsAtAccessibilitySize() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Shared component accessibility screenshots run on the simulator.")
+        #else
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-gofly-ui-gallery", "-gofly-ui-shared-components",
+            "-gofly-ui-preferences-store", UUID().uuidString,
+            "-gofly-ui-preferences-language", "zh-Hant",
+            "-gofly-ui-preferences-appearance", "light",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+            "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+        ]
+        app.launch()
+        let scroll = app.scrollViews["gallery.sharedComponents"]
+        wait(scroll)
+        let smallIcon = app.buttons["gallery.iconButton.standard.extraSmall.enabled"]
+        XCTAssertTrue(smallIcon.waitForExistence(timeout: 10))
+        XCTAssertTrue(smallIcon.isHittable)
+        XCTAssertGreaterThanOrEqual(smallIcon.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(smallIcon.frame.height, 44)
+        let smallTextButton = app.buttons["gallery.iconTextButton.primary.extraSmall.enabled"]
+        XCTAssertTrue(smallTextButton.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !smallTextButton.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(smallTextButton.isHittable)
+        XCTAssertGreaterThanOrEqual(smallTextButton.frame.height, 44)
+        snapshot(app, "shared-button-targets-axxxl")
+        app.terminate()
+        #endif
+    }
+
     func testCaptureOnboardingScreens() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Visual samples run on the simulator.")

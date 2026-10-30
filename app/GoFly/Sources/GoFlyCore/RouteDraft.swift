@@ -81,7 +81,7 @@ public struct RouteDraft: Equatable, Sendable {
         guard isManual, nodes.count < Self.maximumNodeCount, !nodes.contains(where: { $0.id == nodeID }),
               value != .current || !nodes.contains(where: { $0.value == .current }) else { return nil }
         var nodes = nodes
-        nodes.insert(RouteNode(id: nodeID, value: value), at: nodes.count < 2 ? nodes.count : nodes.count - 1)
+        nodes.insert(RouteNode(id: nodeID, value: value), at: nodes.count)
         return RouteDraft(nodes: nodes, speed: speed)
     }
     func removing(nodeID: RouteNodeID) -> RouteDraft? {

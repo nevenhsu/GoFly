@@ -38,7 +38,7 @@ struct GoFlyPlaceDetailsView: View {
         GoFlyLocationCard(
             place: place,
             titleLabel: titleLabel,
-            primaryActionType: .custom(primaryTitleKey),
+            primaryActionType: .localizedTitleKey(primaryTitleKey),
             primaryActionTitle: goFlyString(primaryTitleKey),
             primaryEnabled: canGo,
             onPrimaryAction: onGo,

@@ -39,6 +39,7 @@ struct GoFlyJoystickPanel: View {
         .padding(.horizontal, 20)
         .padding(.bottom, bottomPadding ?? (isCollapsed ? 16 : 20))
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .goFlyTracksSystemPresentation(showingSpeedSheet, id: "joystick.speedSheet")
         .sheet(isPresented: $showingSpeedSheet) {
             GoFlySpeedSheet(
                 speed: controller.speed,
@@ -61,14 +62,14 @@ struct GoFlyJoystickPanel: View {
     private var wanderRow: some View {
         HStack(spacing: 12) {
             if controller.wanderEnabled || !isCollapsed {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 18, weight: .semibold))
+                GoFlyIcon(.shuffle)
+                    .goFlyIconSize(size: 18)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 22, height: 22)
                     .accessibilityHidden(true)
             }
             Text(rowTitle)
-                .font(GoFlyFont.title)
+                .goFlyFont(GoFlyFont.title)
                 .lineLimit(1)
             Spacer(minLength: 8)
             GoFlySpeedChip(
@@ -127,21 +128,21 @@ struct GoFlyWanderDestinationRow: View {
     var body: some View {
         layout {
             HStack(spacing: 12) {
-                Image(systemName: GoFlySymbols.place)
-                    .font(.system(size: 18, weight: .medium))
+                GoFlyIcon(GoFlySymbols.place)
+                    .goFlyIconSize(size: 18)
                     .frame(width: 36, height: 36)
                     .background(GoFlyStyle.secondarySurface, in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(caption).font(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
-                    Text(title).font(GoFlyFont.bodyEmphasis)
+                    Text(caption).goFlyFont(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
+                    Text(title).goFlyFont(GoFlyFont.bodyEmphasis)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button(action: onRandomDestination) {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 15, weight: .semibold))
+                GoFlyIcon(.shuffle)
+                    .goFlyIconSize(size: 15)
                     .goFlyIconButtonChrome(diameter: 34, showsBorder: false)
                     .frame(width: 44, height: 44)
                     .contentShape(Circle())
@@ -198,7 +199,7 @@ private struct GoFlyManualJoystickPad: View {
             ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
                 let angle = Double(index) * 90 - cameraHeadingDegrees
                 Text(letter)
-                    .font(GoFlyFont.micro)
+                    .goFlyFont(GoFlyFont.micro)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .offset(x: CGFloat(sin(angle * .pi / 180)) * (diameter / 2 - 24),
                             y: -CGFloat(cos(angle * .pi / 180)) * (diameter / 2 - 24))

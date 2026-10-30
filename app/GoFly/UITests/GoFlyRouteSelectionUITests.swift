@@ -30,7 +30,7 @@ final class GoFlyRouteSelectionUITests: GoFlyRouteModeTestCase {
         evidence(app, task: "R3", name: "d5-selecting-destination-light")
 
         app.buttons["search.back"].tap()
-        XCTAssertEqual(element(app, "route.node.destination").value as? String, "選擇終點", "back changes nothing")
+        XCTAssertEqual(element(app, "route.node.destination").value as? String, "選擇目的地", "back changes nothing")
         XCTAssertEqual(element(app, "route.node.start").value as? String, "目前位置")
     }
 
@@ -67,7 +67,7 @@ final class GoFlyRouteSelectionUITests: GoFlyRouteModeTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["map.route.addCard"].exists)
         evidence(app, task: "R3", name: "d4-pin-confirm-light")
         confirm.tap()
-        XCTAssertNotEqual(element(app, "route.node.destination").value as? String, "選擇終點")
+        XCTAssertNotEqual(element(app, "route.node.destination").value as? String, "選擇目的地")
         XCTAssertEqual(element(app, "route.node.start").value as? String, "目前位置")
     }
 }

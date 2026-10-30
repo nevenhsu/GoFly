@@ -64,17 +64,17 @@ private struct GoFlySettingsStatusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: symbol)
-                    .goFlyControlSymbol(size: 22, weight: .medium)
+                GoFlyIcon(symbol)
+                    .goFlyIconSize(size: 22)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 44, height: 44)
                     .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(goFlyString(titleKey))
-                        .font(GoFlyFont.headline)
+                        .goFlyFont(GoFlyFont.headline)
                     Text(status)
-                        .font(GoFlyFont.subheadline)
+                        .goFlyFont(GoFlyFont.subheadline)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -88,7 +88,7 @@ private struct GoFlySettingsStatusCard: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private var symbol: String {
+    private var symbol: GoFlyIconAsset {
         switch titleKey {
         case "settings.location": GoFlySymbols.location
         case "settings.background": GoFlySymbols.background
@@ -126,14 +126,14 @@ struct GoFlyLocationSettingsPage: View {
                     GoFlySettingsRow {
                         GoFlySettingsValueRow {
                             Text(goFlyString("settings.location"))
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                         } value: {
                             Text(locationStatus)
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                         }
-                        Image(systemName: GoFlySymbols.disclosure)
-                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.disclosure)
+                            .goFlyIconSize(size: 13, maximum: 16)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .accessibilityHidden(true)
                     }
@@ -170,10 +170,10 @@ struct GoFlyBackgroundSettingsPage: View {
                 GoFlySettingsRow {
                     GoFlySettingsValueRow {
                         Text(goFlyString("settings.background.purposeTitle"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                     } value: {
                         Text(goFlyString("settings.background.systemTask"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                             .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
@@ -182,14 +182,14 @@ struct GoFlyBackgroundSettingsPage: View {
                     GoFlySettingsRow {
                         GoFlySettingsValueRow {
                             Text(goFlyString("settings.background.duration"))
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                         } value: {
                             Text(GoFlyBackgroundDuration.summary(seconds: preferences.backgroundRunSeconds))
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                         }
-                        Image(systemName: GoFlySymbols.disclosure)
-                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.disclosure)
+                            .goFlyIconSize(size: 13, maximum: 16)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .accessibilityHidden(true)
                     }
@@ -203,14 +203,14 @@ struct GoFlyBackgroundSettingsPage: View {
                     GoFlySettingsRow {
                         GoFlySettingsValueRow {
                             Text(goFlyString("settings.background"))
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                         } value: {
                             Text(backgroundStatus)
-                                .font(GoFlyFont.body)
+                                .goFlyFont(GoFlyFont.body)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                         }
-                        Image(systemName: GoFlySymbols.disclosure)
-                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.disclosure)
+                            .goFlyIconSize(size: 13, maximum: 16)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .accessibilityHidden(true)
                     }
@@ -230,6 +230,7 @@ struct GoFlyBackgroundSettingsPage: View {
                 onChange: { preferences.setBackgroundRunSeconds($0) },
                 onDismiss: { showingDuration = false })
         }
+        .goFlyTracksSystemPresentation(showingDuration, id: "settings.background.duration")
         .goFlyToastOverlay(topInset: 8) {
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"),
@@ -261,7 +262,7 @@ struct GoFlyVPNSettingsPage: View {
                 GoFlySettingsRow {
                     GoFlySettingsValueRow {
                         Text(goFlyString("settings.vpn"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                     } value: {
                         GoFlyStatusPill(text: goFlyString(recovery.connectionState.settingsStatusKey),
                                         tone: vpnTone,
@@ -275,7 +276,7 @@ struct GoFlyVPNSettingsPage: View {
                 Button(action: recovery.checkConnection) {
                     GoFlySettingsRow {
                         Text(goFlyString("settings.vpn.check"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                         Spacer(minLength: 8)
                     }
                 }
@@ -286,10 +287,10 @@ struct GoFlyVPNSettingsPage: View {
                 Button(action: status.openLocalDevVPN) {
                     GoFlySettingsRow {
                         Text(goFlyString("settings.vpn.openLocalDevVPN"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                         Spacer(minLength: 8)
-                        Image(systemName: GoFlySymbols.disclosure)
-                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.disclosure)
+                            .goFlyIconSize(size: 13, maximum: 16)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .accessibilityHidden(true)
                     }
@@ -304,10 +305,10 @@ struct GoFlyVPNSettingsPage: View {
                 } label: {
                     GoFlySettingsRow {
                         Text(goFlyString("onboarding.vpn.help"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                         Spacer(minLength: 8)
-                        Image(systemName: GoFlySymbols.disclosure)
-                            .goFlyControlSymbol(size: 13, maximum: 16, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.disclosure)
+                            .goFlyIconSize(size: 13, maximum: 16)
                             .foregroundStyle(GoFlyTextColor.secondary)
                             .accessibilityHidden(true)
                     }
@@ -387,6 +388,7 @@ struct GoFlyDeviceSettingsPage: View {
         .sheet(item: $exportItem) { item in
             GoFlyShareSheet(url: item.url)
         }
+        .goFlyTracksSystemPresentation(exportItem != nil, id: "settings.diagnostics.share")
         .goFlyToastOverlay(topInset: 8) {
             if exportFailed {
                 GoFlyStatusBanner(tone: .danger,
@@ -406,9 +408,9 @@ struct GoFlyDeviceSettingsPage: View {
     private var diagnosticsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(goFlyString("settings.diagnostics.title"))
-                .font(GoFlyFont.headline)
+                .goFlyFont(GoFlyFont.headline)
             Text(goFlyString("settings.diagnostics.description"))
-                .font(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.subheadline)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             GoFlySettingsAction(
@@ -434,10 +436,10 @@ struct GoFlyDeviceSettingsPage: View {
     private func deviceField(_ titleKey: String, value: String, identifier: String) -> some View {
         GoFlySettingsValueRow {
             Text(goFlyString(titleKey))
-                .font(GoFlyFont.body)
+                .goFlyFont(GoFlyFont.body)
         } value: {
             Text(value)
-                .font(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.subheadline)
                 .foregroundStyle(GoFlyTextColor.secondary)
         }
         .frame(minHeight: 52)
@@ -477,19 +479,19 @@ struct GoFlyHelpSettingsPage: View {
         Divider().padding(.leading, 38).padding(.vertical, 16)
     }
 
-    private func helpTopic(_ topic: String, symbol: String) -> some View {
+    private func helpTopic(_ topic: String, symbol: GoFlyIconAsset) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: symbol)
-                .goFlyControlSymbol(size: 20, weight: .medium)
+            GoFlyIcon(symbol)
+                .goFlyIconSize(size: 20)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .frame(width: 24, height: 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
                 Text(goFlyString("settings.help.\(topic)Title"))
-                    .font(GoFlyFont.headline)
+                    .goFlyFont(GoFlyFont.headline)
                     .accessibilityAddTraits(.isHeader)
                 Text(goFlyString("settings.help.\(topic)"))
-                    .font(GoFlyFont.body)
+                    .goFlyFont(GoFlyFont.body)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -523,13 +525,13 @@ struct GoFlyContinuationStatus: View {
             }
 
             Text(goFlyString("background.description"))
-                .font(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.subheadline)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("background.description")
 
             Text(goFlyString("background.systemDecidesRuntime"))
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("background.systemDecides")
@@ -538,9 +540,9 @@ struct GoFlyContinuationStatus: View {
                 Label {
                     Text(goFlyString("background.runtimeAvailable"))
                 } icon: {
-                    Image(systemName: GoFlySymbols.success)
+                    GoFlyIcon(GoFlySymbols.success)
                 }
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityIdentifier("background.runtimeAvailable")
             }
@@ -554,13 +556,13 @@ struct GoFlyContinuationStatus: View {
 
     private var title: some View {
         Text(goFlyString("background.title"))
-            .font(GoFlyFont.headline)
+            .goFlyFont(GoFlyFont.headline)
             .accessibilityIdentifier("background.title")
     }
 
     private var status: some View {
         Text(goFlyString(stateKey))
-            .font(GoFlyFont.subheadline)
+            .goFlyFont(GoFlyFont.subheadline)
             .foregroundStyle(GoFlyTextColor.secondary)
             .accessibilityIdentifier("background.status")
     }

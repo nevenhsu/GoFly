@@ -157,7 +157,7 @@ struct ServiceSettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(goFlyString(titleKey))
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .padding(.horizontal, 16)
                 .accessibilityAddTraits(.isHeader)
@@ -167,7 +167,7 @@ struct ServiceSettingsView: View {
             .goFlyCard(radius: 14)
             if let footerKey {
                 Text(goFlyString(footerKey))
-                    .font(GoFlyFont.footnote)
+                    .goFlyFont(GoFlyFont.footnote)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .padding(.horizontal, 16)
             }
@@ -195,25 +195,25 @@ struct ServiceSettingsView: View {
                 .accessibilityHidden(true)
             GoFlySettingsValueRow {
                 Text(goFlyString(titleKey))
-                    .font(GoFlyFont.body)
+                    .goFlyFont(GoFlyFont.body)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .multilineTextAlignment(.leading)
             } value: {
                 if let value {
                     if (titleKey == "settings.location" && systemStatus.locationAuthorization == .denied) ||
                        (titleKey == "settings.wifi" && !network.isWiFiConnected) {
-                        Label(value, systemImage: GoFlySymbols.warning)
-                            .font(GoFlyFont.subheadline)
+                        GoFlyIconLabel(title: value, icon: GoFlySymbols.warning)
+                            .goFlyFont(GoFlyFont.subheadline)
                             .foregroundStyle(GoFlyTextColor.warning)
                     } else {
                         Text(value)
-                            .font(GoFlyFont.subheadline)
+                            .goFlyFont(GoFlyFont.subheadline)
                             .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
             }
-            Image(systemName: GoFlySymbols.disclosure)
-                .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
+            GoFlyIcon(GoFlySymbols.disclosure)
+                .goFlyIconSize(size: 12, maximum: 16)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityHidden(true)
         }
@@ -243,7 +243,7 @@ struct ServiceSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(goFlyString("service.title")).font(GoFlyFont.headline)
+                    Text(goFlyString("service.title")).goFlyFont(GoFlyFont.headline)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 GoFlyStatusPill(text: goFlyString(movement.status.textKey), tone: movement.status.tone,
@@ -261,8 +261,8 @@ struct ServiceSettingsView: View {
                     if service.nativeBusy {
                         ProgressView()
                     } else {
-                        Image(systemName: offersStop ? "stop.fill" : GoFlySymbols.play)
-                            .goFlyControlSymbol(size: 15, weight: .semibold)
+                        GoFlyIcon(offersStop ? .stop : GoFlySymbols.play)
+                            .goFlyIconSize(size: 15)
                     }
                     Text(goFlyString(offersStop ? "service.stop" : "service.start"))
                 }
@@ -277,8 +277,8 @@ struct ServiceSettingsView: View {
                     resetSuccessToastVisible = false
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: GoFlySymbols.reset)
-                            .goFlyControlSymbol(size: 15, weight: .semibold)
+                        GoFlyIcon(GoFlySymbols.reset)
+                            .goFlyIconSize(size: 15)
                         Text(goFlyString("service.reset"))
                     }
                 }
@@ -290,10 +290,10 @@ struct ServiceSettingsView: View {
             if service.phase == .repairRequired || service.clearConfirmedAt != nil {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
-                    Label(goFlyString("gps.title"), systemImage: "location.circle")
-                        .font(GoFlyFont.subheadlineEmphasis)
+                    GoFlyIconLabel(title: goFlyString("gps.title"), icon: .locate)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
                     Text(goFlyString(service.gpsStatusKey))
-                        .font(GoFlyFont.subheadline)
+                        .goFlyFont(GoFlyFont.subheadline)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .accessibilityIdentifier("service.gpsStatus")
                     if let date = service.clearConfirmedAt {
@@ -301,7 +301,7 @@ struct ServiceSettingsView: View {
                             Text(goFlyString("gps.clearConfirmedAt"))
                             Text(date, style: .time)
                         }
-                        .font(GoFlyFont.caption)
+                        .goFlyFont(GoFlyFont.caption)
                         .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
@@ -319,7 +319,7 @@ struct ServiceSettingsView: View {
 
     private var status: some View {
         Text(goFlyString(service.statusKey))
-            .font(GoFlyFont.subheadline)
+            .goFlyFont(GoFlyFont.subheadline)
             .foregroundStyle(GoFlyTextColor.secondary)
             .accessibilityIdentifier("service.status")
     }

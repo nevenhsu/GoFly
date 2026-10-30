@@ -16,34 +16,43 @@ final class GoFlyFavoriteRoutesPageUITests: GoFlyRouteModeTestCase {
         XCTAssertEqual(element(app, row).value as? String, coordinate)
     }
 
-    private func saveRoute(_ app: XCUIApplication) -> String {
+    private func saveRoute(_ app: XCUIApplication) {
         app.selectGoFlyMode("route")
         fill(app, row: "route.node.start", coordinate: "25.047800, 121.517000")
         fill(app, row: "route.node.destination", coordinate: "25.033000, 121.565400")
         element(app, "route.favorite.toggle").tap()
         let label = app.textFields["favoriteRoutes.save.label"]
         XCTAssertTrue(label.waitForExistence(timeout: 5))
-        let fallback = label.placeholderValue ?? ""
-        XCTAssertFalse(fallback.isEmpty, "the label field shows its generated fallback")
-        XCTAssertNotNil(fallback.range(of: #"^\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}$"#, options: .regularExpression), "empty labels show a date/time fallback")
+        XCTAssertEqual(label.placeholderValue, "路線名稱")
         let save = element(app, "favoriteRoutes.save.confirm")
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertTrue(save.isEnabled, "Save is enabled without a typed label")
         save.tap()
         XCTAssertTrue(app.buttons["route.favoriteRoutes"].waitForExistence(timeout: 8))
-        return fallback
     }
 
     func testPageLayoutDeleteButtonAndUndoSnackbar() throws {
         for appearance in ["light", "dark"] {
             let app = launch(appearance: appearance)
-            let fallbackLabel = saveRoute(app)
+            saveRoute(app)
             element(app, "route.favoriteRoutes").tap()
-            XCTAssertTrue(app.staticTexts[fallbackLabel].waitForExistence(timeout: 5), "the fallback label is persisted")
+            let firstRecord = app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "favoriteRoutes.record.")).firstMatch
+            XCTAssertTrue(firstRecord.waitForExistence(timeout: 5), "the empty-label favorite is saved")
+            XCTAssertNotNil(firstRecord.label.range(
+                of: #"\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}"#,
+                options: .regularExpression), "empty labels persist the generated date/time fallback")
 
             let search = element(app, "favoriteRoutes.search")
             let back = element(app, "favoriteRoutes.dismiss")
             XCTAssertTrue(back.label.contains("路線"), "back label names the previous screen (D19), got \(back.label)")
+            let card = app.descendants(matching: .any)["favoriteRoutes.card"]
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            XCTAssertEqual(card.frame.minX, 16, accuracy: 2)
+            XCTAssertEqual(card.frame.width, app.windows.firstMatch.frame.width - 32, accuracy: 2)
+            XCTAssertGreaterThanOrEqual(card.frame.height, 64)
+            XCTAssertTrue(app.descendants(matching: .any)["favoriteRoutes.searchPaste"].exists)
+            XCTAssertFalse(app.keyboards.firstMatch.exists)
             // The text field is centered in the 48 pt field container.
             let fieldTop = search.frame.midY - 24, fieldBottom = search.frame.midY + 24
             XCTAssertEqual(app.frame.maxY - fieldBottom, 28 + 34, accuracy: 4, "28 pt below the field plus the home indicator area")

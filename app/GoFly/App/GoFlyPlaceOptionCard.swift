@@ -5,7 +5,7 @@ struct GoFlyFavoriteStar: View {
     @EnvironmentObject private var favorites: FavoritePlacesStore
     let place: MapPlace
     var identifier: String
-    /// Place and location cards draw the star as a 40pt icon-only capsule button.
+    /// Location cards use the shared 44 pt icon-only button size.
     var isCardAction = false
     /// List rows draw the icon inside a filled circle (Figma B2 favorite row).
     var circleDiameter: CGFloat? = nil
@@ -16,8 +16,8 @@ struct GoFlyFavoriteStar: View {
     var body: some View {
         Button { showingEditor = true } label: {
             if isCardAction {
-                GoFlyStarIcon(size: 16, filled: favorites.isFavorite(place))
-                    .goFlyIconButtonChrome(diameter: 40)
+                GoFlyStarIcon(size: 22, filled: favorites.isFavorite(place))
+                    .goFlyIconButtonChrome(diameter: 44)
             } else if let circleDiameter {
                 GoFlyStarIcon(size: 15, filled: favorites.isFavorite(place))
                     .goFlyIconButtonChrome(diameter: circleDiameter, showsBorder: false)
@@ -36,14 +36,11 @@ struct GoFlyFavoriteStar: View {
         .accessibilityValue(goFlyString(favorites.canMutate
             ? (favorites.isFavorite(place) ? "favorites.saved" : "favorites.notSaved") : "favorites.unavailable"))
         .accessibilityIdentifier(identifier)
+        .goFlyTracksSystemPresentation(showingEditor, id: "favoriteStar.\(identifier)")
         .sheet(isPresented: $showingEditor) {
             GoFlyFavoriteEditorSheet(place: place, initialLabel: favorites.favorite(for: place)?.label,
                                      allowsDelete: allowsDelete, onDismiss: { showingEditor = false })
         }
-    }
-
-    private var symbol: String {
-        favorites.isFavorite(place) ? GoFlySymbols.favoriteSelected : GoFlySymbols.favorite
     }
 }
 

@@ -39,6 +39,54 @@ struct GoFlyMapProjection: Equatable {
     let searchRegionLatitudeDelta: Double
     let searchRegionLongitudeDelta: Double
 
+    /// MapKit can report sub-pixel and sub-meter floating-point jitter on
+    /// consecutive layout callbacks. Those values do not change the rendered
+    /// pin or search region, so treating them as equal prevents a SwiftUI
+    /// state-update/layout feedback loop while preserving visible map motion.
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        approximatelyEqual(lhs.viewport.minX, rhs.viewport.minX, tolerance: 0.5)
+            && approximatelyEqual(lhs.viewport.minY, rhs.viewport.minY, tolerance: 0.5)
+            && approximatelyEqual(lhs.viewport.width, rhs.viewport.width, tolerance: 0.5)
+            && approximatelyEqual(lhs.viewport.height, rhs.viewport.height, tolerance: 0.5)
+            && approximatelyEqual(lhs.candidatePoint, rhs.candidatePoint, tolerance: 0.5)
+            && approximatelyEqual(lhs.wanderTargetPoint, rhs.wanderTargetPoint, tolerance: 0.5)
+            && approximatelyEqual(lhs.cameraHeadingDegrees, rhs.cameraHeadingDegrees, tolerance: 0.1)
+            && approximatelyEqual(lhs.centerCoordinate?.latitude, rhs.centerCoordinate?.latitude,
+                                  tolerance: 0.00001)
+            && approximatelyEqual(lhs.centerCoordinate?.longitude, rhs.centerCoordinate?.longitude,
+                                  tolerance: 0.00001)
+            && approximatelyEqual(lhs.searchRegionLatitudeDelta, rhs.searchRegionLatitudeDelta,
+                                  tolerance: max(0.000001, abs(lhs.searchRegionLatitudeDelta) * 0.0001))
+            && approximatelyEqual(lhs.searchRegionLongitudeDelta, rhs.searchRegionLongitudeDelta,
+                                  tolerance: max(0.000001, abs(lhs.searchRegionLongitudeDelta) * 0.0001))
+    }
+
+    private static func approximatelyEqual(_ lhs: Double, _ rhs: Double, tolerance: Double) -> Bool {
+        abs(lhs - rhs) <= tolerance
+    }
+
+    private static func approximatelyEqual(_ lhs: CGFloat, _ rhs: CGFloat, tolerance: Double) -> Bool {
+        abs(Double(lhs - rhs)) <= tolerance
+    }
+
+    private static func approximatelyEqual(_ lhs: Double?, _ rhs: Double?, tolerance: Double) -> Bool {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): approximatelyEqual(lhs, rhs, tolerance: tolerance)
+        case (nil, nil): true
+        default: false
+        }
+    }
+
+    private static func approximatelyEqual(_ lhs: CGPoint?, _ rhs: CGPoint?, tolerance: Double) -> Bool {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?):
+            approximatelyEqual(Double(lhs.x), Double(rhs.x), tolerance: tolerance)
+                && approximatelyEqual(Double(lhs.y), Double(rhs.y), tolerance: tolerance)
+        case (nil, nil): true
+        default: false
+        }
+    }
+
     var searchRegion: MKCoordinateRegion? {
         guard let centerCoordinate else { return nil }
         return MKCoordinateRegion(
@@ -81,6 +129,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
     var adjustsFocusForViewportChanges = true
 #if DEBUG && targetEnvironment(simulator)
     var usesOfflineFixtureTiles = false
+    var usesFixtureRealLocationStyle = false
 #endif
     /// Keeps the Apple Maps logo and Legal link above the bottom panel, tab bar and cards.
     var attributionBottomInset: CGFloat = 0
@@ -161,6 +210,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private var correctionsRemaining = 0
         private var hasFocused = false
         private var publication: UInt64 = 0
+        private var lastPublishedProjection: GoFlyMapProjection?
         private var routePoints: [GeoCoordinate] = []
         private var routeOverlay: MKPolyline?
         private var routeRenderer: MKPolylineRenderer?
@@ -361,6 +411,15 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         private func updateMarkerAppearance(on map: MKMapView) {
             guard let marker = parent.marker, let annotation = positionAnnotation,
                   let view = map.view(for: annotation) as? GoFlyPositionArrowView else { return }
+#if DEBUG && targetEnvironment(simulator)
+            if parent.usesFixtureRealLocationStyle {
+                view.applyFixtureRealLocationStyle(
+                    bearingDegrees: parent.markerBearingDegrees,
+                    cameraHeadingDegrees: map.camera.heading
+                )
+                return
+            }
+#endif
             view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: map.camera.heading)
         }
 
@@ -501,12 +560,14 @@ struct GoFlyMapCanvas: UIViewRepresentable {
         }
 
         func publishProjection(on map: MKMapView) {
-            publication &+= 1
-            let revision = publication
             let point = parent.candidate.map { map.convert($0.place.coordinate.clLocationCoordinate, toPointTo: map) }
             let target = parent.wanderTarget.map { map.convert($0.coordinate.clLocationCoordinate, toPointTo: map) }
             let snapshot = GoFlyMapProjection(candidatePoint: point, wanderTargetPoint: target,
                                              viewport: parent.viewport, map: map)
+            guard lastPublishedProjection != snapshot else { return }
+            lastPublishedProjection = snapshot
+            publication &+= 1
+            let revision = publication
             Task { @MainActor [weak self] in
                 guard let self, self.publication == revision else { return }
                 self.parent.onProjection(snapshot)
@@ -545,6 +606,15 @@ struct GoFlyMapCanvas: UIViewRepresentable {
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: "position") as? GoFlyPositionArrowView
                 ?? GoFlyPositionArrowView(annotation: annotation, reuseIdentifier: "position")
             view.annotation = annotation
+#if DEBUG && targetEnvironment(simulator)
+            if parent.usesFixtureRealLocationStyle {
+                view.applyFixtureRealLocationStyle(
+                    bearingDegrees: parent.markerBearingDegrees,
+                    cameraHeadingDegrees: mapView.camera.heading
+                )
+                return view
+            }
+#endif
             view.apply(marker, bearingDegrees: parent.markerBearingDegrees, cameraHeadingDegrees: mapView.camera.heading)
             return view
         }

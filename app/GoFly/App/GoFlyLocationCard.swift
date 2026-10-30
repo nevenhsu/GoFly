@@ -6,13 +6,13 @@ import UIKit
 public enum LocationCardPrimaryAction: Equatable, Sendable {
     case confirm
     case teleport
-    case custom(String)
+    case localizedTitleKey(String)
 
     public var titleKey: String {
         switch self {
         case .confirm: return "common.confirm" // "確認"
-        case .teleport: return "map.go" // "Go"
-        case .custom(let str): return str
+        case .teleport: return "route.startShort" // “Start” / “開始”
+        case .localizedTitleKey(let str): return str
         }
     }
 }
@@ -26,6 +26,9 @@ public enum LocationCardPrimaryAction: Equatable, Sendable {
 /// - Secondary buttons: Favorite star button and Copy coordinates button.
 /// - Dismiss (✕) button in top right.
 struct GoFlyLocationCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let place: MapPlace
     var titleLabel: String? = nil
     var primaryActionType: LocationCardPrimaryAction = .confirm
@@ -41,50 +44,45 @@ struct GoFlyLocationCard: View {
     var identifier: String = "locationCard"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Title
-            Text(GoFlyLocationTitle.resolve(label: titleLabel, for: place))
-                .font(GoFlyFont.title)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .lineLimit(1)
-                .padding(.trailing, 32)
-                .accessibilityIdentifier("\(identifier).title")
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(GoFlyLocationTitle.resolve(label: titleLabel, for: place))
+                    .goFlyFont(.bodyEmphasis)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .accessibilityIdentifier("\(identifier).title")
 
-            Text(place.address ?? "")
-                .font(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .lineLimit(2, reservesSpace: true)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("\(identifier).address")
+                Text(place.address ?? "")
+                    .goFlyFont(.footnote)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("\(identifier).address")
 
-            Text(coordinateLine)
-                .font(GoFlyFont.caption.monospacedDigit())
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .accessibilityIdentifier("\(identifier).coordinates")
+                Text(coordinateLine)
+                    .goFlyFont(.caption)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .accessibilityIdentifier("\(identifier).coordinates")
+            }
+            .frame(maxWidth: 277, alignment: .leading)
 
             Spacer(minLength: 12)
 
-            // Bottom action row matching B5 (Go 77pt, Favorite 86pt, Copy 86pt, height 40pt)
             HStack(spacing: 8) {
-                // Primary CTA (black solid)
                 if let onPrimaryAction {
-                Button(action: onPrimaryAction) {
-                    HStack(spacing: 4) {
-                        if primaryActionType == .teleport {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 12, weight: .bold))
+                    Button(action: onPrimaryAction) {
+                        HStack(spacing: 8) {
+                            GoFlyIcon(.play).goFlyIconSize(size: 16)
+                            Text(resolvedPrimaryTitle)
+                                .goFlyFont(.buttonSmall)
+                                .lineLimit(1)
                         }
-                        Text(resolvedPrimaryTitle)
-                            .font(GoFlyFont.subheadlineEmphasis)
-                            .lineLimit(1)
+                        .frame(width: 77, height: 40)
                     }
-                    .frame(minWidth: 77)
-                    .frame(height: 40)
-                    .padding(.horizontal, 16)
-                }
-                .buttonStyle(GoFlyCardPrimaryStyle())
-                .goFlySteadyDisabled(!primaryEnabled)
-                .accessibilityIdentifier("\(identifier).primaryAction")
+                    .buttonStyle(GoFlyCardPrimaryStyle())
+                    .goFlySteadyDisabled(!primaryEnabled)
+                    .accessibilityIdentifier("\(identifier).primaryAction")
                 }
 
                 Spacer(minLength: 0)
@@ -94,41 +92,40 @@ struct GoFlyLocationCard: View {
                         if let onRouteStart { Button(goFlyString("placeDetails.setStart"), action: onRouteStart) }
                         if let onRouteEnd { Button(goFlyString("placeDetails.setEnd"), action: onRouteEnd) }
                     } label: {
-                        Image(systemName: GoFlySymbols.flag)
-                            .font(.system(size: 15, weight: .medium))
-                            .goFlyIconButtonChrome(diameter: 40)
+                        GoFlyIcon(GoFlySymbols.flag)
+                            .goFlyIconSize(size: 15)
+                            .goFlyIconButtonChrome(diameter: 44)
                     }
                     .accessibilityLabel(goFlyString("placeDetails.setEnd"))
                     .accessibilityIdentifier("\(identifier).route")
                 }
 
-                // Favorite button
                 GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", isCardAction: true)
-
                 GoFlyCopyIconButton(coordinate: place.coordinate, identifier: "\(identifier).copy", onCopy: onCopy)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .padding(.bottom, 20)
-        .frame(height: 188)
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : 180, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+        .background {
+            ZStack {
+                GoFlyLocationCardBackdrop(colorScheme: colorScheme)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(GoFlyStyle.locationCardSurface)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
-        // Dismiss (✕) button pinned to top-right corner matching Figma B5 (24x24 at x:323, y:14)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(alignment: .topTrailing) {
             Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+                GoFlyIcon(.close)
+                    .goFlyIconSize(size: 18)
+                    .goFlyIconButtonChrome(diameter: 44, showsBorder: false, variant: .clear)
             }
             .buttonStyle(.plain)
-            .padding(.top, 16)
+            .padding(.top, 8)
             .padding(.trailing, 16)
             .accessibilityLabel(goFlyString("common.dismiss"))
             .accessibilityIdentifier("\(identifier).dismiss")
@@ -142,8 +139,8 @@ struct GoFlyLocationCard: View {
         if let primaryActionTitle { return primaryActionTitle }
         switch primaryActionType {
         case .confirm: return goFlyString("common.confirm")
-        case .teleport: return goFlyString("map.go")
-        case .custom(let str): return str
+        case .teleport: return goFlyString("route.startShort")
+        case .localizedTitleKey(let str): return str
         }
     }
 
@@ -197,12 +194,31 @@ struct GoFlyCopyIconButton: View {
             UIPasteboard.general.string = coordinate.displayText
             onCopy?()
         } label: {
-            Image(systemName: "doc.on.doc")
-                .font(.system(size: 15, weight: .medium))
-                .goFlyIconButtonChrome(diameter: 40)
+            GoFlyIcon(.copy)
+                .goFlyIconSize(size: 22)
+                .goFlyIconButtonChrome(diameter: 44, variant: .copy)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(goFlyString("placeDetails.copy"))
         .accessibilityIdentifier(identifier)
+    }
+}
+
+private struct GoFlyLocationCardBackdrop: UIViewRepresentable {
+    let colorScheme: ColorScheme
+
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: UIBlurEffect(style: blurStyle))
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ view: UIVisualEffectView, context: Context) {
+        view.effect = UIBlurEffect(style: blurStyle)
+    }
+
+    private var blurStyle: UIBlurEffect.Style {
+        colorScheme == .dark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight
     }
 }

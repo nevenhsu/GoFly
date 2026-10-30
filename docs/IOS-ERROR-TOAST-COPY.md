@@ -1,12 +1,13 @@
-# GoFly iOS 錯誤 Toast 文案、按鈕與處理架構（提案）
+# GoFly iOS 錯誤 Toast 文案、按鈕與處理架構
 
-2026-10-25。對應 [IOS-STATUS-ERRORS.md](IOS-STATUS-ERRORS.md) 的 77 項。**提案稿，尚未實作**；繁中文案沿用清單原文，英文為新增翻譯。按鈕 `—` 表示不放主按鈕，只留關閉（×）。
+2026-10-25 基線；2026-10-30 依 Figma D8／票 11 更新路線規劃失敗文案與 action。對應 [IOS-STATUS-ERRORS.md](IOS-STATUS-ERRORS.md) 的 77 項。按鈕 `—` 表示不放主按鈕，只留關閉（×）。
 
-## 1. 按鈕只有三種
+## 1. Toast action
 
 | 按鈕 | 繁中 | English | 行為 |
 | --- | --- | --- | --- |
 | **重試** | 重試 | Retry | 共用的「重設工作階段並重試」：重建 VPN 通道與裝置連線（既有 `ServiceController.resetTunnel`／`rebuildClientConnection`），成功後自動重跑剛才失敗的操作 |
+| **修正** | 修正 | Fix | 僅用於路線規劃失敗；在固定搜尋上限內重排全部地點（含起點）並重新規劃，成功採用新順序，失敗保留原順序 |
 | 設定 | 設定 | Settings | 只用於需要使用者親自在實機或 Mac App 處理的事（配對、開發者模式、裝置準備、儲存空間） |
 | 選檔 | 選檔 | Choose File | 開檔案選擇器；GPX 錯誤與保存檔損壞（需重新匯入）共用 |
 
@@ -38,7 +39,7 @@
 | `route.error.missingStart` | 請選擇起點。 | Choose a start point. | — |
 | `route.error.missingDestination` | 請選擇終點。 | Choose a destination. | — |
 | `route.error.currentLocationUnavailable` | 目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。 | Your current location can't be confirmed yet. Pick a place on the map or in search for any stop that uses current location. | — |
-| `route.error.planningFailed` | 無法取得路徑。請確認地點或網路連線後重試。 | Couldn't get a route. Check the places and your connection, then try again. | 重試／Retry |
+| `route.error.planningFailed` | 找不到可通行的路徑。請重新檢查起點，或點選修正。 | No drivable route found. Check the start point or select Fix. | 修正／Fix |
 | `route.error.invalidPath` | 規劃的路線無效。請重新選擇地點後再試。 | The planned route isn't valid. Choose the places again and retry. | — |
 | `imports.execution.disconnectedSegments` | 各段端點未完全銜接。仍可預覽或匯出，但無法載入執行。 | Segment endpoints don't connect. You can still preview or export, but it can't be loaded to run. | — |
 | `imports.execution.zeroDistance` | 路徑沒有可行進距離。仍可預覽或匯出，但無法載入執行。 | The path has no travel distance. You can still preview or export, but it can't be loaded to run. | — |

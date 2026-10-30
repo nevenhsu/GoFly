@@ -2,6 +2,8 @@ import GoFlyCore
 import SwiftUI
 
 struct GoFlySpeedSheet: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let speed: RouteSpeed
     var canEdit: Bool = true
     var onSpeedChanged: (RouteSpeed) -> Void
@@ -10,12 +12,12 @@ struct GoFlySpeedSheet: View {
     private let presets: [Int] = RouteSpeed.presets.map(\.kilometersPerHour)
 
     /// Flat colorful vector icons on a transparent background (orange, navy, mustard); they carry their own colors, so no light/dark variants are needed.
-    private func presetIcon(for preset: Int) -> String? {
+    private func presetIcon(for preset: Int) -> GoFlyIconAsset? {
         switch preset {
-        case 5: return "SpeedPresetWalk"
-        case 25: return "SpeedPresetBicycle"
-        case 50: return "SpeedPresetScooter"
-        case 100: return "SpeedPresetCar"
+        case 5: return .speedWalk
+        case 25: return .speedBicycle
+        case 50: return .speedScooter
+        case 100: return .speedCar
         default: return nil
         }
     }
@@ -26,16 +28,16 @@ struct GoFlySpeedSheet: View {
             // Current Speed Readout in a single row
             HStack(alignment: .firstTextBaseline) {
                 Text(goFlyString("route.speedCurrent"))
-                    .font(GoFlyFont.body)
+                    .goFlyFont(GoFlyFont.body)
                     .foregroundStyle(GoFlyTextColor.secondary)
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("\(speed.kilometersPerHour)")
-                        .font(GoFlyFont.metric)
+                        .goFlyFont(GoFlyFont.metric)
                         .monospacedDigit()
                         .foregroundStyle(GoFlyTextColor.primary)
                     Text(goFlyString("route.speedUnit"))
-                        .font(GoFlyFont.subheadlineEmphasis)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
                         .foregroundStyle(GoFlyTextColor.secondary)
                 }
                 .accessibilityIdentifier("route.speed.value")
@@ -53,16 +55,12 @@ struct GoFlySpeedSheet: View {
                     } label: {
                         HStack(spacing: 4) {
                             if let icon = presetIcon(for: preset) {
-                                Image(icon)
-                                    .renderingMode(.original)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
+                                GoFlyIcon(icon, size: 20)
                                     .accessibilityHidden(true)
                             }
                             Text("\(preset)")
                         }
-                        .font(GoFlyFont.footnoteEmphasis)
+                        .goFlyFont(GoFlyFont.footnoteEmphasis)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
@@ -101,11 +99,11 @@ struct GoFlySpeedSheet: View {
 
                 HStack {
                     Text("1 \(goFlyString("route.speedUnit"))")
-                        .font(GoFlyFont.caption)
+                        .goFlyFont(GoFlyFont.caption)
                         .foregroundStyle(GoFlyTextColor.secondary)
                     Spacer()
                     Text("120 \(goFlyString("route.speedUnit"))")
-                        .font(GoFlyFont.caption)
+                        .goFlyFont(GoFlyFont.caption)
                         .foregroundStyle(GoFlyTextColor.secondary)
                 }
             }
@@ -113,8 +111,8 @@ struct GoFlySpeedSheet: View {
 
             }
             .padding(.horizontal, 20)
-            .padding(.top, 28)
-            .padding(.bottom, 20)
+            .padding(.top, 44)
+            .padding(.bottom, 8)
 
             Spacer(minLength: 0)
 
@@ -124,12 +122,14 @@ struct GoFlySpeedSheet: View {
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
             .accessibilityIdentifier("route.speed.confirm")
-            .padding(.top, 40)
+            .padding(.top, 20)
             .padding(.horizontal, 20)
-            .padding(.bottom, -1) // the Home indicator sits 20 pt below the button
+            // The detent respects the home-indicator safe area. Four points
+            // here plus that inset render as the Figma 40 pt bottom margin.
+            .padding(.bottom, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(329)])
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(296)])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
     }

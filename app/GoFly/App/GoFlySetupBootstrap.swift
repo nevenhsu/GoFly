@@ -461,16 +461,71 @@ struct GoFlySetupLockView: View {
     let onRetry: () -> Void
 
     var body: some View {
+        Group {
+            if case .blocked(.identityMismatch) = phase {
+                identityMismatchPage
+            } else {
+                fallbackPage
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var identityMismatchPage: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                GoFlyOnboardingEmblem(symbol: .gear)
+                    .accessibilityIdentifier("setup.blocked.hero")
+                Text(goFlyString(titleKey))
+                    .goFlyFont(GoFlyFont.display)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 30)
+                    .accessibilityIdentifier("setup.blocked.title")
+                Text(goFlyString(messageKey))
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 287)
+                    .padding(.top, 13)
+                    .accessibilityIdentifier("setup.blocked.identity")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.top, 131)
+            .padding(.bottom, 24)
+        }
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button(action: onRetry) {
+                Text(goFlyString("setup.retry"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(GoFlyActionStyle(primary: true))
+            .accessibilityIdentifier("setup.retry")
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .background(GoFlyStyle.canvas.ignoresSafeArea(edges: .bottom))
+            .overlay(alignment: .top) {
+                GoFlyThemeColor.lineSeparator.frame(height: 0.5)
+            }
+        }
+    }
+
+    private var fallbackPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Image(systemName: iconName)
-                    .font(.system(size: 44, weight: .semibold))
+                GoFlyIcon(iconName)
+                    .goFlyIconSize(size: 44, maximum: 56)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .accessibilityHidden(true)
                 Text(goFlyString(titleKey))
-                    .font(GoFlyFont.title)
+                    .goFlyFont(GoFlyFont.title)
                 Text(goFlyString(messageKey))
-                    .font(GoFlyFont.body)
+                    .goFlyFont(GoFlyFont.body)
                     .fixedSize(horizontal: false, vertical: true)
                 if case .blocked = phase {
                     Button(action: onRetry) {
@@ -485,7 +540,6 @@ struct GoFlySetupLockView: View {
             .frame(maxWidth: 560, alignment: .leading)
         }
         .background(GoFlyStyle.canvas.ignoresSafeArea())
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private var titleKey: String {
@@ -508,11 +562,11 @@ struct GoFlySetupLockView: View {
         }
     }
 
-    private var iconName: String {
+    private var iconName: GoFlyIconAsset {
         switch phase {
-        case .blocked: return GoFlySymbols.locked
-        case .awaitingMacInstall, .waitingForMac: return "desktopcomputer"
-        default: return "checkmark.shield"
+        case .blocked: return .shield
+        case .awaitingMacInstall, .waitingForMac: return .mac
+        default: return .select
         }
     }
 
@@ -529,45 +583,46 @@ struct GoFlySetupLockView: View {
 /// R07 is the formal first-install handoff screen. The Mac completes pairing
 /// and setup while GoFly is inactive; returning to the app refreshes bootstrap.
 struct GoFlyMacSetupOnboardingView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                Image(systemName: "laptopcomputer")
-                    .font(.system(size: 48, weight: .medium))
+                GoFlyIcon(.mac)
+                    .goFlyIconSize(size: 48, maximum: 60)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 120, height: 120)
                     .background(
-                        GoFlyStyle.secondarySurface,
+                        GoFlyStyle.onboardingHeroSurface(for: colorScheme),
                         in: RoundedRectangle(cornerRadius: 36, style: .continuous)
                     )
                     .accessibilityHidden(true)
 
                 Text(goFlyString("setup.mac.title"))
-                    .font(GoFlyFont.display)
+                    .goFlyFont(GoFlyFont.display)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 32)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 30)
 
                 Text(goFlyString("setup.mac.message"))
-                    .font(GoFlyFont.body)
+                    .goFlyFont(GoFlyFont.subheadline)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 12)
+                    .frame(maxWidth: 287)
+                    .padding(.top, 13)
 
                 GoFlyStatusPill(
                     text: goFlyString("setup.mac.unpaired"),
                     tone: .neutral,
                     identifier: "setup.mac.status"
                 )
-                .padding(.top, 28)
+                .padding(.top, 24)
             }
-            .frame(maxWidth: 345)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 16)
             .padding(.top, 136)
             .padding(.bottom, 24)
         }
@@ -591,34 +646,44 @@ private extension SetupFailure {
 /// Matches LaunchScreen while the setup check runs off the main actor.
 struct GoFlyStartupView: View {
     @State private var showsProgress = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var logoTileSurface: Color {
+        GoFlyStyle.onboardingHeroSurface(for: colorScheme)
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let midX = geometry.size.width / 2
             let midY = geometry.size.height / 2
             ZStack {
-                GoFlyThemeColor.commonWhite.ignoresSafeArea()
+                GoFlyStyle.canvas.ignoresSafeArea()
                 Image("GoFlyLogo")
                     .resizable()
                     .frame(width: 112, height: 112)
+                    .luminanceToAlpha()
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .clipShape(RoundedRectangle(cornerRadius: 24.5, style: .continuous))
+                    .background(logoTileSurface,
+                                in: RoundedRectangle(cornerRadius: 24.5, style: .continuous))
                     .position(x: midX, y: midY - 48)
 
                 Text("GoFly")
-                    .font(GoFlyFont.display)
-                    .foregroundStyle(GoFlyThemeColor.commonBlack)
+                    .goFlyFont(GoFlyFont.display)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 120, height: 34)
                     .position(x: midX, y: midY + 41)
 
                 if showsProgress {
-                    ProgressView(value: 0.28)
-                        .tint(GoFlyThemeColor.commonBlack)
+                    ProgressView(value: 0.70)
+                        .progressViewStyle(GoFlyProgressStyle())
                         .frame(width: 101)
                         .position(x: midX, y: midY + 96)
                         .accessibilityLabel(goFlyString("setup.preparing.message"))
                         .accessibilityIdentifier("setup.preparing.progress")
                 }
             }
+            .accessibilityElement(children: .contain)
         }
         .ignoresSafeArea()
         .accessibilityIdentifier("setup.preparing")

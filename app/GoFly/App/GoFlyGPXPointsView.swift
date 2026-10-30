@@ -11,20 +11,20 @@ struct GoFlyGPXPointList: View {
     var body: some View {
         LazyVStack(spacing: 0) {
             if summarized && points.count > 10 {
-                pointRow(0, compact: true)
-                Divider()
-                pointRow(1, compact: true)
-                Divider()
-                Text(goFlyLocalizedFormat(goFlyString("imports.points.middle"), points.count - 3))
-                    .font(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.horizontal, 12)
-                Divider()
-                pointRow(points.count - 1, compact: true)
-                Divider()
+                GoFlyListRow(minimumHeight: 46, separatorLeadingInset: 16, separatorTrailingInset: 16) { pointRow(0, compact: true) }
+                GoFlyListRow(minimumHeight: 46, separatorLeadingInset: 16, separatorTrailingInset: 16) { pointRow(1, compact: true) }
+                GoFlyListRow(minimumHeight: 44, separatorLeadingInset: 16, separatorTrailingInset: 16) {
+                    Text(goFlyLocalizedFormat(goFlyString("imports.points.middle"), points.count - 3))
+                        .goFlyFont(GoFlyFont.subheadline)
+                        .foregroundStyle(GoFlyTextColor.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .padding(.horizontal, 12)
+                }
+                GoFlyListRow(minimumHeight: 46, separatorLeadingInset: 16, separatorTrailingInset: 16) { pointRow(points.count - 1, compact: true) }
                 Button(action: onShowAll) {
-                    Label(goFlyLocalizedFormat(goFlyString("imports.points.allCount"), points.count), systemImage: "list.bullet")
+                    GoFlyIconLabel(title: goFlyLocalizedFormat(goFlyString("imports.points.allCount"), points.count),
+                                   icon: .routeList)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .padding(12)
                         .contentShape(Rectangle())
@@ -33,12 +33,15 @@ struct GoFlyGPXPointList: View {
                 .accessibilityIdentifier("imports.points.showAll")
             } else {
                 ForEach(points.indices, id: \.self) { index in
-                    pointRow(index, compact: true)
-                    if index < points.count - 1 { Divider() }
+                    GoFlyListRow(minimumHeight: 46,
+                                 separatorLeadingInset: index < points.count - 1 ? 16 : nil,
+                                 separatorTrailingInset: 16) {
+                        pointRow(index, compact: true)
+                    }
                 }
             }
         }
-        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
         .accessibilityIdentifier("imports.points.list")
     }
@@ -47,16 +50,16 @@ struct GoFlyGPXPointList: View {
         Button { onFocus(points[index]) } label: {
             HStack(spacing: 12) {
                 Text("\(index + 1)")
-                    .font(GoFlyFont.subheadline.monospacedDigit())
+                    .goFlyFont(GoFlyFont.footnote).monospacedDigit().lineLimit(1)
                     .foregroundStyle(GoFlyTextColor.secondary)
-                    .frame(width: 24, alignment: .leading)
-                Text(points[index].displayText)
-                    .font(GoFlyFont.body.monospacedDigit())
-                    .lineLimit(1)
+                    .frame(width: 40, alignment: .leading)
+                Text(pointText(points[index]))
+                    .goFlyFont(GoFlyFont.subheadline).monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if index == 0 || index == points.count - 1 {
                     Text(goFlyString(index == 0 ? "route.origin" : "route.destination"))
-                        .font(GoFlyFont.subheadline)
+                        .goFlyFont(GoFlyFont.subheadline)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(1)
                 }
@@ -68,6 +71,11 @@ struct GoFlyGPXPointList: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("imports.point.\(index)")
     }
+
+    private func pointText(_ coordinate: GeoCoordinate) -> String {
+        String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"),
+               coordinate.latitude, coordinate.longitude)
+    }
 }
 
 struct GoFlyGPXPointsView: View {
@@ -77,23 +85,53 @@ struct GoFlyGPXPointsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title + " · " + goFlyLocalizedFormat(goFlyString("imports.metadata"),
-                                                            goFlyString("imports.kind.tracks"), document.pointCount))
-                    .font(GoFlyFont.footnote)
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .padding(.horizontal, 16)
-                GoFlyGPXPointList(points: document.segments.flatMap { $0 }, onFocus: { coordinate in
-                    dismiss()
-                    onFocus(coordinate)
-                })
+        VStack(spacing: 0) {
+            GoFlySheetHeader(title: goFlyString("imports.points.title")) {
+                Button { dismiss() } label: {
+                    GoFlyIconLabel(title: goFlyString("common.back"), icon: .chevronLeft)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(GoFlyTextColor.accent)
+                .accessibilityLabel(goFlyString("common.back"))
+                .accessibilityIdentifier("imports.points.back")
+            } trailing: {
+                EmptyView()
             }
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(title + " · " + goFlyLocalizedFormat(
+                            goFlyString("imports.pointsFormat"),
+                            document.pointCount.formatted(.number.locale(GoFlyPreferences.shared.locale))))
+                            .goFlyFont(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(goFlyString("imports.points.readOnly"))
+                            .goFlyFont(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .accessibilityIdentifier("imports.points.readOnly")
+                    }
+                    GoFlyGPXPointList(points: document.segments.flatMap { $0 }, onFocus: { coordinate in
+                        dismiss()
+                        onFocus(coordinate)
+                    })
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 10)
+            }
         }
-        .background(GoFlyStyle.canvas)
-        .navigationTitle(goFlyString("imports.points.all"))
-        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("imports.points.content")
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
+        .goFlyPushedFullScreen()
     }
 }

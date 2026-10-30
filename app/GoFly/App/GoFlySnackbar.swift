@@ -17,17 +17,14 @@ struct GoFlySnackbarMessage: Identifiable {
 struct GoFlySnackbar: View {
     let message: GoFlySnackbarMessage
     var onDismiss: () -> Void = {}
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: GoFlySymbols.successFilled)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(GoFlyStyle.success)
+        HStack(spacing: 10) {
+            GoFlyIcon(.toastSuccess, size: 24)
+                .goFlyIconSize(size: 24)
                 .accessibilityHidden(true)
             Text(message.text)
-                .font(GoFlyFont.subheadlineEmphasis)
-                .foregroundStyle(GoFlyTextColor.onDark)
+                .goFlyFont(GoFlyFont.subheadline)
+                .foregroundStyle(GoFlyTextColor.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle = message.actionTitle, let action = message.action {
@@ -36,25 +33,16 @@ struct GoFlySnackbar: View {
                     onDismiss()
                 } label: {
                     Text(actionTitle)
-                        .font(GoFlyFont.subheadlineEmphasis)
-                        .lineLimit(1)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .padding(.horizontal, 12)
-                        .frame(minWidth: 56, minHeight: 32)
-                        .background(GoFlyStyle.snackbarActionSurface, in: Capsule())
-                        .overlay {
-                            Capsule().strokeBorder(GoFlyStyle.snackbarActionBorder,
-                                                   lineWidth: colorScheme == .dark ? 1 : 0.5)
-                        }
-                        .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GoFlyStatusActionStyle(tone: .success))
                 .accessibilityIdentifier("snackbar.action")
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(minHeight: 56)
+        .padding(.horizontal, 14)
+        // Keep the 44 pt undo hit target inside the 52 pt Figma card. The
+        // visible action pill itself remains 32 pt tall.
+        .padding(.vertical, message.action == nil ? 10 : 4)
+        .frame(minHeight: 52)
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
@@ -74,6 +62,17 @@ private struct GoFlySnackbarModifier: ViewModifier {
     @Binding var message: GoFlySnackbarMessage?
     let bottomPadding: CGFloat
     let duration: Duration?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var shouldReduceMotion: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        return reduceMotion || GoFlyUITestOverrides.contains("-gofly-ui-reduce-motion")
+        #else
+        return reduceMotion
+        #endif
+    }
+
+    private var animation: Animation? { shouldReduceMotion ? nil : .easeOut(duration: 0.2) }
 
     func body(content: Content) -> some View {
         content
@@ -82,15 +81,15 @@ private struct GoFlySnackbarModifier: ViewModifier {
                     GoFlySnackbar(message: message) { self.message = nil }
                         .padding(.horizontal, 16)
                         .padding(.bottom, bottomPadding)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(shouldReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                         .task(id: message.id) {
                             try? await Task.sleep(for: duration ?? message.defaultDuration)
                             guard !Task.isCancelled else { return }
-                            withAnimation(.easeOut(duration: 0.2)) { self.message = nil }
+                            withAnimation(animation) { self.message = nil }
                         }
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: message?.id)
+            .animation(animation, value: message?.id)
     }
 }
 

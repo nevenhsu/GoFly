@@ -4,6 +4,8 @@
 
 五態只有：啟動／Standby（灰）、模擬中／Running（綠）、暫停／Paused（黃）、停止／Stopped（灰）、錯誤／Error（紅）。任何下列共用狀態錯誤存在時優先顯示 Error，具體原因保留各自文案；不再有 limited。
 
+D8 的 `route.error.planningFailed` 依 Figma 04 渲染由路線頁浮動 danger toast 顯示；共用 StatusPill 維持「啟動」，不把單純道路規劃失敗提升為 session Error。
+
 | 類別 | 項目數 | 觸發來源 |
 | --- | --- | --- |
 | 連線與裝置服務 | 10 | Wi-Fi 不可用、探測 unavailable/timedOut、ServiceController.error；route/joystick 包裝同一裝置錯誤不重複計數 |
@@ -37,7 +39,7 @@
 | `route.error.missingStart` | 請選擇起點。 |
 | `route.error.missingDestination` | 請選擇終點。 |
 | `route.error.currentLocationUnavailable` | 目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。 |
-| `route.error.planningFailed` | 無法取得路徑。請確認地點或網路連線後重試。 |
+| `route.error.planningFailed` | 找不到可通行的路徑。請重新檢查起點，或點選修正。 |
 | `route.error.invalidPath` | 規劃的路線無效。請重新選擇地點後再試。 |
 | `imports.execution.disconnectedSegments` | 各段端點未完全銜接。仍可預覽或匯出，但無法載入執行。 |
 | `imports.execution.zeroDistance` | 路徑沒有可行進距離。仍可預覽或匯出，但無法載入執行。 |

@@ -17,7 +17,7 @@ struct SessionRefreshTests {
         let errors = SessionStatusErrors(connection: .reachable, service: .pairingRequired,
             route: .planningFailed, joystick: .originUnavailable, wander: .noCandidate,
             wifiAvailable: false, dataErrors: ["favorites.error.writeFailed", "recovery.error.writeFailed"])
-        #expect(errors.keys == ["wifi.error.title", "error.pairingRequired", "route.error.planningFailed",
+        #expect(errors.keys == ["wifi.error.title", "error.pairingRequired",
             "joystick.error.originUnavailable", "joystick.error.noCandidate", "favorites.error.writeFailed", "recovery.error.writeFailed"])
         #expect(SessionDisplayStatus(hasError: !errors.isEmpty, running: true, paused: false, hasSimulated: true) == .error)
         #expect(SessionStatusErrors(connection: .checking, service: .operationCancelled).isEmpty)

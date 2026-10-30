@@ -41,7 +41,7 @@ final class GoFlyNetworkMonitor: ObservableObject {
     }
 
     private nonisolated static func evaluate(_ path: NWPath) -> Bool {
-        #if targetEnvironment(simulator)
+#if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-gofly-ui-wifi-disconnected") {
             return false
         } else if ProcessInfo.processInfo.arguments.contains("-gofly-ui-wifi-connected") {
@@ -49,9 +49,9 @@ final class GoFlyNetworkMonitor: ObservableObject {
         } else {
             return path.status == .satisfied && (path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
         }
-        #else
+#else
         return path.status == .satisfied && path.usesInterfaceType(.wifi)
-        #endif
+#endif
     }
 
     var shouldShowWiFiError: Bool {

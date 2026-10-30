@@ -6,12 +6,12 @@ final class GoFlySnackbarUITests: GoFlyRouteModeTestCase {
         for appearance in ["light", "dark"] {
             let app = launchGallery(appearance: appearance)
             let preview = element(app, "gallery.snackbar.preview")
-            XCTAssertGreaterThanOrEqual(preview.frame.height, 52)
+            XCTAssertEqual(preview.frame.height, 52, accuracy: 1)
             let action = app.buttons["snackbar.action"].firstMatch
             XCTAssertTrue(action.exists)
             XCTAssertGreaterThanOrEqual(action.frame.width, 56)
             XCTAssertGreaterThanOrEqual(action.frame.height, 32)
-            evidence(app, task: "C2", name: "snackbar-\(appearance)")
+            try figmaEvidence(app, ticket: "04", name: "snackbar-\(appearance)")
             app.terminate()
         }
     }

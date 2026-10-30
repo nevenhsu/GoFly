@@ -24,7 +24,6 @@ struct GoFlyImportedRoutesView: View {
             header
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let failure = currentFailureKey { notice(failure, identifier: "imports.error") }
                     if fileOperationInProgress || imports.isBusy || imports.isValidatingSelection {
                         ProgressView(goFlyString(imports.isValidatingSelection ? "imports.validating" : "imports.working"))
                             .accessibilityIdentifier("imports.working")
@@ -32,73 +31,77 @@ struct GoFlyImportedRoutesView: View {
                     if imports.loadState == .loading {
                         ProgressView(goFlyString("imports.loading"))
                     } else if imports.loadState == .ready, imports.records.isEmpty {
-                        GoFlyEmptyState(symbol: GoFlySymbols.importEmpty, message: goFlyString("imports.empty"))
+                        GoFlyEmptyState(symbol: nil, message: goFlyString("imports.empty"))
                             .accessibilityIdentifier("imports.empty")
                     }
                     if !imports.records.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(Array(imports.records.reversed().enumerated()), id: \.element.id) { index, record in
-                                recordCard(record)
-                                if index < imports.records.count - 1 { Divider().padding(.leading, 16) }
+                                GoFlyListRow(minimumHeight: 64,
+                                             separatorLeadingInset: index < imports.records.count - 1 ? 16 : nil,
+                                             separatorTrailingInset: 16) {
+                                    recordCard(record)
+                                }
                             }
                         }
-                        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
-                        Text(goFlyString("imports.footnote"))
-                            .font(GoFlyFont.footnote)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .padding(.horizontal, 16)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(16)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("imports.content")
         .safeAreaInset(edge: .bottom) {
             importButton
+                .opacity(showingActions ? 0 : 1)
+                .accessibilityHidden(showingActions)
+                .allowsHitTesting(!showingActions)
                 .padding(16)
-                .background(GoFlyStyle.surface)
+                .background(GoFlyStyle.canvas)
         }
-        .goFlySnackbar($snackbar)
-        .background(GoFlyStyle.canvas)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationBackground(GoFlyStyle.canvas)
-        .toolbar(.hidden, for: .navigationBar)
+        .goFlySnackbar($snackbar, bottomPadding: 80)
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
+        .goFlyPushedFullScreen()
+        .overlay(alignment: .top) {
+            if let failure = currentFailureKey {
+                GoFlyToastOverlay(topInset: 54) {
+                    notice(failure, identifier: "imports.error")
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let actionRecord, showingActions {
+                GoFlyImportedRouteActionSheet(
+                    title: actionRecord.filename,
+                    detail: goFlyImportedRouteMetadata(actionRecord),
+                    canLoad: !isBusy && controller.canEdit && selectedSnapshot != nil && executionFailureKey == nil,
+                    canExport: !isBusy && selectedSnapshot != nil,
+                    canDelete: !isBusy && imports.canMutate,
+                    onLoad: { showingActions = false; loadSelected() },
+                    onViewAllPoints: {
+                        showingActions = false
+                        showingPoints = true
+                    },
+                    onExport: { showingActions = false; exportSelected() },
+                    onDelete: { showingActions = false; deleteSelected() },
+                    onCancel: { showingActions = false }
+                )
+            }
+        }
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.goFlyGPX, .xml]) { result in
             switch result {
             case .success(let url): importURL(url)
             case .failure(let error): presentFileError(error)
             }
         }
-        .confirmationDialog(actionRecord?.filename ?? goFlyString("imports.title"),
-                            isPresented: $showingActions, titleVisibility: .visible) {
-            Button(goFlyString("imports.load"), action: loadSelected)
-                .disabled(isBusy || !controller.canEdit || selectedSnapshot == nil || executionFailureKey != nil)
-                .accessibilityIdentifier("imports.load")
-            Button(goFlyString("imports.points.all")) { showingPoints = true }
-                .disabled(selectedSnapshot == nil)
-                .accessibilityIdentifier("imports.points.showAll")
-            Button(goFlyString("imports.export"), action: exportSelected)
-                .disabled(isBusy || selectedSnapshot == nil)
-                .accessibilityIdentifier("imports.export")
-            Button(goFlyString("imports.deleteAction"), role: .destructive, action: deleteSelected)
-                .disabled(isBusy || !imports.canMutate)
-                .accessibilityIdentifier("imports.delete")
-            Button(goFlyString("common.cancel"), role: .cancel) {}
-        }
-        .sheet(isPresented: $showingPoints) {
+        .goFlyTracksSystemPresentation(shareItem != nil || showingImporter,
+                                       id: "imports.presentation")
+        .navigationDestination(isPresented: $showingPoints) {
             if let snapshot = selectedSnapshot {
-                NavigationStack {
-                    GoFlyGPXPointsView(document: snapshot.document, title: snapshot.record.filename, onFocus: onFocusPoint)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button(goFlyString("common.back")) { showingPoints = false }
-                            }
-                        }
-                }
+                GoFlyGPXPointsView(document: snapshot.document, title: snapshot.record.filename, onFocus: onFocusPoint)
             }
         }
         .sheet(item: $shareItem) { item in
@@ -113,17 +116,27 @@ struct GoFlyImportedRoutesView: View {
     private var header: some View {
         GoFlySheetHeader(title: goFlyString("imports.title")) {
             Button { dismiss() } label: {
-                Label(goFlyString("common.back"), systemImage: "chevron.backward")
-                    .labelStyle(.titleAndIcon)
-                    .frame(minHeight: 44)
+                if isShowingReturnLabel {
+                    GoFlyIconLabel(title: goFlyString("mode.route"), icon: .chevronLeft)
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                } else {
+                    Text(goFlyString("common.dismiss"))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                }
             }
+            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .buttonStyle(.plain)
+            .foregroundStyle(isShowingReturnLabel ? GoFlyTextColor.accent : GoFlyTextColor.primary)
+            .accessibilityLabel(goFlyString(isShowingReturnLabel ? "common.back" : "common.dismiss"))
             .accessibilityIdentifier("imports.back")
         } trailing: {
             EmptyView()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+    }
+
+    private var isShowingReturnLabel: Bool {
+        showingActions || shareItem != nil || showingImporter || snackbar != nil || currentFailureKey != nil
     }
 
     private var isBusy: Bool { fileOperationInProgress || imports.isBusy || imports.isValidatingSelection }
@@ -153,7 +166,8 @@ struct GoFlyImportedRoutesView: View {
                 else { showingImporter = true }
             } catch { presentFileError(error) }
         } label: {
-            Label(goFlyString("imports.import"), systemImage: GoFlySymbols.importFile)
+            Text(goFlyString("imports.import"))
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(GoFlyActionStyle(primary: true))
         .disabled(isBusy || !imports.canMutate)
@@ -174,25 +188,25 @@ struct GoFlyImportedRoutesView: View {
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(record.filename).font(GoFlyFont.bodyEmphasis).lineLimit(2)
+                    Text(record.filename).goFlyFont(GoFlyFont.bodyEmphasis).lineLimit(2)
                     Text(record.start.displayText + " → " + record.end.displayText + " · "
                          + goFlyLocalizedFormat(goFlyString("imports.pointsFormat"),
                                                 record.pointCount.formatted(.number.locale(GoFlyPreferences.shared.locale))))
-                        .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
+                        .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let failure = imports.unavailable[record.id] {
                         Text(goFlyString(failure.localizationKey))
-                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.danger)
+                            .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.danger)
                             .accessibilityIdentifier("imports.unavailable.\(record.id.uuidString)")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: GoFlySymbols.disclosure)
-                    .font(GoFlyFont.footnoteEmphasis)
+                GoFlyIcon(GoFlySymbols.disclosure)
+                    .goFlyFont(GoFlyFont.footnoteEmphasis)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: 63, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
@@ -215,8 +229,13 @@ struct GoFlyImportedRoutesView: View {
     private func notice(_ key: String, identifier: String) -> some View {
         let button = goFlyIssueButton(for: key, retry: { Task { await imports.load() } },
                                       chooseFile: { showingImporter = true })
-        return GoFlyStatusBanner(tone: .danger, title: goFlyString(key), message: goFlyString("imports.error.guidance"),
-                                 actionTitle: button.title, onAction: button.action, identifier: identifier)
+        // File-level failures such as an oversized GPX are outside IssueCatalog,
+        // but the D18 design still provides a Retry action. Reopen the picker so
+        // the user can retry with a valid file.
+        let actionTitle = button.title ?? goFlyString("common.retry")
+        let action = button.action ?? { showingImporter = true }
+        return GoFlyStatusBanner(tone: .danger, title: goFlyString("imports.error.title"), message: goFlyString(key),
+                                 actionTitle: actionTitle, onAction: action, identifier: identifier)
     }
 
     private func importURL(_ url: URL) {
@@ -283,8 +302,99 @@ struct GoFlyImportedRoutesView: View {
     }
 }
 
+private struct GoFlyImportedRouteActionSheet: View {
+    let title: String
+    let detail: String
+    let canLoad: Bool
+    let canExport: Bool
+    let canDelete: Bool
+    let onLoad: () -> Void
+    let onViewAllPoints: () -> Void
+    let onExport: () -> Void
+    let onDelete: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            GoFlyThemeColor.commonBlack.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onCancel)
+                .accessibilityHidden(true)
+
+            VStack(spacing: 8) {
+                VStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        Text(title)
+                            .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                            .foregroundStyle(GoFlyTextColor.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(detail)
+                            .goFlyFont(GoFlyFont.footnote)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 64)
+                    .padding(.horizontal, 16)
+
+                    action("imports.action.loadRoute", identifier: "imports.load", enabled: canLoad,
+                           foreground: GoFlyTextColor.primary, perform: onLoad)
+                    separator
+                    action("imports.action.viewAllPoints", identifier: "imports.points.showAll", enabled: true,
+                           foreground: GoFlyTextColor.primary, perform: onViewAllPoints)
+                    separator
+                    action("imports.action.exportRoute", identifier: "imports.export", enabled: canExport,
+                           foreground: GoFlyTextColor.primary, perform: onExport)
+                    separator
+                    action("imports.action.deleteRoute", identifier: "imports.delete", enabled: canDelete,
+                           foreground: GoFlyTextColor.danger, perform: onDelete)
+                }
+                .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
+                        .allowsHitTesting(false)
+                }
+
+                Button(goFlyString("common.cancel"), action: onCancel)
+                    .buttonStyle(GoFlyActionStyle())
+                    .accessibilityIdentifier("imports.actions.cancel")
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("imports.actions")
+        .zIndex(60)
+    }
+
+    private func action(_ key: String, identifier: String, enabled: Bool,
+                        foreground: Color, perform: @escaping () -> Void) -> some View {
+        Button(action: perform) {
+            Text(goFlyString(key))
+                .goFlyFont(GoFlyFont.body)
+                .foregroundStyle(enabled ? foreground : GoFlyTextColor.disabled)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var separator: some View {
+        Rectangle()
+            .fill(GoFlyThemeColor.lineSeparator)
+            .frame(height: 0.5)
+            .padding(.horizontal, 12)
+            .accessibilityHidden(true)
+    }
+}
+
 @MainActor
 func goFlyImportedRouteMetadata(_ record: ImportedRouteRecord) -> String {
     goFlyLocalizedFormat(goFlyString("imports.metadata"),
-                                    goFlyString("imports.kind.\(record.kind.rawValue)"), record.pointCount)
+                         goFlyString("imports.kind.\(record.kind.rawValue)"), record.pointCount)
 }

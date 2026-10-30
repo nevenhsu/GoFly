@@ -1,69 +1,60 @@
 import SwiftUI
 
-/// Dark instruction card at the top of execution mode (plan 4.8).
+/// Execution instruction card at the top of the map, matching the panel surface
+/// in both appearances.
 struct GoFlyExecutionHeader: View {
     let title: String
     var detail: String?
-    var symbol: String?
+    var symbol: GoFlyIconAsset?
     var onLeadingAction: (() -> Void)? = nil
     var onTrailingAction: (() -> Void)? = nil
-    var trailingSymbol: String = "shuffle"
+    var trailingSymbol: GoFlyIconAsset = .shuffle
     var trailingAccessibilityLabel: String? = nil
     var trailingAccessibilityIdentifier: String = "execution.header.trailingAction"
-
-    private var iconBackground: Color {
-        Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark
-                ? UIColor(GoFlyThemeColor.commonWhite).withAlphaComponent(0.32)
-                : UIColor(GoFlyThemeColor.commonWhite).withAlphaComponent(0.14)
-        })
-    }
 
     var body: some View {
         HStack(spacing: 12) {
             if let onLeadingAction {
                 Button(action: onLeadingAction) {
-                    Image(systemName: instructionSymbol)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(GoFlyTextColor.onDark)
+                    GoFlyIcon(instructionSymbol)
+                        .goFlyIconSize(size: 20, maximum: 26)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .frame(width: 44, height: 44)
-                        .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(goFlyString("joystick.randomDestination"))
                 .accessibilityIdentifier("execution.header.action")
             } else {
-                Image(systemName: instructionSymbol)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(GoFlyTextColor.onDark)
+                GoFlyIcon(instructionSymbol)
+                    .goFlyIconSize(size: 20, maximum: 26)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .frame(width: 44, height: 44)
-                    .background(iconBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(GoFlyFont.title)
-                    .foregroundStyle(GoFlyTextColor.onDark)
+                    .goFlyFont(GoFlyFont.title)
+                    .foregroundStyle(GoFlyTextColor.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if let detail {
                     Text(detail)
-                        .font(GoFlyFont.footnote)
-                        .foregroundStyle(GoFlyTextColor.onDark.opacity(0.75))
+                        .goFlyFont(GoFlyFont.footnote)
+                        .foregroundStyle(GoFlyTextColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let onTrailingAction {
                 Spacer(minLength: 8)
                 Button(action: onTrailingAction) {
-                    Image(systemName: trailingSymbol)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(GoFlyTextColor.onDark)
+                    GoFlyIcon(trailingSymbol)
+                        .goFlyIconSize(size: 18, maximum: 24)
+                        .foregroundStyle(GoFlyTextColor.primary)
                         .frame(width: 44, height: 44)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(GoFlyStyle.instructionForeground.opacity(0.45), lineWidth: 1)
+                                .stroke(GoFlyThemeColor.lineSeparator, lineWidth: 0.5)
                         )
                         .contentShape(Rectangle())
                 }
@@ -82,7 +73,7 @@ struct GoFlyExecutionHeader: View {
         .accessibilityIdentifier("execution.header")
     }
 
-    private var instructionSymbol: String {
+    private var instructionSymbol: GoFlyIconAsset {
         if let symbol { return symbol }
         // The wander status is exposed as a localized detail string. The route
         // header keeps the navigation arrow used by the execution design.
@@ -137,7 +128,7 @@ struct GoFlyExecutionControls<Leading: View>: View {
                 leading()
                 if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
                 Button(action: onEnd) {
-                    Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
+                    GoFlyIconLabel(title: goFlyString("execution.end"), icon: GoFlySymbols.close)
                         .lineLimit(1)
                 }
                 .buttonStyle(GoFlyActionStyle())
@@ -145,7 +136,7 @@ struct GoFlyExecutionControls<Leading: View>: View {
                 .accessibilityIdentifier("execution.end")
                 if isPaused {
                     Button(action: onResume) {
-                        Label(goFlyString("route.resume"), systemImage: GoFlySymbols.play)
+                        GoFlyIconLabel(title: goFlyString("route.resume"), icon: GoFlySymbols.play)
                             .lineLimit(1)
                     }
                     .buttonStyle(GoFlyActionStyle(primary: true))
@@ -154,7 +145,7 @@ struct GoFlyExecutionControls<Leading: View>: View {
                     .accessibilityIdentifier("execution.resume")
                 } else {
                     Button(action: onPause) {
-                        Label(goFlyString("route.pause"), systemImage: GoFlySymbols.pause)
+                        GoFlyIconLabel(title: goFlyString("route.pause"), icon: GoFlySymbols.pause)
                             .lineLimit(1)
                     }
                     .buttonStyle(GoFlyActionStyle(primary: true))
@@ -187,16 +178,15 @@ extension GoFlyExecutionControls where Leading == EmptyView {
 /// Secondary control used inside the execution bar, for direction or round trip.
 struct GoFlyExecutionToggle: View {
     let title: String
-    let symbol: String
+    let symbol: GoFlyIconAsset
     let isOn: Bool
     let action: () -> Void
     var identifier: String = "execution.toggle"
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(GoFlyFont.subheadlineEmphasis)
-                .labelStyle(.titleAndIcon)
+            GoFlyIconLabel(title: title, icon: symbol)
+                .goFlyFont(GoFlyFont.subheadlineEmphasis)
                 .lineLimit(1)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 44)

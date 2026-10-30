@@ -12,9 +12,14 @@ enum GoFlySetupPaths {
         ).first else {
             throw GoFlySetupPathsError.storageUnavailable
         }
-        return GoFlyUITestOverrides.namespace(
+#if DEBUG && targetEnvironment(simulator)
+        if let fixtureDirectory = GoFlyUITestOverrides.namespace(
             "-gofly-ui-setup-store", under: support, folder: directoryName
-        ) ?? support.appendingPathComponent(directoryName, isDirectory: true)
+        ) {
+            return fixtureDirectory
+        }
+#endif
+        return support.appendingPathComponent(directoryName, isDirectory: true)
     }
 }
 

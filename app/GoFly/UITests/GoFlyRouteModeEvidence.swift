@@ -49,4 +49,20 @@ class GoFlyRouteModeTestCase: XCTestCase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? screenshot.pngRepresentation.write(to: dir.appendingPathComponent("\(name).png"))
     }
+
+    func figmaEvidence(_ app: XCUIApplication, ticket: String, name: String) throws {
+        let screenshot = app.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "ticket-\(ticket)-\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<4 { root.deleteLastPathComponent() }
+        let directory = root.appendingPathComponent(
+            "work/gofly-ios-figma04/screenshots/ticket\(ticket)-feedback",
+            isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try screenshot.pngRepresentation.write(to: directory.appendingPathComponent("\(name).png"), options: .atomic)
+    }
 }

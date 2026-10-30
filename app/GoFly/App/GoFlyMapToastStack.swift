@@ -30,6 +30,11 @@ struct GoFlyMapToastStack: View {
 
     private var unconfirmedID: UUID? { service.pointState.unconfirmedID }
     private var unconfirmedFailure: DeviceServiceFailure? { service.pointState.unconfirmedFailure }
+    private var isUnconfirmedTeleportFailure: Bool {
+        mode == .teleport
+            && unconfirmedFailure.map { SessionStatusErrors.reportsFailure($0.rawValue) } == true
+            && notices.showsUnconfirmed(unconfirmedID)
+    }
 
     private func retryInterruptedRoute() { goFlyRetryInterruptedRoute(route: route, recovery: recovery) }
 
@@ -54,8 +59,10 @@ struct GoFlyMapToastStack: View {
     /// The one toast button for an error key. Retry stays in the current mode:
     /// teleport retries its prepared operation, route its planning, wander its
     /// stream. Only when none applies does it reconnect the device.
-    private func issueButton(for key: String, retry: (() -> Void)? = nil) -> (title: String?, action: (() -> Void)?) {
-        goFlyIssueButton(for: key, retry: retry ?? { retryInCurrentMode() }, settings: { showingSettings = true })
+    private func issueButton(for key: String, retry: (() -> Void)? = nil,
+                             fix: (() -> Void)? = nil) -> (title: String?, action: (() -> Void)?) {
+        goFlyIssueButton(for: key, retry: retry ?? { retryInCurrentMode() }, fix: fix,
+                         settings: { showingSettings = true })
     }
 
     private func retryInCurrentMode() {
@@ -138,7 +145,7 @@ struct GoFlyMapToastStack: View {
                     isFloating: true
                 )
             }
-            if let error = service.error, !repairOwnsNotice,
+            if let error = service.error, !repairOwnsNotice, !isUnconfirmedTeleportFailure,
                SessionStatusErrors.reportsFailure(error.rawValue), !notices.isDismissed(.serviceError) {
                 GoFlyStatusBanner(
                     tone: .danger,
@@ -153,19 +160,25 @@ struct GoFlyMapToastStack: View {
             }
             if let failure = unconfirmedFailure, SessionStatusErrors.reportsFailure(failure.rawValue),
                notices.showsUnconfirmed(unconfirmedID) {
+                let isTeleportFailure = mode == .teleport
                 GoFlyStatusBanner(
                     tone: .danger,
-                    title: goFlyString(failure.rawValue),
-                    message: goFlyString("teleport.positionUnconfirmed") + " " + goFlyString("operation.failureGuidance"),
-                    actionTitle: goFlyString("operation.settings"),
-                    onAction: { showingSettings = true },
+                    title: goFlyString(isTeleportFailure ? "teleport.failure.toast.title" : failure.rawValue),
+                    message: isTeleportFailure
+                        ? goFlyString("teleport.failure.toast.message")
+                        : goFlyString("teleport.positionUnconfirmed") + " " + goFlyString("operation.failureGuidance"),
+                    actionTitle: goFlyString(isTeleportFailure ? "common.retry" : "operation.settings"),
+                    onAction: {
+                        if isTeleportFailure { recovery.checkConnection() }
+                        else { showingSettings = true }
+                    },
                     onDismiss: { notices.leaveUnconfirmed(unconfirmedID) },
                     identifier: "map.unconfirmedFailure",
                     isFloating: true
                 )
             }
             if case .failed(let failure)? = service.preparedOperation?.state,
-               SessionStatusErrors.reportsFailure(failure.rawValue) {
+               SessionStatusErrors.reportsFailure(failure.rawValue), !isUnconfirmedTeleportFailure {
                 GoFlyStatusBanner(
                     tone: .danger,
                     title: goFlyString(failure.rawValue),
@@ -208,18 +221,24 @@ struct GoFlyMapToastStack: View {
             }
             if let error = route.error, SessionStatusErrors.reportsFailure(error.localizationKey),
                mode == .route, !notices.isDismissed(.routeError) {
+                let routeIssueButton = issueButton(for: error.localizationKey,
+                                                   fix: { _ = route.fixPlanningOrder() })
                 GoFlyStatusBanner(
-                    tone: .warning,
+                    tone: .danger,
                     title: goFlyString("route.error.shortTitle"),
                     message: goFlyString(error.localizationKey),
-                    actionTitle: issueButton(for: error.localizationKey).title,
-                    onAction: issueButton(for: error.localizationKey, retry: { _ = route.retryPlanning() }).action,
+                    actionTitle: routeIssueButton.title,
+                    onAction: routeIssueButton.action,
                     onDismiss: { notices.dismiss(.routeError) },
                     identifier: "route.error",
+                    actionEnabled: !route.isFixingPlanningOrder,
+                    actionInProgress: route.isFixingPlanningOrder,
+                    actionProgressAccessibilityLabel: goFlyString("route.fixing"),
+                    actionIdentifier: "route.error.action",
                     isFloating: true
                 )
             }
-            if let key = recovery.noticeKey, !notices.isDismissed(.recovery) {
+            if let key = recovery.noticeKey, !notices.isDismissed(.recovery), !isUnconfirmedTeleportFailure {
                 let cold = recovery.requiresColdConfirmation
                 let tone: GoFlyStatusTone = key == "recovery.connectionRecovered" ? .success : .danger
                 GoFlyStatusBanner(
@@ -239,7 +258,7 @@ struct GoFlyMapToastStack: View {
                     isFloating: true
                 )
             }
-            if sceneSettled, !repairOwnsNotice,
+            if sceneSettled, !repairOwnsNotice, !isUnconfirmedTeleportFailure,
                !isUserPausedRoute, !isUserPausedWander, (continuation.noticeKey != nil && !notices.isDismissed(.continuation)) || isResumeState {
             let routePaused = mode == .route && (route.phase == .paused || route.phase == .interrupted)
             let holdPaused = positionHold.phase == .paused || positionHold.phase == .completed
@@ -256,7 +275,7 @@ struct GoFlyMapToastStack: View {
                     tone: .warning,
                     title: title,
                     message: message,
-                    actionTitle: goFlyString("common.retry"),
+                    actionTitle: goFlyString(routePaused || holdPaused ? "common.continue" : "common.retry"),
                     onAction: {
                         if routePaused { if route.phase == .interrupted { retryInterruptedRoute() } else { _ = route.resume() } }
                         else if holdPaused { _ = positionHold.retry() }

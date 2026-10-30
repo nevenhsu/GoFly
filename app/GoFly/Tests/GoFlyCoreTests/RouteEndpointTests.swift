@@ -63,6 +63,167 @@ struct RouteEndpointTests {
         #expect(planner.calls == before)
     }
 
+    @Test func addingWaypointAppendsBlankDestinationAndPlansAfterItIsFilled() async throws {
+        let planner = CountingPlanner()
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2))]))
+        let originalIDs = draft.nodes.map(\.id)
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.plannedRoute != nil }
+        let callsBeforeAdd = planner.calls
+
+        #expect(route.addEmptyWaypoint())
+        let newID = try #require(route.draft.nodes.last?.id)
+        #expect(route.draft.nodes.map(\.id) == originalIDs + [newID])
+        #expect(route.draft.nodes.map(\.value) == [.place(place(1)), .place(place(2)), .empty])
+        #expect(route.draft.role(of: originalIDs[1]) == .waypoint(1))
+        #expect(route.draft.role(of: newID) == .destination)
+        #expect(route.selectedNodeID == newID)
+        #expect(route.draft.hasEmptyEndpoint)
+        #expect(route.plannedRoute == nil)
+        #expect(route.error == nil)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(planner.calls == callsBeforeAdd, "an empty destination does not trigger preview planning")
+
+        #expect(route.confirmSelectedNode(with: place(3)))
+        await settle { route.plannedRoute != nil }
+        #expect(planner.calls > callsBeforeAdd, "filling the endpoint starts a fresh preview")
+        #expect(route.draft.nodes.map(\.id) == originalIDs + [newID])
+    }
+
+    @Test func appendedWaypointSurvivesRecoveryAndRouteReordering() throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let route = fixture(draft: draft)
+        let originalIDs = draft.nodes.map(\.id)
+        #expect(route.addEmptyWaypoint())
+        let newID = try #require(route.draft.nodes.last?.id)
+        #expect(route.draft.nodes.map(\.id) == originalIDs + [newID])
+
+        let snapshot = SessionRecoverySnapshot(mode: .route, draft: route.draft)
+        let decoded = try SessionRecoveryCodec.decode(SessionRecoveryCodec.encode(snapshot))
+        #expect(decoded.draft.nodes.map(\.id) == originalIDs + [newID])
+        #expect(decoded.draft.nodes.map(\.value) == draft.nodes.map(\.value) + [.empty])
+        #expect(decoded.draft.role(of: originalIDs[2]) == .waypoint(2))
+        #expect(decoded.draft.role(of: newID) == .destination)
+
+        #expect(route.reverseNodes())
+        #expect(route.draft.nodes.map(\.id) == [newID] + Array(originalIDs.reversed()))
+        #expect(route.draft.role(of: newID) == .start)
+        #expect(route.moveNode(id: newID, toIndex: route.draft.nodes.count - 1))
+        #expect(route.draft.nodes.map(\.id) == Array(originalIDs.reversed()) + [newID])
+        #expect(route.draft.role(of: newID) == .destination)
+    }
+
+    @Test func addingWaypointIsDisabledAtTheNodeLimit() throws {
+        let nodes = (0..<RouteDraft.maximumNodeCount).map { RouteNode(value: .place(place($0))) }
+        let draft = try #require(RouteDraft(nodes: nodes))
+        let route = fixture(draft: draft)
+        #expect(!route.canAddNode)
+        #expect(!route.addEmptyWaypoint())
+        #expect(route.draft.nodes == nodes)
+    }
+
+    @Test func addingWaypointToALoneStartCreatesTheDestinationRow() throws {
+        let start = RouteNode(value: .current)
+        let draft = try #require(RouteDraft(nodes: [start]))
+        let route = fixture(draft: draft)
+
+        #expect(route.addEmptyWaypoint())
+        let destination = try #require(route.draft.nodes.last)
+        #expect(route.draft.nodes.map(\.id) == [start.id, destination.id])
+        #expect(route.draft.role(of: start.id) == .start)
+        #expect(route.draft.role(of: destination.id) == .destination)
+        #expect(destination.value == .empty)
+    }
+
+    @Test func planningFixCanReorderBothNodesIncludingTheOriginalStart() async throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2))]))
+        let originalIDs = draft.nodes.map(\.id)
+        let planner = SelectiveRepairPlanner(failingEdges: [EndpointPlannerEdge(
+            from: place(1).coordinate, to: place(2).coordinate)])
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await settle { !route.isFixingPlanningOrder }
+
+        #expect(route.error == nil)
+        #expect(route.draft.nodes.map(\.id) == Array(originalIDs.reversed()))
+        #expect(route.draft.role(of: originalIDs[1]) == .start)
+        #expect(route.draft.role(of: originalIDs[0]) == .destination)
+        #expect(route.plannedRoute != nil)
+    }
+
+    @Test func planningFixFindsAnotherOrderAndPreservesEveryLocation() async throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let originalIDs = draft.nodes.map(\.id)
+        let planner = SelectiveRepairPlanner(failingEdges: [EndpointPlannerEdge(
+            from: place(1).coordinate, to: place(2).coordinate)])
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await settle { !route.isFixingPlanningOrder }
+
+        #expect(route.error == nil)
+        #expect(route.draft.nodes.map(\.id) == [originalIDs[0], originalIDs[2], originalIDs[1]])
+        #expect(route.draft.nodes.count == draft.nodes.count)
+        #expect(Set(route.draft.nodes.map(\.id)) == Set(draft.nodes.map(\.id)))
+        for node in draft.nodes {
+            #expect(route.draft.nodes.first(where: { $0.id == node.id })?.value == node.value)
+        }
+        #expect(route.plannedRoute != nil)
+    }
+
+    @Test func failedPlanningFixLeavesTheDraftAndFailureUntouched() async throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let planner = SelectiveRepairPlanner(failingAllEdges: true)
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        #expect(route.isFixingPlanningOrder)
+        await settle { !route.isFixingPlanningOrder }
+
+        #expect(route.draft == draft)
+        #expect(route.error == .planningFailed)
+        #expect(route.plannedRoute == nil)
+    }
+
+    @Test func planningFixIsBoundedAtTheTwentySevenNodeLimit() async throws {
+        let nodes = (0..<RouteDraft.maximumNodeCount).map { RouteNode(value: .place(place($0))) }
+        let draft = try #require(RouteDraft(nodes: nodes))
+        let planner = SelectiveRepairPlanner(failingAllEdges: true)
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await settle { !route.isFixingPlanningOrder }
+
+        #expect(route.draft == draft)
+        #expect(route.error == .planningFailed)
+        let calls = await planner.callCount
+        #expect(calls <= 65, "one initial preview plus at most 64 repair requests")
+    }
+
+    @Test func editingDuringPlanningFixCancelsItsStaleResult() async throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let planner = HeldRepairPlanner()
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await planner.waitUntilRepairIsHeld()
+        #expect(route.isFixingPlanningOrder)
+        #expect(route.reverseNodes())
+        #expect(!route.isFixingPlanningOrder)
+        await planner.releaseHeldRepair()
+        await settle { route.plannedRoute != nil }
+
+        #expect(route.draft.nodes.map(\.id) == Array(draft.nodes.reversed().map(\.id)))
+        #expect(route.error == nil)
+        #expect(route.plannedRoute != nil)
+    }
+
     @Test func reversingSwapsEmptyValuesWithTheirRows() throws {
         let draft = try #require(RouteDraft(nodes: [RouteNode(value: .place(place(1))), RouteNode(value: .empty)]))
         let reversed = try #require(draft.reversing())
@@ -189,6 +350,60 @@ private final class CountingPlanner: RoutePlanning, @unchecked Sendable {
         return [from, to]
     }
 }
+
+private struct EndpointPlannerEdge: Hashable, Sendable {
+    let from: GeoCoordinate
+    let to: GeoCoordinate
+}
+
+private actor SelectiveRepairPlanner: RoutePlanning {
+    private let failingEdges: Set<EndpointPlannerEdge>
+    private let failingAllEdges: Bool
+    private(set) var callCount = 0
+
+    init(failingEdges: Set<EndpointPlannerEdge> = [], failingAllEdges: Bool = false) {
+        self.failingEdges = failingEdges
+        self.failingAllEdges = failingAllEdges
+    }
+
+    func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
+        callCount += 1
+        if failingAllEdges || failingEdges.contains(EndpointPlannerEdge(from: from, to: to)) {
+            throw RouteExecutionFailure.planningFailed
+        }
+        return [from, to]
+    }
+}
+
+private actor HeldRepairPlanner: RoutePlanning {
+    private var callCount = 0
+    private var heldContinuation: CheckedContinuation<Void, Never>?
+    private var hasHeldRepair = false
+
+    func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
+        callCount += 1
+        if callCount == 1 { throw RouteExecutionFailure.planningFailed }
+        if callCount == 2 {
+            await withCheckedContinuation { continuation in
+                heldContinuation = continuation
+                hasHeldRepair = true
+            }
+        }
+        return [from, to]
+    }
+
+    func waitUntilRepairIsHeld() async {
+        for _ in 0..<200 where !hasHeldRepair {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    func releaseHeldRepair() {
+        heldContinuation?.resume()
+        heldContinuation = nil
+    }
+}
+
 private struct EndpointSearch: PlaceSearching {
     func search(query: String) async throws -> [MapPlace] { [] }
 }

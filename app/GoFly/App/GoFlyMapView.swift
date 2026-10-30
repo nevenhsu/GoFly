@@ -258,6 +258,8 @@ struct GoFlyMapView: View {
     @State private var showingRouteList = false
     @State private var searchFavorites = false
     @State private var showingFavoriteRoutes = false
+    @State private var showingImportedRoutes = false
+    @State private var showingAllImportedPoints = false
     @State private var recentPlaces: [MapPlace] = []
     @State private var snackbar: GoFlySnackbarMessage?
     @State private var searchPasteWarning: GoFlySearchPasteWarning?
@@ -344,6 +346,19 @@ struct GoFlyMapView: View {
     private var viewportGap: CGFloat { dynamicTypeSize.isAccessibilitySize ? 4 : 8 }
     private var bottomPadding: CGFloat { dynamicTypeSize.isAccessibilitySize ? 8 : 12 }
 
+    private func updateMeasuredHeight(_ height: CGFloat, from current: CGFloat, assign: (CGFloat) -> Void) {
+        guard abs(height - current) > 0.5 else { return }
+        assign(height)
+    }
+
+    private func updateMeasuredFrame(_ frame: CGRect, from current: CGRect, assign: (CGRect) -> Void) {
+        guard abs(frame.minX - current.minX) > 0.5
+                || abs(frame.minY - current.minY) > 0.5
+                || abs(frame.width - current.width) > 0.5
+                || abs(frame.height - current.height) > 0.5 else { return }
+        assign(frame)
+    }
+
     var body: some View { mapNavigation }
 
     private var mapNavigation: some View {
@@ -357,7 +372,8 @@ struct GoFlyMapView: View {
                         if !busy, wander.hasAcknowledgedPendingStart,
                            scenePhase == .active, !recovery.isChecking { wander.resumePending() }
                     }
-                    .accessibilityHidden(presentedSheet != nil || showingSearch || route.picker != nil)
+                    .accessibilityHidden(presentedSheet != nil || showingSearch || showingImportedRoutes
+                        || showingAllImportedPoints || route.picker != nil)
             }
             // Destinations must sit inside the stack; on the stack itself SwiftUI ignores them.
             .navigationDestination(isPresented: $showingSettings) {
@@ -377,6 +393,22 @@ struct GoFlyMapView: View {
                 )
                 .navigationDestination(isPresented: routePickerNavigationBinding) {
                     searchScreen
+                }
+            }
+            .navigationDestination(isPresented: $showingImportedRoutes) {
+                GoFlyImportedRoutesView(controller: route, onLoaded: {
+                    showingImportedRoutes = false
+                }, onFocusPoint: { coordinate in
+                    showingImportedRoutes = false
+                    cameraIntent = GoFlyCameraIntent(coordinate: coordinate)
+                })
+            }
+            .navigationDestination(isPresented: $showingAllImportedPoints) {
+                if let source = route.draft.gpxSource {
+                    GoFlyGPXPointsView(document: source.document, title: source.displayFilename, onFocus: { coordinate in
+                        showingAllImportedPoints = false
+                        cameraIntent = GoFlyCameraIntent(coordinate: coordinate)
+                    })
                 }
             }
             .modifier(GoFlyMapSheetsModifier(
@@ -428,7 +460,8 @@ struct GoFlyMapView: View {
                     requestLocationFix: { location.requestRecenter() }))
                 wander.attach(wanderPlanningHost)
                 movement.attachMapAdmission {
-                    !showingSettings && !showingSearch && !showingRouteList && presentedSheet == nil && route.picker == nil
+                    !showingSettings && !showingSearch && !showingRouteList && !showingImportedRoutes
+                        && !showingAllImportedPoints && presentedSheet == nil && route.picker == nil
                 }
                 location.start()
                 autoResolveJoystickOrigin()
@@ -445,7 +478,9 @@ struct GoFlyMapView: View {
                     movement.keepAlive.sceneDidBecomeActive()
                 }
 #if DEBUG && targetEnvironment(simulator)
-                if uiTestFixtureFrame == nil { recovery.requestForegroundCheck() }
+                // B11 captures the explicit connecting state without settling
+                // the local probe before its screenshot is taken.
+                if uiTestFixtureFrame != "B11" { recovery.requestForegroundCheck() }
 #else
                 recovery.requestForegroundCheck()
 #endif
@@ -467,33 +502,62 @@ struct GoFlyMapView: View {
     private func configureUITestFrame(_ frame: String) {
         let places = GoFlyUITestOverrides.fixturePlaces
         if let mode = GoFlyUITestOverrides.initialMode(for: frame) { movement.setPresentationMode(mode) }
-        sheetDetent = frame == "B2" ? .half : (["B1", "D3", "E1.a", "E2.a"].contains(frame) ? .collapsed : .expanded)
+        sheetDetent = frame == "B2" ? .half
+            : (["B1", "B6", "B7", "B8", "B9", "B10", "B11", "D3", "E1.a", "E2.a"].contains(frame) ? .collapsed : .expanded)
         if let coordinate = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) {
             cameraIntent = GoFlyCameraIntent(coordinate: coordinate, resetsZoom: true)
         }
 
         switch frame {
+        case "B1":
+            if let coordinate = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) {
+                let title = goFlyString("figma.fixture.b1.position")
+                recordRecentPlace(MapPlace(id: .coordinate(coordinate), title: title, coordinate: coordinate))
+            }
         case "B3":
+            if let coordinate = GeoCoordinate(latitude: 24.200544, longitude: 121.348432) {
+                recordRecentPlace(MapPlace(id: .coordinate(coordinate), title: coordinate.displayText,
+                                           coordinate: coordinate))
+            }
+            recordRecentPlace(places[0])
             showingSearch = true
         case "B4":
             showingSearch = true
-            search.updateQuery("25.04776, 121.51706")
+            search.updateQuery("台北")
+        case "B2":
+            Task { @MainActor in await startRunningPositionHoldUITestFixture() }
         case "B5":
-            search.select(places[2])
-            presentedSheet = GoFlyMapSheet(content: .details(places[2]))
+            selectSearchPlace(places[2])
         case "B6":
-            snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), places[0].title))
+            Task { @MainActor in
+                await startRunningPositionHoldUITestFixture(target: places[0])
+                snackbar = GoFlySnackbarMessage(text: goFlyLocalizedFormat(goFlyString("teleport.completed"), places[0].title))
+            }
         case "B7":
+            selectSearchPlace(places[2])
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(250))
                 _ = service.teleport(to: TeleportCandidate(place: places[2]))
             }
+        case "B8", "B9":
+            Task { @MainActor in await startPausedPositionHoldUITestFixture(target: places[0]) }
         case "C1", "C2", "C3", "C4":
             presentedSheet = GoFlyMapSheet(content: .favorites)
         case "D5":
+            recentPlaces = [places[0]]
             if let nodeID = route.draft.destination?.id { _ = route.openPicker(for: nodeID) }
-        case "D19", "D21", "D22":
+        case "D4":
+            search.select(places[2])
+        case "D6", "D7":
+            Task { @MainActor in await startRouteUITestFixture(interrupt: false) }
+        case "D10":
+            Task { @MainActor in await startRouteUITestFixture(interrupt: true) }
+        case "D10.a":
+            Task { @MainActor in await startRouteUITestFixture(interrupt: false, pauseForUser: true) }
+        case "D19", "D20", "D21", "D22":
             showingFavoriteRoutes = true
+        case "D23":
+            showingRouteList = true
         case "E2", "E2.a":
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(350))
@@ -504,6 +568,20 @@ struct GoFlyMapView: View {
                 try? await Task.sleep(for: .milliseconds(350))
                 await startWanderUITestFixture(target: places[1], showLocationCard: true)
             }
+        case "E5":
+            Task { @MainActor in
+                await startWanderUITestFixture(target: places[1], showLocationCard: false)
+                mode = .joystick
+                for _ in 0..<1_000 {
+                    if joystick.wanderEnabled && joystick.canPause { break }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+                if joystick.wanderEnabled && joystick.canPause { joystick.continuationDidBecomeUnavailable() }
+                for _ in 0..<1_000 {
+                    if joystick.wanderEnabled && [.paused, .suspended, .interrupted].contains(joystick.phase) { break }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            }
         case "F1", "F1.a", "F1.b", "F4", "F5", "F6", "F6.a", "F7", "F8", "F9":
             showingSettings = true
         default:
@@ -511,25 +589,93 @@ struct GoFlyMapView: View {
         }
     }
 
+    private func startPausedPositionHoldUITestFixture(target: MapPlace) async {
+        for _ in 0..<1_000 {
+            if !service.nativeBusy, !recovery.isChecking,
+               service.movementConnection == .available,
+               (service.phase == .ready || service.phase == .stopped) { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard !service.nativeBusy, service.movementConnection == .available,
+              (service.phase == .ready || service.phase == .stopped),
+              service.teleport(to: TeleportCandidate(place: target)) else { return }
+        recordRecentPlace(target)
+        for _ in 0..<1_000 {
+            if positionHold.phase == .paused || continuation.noticeKey != nil { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private func startRunningPositionHoldUITestFixture(target requestedTarget: MapPlace? = nil) async {
+        for _ in 0..<1_000 {
+            if !service.nativeBusy, !recovery.isChecking,
+               service.movementConnection == .available,
+               (service.phase == .ready || service.phase == .stopped) { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard !service.nativeBusy, !recovery.isChecking,
+              service.movementConnection == .available,
+              (service.phase == .ready || service.phase == .stopped),
+              let coordinate = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) else { return }
+        let target = requestedTarget ?? MapPlace(
+            id: .coordinate(coordinate), title: goFlyString("figma.fixture.b2.position"), coordinate: coordinate)
+        recordRecentPlace(target)
+        guard service.teleport(to: TeleportCandidate(place: target)) else { return }
+        for _ in 0..<1_000 {
+            if positionHold.phase == .running { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private func startRouteUITestFixture(interrupt: Bool, pauseForUser: Bool = false) async {
+        for _ in 0..<1_000 {
+            if !service.nativeBusy, !recovery.isChecking,
+               service.movementConnection == .available,
+               (service.phase == .ready || service.phase == .stopped) { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard !service.nativeBusy, service.movementConnection == .available,
+              (service.phase == .ready || service.phase == .stopped), route.start() else { return }
+        for _ in 0..<1_000 {
+            if route.phase == .running { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        if interrupt, route.phase == .running {
+            route.connectionDidBecomeUnavailable()
+            for _ in 0..<1_000 {
+                if route.phase == .paused || route.phase == .interrupted { break }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            // The D10 frame presents the recovered, ready-to-continue state;
+            // keep the system-interruption reason so its warning notice remains visible.
+            route.connectionDidBecomeAvailable()
+        } else if pauseForUser, route.phase == .running {
+            _ = route.pause()
+        }
+    }
+
     private func startWanderUITestFixture(target: MapPlace, showLocationCard: Bool) async {
         guard let origin = GeoCoordinate(latitude: 25.05712, longitude: 121.52281) else { return }
+        // Wander fixtures establish their own acknowledged origin, so cancel
+        // any launch-time joystick origin lookup before staging that state.
+        joystickOrigin.cancel()
         // A cold-recovery marker is display-only. Establish a confirmed
         // simulator position first so the fixture follows the same admission
         // contract as a real wander start without using GPS or network access.
-        for _ in 0..<250 {
+        for _ in 0..<1_000 {
             if !service.nativeBusy { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
-        for _ in 0..<250 {
-            if sceneActivity.isActive, !recovery.isChecking, service.movementConnection != .unavailable { break }
+        for _ in 0..<1_000 {
+            if sceneActivity.isActive, !recovery.isChecking, service.movementConnection == .available { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
-        guard sceneActivity.isActive, !recovery.isChecking, service.movementConnection != .unavailable else { return }
+        guard sceneActivity.isActive, !recovery.isChecking, service.movementConnection == .available else { return }
         if service.phase != .ready {
             guard service.phase == .stopped, service.start() else {
                 return
             }
-            for _ in 0..<250 {
+            for _ in 0..<1_000 {
                 if service.phase == .ready && !service.nativeBusy { break }
                 try? await Task.sleep(for: .milliseconds(20))
             }
@@ -538,13 +684,13 @@ struct GoFlyMapView: View {
         joystickOrigin.cancel()
         let originPlace = MapPlace(id: .coordinate(origin), title: "台北車站", coordinate: origin)
         guard service.teleport(to: TeleportCandidate(place: originPlace)) else { return }
-        for _ in 0..<250 {
+        for _ in 0..<1_000 {
             if case .acknowledged(let point) = service.pointState,
                point.candidate.place.coordinate == origin { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
         guard service.currentJoystickOrigin == origin else { return }
-        for _ in 0..<250 {
+        for _ in 0..<1_000 {
             if service.phase == .ready, !service.nativeBusy, joystick.canStartWanderPlanning { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
@@ -556,10 +702,17 @@ struct GoFlyMapView: View {
         guard joystick.installWanderRoute(target: WanderTarget(place: target), route: planned) else {
             return
         }
+        // Teleport ACK starts the normal position-hold takeover asynchronously.
+        // Wait for that simulator write to drain before the fixture admits wander.
+        for _ in 0..<1_000 {
+            if !service.nativeBusy, joystick.canSetWanderEnabled { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard !service.nativeBusy, joystick.canSetWanderEnabled else { return }
         guard joystick.setWanderEnabled(true) else {
             return
         }
-        for _ in 0..<250 {
+        for _ in 0..<1_000 {
             if joystick.wanderEnabled && joystick.phase == .moving { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
@@ -743,7 +896,8 @@ struct GoFlyMapView: View {
                 GoFlySearchPanel(
                     search: picker.candidates,
                     focusRequest: searchFocusRequest,
-                    placeholderOverride: routePickerPlaceholder(picker.role),
+                    placeholderOverride: "",
+                    accessibilityLabelOverride: routePickerAccessibilityLabel(picker.role),
                     roleTitle: goFlyLocalizedFormat(goFlyString("route.picker.selecting"), goFlyRouteRoleTitle(picker.role)),
                     onBack: { route.cancelPicker(id: picker.id) },
                     onFavorites: { searchFavorites = true },
@@ -762,9 +916,12 @@ struct GoFlyMapView: View {
                 GoFlySearchPanel(
                     search: activeSearch,
                     focusRequest: searchFocusRequest,
+                    placeholderOverride: "",
                     onBack: { showingSearch = false },
                     onFavorites: { searchFavorites = true },
                     recentPlaces: recentPlaces,
+                    fixtureCoordinateResult: uiTestFixtureFrame == "B4" ? GoFlyUITestOverrides.searchCoordinateResult : nil,
+                    fixtureNearbyResults: uiTestFixtureFrame == "B4" ? GoFlyUITestOverrides.searchNearbyResults : nil,
                     onClearRecentPlaces: clearRecentPlaces,
                     onSelect: selectSearchPlace)
             }
@@ -784,7 +941,7 @@ struct GoFlyMapView: View {
         }
     }
 
-    private func routePickerPlaceholder(_ role: RouteNodeRole) -> String {
+    private func routePickerAccessibilityLabel(_ role: RouteNodeRole) -> String {
         switch role {
         case .start: goFlyString("route.chooseOrigin")
         case .destination: goFlyString("route.chooseDestination")
@@ -796,14 +953,24 @@ struct GoFlyMapView: View {
     @ViewBuilder
     private func mapContent(in geometry: GeometryProxy) -> some View {
         let viewport = visibleViewport(in: geometry)
+        let mapSafeInsets = geometry.safeAreaInsets
+        let mapViewport = viewport.offsetBy(dx: mapSafeInsets.leading, dy: mapSafeInsets.top)
+        let mapSize = CGSize(
+            width: geometry.size.width + mapSafeInsets.leading + mapSafeInsets.trailing,
+            height: geometry.size.height + mapSafeInsets.top + mapSafeInsets.bottom
+        )
         ZStack(alignment: .topLeading) {
-            mapCanvas(viewport: viewport, size: geometry.size,
+            mapCanvas(viewport: mapViewport, size: mapSize,
                       attributionBottomInset: attributionBottomInset(in: geometry))
-            mapPins(viewport: viewport)
+                .ignoresSafeArea()
+            mapPins(viewport: mapViewport)
+                .ignoresSafeArea()
             topChrome
-            toastStack(topInset: (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
-            if showsMapControls { mapControls(bottomInset: geometry.safeAreaInsets.bottom) }
+            if showsMapControls { mapControls(in: geometry) }
             bottomChrome(in: geometry)
+        }
+        .overlay(alignment: .top) {
+            toastStack(topInset: (topFrame.maxY > 0 ? topFrame.maxY : 116) + 8)
         }
         .goFlySnackbar(
             $snackbar,
@@ -843,7 +1010,7 @@ struct GoFlyMapView: View {
     @ViewBuilder
     private var topChrome: some View {
         if isExecutionMode || isWanderMap {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: GoFlyStyle.statusPillTopSpacing) {
                 GoFlyExecutionHeader(
                     title: executionTitle,
                     detail: executionDetail,
@@ -854,7 +1021,9 @@ struct GoFlyMapView: View {
                     .accessibilityValue(goFlyString(movement.status.textKey))
             }
             .padding(.horizontal, 16).padding(.top, 8)
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+                updateMeasuredFrame($0, from: topFrame) { topFrame = $0 }
+            }
         } else {
             topBar
         }
@@ -943,11 +1112,21 @@ struct GoFlyMapView: View {
             },
             onProjection: {
                 MapKitSearchRegionContext.current = $0.searchRegion
-                if projection != $0 { projection = $0 }
+                // The map's centre and visible search region can move without
+                // a pin. Keep the search context fresh, but only publish a
+                // SwiftUI state update when the candidate/wander overlay uses
+                // projection coordinates. Otherwise each MapKit layout pass
+                // needlessly invalidates the whole map sheet hierarchy.
+                if activeCandidate != nil || isWanderMap, projection != $0 {
+                    projection = $0
+                }
             }
         )
 #if DEBUG && targetEnvironment(simulator)
         canvas.usesOfflineFixtureTiles = uiTestFixtureFrame != nil
+        // B8 is designed with a confirmed GPS arrow. The fixture has no Core
+        // Location provider, so render that glyph without changing movement state.
+        canvas.usesFixtureRealLocationStyle = uiTestFixtureFrame == "B8"
 #endif
         return canvas
     }
@@ -981,7 +1160,10 @@ struct GoFlyMapView: View {
                         .background(GoFlyStyle.cardSurface)
                         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20))
                         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
-                            panelFrame = $0; sheetHeight = $0.height
+                            updateMeasuredFrame($0, from: panelFrame) {
+                                panelFrame = $0
+                                updateMeasuredHeight($0.height, from: sheetHeight) { sheetHeight = $0 }
+                            }
                         }
                 } else {
                     GoFlyBottomSheet(
@@ -992,17 +1174,21 @@ struct GoFlyMapView: View {
                         contentHeight: bottomContentHeight,
                         fitsContent: sheetFitsContent,
                         preferredHeight: sheetPreferredHeight,
-                        onHeightChange: { sheetHeight = $0 }
+                        onHeightChange: { updateMeasuredHeight($0, from: sheetHeight) { sheetHeight = $0 } }
                     ) {
                         sheetContent(in: geometry)
                     }
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { panelFrame = $0 }
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+                        updateMeasuredFrame($0, from: panelFrame) { panelFrame = $0 }
+                    }
                 }
                 if showsBottomBar {
                     GoFlyBottomBar(selection: Binding(get: { mode }, set: { selectMode($0) }),
                                      bottomInset: geometry.safeAreaInsets.bottom)
                         .disabled(!canSwitchMode)
-                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomBarHeight = $0 }
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                            updateMeasuredHeight($0, from: bottomBarHeight) { bottomBarHeight = $0 }
+                        }
                 }
             }
             if isWanderMap, let place = wanderCardPlace {
@@ -1010,7 +1196,9 @@ struct GoFlyMapView: View {
                     .padding(.horizontal, 16)
                     // E4: the card ends 28 pt above the screen bottom when there is no tab bar.
                     .padding(.bottom, showsBottomBar ? bottomBarHeight + 12 : 28)
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { bottomCardFrame = $0 }
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+                        updateMeasuredFrame($0, from: bottomCardFrame) { bottomCardFrame = $0 }
+                    }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(10)
             }
@@ -1036,14 +1224,16 @@ struct GoFlyMapView: View {
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 16)
-                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { bottomCardFrame = $0 }
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+                    updateMeasuredFrame($0, from: bottomCardFrame) { bottomCardFrame = $0 }
+                }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
             }
             if (mode == .teleport || (mode == .joystick && !joystick.wanderEnabled)), let candidate = activeCandidate {
                 GoFlyLocationCard(
                     place: candidate.place,
-                    titleLabel: favorites.favorite(for: candidate.place)?.label,
+                    titleLabel: locationCardTitleLabel(for: candidate.place),
                     primaryActionType: .teleport,
                     primaryEnabled: !isGoButtonDisabled,
                     onPrimaryAction: {
@@ -1059,11 +1249,12 @@ struct GoFlyMapView: View {
                     identifier: mode == .joystick ? "map.joystick.locationCard" : "map.teleport.locationCard"
                 )
                 .padding(.horizontal, 16)
-                .padding(.bottom, geometry.safeAreaInsets.bottom + 12)
+                .padding(.bottom, geometry.safeAreaInsets.bottom)
                 .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { frame in
                     // Exclude the outer bottom padding from the card bounds.
-                    teleportCardFrame = CGRect(x: frame.minX, y: frame.minY,
-                                              width: frame.width, height: frame.height - geometry.safeAreaInsets.bottom - 12)
+                    let cardFrame = CGRect(x: frame.minX, y: frame.minY,
+                                           width: frame.width, height: frame.height - geometry.safeAreaInsets.bottom)
+                    updateMeasuredFrame(cardFrame, from: teleportCardFrame) { teleportCardFrame = $0 }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
@@ -1107,7 +1298,9 @@ struct GoFlyMapView: View {
     private func sheetContent(in geometry: GeometryProxy) -> some View {
         bottomPanelContent(in: geometry)
             .fixedSize(horizontal: false, vertical: sheetFitsContent)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { bottomContentHeight = $0 }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                updateMeasuredHeight($0, from: bottomContentHeight) { bottomContentHeight = $0 }
+            }
             .frame(maxWidth: .infinity, alignment: .top)
     }
 
@@ -1179,7 +1372,9 @@ struct GoFlyMapView: View {
             } else if mode == .route || !route.canEdit {
                 // D10 / D10.a: a paused or interrupted route keeps the running panel; only the button turns into 繼續.
                 GoFlyRoutePanel(
-                    controller: route, showingFavoriteRoutes: $showingFavoriteRoutes, maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
+                    controller: route, showingFavoriteRoutes: $showingFavoriteRoutes,
+                    showingImportedRoutes: $showingImportedRoutes, showingAllPoints: $showingAllImportedPoints,
+                    maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                     onEditNode: selectRouteNode,
                     onInspectRoute: {
                         pendingRouteNodeTapID = nil
@@ -1213,7 +1408,7 @@ struct GoFlyMapView: View {
         return goFlyString("mode.route")
     }
 
-    private var executionSymbol: String {
+    private var executionSymbol: GoFlyIconAsset {
         if joystick.wanderEnabled {
             return [.paused, .suspended, .interrupted].contains(joystick.phase) ? GoFlySymbols.pause : GoFlySymbols.heading
         }
@@ -1315,18 +1510,18 @@ struct GoFlyMapView: View {
     private var collapsedPositionSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(goFlyString(collapsedPositionTitleKey))
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(currentPositionTitle)
-                        .font(GoFlyFont.title)
+                        .goFlyFont(GoFlyFont.title)
                         .monospacedDigit()
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
                     if let coordinate = service.positionMarker?.coordinate {
                         Text(coordinate.displayText)
-                            .font(GoFlyFont.footnote)
+                            .goFlyFont(GoFlyFont.footnote)
                             .foregroundStyle(GoFlyTextColor.secondary)
                     }
                 }
@@ -1347,6 +1542,9 @@ struct GoFlyMapView: View {
     }
 
     private var collapsedPositionTitleKey: String {
+#if DEBUG && targetEnvironment(simulator)
+        if uiTestFixtureFrame == "B8" { return "sheet.realPosition" }
+#endif
         if hasFreshRealGPS { return "sheet.realPosition" }
         if positionHold.phase == .paused || positionHold.phase == .completed {
             return "sheet.lastSimulatedPosition"
@@ -1372,7 +1570,11 @@ struct GoFlyMapView: View {
 
     private var currentPositionTitle: String {
         guard let place = currentPositionPlace else { return goFlyString("sheet.noPosition") }
-        return GoFlyLocationTitle.resolve(label: currentPositionFavorite?.label, for: place)
+        return GoFlyLocationTitle.resolve(for: place)
+    }
+
+    private func locationCardTitleLabel(for place: MapPlace) -> String? {
+        return favorites.favorite(for: place)?.label
     }
 
     private var expandedTeleportContent: some View {
@@ -1387,11 +1589,13 @@ struct GoFlyMapView: View {
             }
             .padding(.top, 12)
             .padding(.bottom, 4)
-            // Newest saved/edited first; fewer than two favorites just shrinks the panel.
+            // Figma B2 shows the first two favorites in their persisted order.
             VStack(spacing: 0) {
-                ForEach(favorites.favorites.prefix(2)) { favorite in
+                ForEach(visibleTeleportFavorites.indices, id: \.self) { index in
+                    let favorite = visibleTeleportFavorites[index]
                     teleportPlaceRow(favorite.place, title: favorite.displayTitle,
-                                     identifier: "favorites.place.\(favorite.place.coordinate.displayText)")
+                                     identifier: "favorites.place.\(favorite.place.coordinate.displayText)",
+                                     showsSeparator: index < visibleTeleportFavorites.count - 1)
                 }
             }
         }
@@ -1403,55 +1607,54 @@ struct GoFlyMapView: View {
                                        action: (() -> Void)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(goFlyString(key))
-                .font(GoFlyFont.subheadlineEmphasis)
+                .goFlyFont(GoFlyFont.subheadlineEmphasis)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
                 Button(goFlyString(actionTitle), action: action)
-                    .font(GoFlyFont.subheadline)
+                    .goFlyFont(GoFlyFont.buttonSmall)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                     .accessibilityIdentifier("favorites.open")
+                    .buttonStyle(.plain)
             }
         }
     }
 
+    private var visibleTeleportFavorites: [FavoritePlace] {
+        Array(favorites.favorites.prefix(2))
+    }
+
     /// The star opens the label editor (C2); the rest of the row selects the place.
-    private func teleportPlaceRow(_ place: MapPlace, title: String, identifier: String) -> some View {
-        HStack(spacing: 8) {
-            GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", circleDiameter: 36,
-                              allowsDelete: true)
-                .padding(.leading, -4)
-            Button { selectSearchPlace(place) } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
-                            .font(GoFlyFont.headline)
-                            .foregroundStyle(GoFlyTextColor.primary)
-                            .lineLimit(1)
-                        Text(place.address ?? place.coordinate.displayText)
-                            .font(GoFlyFont.footnote)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .lineLimit(1)
+    private func teleportPlaceRow(_ place: MapPlace, title: String, identifier: String,
+                                  showsSeparator: Bool) -> some View {
+        GoFlyListRow(minimumHeight: 64, separatorLeadingInset: showsSeparator ? 48 : nil) {
+            HStack(spacing: 8) {
+                GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", circleDiameter: 36,
+                                  allowsDelete: true)
+                    .padding(.leading, -4)
+                Button { selectSearchPlace(place) } label: {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(title)
+                                .goFlyFont(GoFlyFont.headline)
+                                .foregroundStyle(GoFlyTextColor.primary)
+                                .lineLimit(1)
+                            Text(place.address ?? place.coordinate.displayText)
+                                .goFlyFont(GoFlyFont.footnote)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: GoFlySymbols.disclosure)
-                        .goFlyControlSymbol(size: 12, maximum: 16, weight: .semibold)
-                        .foregroundStyle(GoFlyTextColor.secondary)
-                        .accessibilityHidden(true)
+                    .frame(minHeight: 64)
+                    .contentShape(Rectangle())
                 }
-                .frame(minHeight: 64)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(identifier)
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier(identifier)
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(GoFlyStyle.subtleBorder)
-                .frame(height: 0.5)
-                .padding(.leading, 48)
         }
     }
 
@@ -1550,7 +1753,7 @@ struct GoFlyMapView: View {
     /// Floating search bar and status pill (plan 3). Paste, clear, and gear
     /// controls are independent siblings inside the rounded search field.
     private var topBar: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: GoFlyStyle.statusPillTopSpacing) {
             GoFlyMapSearchBar(
                 text: searchBarText,
                 hasContent: hasSearchBarContent,
@@ -1574,7 +1777,9 @@ struct GoFlyMapView: View {
         .padding(.top, 8)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .frame(maxWidth: .infinity, alignment: .top)
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) { topFrame = $0 }
+        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
+            updateMeasuredFrame($0, from: topFrame) { topFrame = $0 }
+        }
     }
 
     private var searchBarText: String {
@@ -1600,34 +1805,41 @@ struct GoFlyMapView: View {
 
     /// The only map-side control: Figma `Recenter`. It also resets the map to north,
     /// so there is no separate compass or follow-heading button.
-    private func mapControls(bottomInset: CGFloat) -> some View {
+    private func mapControls(in geometry: GeometryProxy) -> some View {
         VStack(spacing: 12) {
             // Route mode only: frame the whole planned route (Figma has no variant yet).
             if mode == .route, let planned = route.plannedRoute {
                 Button { cameraIntent = GoFlyCameraIntent(route: planned) } label: {
-                    Image(systemName: GoFlySymbols.fitRoute)
-                        .goFlyControlSymbol(size: 18, weight: .semibold)
+                    GoFlyIcon(GoFlySymbols.fitRoute)
+                        .goFlyIconSize(size: 18)
                 }
-                .buttonStyle(GoFlyIconStyle(floating: true))
+                .buttonStyle(GoFlyIconStyle(variant: .mapControls))
                 .accessibilityLabel(goFlyString("map.fitRoute"))
                 .accessibilityIdentifier("map.fitRoute")
             }
             Button { recenter() } label: {
                 GoFlyRecenterIcon(size: 22)
             }
-            .buttonStyle(GoFlyIconStyle(floating: true))
+            .buttonStyle(GoFlyIconStyle(variant: .mapControls))
             .accessibilityLabel(goFlyString("map.recenter"))
             .accessibilityHint(goFlyString("map.recenterHint"))
             .accessibilityIdentifier("map.recenter")
         }
         .padding(.trailing, 16)
-        .padding(.bottom, max(0, sheetHeight + (showsBottomBar ? bottomBarHeight : 0) - bottomInset) + 16)
+        .padding(.bottom, mapControlsBottomInset(in: geometry))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
-    /// Hidden while a place card, search or the route point picker covers the sheet.
+    private func mapControlsBottomInset(in geometry: GeometryProxy) -> CGFloat {
+        if (activeCandidate != nil || wanderCardPlace != nil), bottomCardFrame.height > 0 {
+            return max(0, geometry.size.height - bottomCardFrame.minY + 16)
+        }
+        return max(0, sheetHeight + (showsBottomBar ? bottomBarHeight : 0) - geometry.safeAreaInsets.bottom) + 16
+    }
+
+    /// Floating location cards leave the recenter control visible directly above the card.
     private var showsMapControls: Bool {
-        activeCandidate == nil && wanderCardPlace == nil && !showingSearch && route.picker == nil
+        !showingSearch && route.picker == nil
     }
 
     /// Teleport and the route editor size the sheet to their content (Figma D1/D2/D3).
@@ -1803,7 +2015,17 @@ struct GoFlyMapView: View {
     /// D6.a: while the end-route dialog is open the pill already reads 停止.
     private var displayedPillStatus: GoFlySessionStatus { movement.status }
 
-    private var pillText: String { goFlyString(displayedPillStatus.textKey) }
+    private var pillText: String {
+        if mode == .teleport, unconfirmedFailure != nil {
+            return goFlyString("status.pill.disconnected")
+        }
+        let status = goFlyString(displayedPillStatus.textKey)
+        if mode == .teleport, positionHold.phase == .running, snackbar != nil,
+           let place = currentPositionPlace {
+            return status + " · " + GoFlyLocationTitle.resolve(for: place)
+        }
+        return status
+    }
 
     private var pillTone: GoFlyStatusTone { displayedPillStatus.tone }
 
@@ -1895,7 +2117,9 @@ struct GoFlyMapView: View {
             pinButton(candidate)
         }
         .frame(width: max(84, goWidth))
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { candidateHeight = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+            updateMeasuredHeight($0, from: candidateHeight) { candidateHeight = $0 }
+        }
     }
 
     private func goButton(_ candidate: TeleportCandidate) -> some View {
@@ -1909,7 +2133,7 @@ struct GoFlyMapView: View {
             }
         } label: {
             Text(goButtonTitle)
-                .font(GoFlyFont.footnoteEmphasis)
+                .goFlyFont(GoFlyFont.footnoteEmphasis)
                 .padding(.horizontal, 16)
                 .frame(minWidth: 44, minHeight: 28)
                 .foregroundStyle(GoFlyTextColor.inverse)

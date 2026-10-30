@@ -47,10 +47,10 @@ struct GoFlyOperationPanel: View {
             HStack(alignment: .top, spacing: 8) {
                 ProgressView().accessibilityHidden(true)
                 Text(goFlyString(operation.attempt.value == 1 ? preparationTitle(operation.source) : "operation.retrying"))
-                    .font(GoFlyFont.headline)
+                    .goFlyFont(GoFlyFont.headline)
             }
             Text(goFlyLocalizedFormat(goFlyString("operation.attempt"), operation.attempt.value))
-                .font(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.subheadline)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityIdentifier("operation.attempt")
             sourceSummary(operation.source)
@@ -69,9 +69,9 @@ struct GoFlyOperationPanel: View {
                 .disabled(nativeBusy)
                 .accessibilityIdentifier(cancelIdentifier)
         case .cancelled:
-            ProgressView(goFlyString("operation.cancelling")).font(GoFlyFont.headline)
+            ProgressView(goFlyString("operation.cancelling")).goFlyFont(GoFlyFont.headline)
             Text(goFlyString("operation.waitForReturn"))
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
             Button(goFlyString("operation.cancel")) { }
                 .buttonStyle(GoFlyActionStyle())
@@ -101,7 +101,7 @@ struct GoFlyOperationPanel: View {
         case .joystick: text = goFlyString("operation.joystickSummary")
         }
         return Text(text)
-            .font(GoFlyFont.subheadline)
+            .goFlyFont(GoFlyFont.subheadline)
             .foregroundStyle(GoFlyTextColor.secondary)
             .accessibilityIdentifier("operation.source")
     }

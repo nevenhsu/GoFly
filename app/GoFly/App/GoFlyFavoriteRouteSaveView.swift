@@ -27,7 +27,7 @@ struct GoFlySaveFavoriteRouteView: View {
                     if let saved = savedOmittingCurrent {
                         GoFlyStatusBanner(tone: .success, title: goFlyString("favoriteRoutes.savedOmittingCurrent"),
                                           identifier: "favoriteRoutes.save.omittedResult")
-                        Text(goFlyFavoriteRouteEndpoints(saved)).font(GoFlyFont.body)
+                        Text(goFlyFavoriteRouteEndpoints(saved)).goFlyFont(GoFlyFont.body)
                     } else {
                         GoFlyFavoriteRouteFailureNotice(localErrorKey: localErrorKey)
 
@@ -40,16 +40,17 @@ struct GoFlySaveFavoriteRouteView: View {
                         if controller.draft.nodes.contains(where: { $0.value == .current }) {
                             Text(goFlyString(currentLocationAvailable == true
                                 ? "favoriteRoutes.currentSnapshotHint" : "favoriteRoutes.currentOmittedHint"))
-                                .font(GoFlyFont.footnote)
+                                .goFlyFont(GoFlyFont.footnote)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text(goFlyString("favoriteRoutes.label"))
-                                .font(GoFlyFont.footnote)
+                                .goFlyFont(GoFlyFont.footnote)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                             HStack {
-                                TextField(goFlyString("favoriteRoutes.label"), text: $label, prompt: Text(fallbackLabel))
+                                TextField(goFlyString("favoriteRoutes.label"), text: $label,
+                                          prompt: Text(goFlyString("favoriteRoutes.namePlaceholder")))
                                     .focused($focused)
                                     .submitLabel(.done)
                                     .onSubmit { focused = false }
@@ -57,7 +58,7 @@ struct GoFlySaveFavoriteRouteView: View {
                                     .accessibilityIdentifier("favoriteRoutes.save.label")
                                 if !label.isEmpty {
                                     Button { label = "" } label: {
-                                        Image(systemName: "xmark.circle.fill")
+                                        GoFlyIcon(.close)
                                             .frame(width: 44, height: 44)
                                     }
                                     .buttonStyle(.plain)
@@ -72,10 +73,10 @@ struct GoFlySaveFavoriteRouteView: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text(sourceSummary)
-                                .font(GoFlyFont.subheadlineEmphasis)
+                                .goFlyFont(GoFlyFont.subheadlineEmphasis)
                                 .foregroundStyle(GoFlyTextColor.primary)
                             Text(pointSummary)
-                                .font(GoFlyFont.footnote)
+                                .goFlyFont(GoFlyFont.footnote)
                                 .foregroundStyle(GoFlyTextColor.secondary)
                         }
                         .padding(16)
@@ -84,7 +85,7 @@ struct GoFlySaveFavoriteRouteView: View {
                         .accessibilityIdentifier("favoriteRoutes.save.source")
                     }
 
-                    // D20 / D7: 40 pt between the route info card and the Save button; the sheet ends 20 pt below it (height fits the content).
+                    // D20 / D7: 40 pt between the route info card and Save, and below Save per the user's D20 spacing update.
                     if savedOmittingCurrent != nil {
                         Button(goFlyString("favoriteRoutes.done"), action: onDismiss)
                             .buttonStyle(GoFlyActionStyle(primary: true))
@@ -103,7 +104,7 @@ struct GoFlySaveFavoriteRouteView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                .padding(.bottom, 20)
+                .padding(.bottom, GoFlyStyle.favoriteEditorSaveBottomSpacing)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -115,7 +116,6 @@ struct GoFlySaveFavoriteRouteView: View {
         // sheet material lets the Save button tint change with the detent.
         .presentationBackground(GoFlyStyle.surface)
         .interactiveDismissDisabled(saving)
-        .task { focused = true }
         .onDisappear { saveTask?.cancel() }
     }
 
@@ -211,6 +211,8 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     @State private var fallbackLabel = FavoriteLabelDefaults.defaultName()
     @State private var saving = false
     @State private var saveTask: Task<Void, Never>?
+    @State private var headerHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     init(record: FavoriteRouteRecord, onDismiss: @escaping () -> Void, onDelete: (() -> Void)? = nil) {
@@ -223,6 +225,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { headerHeight = $0 }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     GoFlyFavoriteRouteFailureNotice()
@@ -234,24 +237,25 @@ struct GoFlyFavoriteRouteLabelEditor: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(goFlyString("favoriteRoutes.label"))
-                            .font(GoFlyFont.footnote)
+                            .goFlyFont(GoFlyFont.footnote)
                             .foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
-                            TextField(goFlyString("favoriteRoutes.label"), text: $label, prompt: Text(fallbackLabel))
+                            TextField(goFlyString("favoriteRoutes.label"), text: $label,
+                                      prompt: Text(goFlyString("favoriteRoutes.namePlaceholder")))
                                 .focused($focused)
                                 .submitLabel(.done)
                                 .onSubmit { focused = false }
                                 .disabled(saving)
                                 .accessibilityIdentifier("favoriteRoutes.editor.label")
-                            if !label.isEmpty {
-                                Button { label = "" } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(GoFlyTextColor.secondary)
-                                .accessibilityLabel(goFlyString("search.clear"))
+                            Button { label = "" } label: {
+                                GoFlyIcon(.close)
+                                    .frame(width: 44, height: 44)
                             }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .disabled(label.isEmpty)
+                            .accessibilityLabel(goFlyString("search.clear"))
+                            .accessibilityIdentifier("favoriteRoutes.editor.clearLabel")
                         }
                         .padding(.leading, 16)
                         .frame(minHeight: 48)
@@ -260,11 +264,11 @@ struct GoFlyFavoriteRouteLabelEditor: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(goFlyFavoriteRouteEndpoints(record))
-                            .font(GoFlyFont.subheadlineEmphasis)
+                            .goFlyFont(GoFlyFont.subheadlineEmphasis)
                             .foregroundStyle(GoFlyTextColor.primary)
                         Text(goFlyLocalizedFormat(goFlyString(record.sourceKind == .gpx
                             ? "favoriteRoutes.pointCount" : "favoriteRoutes.placeCount"), record.count))
-                            .font(GoFlyFont.footnote)
+                            .goFlyFont(GoFlyFont.footnote)
                             .foregroundStyle(GoFlyTextColor.secondary)
                     }
                     .padding(16)
@@ -290,18 +294,18 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
-                .padding(.bottom, -1)
+                .padding(.bottom, GoFlyStyle.favoriteEditorSaveBottomSpacing)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favoriteRoutes.editor.content")
         }
-        .presentationDetents([.height(367), .large])
+        .presentationDetents([.height(max(200, headerHeight + contentHeight)), .large])
         .presentationDragIndicator(.visible)
         // Same opaque sheet as the place editor: a view background over the system
         // sheet material lets the Save button tint change with the detent.
         .presentationBackground(GoFlyStyle.surface)
         .interactiveDismissDisabled(saving)
-        .task { focused = true }
         .onDisappear { saveTask?.cancel() }
     }
 

@@ -110,7 +110,8 @@ enum GoFlyGPXFileAccess {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("GoFlyGPXInputs", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                               attributes: [.posixPermissions: 0o700])
-        let url = directory.appendingPathComponent("\(variant).gpx")
+        let filename = variant == "valid" ? "週末騎行.gpx" : "\(variant).gpx"
+        let url = directory.appendingPathComponent(filename)
         try Data(contents.utf8).write(to: url, options: .atomic)
         return url
         #else

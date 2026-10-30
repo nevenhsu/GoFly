@@ -21,7 +21,7 @@ final class GoFlyRuntimeAssembly: ObservableObject {
         let recovery = goFlySessionRecoveryStore()
         let service: ServiceController
         #if DEBUG && targetEnvironment(simulator)
-        let isUITestFixture = GoFlyUITestOverrides.isFrameMode
+        let isUITestFixture = GoFlyUITestOverrides.isFrameMode || GoFlyUITestOverrides.isFirstLaunchFixture
         if isUITestFixture {
             service = ServiceController(service: GoFlyUITestDeviceService())
         } else {
@@ -73,28 +73,42 @@ final class GoFlyRuntimeAssembly: ObservableObject {
     func prepareUITestData() async {
         guard GoFlyUITestOverrides.isFrameMode else { return }
         let places = GoFlyUITestOverrides.fixturePlaces
-        if favorites.favorites.isEmpty {
-            _ = favorites.save(place: places[0], label: "公司")
+        let frame = GoFlyUITestOverrides.frame ?? ""
+        if favorites.favorites.isEmpty, ["C1", "C2", "C3", "C4"].contains(frame) {
+            for place in GoFlyUITestOverrides.favoritePlaceFixtures(frame: frame).reversed() {
+                _ = favorites.save(place: place, label: nil)
+            }
+        } else if favorites.favorites.isEmpty, frame == "B2" {
             _ = favorites.save(place: places[2], label: "測試點 A")
+            _ = favorites.save(place: places[0], label: "公司")
         }
 
         await importedRoutes.load()
         if importedRoutes.records.isEmpty {
-            let points = (0..<14).compactMap { index in
-                GeoCoordinate(latitude: 25.04776 + Double(index) * 0.001,
-                              longitude: 121.51706 + Double(index) * 0.001)
-            }
-            if let document = try? GPXDocument(content: .tracks([GPXTrack(segments: [points])])),
-               let data = try? GPXCodec.encode(document, name: "GoFly fixture") {
-                _ = await importedRoutes.importData(data, filename: "GoFly fixture.gpx")
+            for (filename, count, latitudeStep, longitudeStep) in [
+                ("通勤.gpx", 8, 0.0009, 0.0005),
+                ("河濱路線.gpx", 436, 0.0007, 0.0011),
+                ("台北市區.gpx", 1_248, 0.001, 0.001)
+            ] {
+                let points = (0..<count).compactMap { index in
+                    GeoCoordinate(latitude: 25.04776 + Double(index) * latitudeStep,
+                                  longitude: 121.51706 + Double(index) * longitudeStep)
+                }
+                if let document = try? GPXDocument(content: .tracks([GPXTrack(segments: [points])])),
+                   let data = try? GPXCodec.encode(document, name: filename) {
+                    _ = await importedRoutes.importData(data, filename: filename)
+                }
             }
         }
 
         await favoriteRoutes.load()
         if favoriteRoutes.records.isEmpty,
-           let draft = RouteDraft(values: [.place(places[0]), .place(places[1])]),
-           let candidate = try? FavoriteRouteSaveBuilder.build(draft: draft, currentRouteOrigin: nil) {
-            _ = await favoriteRoutes.save(candidate, label: "台北散步")
+           ["D19", "D20", "D21", "D22"].contains(GoFlyUITestOverrides.frame ?? "") {
+            for fixture in GoFlyUITestOverrides.favoriteRouteFixtures {
+                guard let draft = RouteDraft(values: fixture.places.map(RouteNodeValue.place)),
+                      let candidate = try? FavoriteRouteSaveBuilder.build(draft: draft, currentRouteOrigin: nil) else { continue }
+                _ = await favoriteRoutes.save(candidate, label: fixture.label)
+            }
         }
     }
 #endif
@@ -106,35 +120,44 @@ final class GoFlyRuntimeAssembly: ObservableObject {
     }
 
     private static func favoritePlacesStore(directory: URL, allowUITestNamespace: Bool) -> FavoritePlacesStore {
-        let resolved = allowUITestNamespace
-            ? GoFlyUITestOverrides.namespace(
+        var resolved = directory
+#if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace {
+            resolved = GoFlyUITestOverrides.namespace(
                 "-gofly-ui-favorites-store",
                 under: directory.deletingLastPathComponent(),
                 folder: "FavoritePlaces"
             ) ?? directory
-            : directory
+        }
+#endif
         return FavoritePlacesStore(persistence: FileFavoritePlacesPersistence(directory: resolved))
     }
 
     private static func importedRoutesStore(directory: URL, allowUITestNamespace: Bool) -> ImportedRoutesStore {
-        let resolved = allowUITestNamespace
-            ? GoFlyUITestOverrides.namespace(
+        var resolved = directory
+#if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace {
+            resolved = GoFlyUITestOverrides.namespace(
                 "-gofly-ui-imports-store",
                 under: directory.deletingLastPathComponent(),
                 folder: "ImportedRoutes"
             ) ?? directory
-            : directory
+        }
+#endif
         return ImportedRoutesStore(persistence: FileImportedRoutesPersistence(directory: resolved))
     }
 
     private static func favoriteRoutesStore(directory: URL, allowUITestNamespace: Bool) -> FavoriteRoutesStore {
-        let resolved = allowUITestNamespace
-            ? GoFlyUITestOverrides.namespace(
+        var resolved = directory
+#if DEBUG && targetEnvironment(simulator)
+        if allowUITestNamespace {
+            resolved = GoFlyUITestOverrides.namespace(
                 "-gofly-ui-favorite-routes-store",
                 under: directory.deletingLastPathComponent(),
                 folder: "FavoriteRoutes"
             ) ?? directory
-            : directory
+        }
+#endif
         return FavoriteRoutesStore(persistence: FileFavoriteRoutesPersistence(directory: resolved))
     }
 

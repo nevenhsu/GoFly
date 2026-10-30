@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Figma D19–D22 bottom area of the favorites pages: the search section
 /// (`Bottom bar / 搜尋`, 1 pt divider, 12 pt above and 28 pt below a 48 pt field) and,
@@ -12,6 +13,9 @@ struct GoFlyFavoritesBottomBar: View {
     let placeholder: String
     @Binding var query: String
     let searchIdentifier: String
+    var showsPasteControl = false
+    var pasteIdentifier = "favorites.searchPaste"
+    var onPaste: (String) -> Void = { _ in }
     /// Non-nil only while selecting: the delete button title.
     var deleteTitle: String? = nil
     var deleteEnabled = true
@@ -40,8 +44,8 @@ struct GoFlyFavoritesBottomBar: View {
 
     private var searchSection: some View {
         HStack(spacing: 8) {
-            Image(systemName: GoFlySymbols.search)
-                .goFlyControlSymbol(size: 17, weight: .medium)
+            GoFlyIcon(GoFlySymbols.search)
+                .goFlyIconSize(size: 17)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityHidden(true)
             TextField(placeholder, text: $query)
@@ -49,9 +53,16 @@ struct GoFlyFavoritesBottomBar: View {
                 .submitLabel(.search)
                 .focused($focused)
                 .accessibilityIdentifier(searchIdentifier)
-            if !query.isEmpty {
+            if query.isEmpty, showsPasteControl {
+                GoFlySystemPasteControl(
+                    accessibilityLabel: goFlyString("search.paste"),
+                    accessibilityIdentifier: pasteIdentifier,
+                    onPaste: onPaste
+                )
+                .frame(width: 44, height: 44)
+            } else if !query.isEmpty {
                 Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    GoFlyIcon(.close)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
@@ -60,7 +71,8 @@ struct GoFlyFavoritesBottomBar: View {
                 .accessibilityLabel(goFlyString("search.clear"))
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 16)
+        .padding(.trailing, showsPasteControl ? 0 : 16)
         .frame(minHeight: 48)
         .goFlySearchField(isFocused: focused)
         .padding(.horizontal, 16)
@@ -68,5 +80,54 @@ struct GoFlyFavoritesBottomBar: View {
         .padding(.bottom, 28)
         .background(GoFlyStyle.tabBarSurface.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { GoFlyStyle.tabSeparator.frame(height: 1) }
+    }
+}
+
+/// Uses the system paste affordance so the clipboard is read only after a direct tap.
+private struct GoFlySystemPasteControl: UIViewRepresentable {
+    let accessibilityLabel: String
+    let accessibilityIdentifier: String
+    let onPaste: (String) -> Void
+
+    func makeCoordinator() -> PasteReceiver { PasteReceiver(onPaste: onPaste) }
+
+    func makeUIView(context: Context) -> UIPasteControl {
+        let configuration = UIPasteControl.Configuration()
+        configuration.displayMode = .iconOnly
+        configuration.cornerStyle = .capsule
+        configuration.baseForegroundColor = GoFlyStyle.pasteSymbolUIColor
+        configuration.baseBackgroundColor = GoFlyStyle.inputSurfaceUIColor
+        let control = UIPasteControl(configuration: configuration)
+        control.target = context.coordinator
+        control.accessibilityLabel = accessibilityLabel
+        control.accessibilityIdentifier = accessibilityIdentifier
+        return control
+    }
+
+    func updateUIView(_ control: UIPasteControl, context: Context) {
+        context.coordinator.onPaste = onPaste
+        control.target = context.coordinator
+        control.accessibilityLabel = accessibilityLabel
+        control.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    @MainActor
+    final class PasteReceiver: NSObject, UIPasteConfigurationSupporting {
+        var pasteConfiguration: UIPasteConfiguration? = UIPasteConfiguration(forAccepting: String.self)
+        var onPaste: (String) -> Void
+
+        init(onPaste: @escaping (String) -> Void) { self.onPaste = onPaste }
+
+        func canPaste(_ itemProviders: [NSItemProvider]) -> Bool {
+            itemProviders.contains { $0.canLoadObject(ofClass: String.self) }
+        }
+
+        func paste(itemProviders: [NSItemProvider]) {
+            guard let provider = itemProviders.first(where: { $0.canLoadObject(ofClass: String.self) }) else { return }
+            let _ = provider.loadObject(ofClass: String.self) { [weak self] pasted, _ in
+                guard let pasted else { return }
+                Task { @MainActor [weak self] in self?.onPaste(pasted) }
+            }
+        }
     }
 }

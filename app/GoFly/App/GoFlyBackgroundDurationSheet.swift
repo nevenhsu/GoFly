@@ -43,7 +43,7 @@ struct GoFlyBackgroundDurationSheet: View {
             GoFlySheetHeader(title: nil) {
                 Button(action: cancel) {
                     Text(goFlyString("common.cancel"))
-                        .font(GoFlyFont.body)
+                        .goFlyFont(GoFlyFont.body)
                         .foregroundStyle(GoFlyTextColor.primary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
@@ -54,7 +54,7 @@ struct GoFlyBackgroundDurationSheet: View {
             } trailing: {
                 Button(action: onDismiss) {
                     Text(goFlyString("common.done"))
-                        .font(GoFlyFont.bodyEmphasis)
+                        .goFlyFont(GoFlyFont.bodyEmphasis)
                         .foregroundStyle(GoFlyTextColor.primary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
@@ -99,7 +99,7 @@ struct GoFlyBackgroundDurationSheet: View {
                       displayUnitKey: "settings.background.duration.wheelUnit.hours",
                       identifier: "hours", padded: false, columnWidth: columnWidth)
                 Text(":")
-                    .font(GoFlyFont.title)
+                    .goFlyFont(GoFlyFont.title)
                     .foregroundStyle(GoFlyTextColor.disabled)
                     .frame(width: colonWidth)
                     .accessibilityHidden(true)
@@ -126,7 +126,7 @@ struct GoFlyBackgroundDurationSheet: View {
             Picker(goFlyString(unitKey), selection: selection) {
                 ForEach(range, id: \.self) { value in
                     Text(padded ? String(format: "%02d", value) : String(value))
-                        .font(GoFlyFont.wheel)
+                        .goFlyFont(GoFlyFont.wheel)
                         .offset(x: -17)
                         .tag(value)
                 }
@@ -135,7 +135,7 @@ struct GoFlyBackgroundDurationSheet: View {
             .frame(width: columnWidth)
 
             Text(goFlyString(displayUnitKey))
-                .font(GoFlyFont.title)
+                .goFlyFont(GoFlyFont.title)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

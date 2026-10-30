@@ -23,10 +23,14 @@ enum GoFlyStyle {
     static let admissionBlipDelay: Duration = .seconds(1)
     static let cardRadius: CGFloat = 16
     static let controlRadius: CGFloat = 14
+    static let routeListCardRadius: CGFloat = 14
     static let inputRadius: CGFloat = 12
     static let primaryButtonHeight: CGFloat = 56
     static let secondaryButtonHeight: CGFloat = 48
     static let smallButtonHeight: CGFloat = 40
+    static let statusPillTopSpacing: CGFloat = 12
+    static let favoriteListTopSpacing: CGFloat = 16
+    static let favoriteEditorSaveBottomSpacing: CGFloat = 40
 
     static let danger = GoFlyThemeColor.actionDangerSurface
     static let warning = GoFlyThemeColor.iconWarning
@@ -34,6 +38,10 @@ enum GoFlyStyle {
     static let dangerForeground = GoFlyThemeColor.textDanger
     static let warningForeground = GoFlyThemeColor.textWarning
     static let successForeground = GoFlyThemeColor.textSuccess
+    /// Figma A-section hero tiles bind to Common Color rather than the theme control surface.
+    static func onboardingHeroSurface(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? GoFlyThemeColor.commonGray900 : GoFlyThemeColor.commonGray50
+    }
     static let toastDangerSurface = GoFlyThemeColor.surfaceStatusDanger
     static let toastWarningSurface = GoFlyThemeColor.surfaceStatusWarning
     static let toastSuccessSurface = GoFlyThemeColor.surfaceStatusSuccess
@@ -41,12 +49,10 @@ enum GoFlyStyle {
     static let toastDismiss = GoFlyThemeColor.iconSecondary
     static let toastActionSurface = GoFlyThemeColor.surfaceControlFloating
     static let toastActionBorder = GoFlyThemeColor.lineBorder
-    static let snackbarSurface = GoFlyThemeColor.commonBlack
-    static let snackbarForeground = GoFlyThemeColor.commonWhite
+    static let snackbarSurface = GoFlyThemeColor.surfaceCard
+    static let snackbarForeground = GoFlyThemeColor.textPrimary
     static let instructionSurface = snackbarSurface
-    static let instructionForeground = GoFlyThemeColor.commonWhite
     static let sheetCornerRadius: CGFloat = 20
-    static let panelTitleFont = GoFlyFont.title
 
     // Component-specific roles alias the semantic token table above.
     static let iconButtonSurface = GoFlyThemeColor.surfaceControlFloating
@@ -54,21 +60,27 @@ enum GoFlyStyle {
     static let routeControlSurface = GoFlyThemeColor.surfaceControlFloating
     static let routeControlBorder = GoFlyThemeColor.lineSeparator
     static let directionInactive = GoFlyThemeColor.iconSecondary
-    static let pasteSymbol = GoFlyThemeColor.iconInputDefault
+    static let pasteSymbol = GoFlyThemeColor.iconSecondary
+    static let pasteSymbolUIColor = GoFlyThemeColor.uiColor(named: "color/icon/secondary")
+    static let inputSurfaceUIColor = GoFlyThemeColor.uiColor(named: "color/surface/input")
+    static let inputTextUIColor = GoFlyThemeColor.uiColor(named: "color/text/secondary")
+    static let primaryTextUIColor = GoFlyThemeColor.uiColor(named: "color/text/primary")
+    static let accentTextUIColor = GoFlyThemeColor.uiColor(named: "color/text/accent")
     static let fieldSurface = GoFlyThemeColor.surfaceInput
+    static let fieldFocusedSurface = GoFlyThemeColor.surfaceInput
     static let fieldBorder = GoFlyThemeColor.lineInputDefault
-    static let fieldFocus = GoFlyThemeColor.iconAccent
+    static let fieldFocus = GoFlyThemeColor.textAccent
     static let overlayPanelSurface = GoFlyThemeColor.surfaceOverlaySheet
     static let tabBarSurface = overlayPanelSurface
+    static let locationCardSurface = GoFlyThemeColor.surfaceOverlayLocationCard
     static let tabSeparator = GoFlyThemeColor.lineSeparator
     static let tabInactive = GoFlyThemeColor.iconSecondary
-    static let startSecondarySurface = GoFlyThemeColor.surfaceDisabled
     static let dialogMessage = GoFlyThemeColor.textStatusSecondary
     static let dialogCancelSurface = GoFlyThemeColor.surfaceControl
-    static let pillSurface = GoFlyThemeColor.surfaceControlFloating
+    static let pillSurface = GoFlyThemeColor.surfaceCard
     static let checkboxOffBorder = GoFlyThemeColor.lineBorder
     static let checkboxOffFill = GoFlyThemeColor.surfaceCard
-    static let progressTrack = GoFlyThemeColor.lineSeparator
+    static let progressTrack = GoFlyThemeColor.surfaceControl
     static let durationWheelSurface = GoFlyThemeColor.surfaceControl
     static let durationWheelBorder = GoFlyThemeColor.lineSeparator
     static let pillBorder = GoFlyThemeColor.lineBorder
@@ -77,7 +89,14 @@ enum GoFlyStyle {
     static let hairline = GoFlyThemeColor.lineSeparator
     static let snackbarActionSurface = GoFlyThemeColor.surfaceControlFloating
     static let snackbarActionBorder = GoFlyThemeColor.lineSeparator
-    static let snackbarBorder = GoFlyThemeColor.commonWhite.opacity(0.12)
+    static let snackbarBorder = GoFlyThemeColor.lineBorder
+    /// iOS contributes its own sheet scrim (~16% in the iOS 26 simulator).
+    /// This supplemental layer composes with it to match the rendered Figma
+    /// Overlay/Dim on presented sheets and system dialogs.
+    static func systemPresentationDimSupplement(for colorScheme: ColorScheme) -> Color {
+        let figmaScrim = colorScheme == .dark ? GoFlyThemeColor.commonBlack : GoFlyThemeColor.commonGray950
+        return figmaScrim.opacity(0.20)
+    }
 }
 
 /// Opaque content keeps labels readable over every map style and in Reduce Transparency.
@@ -138,19 +157,19 @@ extension View {
 }
 
 struct GoFlyEmptyState: View {
-    var symbol: String
+    var symbol: GoFlyIconAsset?
     var message: String
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: symbol)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .frame(width: 80, height: 80)
-                .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 24))
-                .accessibilityHidden(true)
+            if let symbol {
+                GoFlyIcon(symbol, size: 34, maximumSize: 44)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .frame(width: 80, height: 80)
+                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 24))
+            }
             Text(message)
-                .font(GoFlyFont.body)
+                .goFlyFont(GoFlyFont.body)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -178,143 +197,402 @@ func goFlyLocalizedFormat(_ format: String, _ arguments: CVarArg...) -> String {
     String(format: format, locale: GoFlyPreferences.shared.locale, arguments: arguments)
 }
 
-/// Figma 0 board buttons: 56 pt black primary, 48 pt gray secondary,
-/// 40 pt action-row capsules and a filled red destructive variant.
-/// The solid capsule CTA of the location and place-details cards. Colours
-/// follow the environment so `goFlySteadyDisabled` also steadies them.
-struct GoFlyCardPrimaryStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
+enum GoFlyButtonVariant: CaseIterable, Equatable, Identifiable {
+    case primary, neutral, danger, ghostPrimary, ghostSecondary
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isEnabled ? GoFlyStyle.primaryActionText : GoFlyTextColor.disabled)
-            .background(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledSurface, in: Capsule())
-            .contentShape(Capsule())
-            .opacity(configuration.isPressed ? 0.75 : 1)
+    var id: String {
+        switch self {
+        case .primary: "primary"
+        case .neutral: "neutral"
+        case .danger: "danger"
+        case .ghostPrimary: "ghostPrimary"
+        case .ghostSecondary: "ghostSecondary"
+        }
+    }
+
+    var galleryTitleKey: String { "gallery.button.variant.\(id)" }
+    var galleryIcon: GoFlyIconAsset {
+        switch self {
+        case .primary, .danger: .play
+        case .neutral: .star
+        case .ghostPrimary: .search
+        case .ghostSecondary: .chevronLeft
+        }
+    }
+    var galleryActionKey: String {
+        switch self {
+        case .primary: "route.start"
+        case .neutral: "common.cancel"
+        case .danger: "imports.deleteAction"
+        case .ghostPrimary: "operation.retry"
+        case .ghostSecondary: "common.back"
+        }
     }
 }
 
+enum GoFlyButtonSize: CaseIterable, Equatable, Identifiable {
+    case large, medium, small, extraSmall, inline
+
+    var id: String {
+        switch self {
+        case .large: "large"
+        case .medium: "medium"
+        case .small: "small"
+        case .extraSmall: "extraSmall"
+        case .inline: "inline"
+        }
+    }
+
+    var galleryTitleKey: String { "gallery.button.size.\(id)" }
+
+    var visibleHeight: CGFloat {
+        switch self {
+        case .large: 56
+        case .medium: 48
+        case .small: 40
+        case .extraSmall: 32
+        case .inline: 40
+        }
+    }
+
+    var font: GoFlyFont {
+        switch self {
+        case .large: .bodyEmphasis
+        case .medium: .buttonMedium
+        case .small: .buttonSmall
+        case .extraSmall: .captionEmphasis
+        case .inline: .buttonSmall
+        }
+    }
+
+    var horizontalInset: CGFloat {
+        switch self {
+        case .large: 24
+        case .medium: 20
+        case .small: 16
+        case .extraSmall: 12
+        case .inline: 0
+        }
+    }
+}
+
+/// One token-driven implementation for Figma's filled, neutral, danger, and
+/// text-only buttons. The visible XS button stays 32 pt while its hit area is 44.
+struct GoFlyButtonStyle: ButtonStyle {
+    let variant: GoFlyButtonVariant
+    let size: GoFlyButtonSize
+    var fixedHeight: CGFloat?
+    var expandsToFill: Bool
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(variant: GoFlyButtonVariant, size: GoFlyButtonSize = .large,
+         fixedHeight: CGFloat? = nil, expandsToFill: Bool = true) {
+        self.variant = variant
+        self.size = size
+        self.fixedHeight = fixedHeight
+        self.expandsToFill = expandsToFill
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        let visibleHeight = fixedHeight ?? size.visibleHeight
+        let isGhost = variant == .ghostPrimary || variant == .ghostSecondary
+        let foreground = foregroundColor
+        return configuration.label
+            .goFlyFont(size.font)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: expandsToFill ? .infinity : nil, minHeight: visibleHeight, alignment: .center)
+            .padding(.horizontal, size.horizontalInset)
+            .foregroundStyle(foreground)
+            .tint(foreground)
+            .background(backgroundColor, in: Capsule())
+            .overlay {
+                if isEnabled && variant == .neutral {
+                    Capsule().strokeBorder(GoFlyThemeColor.lineSeparator, lineWidth: 1).allowsHitTesting(false)
+                }
+            }
+            .brightness(isEnabled && configuration.isPressed && !isGhost && variant != .primary && variant != .danger ? -0.04 : 0)
+            .opacity(isEnabled && configuration.isPressed && isGhost ? 0.72 : 1)
+            .scaleEffect(isEnabled && configuration.isPressed && (variant == .primary || variant == .danger) ? 0.98 : 1)
+            .frame(minHeight: max(44, visibleHeight))
+            .contentShape(Capsule())
+    }
+
+    private var backgroundColor: Color {
+        guard isEnabled else {
+            return (variant == .ghostPrimary || variant == .ghostSecondary) ? .clear : GoFlyStyle.disabledSurface
+        }
+        return switch variant {
+        case .primary: GoFlyStyle.primary
+        case .neutral: GoFlyStyle.actionSecondarySurface
+        case .danger: GoFlyStyle.danger
+        case .ghostPrimary, .ghostSecondary: .clear
+        }
+    }
+
+    private var foregroundColor: Color {
+        guard isEnabled else { return GoFlyTextColor.disabled }
+        return switch variant {
+        case .primary: GoFlyThemeColor.commonWhite
+        case .danger: GoFlyThemeColor.actionDangerText
+        case .neutral, .ghostSecondary: GoFlyTextColor.primary
+        case .ghostPrimary: GoFlyTextColor.accent
+        }
+    }
+}
+
+/// Compatibility adapter for existing screens; button rendering lives above.
 struct GoFlyActionStyle: ButtonStyle {
     var primary = false
     var compactAtAccessibilitySizes = false
     var destructive = false
     var small = false
-    /// A secondary button at the 56 pt primary height (Figma D6 結束).
     var prominent = false
-    /// Overrides the button height (Figma D21 delete is 48 pt).
     var fixedHeight: CGFloat? = nil
 
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var height: CGFloat {
-        fixedHeight ?? (small ? GoFlyStyle.smallButtonHeight
-            : (primary || destructive || prominent ? GoFlyStyle.primaryButtonHeight : GoFlyStyle.secondaryButtonHeight))
-    }
-
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(small ? GoFlyFont.subheadlineEmphasis : GoFlyFont.bodyEmphasis)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, minHeight: height)
-            .padding(.horizontal, small ? 14 : 16)
-            .foregroundStyle(foreground)
-            .tint(foreground)
-            .background(background, in: Capsule())
-            .overlay {
-                if isEnabled && !primary && !destructive {
-                    Capsule().strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5).allowsHitTesting(false)
-                }
-            }
-            // Primary/destructive fills keep their token color while pressed: a sheet drag also presses the button, and a lightened fill reads as disabled.
-            .brightness(isEnabled && configuration.isPressed && !(primary || destructive) ? -0.04 : 0)
-            .opacity(isEnabled && configuration.isPressed && !(primary || destructive) ? 0.82 : 1)
-            .scaleEffect(isEnabled && configuration.isPressed && (primary || destructive) ? 0.98 : 1)
-            .frame(minHeight: small ? GoFlyStyle.smallButtonHeight : 44)
-            .contentShape(Capsule())
-    }
-
-    private var background: Color {
-        guard isEnabled else { return GoFlyStyle.disabledSurface }
-        if destructive { return GoFlyStyle.danger }
-        return primary ? GoFlyStyle.primary : GoFlyStyle.actionSecondarySurface
-    }
-
-    private var foreground: Color {
-        guard isEnabled else { return GoFlyTextColor.disabled }
-        if destructive { return GoFlyTextColor.onDark }
-        return primary ? GoFlyTextColor.inverse : GoFlyTextColor.primary
+        let variant: GoFlyButtonVariant = destructive ? .danger : (primary ? .primary : .neutral)
+        let size: GoFlyButtonSize = small ? .small : ((primary || destructive || prominent) ? .large : .medium)
+        return GoFlyButtonStyle(variant: variant, size: size, fixedHeight: fixedHeight)
+            .makeBody(configuration: configuration)
     }
 }
 
-/// Small icon + text route action (新增停靠點 / 檢視路線 / 反轉順序); gray when disabled.
+struct GoFlyCardPrimaryStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        GoFlyButtonStyle(variant: .primary, size: .inline, expandsToFill: false).makeBody(configuration: configuration)
+    }
+}
+
+/// Shared token-driven row shell for Figma's searchable and file lists.
+/// Content remains customizable while row height and separator rendering stay consistent.
+struct GoFlyListRow<Content: View>: View {
+    let minimumHeight: CGFloat
+    let separatorLeadingInset: CGFloat?
+    let separatorTrailingInset: CGFloat
+    @ViewBuilder let content: Content
+
+    init(minimumHeight: CGFloat = 64, separatorLeadingInset: CGFloat? = nil,
+         separatorTrailingInset: CGFloat = 0,
+         @ViewBuilder content: () -> Content) {
+        self.minimumHeight = minimumHeight
+        self.separatorLeadingInset = separatorLeadingInset
+        self.separatorTrailingInset = separatorTrailingInset
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                if let separatorLeadingInset {
+                    Rectangle()
+                        .fill(GoFlyThemeColor.lineSeparator)
+                        .frame(height: 0.5)
+                        .padding(.leading, separatorLeadingInset)
+                        .padding(.trailing, separatorTrailingInset)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
 struct GoFlyRouteTextButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        GoFlyButtonStyle(variant: .ghostPrimary, size: .inline, expandsToFill: false)
+            .makeBody(configuration: configuration)
+    }
+}
+
+/// Status-context action used by banners and snackbars. The visible capsule is
+/// 32 pt high; its Button retains the shared 44 pt minimum target.
+struct GoFlyStatusActionStyle: ButtonStyle {
+    let tone: GoFlyStatusTone
+
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(GoFlyFont.subheadlineEmphasis)
+            .goFlyFont(GoFlyFont.subheadlineEmphasis)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .frame(minWidth: 56, minHeight: 32)
             .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
-            .frame(minHeight: 40)
-            .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.65 : 1)
+            .background(backgroundSurface, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(isEnabled ? tone.actionBorder : GoFlyThemeColor.lineSeparator,
+                                  lineWidth: isEnabled ? tone.actionBorderWidth : 0.5)
+                    .allowsHitTesting(false)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.76 : 1)
+    }
+
+    private var backgroundSurface: Color {
+        colorScheme == .dark ? .clear : GoFlyStyle.toastActionSurface
+    }
+}
+
+enum GoFlyIconButtonVariant: CaseIterable, Equatable, Identifiable {
+    case standard, route, ghostStandard, ghostRoute, clear, more, mapControls, copy
+
+    var id: String {
+        switch self {
+        case .standard: "standard"
+        case .route: "route"
+        case .ghostStandard: "ghostStandard"
+        case .ghostRoute: "ghostRoute"
+        case .clear: "clear"
+        case .more: "more"
+        case .mapControls: "mapControls"
+        case .copy: "copy"
+        }
+    }
+
+    var galleryIcon: GoFlyIconAsset {
+        switch self {
+        case .standard, .ghostStandard: .star
+        case .route, .ghostRoute: .swapHorizontal
+        case .clear: .close
+        case .more: .more
+        case .mapControls: .locate
+        case .copy: .copy
+        }
+    }
+
+    var galleryTitleKey: String { "gallery.iconButton.variant.\(id)" }
+
+    var hasBorder: Bool {
+        switch self {
+        case .standard, .route, .mapControls, .copy: true
+        case .ghostStandard, .ghostRoute, .clear, .more: false
+        }
+    }
+
+    var surface: Color {
+        switch self {
+        case .standard, .mapControls, .copy: GoFlyStyle.cardSurface
+        case .route: GoFlyStyle.secondarySurface
+        case .ghostStandard, .ghostRoute, .clear, .more: .clear
+        }
+    }
+
+    var foreground: Color {
+        switch self {
+        case .clear: GoFlyTextColor.secondary
+        case .route: GoFlyTextColor.accent
+        case .copy: GoFlyThemeColor.iconPrimary
+        default: GoFlyTextColor.primary
+        }
+    }
+
+    var hasFloatingShadow: Bool { self == .mapControls }
+}
+
+enum GoFlyIconButtonSize: CaseIterable, Equatable, Identifiable {
+    case large, medium, small, extraSmall
+
+    var id: String {
+        switch self {
+        case .large: "large"
+        case .medium: "medium"
+        case .small: "small"
+        case .extraSmall: "extraSmall"
+        }
+    }
+
+    var galleryTitleKey: String { "gallery.iconButton.size.\(id)" }
+
+    var diameter: CGFloat {
+        switch self { case .large: 44; case .medium: 40; case .small: 36; case .extraSmall: 32 }
+    }
+
+    var glyph: CGFloat {
+        switch self { case .large: 22; case .medium: 20; case .small: 18; case .extraSmall: 16 }
+    }
+}
+
+private enum GoFlyIconButtonAppearance {
+    static func surface(variant: GoFlyIconButtonVariant, isEnabled: Bool) -> Color {
+        if isEnabled { return variant.surface }
+        return variant.hasBorder ? GoFlyStyle.disabledSurface : .clear
+    }
+
+    static func foreground(variant: GoFlyIconButtonVariant, isEnabled: Bool) -> Color {
+        isEnabled ? variant.foreground : GoFlyThemeColor.iconButtonDisabled
+    }
+
+    static func border(variant: GoFlyIconButtonVariant, isEnabled: Bool) -> Color? {
+        isEnabled && variant.hasBorder ? GoFlyThemeColor.lineSeparator : nil
     }
 }
 
 struct GoFlyIconStyle: ButtonStyle {
-    var floating = false
+    var variant: GoFlyIconButtonVariant = .standard
+    var size: GoFlyIconButtonSize = .large
     @Environment(\.isEnabled) private var isEnabled
-    @ScaledMetric(relativeTo: .body) private var symbolSize: CGFloat = 18
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: min(symbolSize, 24), weight: .semibold))
-            .frame(minWidth: 44, minHeight: 44)
-            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
-            .tint(isEnabled ? GoFlyStyle.primary : GoFlyStyle.disabledForeground)
-            .background(isEnabled
-                        ? (floating ? GoFlyStyle.cardSurface : GoFlyStyle.iconButtonSurface)
-                        : GoFlyStyle.disabledSurface, in: Circle())
-            .overlay {
-                if isEnabled {
-                    Circle().strokeBorder(floating ? GoFlyStyle.subtleBorder : GoFlyStyle.iconButtonBorder,
-                                          lineWidth: 0.5).allowsHitTesting(false)
-                }
+        ZStack {
+            Circle().fill(GoFlyIconButtonAppearance.surface(variant: variant, isEnabled: isEnabled))
+                .frame(width: size.diameter, height: size.diameter)
+            configuration.label
+                .foregroundStyle(GoFlyIconButtonAppearance.foreground(variant: variant, isEnabled: isEnabled))
+                .tint(GoFlyIconButtonAppearance.foreground(variant: variant, isEnabled: isEnabled))
+            if let border = GoFlyIconButtonAppearance.border(variant: variant, isEnabled: isEnabled) {
+                Circle().strokeBorder(border, lineWidth: 0.5)
+                    .frame(width: size.diameter, height: size.diameter)
+                    .allowsHitTesting(false)
             }
-            .goFlyShadow(floating ? .floating : nil)
-            .contentShape(Circle())
-            .opacity(isEnabled && configuration.isPressed ? 0.65 : 1)
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Circle())
+        .goFlyShadow(variant.hasFloatingShadow ? .floating : nil)
+        .opacity(isEnabled && configuration.isPressed && !variant.hasFloatingShadow ? 0.7 : 1)
     }
 }
 
-/// Gray icon-button chrome that reflects the Button's enabled state.
+/// Shared circle chrome for icon-only controls hosted inside custom rows.
 struct GoFlyIconButtonChrome: ViewModifier {
     let diameter: CGFloat
     let showsBorder: Bool
-    let enabledSurface: Color
+    let enabledSurface: Color?
+    let borderColorOverride: Color?
+    let variant: GoFlyIconButtonVariant
     @Environment(\.isEnabled) private var isEnabled
 
     func body(content: Content) -> some View {
-        content
-            .frame(width: diameter, height: diameter)
-            .foregroundStyle(isEnabled ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
-            .background(isEnabled ? enabledSurface : GoFlyStyle.disabledSurface,
-                        in: Circle())
-            .overlay {
-                if isEnabled && showsBorder {
-                    Circle().strokeBorder(GoFlyStyle.iconButtonBorder, lineWidth: 0.5)
-                        .allowsHitTesting(false)
-                }
+        ZStack {
+            Circle()
+                .fill(enabledSurface ?? GoFlyIconButtonAppearance.surface(variant: variant, isEnabled: isEnabled))
+                .frame(width: diameter, height: diameter)
+            content.foregroundStyle(GoFlyIconButtonAppearance.foreground(variant: variant, isEnabled: isEnabled))
+            let border = isEnabled
+                ? (borderColorOverride ?? GoFlyIconButtonAppearance.border(variant: variant, isEnabled: true))
+                : GoFlyIconButtonAppearance.border(variant: variant, isEnabled: false)
+            if showsBorder, let border {
+                Circle().strokeBorder(border, lineWidth: 0.5)
+                    .frame(width: diameter, height: diameter)
+                    .allowsHitTesting(false)
             }
-            .contentShape(Circle())
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Circle())
     }
 }
 
 extension View {
     func goFlyIconButtonChrome(diameter: CGFloat, showsBorder: Bool = true,
-                               enabledSurface: Color = GoFlyStyle.iconButtonSurface) -> some View {
+                               enabledSurface: Color? = nil,
+                               borderColorOverride: Color? = nil,
+                               variant: GoFlyIconButtonVariant = .standard) -> some View {
         modifier(GoFlyIconButtonChrome(diameter: diameter, showsBorder: showsBorder,
-                                       enabledSurface: enabledSurface))
+                                       enabledSurface: enabledSurface,
+                                       borderColorOverride: borderColorOverride,
+                                       variant: variant))
     }
 }
 
@@ -352,7 +630,8 @@ extension View {
             // Figma toast shadow: black 18%, y=4, blur=16 (SwiftUI radius is half the blur).
             self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.18), radius: 8, x: 0, y: 4)
         case .card:
-            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.14), radius: 12, x: 0, y: 8)
+            // LocationCard: Figma black 12%, y=6, blur=20 (SwiftUI radius is half the blur).
+            self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.12), radius: 10, x: 0, y: 6)
         case .chip:
             self.shadow(color: GoFlyThemeColor.commonBlack.opacity(0.06), radius: 2, x: 0, y: 1)
         case nil:
@@ -361,29 +640,55 @@ extension View {
     }
 }
 
-private struct GoFlySearchFieldBackground: ViewModifier {
-    let isFocused: Bool
+enum GoFlyTextFieldState: Hashable {
+    case `default`, focused, disabled
+
+    var identifier: String {
+        switch self {
+        case .default: "default"
+        case .focused: "focused"
+        case .disabled: "disabled"
+        }
+    }
+}
+
+private struct GoFlyTextFieldBackground: ViewModifier {
+    let state: GoFlyTextFieldState
+
+    private var appearance: (background: Color, border: Color, borderWidth: CGFloat) {
+        switch state {
+        case .default:
+            (GoFlyStyle.fieldSurface, GoFlyStyle.fieldBorder, 0.75)
+        case .focused:
+            (GoFlyStyle.fieldFocusedSurface, GoFlyStyle.fieldFocus, 1.5)
+        case .disabled:
+            (GoFlyStyle.disabledSurface, GoFlyThemeColor.lineInputDisabled, 0.75)
+        }
+    }
 
     func body(content: Content) -> some View {
         content
-            .background(GoFlyStyle.fieldSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(appearance.background, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(isFocused ? GoFlyStyle.fieldFocus : GoFlyStyle.fieldBorder,
-                                  lineWidth: isFocused ? 1.5 : 0.75)
+                    .strokeBorder(appearance.border, lineWidth: appearance.borderWidth)
             }
+            .foregroundStyle(state == .disabled ? GoFlyTextColor.disabled : GoFlyTextColor.primary)
     }
 }
 
 extension View {
-    /// `SearchField` surface: `#F2F2F7` fill, 14 pt radius, 1.5 pt blue border when
-    /// focused (also the selected route row), 0.75 pt gray otherwise.
+    /// `Text Field / Neutral` Figma variants share one implementation.
+    func goFlyTextField(state: GoFlyTextFieldState) -> some View {
+        modifier(GoFlyTextFieldBackground(state: state))
+    }
+
     func goFlySearchField(isFocused: Bool) -> some View {
-        modifier(GoFlySearchFieldBackground(isFocused: isFocused))
+        goFlyTextField(state: isFocused ? .focused : .default)
     }
 }
 
-/// Figma `Progress`: 6 pt capsule, black value on a `#E5E5EA` track (inverted in dark).
+/// Figma progress treatment: a 6 pt capsule with semantic track and primary-fill tokens.
 struct GoFlyProgressStyle: ProgressViewStyle {
     func makeBody(configuration: Configuration) -> some View {
         let fraction = min(max(configuration.fractionCompleted ?? 0, 0), 1)
@@ -402,39 +707,74 @@ struct GoFlyProgressStyle: ProgressViewStyle {
 }
 
 
-/// The app's one type scale (docs/IOS-TYPOGRAPHY.md). Every text uses one of these tokens: iOS text styles, so
-/// Dynamic Type still applies, and only two weights (regular, semibold).
-enum GoFlyFont {
-    /// 28 — onboarding and setup hero titles.
-    static let display = Font.title.weight(.semibold)
-    /// 20 — panel, card and navigation-card titles.
-    static let title = Font.title3.weight(.semibold)
-    /// 22 — duration picker wheel digits (Figma F6.a `TimePicker / Wheel`).
-    static let wheel = Font.title2
-    /// 17 semibold — page titles, dialog titles, section titles.
-    static let headline = Font.headline
-    /// 17 — list rows and text fields.
-    static let body = Font.body
-    /// 17 semibold — primary buttons.
-    static let bodyEmphasis = Font.body.weight(.semibold)
-    /// 15 — secondary text.
-    static let subheadline = Font.subheadline
-    /// 15 semibold — compact buttons, toast titles, chips.
-    static let subheadlineEmphasis = Font.subheadline.weight(.semibold)
-    /// 13 — subtitles, toast messages, captions.
-    static let footnote = Font.footnote
-    /// 13 semibold — status pill, small chips.
-    static let footnoteEmphasis = Font.footnote.weight(.semibold)
-    /// 14 semibold — Figma `Theme/button/small`, including the R04 help link.
-    static let buttonSmall = Font.system(size: 14, weight: .semibold)
-    /// 12 — role labels and axis labels.
-    static let caption = Font.caption
-    /// 12 semibold.
-    static let captionEmphasis = Font.caption.weight(.semibold)
-    /// 10 semibold, fixed — tab labels and compass letters.
-    static let micro = Font.system(size: 10, weight: .semibold)
-    /// 36 semibold, fixed — the speed readout.
-    static let metric = Font.system(size: 36, weight: .semibold)
+/// Figma 04 Theme typography. Text uses `Font.system` at the Figma point size;
+/// `@ScaledMetric` applies the matching Dynamic Type curve to every token except
+/// the two deliberately fixed display styles, `micro` and `metric`.
+enum GoFlyFont: CaseIterable {
+    case display, title, wheel, headline, body, bodyEmphasis
+    case subheadline, subheadlineEmphasis, footnote, footnoteEmphasis
+    case buttonMedium, buttonSmall, caption, captionEmphasis, micro, metric
+
+    var pointSize: CGFloat {
+        switch self {
+        case .display: 28
+        case .title: 20
+        case .wheel: 22
+        case .headline, .body, .bodyEmphasis: 17
+        case .buttonMedium: 16
+        case .subheadline, .subheadlineEmphasis: 15
+        case .buttonSmall: 14
+        case .footnote, .footnoteEmphasis: 13
+        case .caption, .captionEmphasis: 12
+        case .micro: 10
+        case .metric: 36
+        }
+    }
+
+    var weight: Font.Weight {
+        switch self {
+        case .wheel, .body, .subheadline, .footnote, .caption: .regular
+        default: .semibold
+        }
+    }
+
+    var dynamicTypeStyle: Font.TextStyle {
+        switch self {
+        case .display: .title
+        case .title: .title3
+        case .wheel: .title2
+        case .headline: .headline
+        case .body, .bodyEmphasis: .body
+        case .buttonMedium: .callout
+        case .subheadline, .subheadlineEmphasis: .subheadline
+        case .buttonSmall, .footnote, .footnoteEmphasis: .footnote
+        case .caption, .captionEmphasis, .micro: .caption
+        case .metric: .largeTitle
+        }
+    }
+
+    var isFixed: Bool { self == .micro || self == .metric }
+}
+
+private struct GoFlyFontModifier: ViewModifier {
+    let token: GoFlyFont
+    @ScaledMetric private var scaledPointSize: CGFloat
+
+    init(token: GoFlyFont) {
+        self.token = token
+        _scaledPointSize = ScaledMetric(wrappedValue: token.pointSize, relativeTo: token.dynamicTypeStyle)
+    }
+
+    func body(content: Content) -> some View {
+        let size = token.isFixed ? token.pointSize : scaledPointSize
+        content.font(.system(size: size, weight: token.weight, design: .default))
+    }
+}
+
+extension View {
+    func goFlyFont(_ token: GoFlyFont) -> some View {
+        modifier(GoFlyFontModifier(token: token))
+    }
 }
 
 
@@ -452,6 +792,8 @@ enum GoFlyTextColor {
     static let warning = GoFlyThemeColor.textWarning
     static let success = GoFlyThemeColor.textSuccess
     static let accent = GoFlyThemeColor.textAccent
+    static let input = GoFlyThemeColor.textInputDefault
+    static let inputIcon = GoFlyThemeColor.iconInputDefault
 }
 
 /// Page and sheet title row: the title stays centered on the page whatever the
@@ -468,22 +810,46 @@ struct GoFlySheetHeader<Leading: View, Trailing: View>: View {
     var title: String?
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 12) {
-            leading()
-            Spacer(minLength: 0)
-            trailing()
-        }
-        .frame(minHeight: 44)
-        .overlay {
-            if let title {
-                Text(title)
-                    .font(GoFlyFont.headline)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 88)
-                    .accessibilityAddTraits(.isHeader)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    leading()
+                    Spacer(minLength: 8)
+                    trailing()
+                }
+                .frame(minHeight: 44)
+
+                if let title {
+                    Text(title)
+                        .goFlyFont(GoFlyFont.headline)
+                        .foregroundStyle(GoFlyTextColor.primary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        } else {
+            HStack(spacing: 12) {
+                leading()
+                Spacer(minLength: 0)
+                trailing()
+            }
+            .frame(minHeight: 44)
+            .overlay {
+                if let title {
+                    Text(title)
+                        .goFlyFont(GoFlyFont.headline)
+                        .foregroundStyle(GoFlyTextColor.primary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 88)
+                        .accessibilityAddTraits(.isHeader)
+                }
             }
         }
     }

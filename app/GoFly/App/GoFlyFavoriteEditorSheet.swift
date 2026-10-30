@@ -34,35 +34,36 @@ struct GoFlyFavoriteEditorSheet: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text(goFlyString("favorites.label"))
-                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
+                            .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
-                            TextField(goFlyString("favorites.label"), text: $draft, prompt: Text(fallbackLabel))
+                            TextField(goFlyString("favorites.label"), text: $draft,
+                                      prompt: Text(goFlyString("favorites.label")))
+                                .goFlyFont(GoFlyFont.body)
                                 .focused($focused).submitLabel(.done)
                                 .onSubmit { focused = false }
                                 .accessibilityIdentifier("favorites.editor.label")
-                            if !draft.isEmpty {
-                                Button { draft = "" } label: {
-                                    Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(GoFlyTextColor.secondary)
-                                .accessibilityLabel(goFlyString("search.clear"))
+                            Button { draft = "" } label: {
+                                GoFlyIcon(.close).frame(width: 44, height: 44)
                             }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(GoFlyTextColor.secondary)
+                            .accessibilityLabel(goFlyString("search.clear"))
+                            .accessibilityIdentifier("favorites.editor.clear")
                         }
                         .padding(.leading, 16)
                         .frame(minHeight: 48)
                         .goFlySearchField(isFocused: focused)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(place.address ?? place.title).font(GoFlyFont.subheadline)
-                        Text(place.coordinate.displayText)
-                            .font(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
+                        Text(place.address ?? place.title).goFlyFont(GoFlyFont.subheadline)
+                        Text(coordinateSummary)
+                            .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
+                    .background(GoFlyStyle.canvas, in: RoundedRectangle(cornerRadius: 14))
 
-                    // C2 / D7: 40 pt between the place card and the Save button; the Home indicator sits 20 pt below it.
+                    // Keep 40 pt above the button from the preceding VStack gap + top inset, and 40 pt below per the latest C2 spacing update.
                     Button {
                         if favorites.save(place: place, label: FavoriteLabelDefaults.resolved(draft, fallback: fallbackLabel)) {
                             onDismiss()
@@ -74,11 +75,11 @@ struct GoFlyFavoriteEditorSheet: View {
                     .buttonStyle(GoFlyActionStyle(primary: true))
                     .disabled(!favorites.canMutate)
                     .padding(.top, 24)
+                    .padding(.bottom, GoFlyStyle.favoriteEditorSaveBottomSpacing)
                     .accessibilityIdentifier("favorites.editor.save")
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .padding(.top, 20)
-                .padding(.bottom, -1)
             }
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favorites.editor.form")
@@ -97,11 +98,22 @@ struct GoFlyFavoriteEditorSheet: View {
         favorites.isFavorite(place)
     }
 
+    private var coordinateSummary: String {
+        String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"),
+               place.coordinate.latitude, place.coordinate.longitude)
+    }
+
     private var header: some View {
         GoFlySheetHeader(title: nil) {
-            Button(goFlyString("favorites.cancel")) {
+            Button {
                 favorites.clearError()
                 onDismiss()
+            } label: {
+                Text(goFlyString("favorites.cancel"))
+                    .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .accessibilityIdentifier("favorites.editor.cancel")
         } trailing: {
@@ -115,7 +127,10 @@ struct GoFlyFavoriteEditorSheet: View {
                     }
                 } label: {
                     Text(goFlyString("favorites.delete"))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
                         .foregroundStyle(GoFlyTextColor.danger)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("favorites.editor.delete")
             }

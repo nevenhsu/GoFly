@@ -14,6 +14,7 @@ struct GoFlyFavoriteRoutesView: View {
     @State private var loadTask: Task<Void, Never>?
     @State private var loadRequest: UUID?
     @State private var loadFailureKey: String?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var visible: [FavoriteRouteRecord] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,7 +35,7 @@ struct GoFlyFavoriteRoutesView: View {
             header
                 .goFlyDismissesKeyboardOnTap()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     GoFlyFavoriteRouteFailureNotice(localErrorKey: loadFailureKey)
                     if favorites.loadState == .loading {
                         ProgressView(goFlyString("favoriteRoutes.loading"))
@@ -48,17 +49,37 @@ struct GoFlyFavoriteRoutesView: View {
                     }
                     if favorites.isBusy || favorites.isValidatingSelection {
                         ProgressView(goFlyString(favorites.isValidatingSelection ? "favoriteRoutes.validating" : "favoriteRoutes.working"))
-                            .font(GoFlyFont.body)
+                            .goFlyFont(GoFlyFont.body)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 12)
                             .accessibilityIdentifier("favoriteRoutes.working")
                     }
-                    ForEach(visible) { record in
-                        row(record)
-                        Divider().padding(.leading, 48)
+                    if !visible.isEmpty {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(visible.enumerated()), id: \.element.id) { index, record in
+                                GoFlyListRow(
+                                    minimumHeight: 64,
+                                    separatorLeadingInset: index < visible.count - 1 ? 52 : nil,
+                                    separatorTrailingInset: 4
+                                ) {
+                                    row(record)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .background(GoFlyStyle.cardSurface,
+                                    in: RoundedRectangle(cornerRadius: GoFlyStyle.cardRadius, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: GoFlyStyle.cardRadius, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: GoFlyStyle.cardRadius, style: .continuous)
+                                .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("favoriteRoutes.card")
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             }
             .scrollDismissesKeyboard(.immediately)
             .goFlyDismissesKeyboardOnTap()
@@ -67,14 +88,18 @@ struct GoFlyFavoriteRoutesView: View {
                 GoFlyFavoritesBottomBar(
                     placeholder: goFlyString("favoriteRoutes.searchSaved"), query: $query,
                     searchIdentifier: "favoriteRoutes.search",
+                    showsPasteControl: true,
+                    pasteIdentifier: "favoriteRoutes.searchPaste",
+                    onPaste: { query = $0.trimmingCharacters(in: .whitespacesAndNewlines) },
                     deleteTitle: selecting ? goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count) : nil,
                     deleteEnabled: !selected.isEmpty && favorites.canMutate,
                     deleteIdentifier: "favoriteRoutes.deleteSelected",
                     onDelete: { delete(selected) })
             }
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas)
         .goFlySnackbar($snackbar, bottomPadding: GoFlyFavoritesBottomBar.snackbarOffset)
+        .goFlyTracksSystemPresentation(editing != nil, id: "favoriteRoutes.editor")
         .sheet(item: $editing) { record in
             GoFlyFavoriteRouteLabelEditor(record: record, onDismiss: { editing = nil }) {
                 delete(Set([record.id]))
@@ -104,8 +129,8 @@ struct GoFlyFavoriteRoutesView: View {
                     if selecting {
                         Text(goFlyString("favorites.cancel"))
                     } else {
-                        Label(goFlyString("mode.route"), systemImage: "chevron.backward")
-                            .labelStyle(.titleAndIcon)
+                        GoFlyIconLabel(title: goFlyString("mode.route"), icon: .chevronLeft)
+                            .goFlyFont(GoFlyFont.subheadlineEmphasis)
                     }
                 }
                 .frame(minHeight: 44)
@@ -131,8 +156,7 @@ struct GoFlyFavoriteRoutesView: View {
                     selecting = true
                     selected.removeAll()
                 } label: {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 21))
+                    GoFlyIcon(.select, size: 22)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -142,20 +166,23 @@ struct GoFlyFavoriteRoutesView: View {
                 .accessibilityIdentifier("favoriteRoutes.select")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 44)
     }
 
     private func row(_ record: FavoriteRouteRecord) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 8) {
             if selecting {
                 Button {
                     toggleSelection(record.id)
                 } label: {
                     GoFlyCheckboxIcon(selected: selected.contains(record.id), size: 22)
                         .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 .accessibilityLabel(goFlyString("favorites.select"))
                 .accessibilityIdentifier("favoriteRoutes.checkbox.\(record.id.uuidString)")
             } else {
@@ -178,16 +205,18 @@ struct GoFlyFavoriteRoutesView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(record.label ?? goFlyFavoriteRouteEndpoints(record))
-                        .font(GoFlyFont.body)
+                        .goFlyFont(GoFlyFont.body)
                         .foregroundStyle(GoFlyTextColor.primary)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(goFlyFavoriteRouteSubtitle(record))
-                        .font(GoFlyFont.footnote)
+                        .goFlyFont(GoFlyFont.footnote)
                         .foregroundStyle(GoFlyTextColor.secondary)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let failure = favorites.unavailable[record.id] {
                         Text(goFlyString(failure.localizationKey))
-                            .font(GoFlyFont.footnote)
+                            .goFlyFont(GoFlyFont.footnote)
                             .foregroundStyle(GoFlyTextColor.danger)
                             .accessibilityIdentifier("favoriteRoutes.unavailable.\(record.id.uuidString)")
                     }
@@ -202,8 +231,7 @@ struct GoFlyFavoriteRoutesView: View {
 
             if !selecting {
                 Button { edit(record) } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 20))
+                    GoFlyIcon(.more, size: 20)
                         .goFlyIconForeground(enabledColor: GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
@@ -212,7 +240,6 @@ struct GoFlyFavoriteRoutesView: View {
                 .disabled(!favorites.canMutate)
                 .accessibilityLabel(goFlyString("favoriteRoutes.editLabel"))
                 .accessibilityIdentifier("favoriteRoutes.edit.\(record.id.uuidString)")
-                .padding(.trailing, 4)
             }
         }
     }

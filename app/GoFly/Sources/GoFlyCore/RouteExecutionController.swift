@@ -7,6 +7,112 @@ public enum RouteSuspensionReason: String, Equatable, Sendable {
     case backgroundUnavailable
 }
 
+private struct RoutePlanningEdge: Hashable {
+    let from: GeoCoordinate
+    let to: GeoCoordinate
+}
+
+private enum RoutePlanningEdgeResult {
+    case planned(PlannedRoute)
+    case failed
+}
+
+private struct RouteOrderRepairResult {
+    let draft: RouteDraft
+    let route: PlannedRoute
+    let coordinates: [GeoCoordinate]
+}
+
+/// Searches full route permutations in stable order. It plans edges lazily and
+/// stops after a fixed request and branch budget, so a large draft cannot
+/// trigger a factorial number of Directions requests.
+@MainActor
+private final class RouteOrderRepairSearch {
+    static let maximumPlannerRequests = 64
+    static let maximumExpandedPrefixes = 4_096
+
+    private let planner: any RoutePlanning
+    private let nodes: [RouteNode]
+    private let coordinates: [GeoCoordinate]
+    private let speed: RouteSpeed
+    private var edgeResults: [RoutePlanningEdge: RoutePlanningEdgeResult]
+    private var plannerRequests = 0
+    private var expandedPrefixes = 0
+
+    init(planner: any RoutePlanning, nodes: [RouteNode], coordinates: [GeoCoordinate],
+         speed: RouteSpeed, cachedEdges: [RoutePlanningEdge: RoutePlanningEdgeResult]) {
+        self.planner = planner
+        self.nodes = nodes
+        self.coordinates = coordinates
+        self.speed = speed
+        edgeResults = cachedEdges
+    }
+
+    func findOrder() async -> RouteOrderRepairResult? {
+        guard nodes.count >= 2, nodes.count <= RouteDraft.maximumNodeCount,
+              nodes.count == coordinates.count else { return nil }
+        return await search(order: [], used: Array(repeating: false, count: nodes.count), legs: [])
+    }
+
+    private func search(order: [Int], used: [Bool], legs: [PlannedRoute]) async -> RouteOrderRepairResult? {
+        guard !Task.isCancelled else { return nil }
+
+        if order.count == nodes.count {
+            guard let route = try? PlannedRoute(legs: legs) else { return nil }
+            let orderedNodes = order.map { nodes[$0] }
+            guard let draft = RouteDraft(nodes: orderedNodes, speed: speed) else { return nil }
+            return RouteOrderRepairResult(draft: draft, route: route,
+                                          coordinates: order.map { coordinates[$0] })
+        }
+        guard expandedPrefixes < Self.maximumExpandedPrefixes,
+              plannerRequests < Self.maximumPlannerRequests else { return nil }
+        expandedPrefixes += 1
+
+        for next in nodes.indices where !used[next] {
+            if Task.isCancelled || expandedPrefixes >= Self.maximumExpandedPrefixes
+                || plannerRequests >= Self.maximumPlannerRequests { return nil }
+
+            var nextLegs = legs
+            if let previous = order.last {
+                let from = legs.last?.end ?? coordinates[previous]
+                let to = coordinates[next]
+                guard from != to else { continue }
+                switch await planEdge(from: from, to: to) {
+                case .planned(let planned): nextLegs.append(planned)
+                case .failed: continue
+                case nil: return nil
+                }
+            }
+
+            var nextUsed = used
+            nextUsed[next] = true
+            if let result = await search(order: order + [next], used: nextUsed, legs: nextLegs) {
+                return result
+            }
+        }
+        return nil
+    }
+
+    private func planEdge(from: GeoCoordinate, to: GeoCoordinate) async -> RoutePlanningEdgeResult? {
+        let edge = RoutePlanningEdge(from: from, to: to)
+        if let cached = edgeResults[edge] { return cached }
+        guard plannerRequests < Self.maximumPlannerRequests, !Task.isCancelled else { return nil }
+        plannerRequests += 1
+        do {
+            let points = try await planner.plan(from: from, to: to)
+            try Task.checkCancellation()
+            let planned = try PlannedRoute(points: points)
+            let result = RoutePlanningEdgeResult.planned(planned)
+            edgeResults[edge] = result
+            return result
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            edgeResults[edge] = .failed
+            return .failed
+        }
+    }
+}
+
 @MainActor
 public final class RouteExecutionController: ObservableObject {
 
@@ -30,6 +136,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     @Published public private(set) var isRecoveringConnection = false
     @Published public private(set) var intent: RouteExecutionIntent?
     @Published public private(set) var plannedRoute: PlannedRoute?
+    @Published public private(set) var isFixingPlanningOrder = false
     @Published public private(set) var progress: RouteProgress?
     @Published public private(set) var error: RouteExecutionFailure?
     @Published public private(set) var completion: RouteCompletion?
@@ -56,6 +163,8 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     private var task: Task<Void, Never>?
     private var transition: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
+    private var planningOrderFixTask: Task<Void, Never>?
+    private var previewEdgeResults: [RoutePlanningEdge: RoutePlanningEdgeResult] = [:]
     private var previewInputs: [GeoCoordinate]?
     private var subscription: AnyCancellable?
     private var pickerCandidateSubscription: AnyCancellable?
@@ -246,7 +355,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
             allowsCurrent: allowsCurrent, role: draft.role(of: nodeID)!)
         return true
     }
-    /// 新增地點: an empty row goes in before the destination and becomes the selected field.
+    /// 新增地點: append an empty row as the new destination and select it.
     /// It opens no picker; the person fills it from the search bar, the map or a Pin.
     @discardableResult public func addEmptyWaypoint() -> Bool {
         guard canAddNode, picker == nil else { return false }
@@ -369,12 +478,67 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         return true
     }
 
+    /// Searches a bounded set of full permutations after D8 route planning
+    /// fails. It updates only the editable draft and its preview; it never
+    /// starts movement or reaches the command owner.
+    @discardableResult public func fixPlanningOrder() -> Bool {
+        guard canEdit, draft.isManual, error == .planningFailed,
+              !isFixingPlanningOrder, !draft.hasEmptyEndpoint,
+              draft.nodes.count >= 2, draft.nodes.count <= RouteDraft.maximumNodeCount,
+              !draft.nodes.contains(where: { $0.value == .empty }) else { return false }
+
+        var coordinates: [GeoCoordinate] = []
+        for node in draft.nodes {
+            switch node.value {
+            case .current:
+                guard let current = commands.currentRouteOrigin else { return false }
+                coordinates.append(current)
+            case .place(let place): coordinates.append(place.coordinate)
+            case .empty: return false
+            }
+        }
+
+        revision &+= 1
+        let token = revision
+        let snapshot = draft
+        previewTask?.cancel()
+        previewTask = nil
+        plannedRoute = nil
+        previewInputs = nil
+        isFixingPlanningOrder = true
+        let search = RouteOrderRepairSearch(planner: planner, nodes: snapshot.nodes,
+                                            coordinates: coordinates, speed: snapshot.speed,
+                                            cachedEdges: previewEdgeResults)
+        planningOrderFixTask = Task { @MainActor [weak self] in
+            let result = await search.findOrder()
+            guard let self, self.revision == token, self.draft == snapshot,
+                  self.canEdit, !Task.isCancelled else { return }
+            self.planningOrderFixTask = nil
+            self.isFixingPlanningOrder = false
+            guard let result else {
+                // Leave the original draft and failure toast intact.
+                self.error = .planningFailed
+                return
+            }
+            self.draft = result.draft
+            self.plannedRoute = result.route
+            self.previewInputs = result.coordinates
+            self.previewEdgeResults = [:]
+            self.error = nil
+        }
+        return true
+    }
+
     private func resetPreview() {
         revision &+= 1
         previewTask?.cancel()
         previewTask = nil
+        planningOrderFixTask?.cancel()
+        planningOrderFixTask = nil
+        isFixingPlanningOrder = false
         previewInputs = nil
         plannedRoute = nil
+        previewEdgeResults = [:]
         error = nil
     }
 
@@ -403,10 +567,25 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 var legs: [PlannedRoute] = []
                 for index in 1..<coordinates.count {
                     let from = legs.last?.end ?? coordinates[0], to = coordinates[index]
-                    let points = try await planner.plan(from: from, to: to)
+                    let edge = RoutePlanningEdge(from: from, to: to)
+                    let points: [GeoCoordinate]
+                    do {
+                        points = try await planner.plan(from: from, to: to)
+                    } catch {
+                        guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
+                        self.previewEdgeResults[edge] = .failed
+                        throw error
+                    }
                     try Task.checkCancellation()
                     guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
-                    legs.append(try PlannedRoute(points: points))
+                    do {
+                        let planned = try PlannedRoute(points: points)
+                        self.previewEdgeResults[edge] = .planned(planned)
+                        legs.append(planned)
+                    } catch {
+                        self.previewEdgeResults[edge] = .failed
+                        throw error
+                    }
                 }
                 guard let self, self.revision == token, self.canEdit, !Task.isCancelled else { return }
                 self.plannedRoute = try PlannedRoute(legs: legs)

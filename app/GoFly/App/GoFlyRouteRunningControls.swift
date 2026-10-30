@@ -37,11 +37,11 @@ struct GoFlyRouteRunningControls: View {
             VStack(spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(title)
-                        .font(GoFlyFont.footnote)
+                        .goFlyFont(GoFlyFont.footnote)
                         .foregroundStyle(GoFlyTextColor.secondary)
                     Spacer(minLength: 8)
                     Text(min(max(fraction, 0), 1), format: .percent.precision(.fractionLength(0)))
-                        .font(GoFlyFont.footnote.monospacedDigit())
+                        .goFlyFont(GoFlyFont.footnote).monospacedDigit()
                         .accessibilityIdentifier("route.position.value")
                 }
                 ProgressView(value: min(max(fraction, 0), 1), total: 1)
@@ -66,7 +66,7 @@ struct GoFlyRouteRunningControls: View {
 
     private var endButton: some View {
         Button(action: onEnd) {
-            Label(goFlyString("execution.end"), systemImage: GoFlySymbols.close)
+            GoFlyIconLabel(title: goFlyString("execution.end"), icon: GoFlySymbols.close)
                 .lineLimit(1)
         }
         .buttonStyle(GoFlyActionStyle(prominent: true))
@@ -76,8 +76,9 @@ struct GoFlyRouteRunningControls: View {
 
     private var playbackButton: some View {
         Button(action: onPlayback) {
-            Label(goFlyString(isInterrupted ? "common.retry" : (isPaused ? "route.resume" : "route.pause")),
-                  systemImage: isInterrupted ? GoFlySymbols.retry : (isPaused ? GoFlySymbols.play : GoFlySymbols.pause))
+            GoFlyIconLabel(
+                title: goFlyString(isInterrupted ? "common.retry" : (isPaused ? "route.resume" : "route.pause")),
+                icon: isInterrupted ? GoFlySymbols.retry : (isPaused ? GoFlySymbols.play : GoFlySymbols.pause))
                 .lineLimit(1)
         }
         .buttonStyle(GoFlyActionStyle(primary: true))

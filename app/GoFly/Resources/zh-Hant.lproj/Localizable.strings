@@ -47,6 +47,7 @@
 "onboarding.welcome.title" = "歡迎使用 GoFly";
 "onboarding.next" = "下一步";
 "onboarding.location.title" = "允許 GoFly 使用定位";
+"onboarding.location.title.authorized" = "已允許使用定位";
 "onboarding.location.message" = "在地圖顯示你的真實位置，並作為路線與漫步的起點。只需「使用 App 期間」。";
 "onboarding.location.allow" = "允許定位";
 "onboarding.location.skip" = "略過";
@@ -54,7 +55,7 @@
 "onboarding.location.currentStatus" = "目前權限";
 "onboarding.location.status.notDetermined" = "尚未設定";
 "onboarding.location.status.denied" = "未允許";
-"onboarding.location.status.authorized" = "使用 App 期間";
+"onboarding.location.status.authorized" = "使用 App 期間・已允許";
 "onboarding.location.deniedTitle" = "定位權限未開啟";
 "onboarding.location.authorized" = "已允許定位。";
 "onboarding.location.denied" = "你仍可使用所有模擬定位功能；若要顯示真實位置，可到系統設定開啟。";
@@ -76,12 +77,13 @@
 "onboarding.vpn.help.troubleshooting" = "仍然無法連線？";
 "onboarding.vpn.help.reconnect" = "確認連著 Wi‑Fi，在 LocalDevVPN 中斷後重新連接，再回來檢查。";
 "onboarding.vpn.help.notChecked" = "尚未連線";
-"onboarding.vpn.help.notReachable" = "無法連線";
+"onboarding.vpn.help.notReachable" = "連線錯誤";
 "onboarding.vpn.disconnected" = "未連接";
 "onboarding.vpn.checking" = "檢查中…";
 "onboarding.vpn.check" = "檢查連線";
-"onboarding.vpn.unavailable" = "LocalDevVPN 未連線，或連線逾時。";
-"onboarding.vpn.timedOut" = "LocalDevVPN 未連線，或連線逾時。";
+"onboarding.vpn.reconnect" = "重新連線";
+"onboarding.vpn.unavailable" = "LocalDevVPN 未連線，或連線逾時。請至設定檢查通道。";
+"onboarding.vpn.timedOut" = "LocalDevVPN 未連線，或連線逾時。請至設定檢查通道。";
 "onboarding.vpn.failureDetail" = "iOS 回報";
 "onboarding.vpn.externalOpenFailed" = "無法開啟 App Store。請手動開啟 App Store，搜尋 LocalDevVPN。";
 "map.simulatedLocation" = "目前模擬位置";
@@ -103,6 +105,19 @@
 "teleport.moving" = "前往中…";
 "teleport.unconfirmed" = "位置待確認";
 "teleport.positionUnconfirmed" = "位置變更尚未確認，請先停止服務，再使用 Go。";
+"teleport.failure.toast.title" = "瞬移失敗";
+"teleport.failure.toast.message" = "無法更新模擬位置。請至「設定 › VPN 通道」檢查連線。";
+"figma.fixture.b2.position" = "中山北路二段 45 號";
+"figma.fixture.b1.position" = "中山北路二段 45 號";
+"figma.fixture.b4.coordinate" = "前往座標";
+"figma.fixture.b4.result1.title" = "台北車站";
+"figma.fixture.b4.result1.address" = "台北市中正區北平西路 3 號 · 40 m";
+"figma.fixture.b4.result2.title" = "台北轉運站";
+"figma.fixture.b4.result2.address" = "台北市大同區市民大道一段 209 號 · 210 m";
+"figma.fixture.b4.result3.title" = "京站時尚廣場";
+"figma.fixture.b4.result3.address" = "台北市大同區承德路一段 1 號 · 260 m";
+"figma.fixture.b4.result4.title" = "國立台灣博物館";
+"figma.fixture.b4.result4.address" = "台北市中正區襄陽路 2 號 · 650 m";
 "error.operationCancelled" = "操作已取消。";
 "operation.preparingService" = "準備定位服務";
 "operation.preparingMove" = "準備位置變更";
@@ -153,7 +168,7 @@
 "route.currentLocation" = "目前位置";
 "route.picker.selecting" = "正在選：%@";
 "route.chooseOrigin" = "選擇起點";
-"route.chooseDestination" = "選擇終點";
+"route.chooseDestination" = "選擇目的地";
 "route.editOrigin" = "編輯起點";
 "route.editDestination" = "編輯終點";
 "route.fieldSearchHint" = "再次點擊即可開啟地點搜尋。";
@@ -177,7 +192,7 @@
 "route.error.missingStart" = "請選擇起點。";
 "route.error.missingDestination" = "請選擇終點。";
 "route.error.currentLocationUnavailable" = "目前位置尚無法確認。請在地圖或搜尋中，為使用目前位置的節點選擇地點。";
-"route.error.planningFailed" = "無法取得路徑。請確認地點或網路連線後重試。";
+"route.error.planningFailed" = "找不到可通行的路徑。請重新檢查起點，或點選修正。";
 "route.error.invalidPath" = "規劃的路線無效。請重新選擇地點後再試。";
 "route.phase.editing" = "編輯路線";
 "route.phase.planning" = "正在規劃路線⋯";
@@ -226,6 +241,10 @@
 "imports.import" = "匯入 GPX 檔案";
 "imports.export" = "GPX 匯出";
 "imports.load" = "載入";
+"imports.action.loadRoute" = "載入路線";
+"imports.action.viewAllPoints" = "查看全部點位";
+"imports.action.exportRoute" = "匯出路線";
+"imports.action.deleteRoute" = "刪除路線";
 "imports.empty" = "尚未匯入路線。";
 "imports.loading" = "正在讀取匯入清單…";
 "imports.working" = "正在處理檔案…";
@@ -243,7 +262,8 @@
 "imports.execution.disconnectedSegments" = "各段端點未完全銜接。仍可預覽或匯出，但無法載入執行。";
 "imports.execution.zeroDistance" = "路徑沒有可行進距離。仍可預覽或匯出，但無法載入執行。";
 "imports.file.unavailable" = "無法開啟或儲存檔案，請再試一次。";
-"imports.file.tooLarge" = "GPX 檔案超過 2 MiB 上限。";
+"imports.error.title" = "無法匯入 GPX";
+"imports.file.tooLarge" = "GPX 檔案超過 2 MiB 上限，請選擇較小的檔案。";
 "imports.file.unsupported" = "請選擇 GPX 或 XML 檔案。";
 "imports.error.corruptArchive" = "匯入路線清單已損壞，暫時無法變更。";
 "imports.error.unsupportedSchema" = "尚未支援此匯入清單版本。";
@@ -277,20 +297,21 @@
 "favoriteRoutes.remove" = "移除最愛路線";
 "favoriteRoutes.editLabel" = "編輯路線標籤";
 "favoriteRoutes.empty" = "尚未儲存最愛路線。";
-"favoriteRoutes.searchSaved" = "搜尋最愛路線";
+"favoriteRoutes.searchSaved" = "搜尋最愛地點";
 "favoriteRoutes.noMatches" = "找不到相符的最愛路線。";
 "favoriteRoutes.loading" = "正在讀取最愛路線…";
 "favoriteRoutes.validating" = "正在檢查選取路線…";
 "favoriteRoutes.working" = "正在更新最愛路線…";
 "favoriteRoutes.deleted" = "路線已刪除";
-"favoriteRoutes.deletedCount" = "已刪除 %ld 筆最愛路線";
+"favoriteRoutes.deletedCount" = "已刪除 %ld 項";
 "favoriteRoutes.undo" = "復原";
 "favoriteRoutes.return" = "返回路線";
 "favoriteRoutes.delete" = "刪除%@";
 "favoriteRoutes.deleteSingle" = "刪除";
 "favoriteRoutes.pointCount" = "%ld 點";
-"favoriteRoutes.placeCount" = "%ld 個地點";
-"favoriteRoutes.label" = "標籤（選填）";
+"favoriteRoutes.placeCount" = "%ld 個點位";
+"favoriteRoutes.label" = "路線標籤";
+"favoriteRoutes.namePlaceholder" = "路線名稱";
 "favoriteRoutes.cancel" = "取消";
 "favoriteRoutes.save" = "儲存";
 "favoriteRoutes.done" = "完成";
@@ -460,17 +481,17 @@
 "setup.waiting.title" = "在 Mac 上繼續設定";
 "setup.waiting.message" = "請在 GoFly Mac App 完成設定，再返回這部 iPhone。";
 "setup.mac.title" = "連接 Mac 完成配對";
-"setup.mac.message" = "安裝 App 後，請使用 USB 傳輸線連接 Mac，並於 Mac 端 GoFly 完成裝置配對與簽名授權。";
+"setup.mac.message" = "請使用 USB 傳輸線連接 Mac，並於 Mac 端 GoFly 完成裝置配對與簽名授權。";
 "setup.mac.unpaired" = "尚未配對";
 "setup.completed.title" = "設定完成";
 "setup.completed.message" = "GoFly 已準備就緒。";
 "setup.blocked.title" = "需要完成設定";
-"setup.blocked.identity" = "這個 GoFly App 與設定套件不符。請將這部 iPhone 連接 GoFly Mac App 修復設定。";
+"setup.blocked.identity" = "GoFly App 與套件不相符。請將這支 iPhone 連接 Mac App，以修復設定。";
 "setup.blocked.pairing" = "配對資料遺失或與這次設定不符。請將這部 iPhone 連接 GoFly Mac App 修復設定。";
 "setup.blocked.artifact" = "裝置支援套件不完整或與設定不符。請將這部 iPhone 連接 GoFly Mac App 修復設定。";
 "setup.blocked.input" = "設定套件無效。請將這部 iPhone 連接 GoFly Mac App 重試設定。";
 "setup.blocked.storage" = "GoFly 無法安全讀取設定。請將這部 iPhone 連接 GoFly Mac App 重試設定。";
-"setup.retry" = "重試設定";
+"setup.retry" = "重試";
 
 
 "recovery.coldClearPending" = "上次的模擬位置可能還在，請按「恢復 GPS」清除。";
@@ -494,10 +515,14 @@
 "sheet.detent.expanded" = "全開";
 "execution.end" = "結束";
 "common.undo" = "復原";
-"gallery.warningTitle" = "定位權限受限";
-"gallery.warningMessage" = "GoFly 只在 App 開啟時要求定位。";
-"gallery.successTitle" = "已移至此地點";
-"gallery.showSnackbar" = "顯示 snackbar";
+"common.continue" = "繼續";
+"gallery.warningTitle" = "系統已中止背景執行";
+"gallery.warningMessage" = "回到 GoFly 後可繼續漫步。";
+"gallery.successTitle" = "VPN 通道可用";
+"gallery.successMessage" = "可以進行下一步。";
+"gallery.showSnackbar" = "顯示";
+"gallery.presentationDim.show" = "顯示面板遮罩";
+"gallery.slider.resize" = "調整滑桿寬度";
 "gallery.snackbarText" = "已刪除 1 項";
 "gallery.executionTitle" = "前往 台北 101";
 "gallery.executionDetail" = "剩 1.2 km · 4 分鐘";
@@ -505,7 +530,8 @@
 "gallery.sheetBody" = "25.033, 121.565";
 "gallery.sheetRow" = "最近或最愛地點";
 
-"gallery.dangerTitle" = "裝置服務無法連線";
+"gallery.dangerTitle" = "無法連線到裝置服務";
+"gallery.dangerMessage" = "請確認 LocalDevVPN 已連線後重試。";
 
 "map.searchHint" = "搜尋地點、地址或經緯度。";
 "placeDetails.copied" = "已複製座標";
@@ -533,6 +559,8 @@
 "route.summary" = "%.1f 公里・%d 分鐘・%d 公里／小時";
 
 "imports.points.middle" = "中間 %d 點";
+"imports.points.title" = "全部點位";
+"imports.points.readOnly" = "唯讀";
 
 "imports.points.allCount" = "查看全部 %d 點";
 
@@ -544,7 +572,6 @@
 
 "imports.imported" = "已匯入「%@」";
 
-"imports.error.guidance" = "請選擇有效的 GPX 或 XML 檔案，大小上限 2 MiB。既有路線不受影響。";
 
 "favorites.noMatches" = "沒有符合的最愛地點";
 
@@ -575,7 +602,7 @@
 "search.nearby" = "附近地點";
 "search.choosing" = "正在選：%@";
 "route.chooseOrigin" = "選擇起點";
-"route.chooseDestination" = "選擇終點";
+"route.chooseDestination" = "選擇目的地";
 "route.chooseWaypoint" = "選擇停靠點 %ld";
 "sheet.currentPosition" = "目前模擬位置";
 "sheet.realPosition" = "目前位置";
@@ -603,7 +630,8 @@
 "route.duration" = "約 %d 分";
 "route.noRouteYet" = "選擇兩個地點後顯示距離";
 "route.speedUnit" = "km/h";
-"route.error.shortTitle" = "無法取得路徑";
+"route.error.shortTitle" = "無法規劃路線";
+"route.fixing" = "正在修正路線";
 "joystick.wanderDetail" = "自動前往隨機目的地";
 "joystick.currentDestinationLabel" = "目前目的地";
 "joystick.endWander" = "結束漫步";
@@ -619,7 +647,7 @@
 
 "route.viewList" = "檢視路線";
 
-"route.list.title" = "全部點位";
+"route.list.title" = "全部地點";
 
 "route.exchange" = "反轉順序";
 "route.speedShort" = "%ld km/h";
@@ -643,8 +671,8 @@
 "background.activity.durationProgress" = "%ld%% · 背景任務";
 "background.activity.routeProgress" = "路線進度 %ld%%";
 "background.durationCompleted" = "背景任務已完成";
-"background.positionPaused" = "位置維持已暫停";
-"background.positionPaused.message" = "重試以維持此位置。";
+"background.positionPaused" = "瞬移模擬已暫停";
+"background.positionPaused.message" = "連線中斷或背景中斷，點選重試以恢復定位。";
 "background.positionRetry" = "重試";
 "common.confirm" = "確認";
 "common.retry" = "重試";
@@ -660,11 +688,45 @@
 "status.pill.started" = "啟動";
 "status.pill.connecting" = "連接中";
 "status.pill.simulating" = "模擬中";
-"status.pill.paused" = "暫停";
+"status.pill.paused" = "已暫停";
 "status.pill.stopped" = "停止";
 "status.pill.error" = "錯誤";
+"status.pill.disconnected" = "連線中斷";
 "gallery.fieldFocused" = "台北";
 "gallery.fieldNormal" = "搜尋最愛地點";
+"gallery.component.iconButtons" = "圖示按鈕";
+"gallery.component.iconTextButtons" = "圖示＋文字按鈕";
+"gallery.component.textButtons" = "文字按鈕";
+"gallery.component.checkButtons" = "核取按鈕";
+"gallery.component.statusActions" = "狀態操作";
+"gallery.component.textFields" = "輸入欄位";
+"gallery.component.sample" = "元件預覽";
+"gallery.component.enabled" = "啟用";
+"gallery.component.disabled" = "停用";
+"gallery.component.selected" = "已選取";
+"gallery.component.unselected" = "未選取";
+"gallery.iconButton.variant.standard" = "標準";
+"gallery.iconButton.variant.route" = "路線";
+"gallery.iconButton.variant.ghostStandard" = "透明標準";
+"gallery.iconButton.variant.ghostRoute" = "透明路線";
+"gallery.iconButton.variant.clear" = "清除";
+"gallery.iconButton.variant.more" = "更多";
+"gallery.iconButton.variant.mapControls" = "地圖控制";
+"gallery.iconButton.variant.copy" = "複製";
+"gallery.iconButton.size.large" = "大型 · 44";
+"gallery.iconButton.size.medium" = "中型 · 40";
+"gallery.iconButton.size.small" = "小型 · 36";
+"gallery.iconButton.size.extraSmall" = "特小 · 32";
+"gallery.button.variant.primary" = "主要";
+"gallery.button.variant.neutral" = "中性";
+"gallery.button.variant.danger" = "危險";
+"gallery.button.variant.ghostPrimary" = "透明主要";
+"gallery.button.variant.ghostSecondary" = "透明次要";
+"gallery.button.size.large" = "大型";
+"gallery.button.size.medium" = "中型";
+"gallery.button.size.small" = "小型";
+"gallery.button.size.extraSmall" = "特小";
+"gallery.button.size.inline" = "行內";
 "wander.error.planningFailed" = "無法規劃路線";
 "wander.planning" = "正在規劃路線";
 "route.pausedToast.title" = "路線模擬已暫停";
@@ -677,6 +739,7 @@
 
 /* Shared error toast buttons (IssueAction) */
 "issue.action.retry" = "重試";
+"issue.action.fix" = "修正";
 "issue.action.settings" = "設定";
 "issue.action.chooseFile" = "選檔";
 
@@ -692,3 +755,10 @@
 
 // Figma 04 VPN onboarding copy.
 "onboarding.vpn.step4" = "點「重新檢查」";
+
+// Figma D2 route list fixture.
+"figma.fixture.route.taipei101" = "台北 101";
+"figma.fixture.route.palaceMuseum" = "國立故宮博物院";
+"figma.fixture.route.daanPark" = "大安森林公園";
+"figma.fixture.route.huashan1914" = "華山 1914 文創園區";
+"figma.fixture.route.songshanAirport" = "松山機場";

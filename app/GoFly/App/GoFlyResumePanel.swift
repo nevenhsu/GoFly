@@ -20,14 +20,14 @@ struct GoFlyResumePanel: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(GoFlyFont.title)
+                    .goFlyFont(GoFlyFont.title)
                     .foregroundStyle(GoFlyTextColor.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .accessibilityIdentifier("\(identifier).title")
                 if let subtitle {
                     Text(subtitle)
-                        .font(GoFlyFont.footnote)
+                        .goFlyFont(GoFlyFont.footnote)
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(1)
                         .accessibilityIdentifier("\(identifier).subtitle")
@@ -37,7 +37,7 @@ struct GoFlyResumePanel: View {
 
             Button(action: onResume) {
                 Text(ctaTitle)
-                    .font(GoFlyFont.subheadlineEmphasis)
+                    .goFlyFont(GoFlyFont.subheadlineEmphasis)
                     .foregroundStyle(isEnabled ? GoFlyTextColor.inverse : GoFlyTextColor.disabled)
                     .padding(.horizontal, 16)
                     .frame(height: 40)

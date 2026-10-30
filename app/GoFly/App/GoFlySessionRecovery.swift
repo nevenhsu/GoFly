@@ -8,9 +8,13 @@ func goFlySessionRecoveryStore() -> SessionRecoveryStore {
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: true
         )
+#if DEBUG && targetEnvironment(simulator)
         let directory = GoFlyUITestOverrides.namespace(
             "-gofly-ui-session-store", under: support, folder: "SessionRecovery"
         ) ?? support.appendingPathComponent("SessionRecovery", isDirectory: true)
+#else
+        let directory = support.appendingPathComponent("SessionRecovery", isDirectory: true)
+#endif
         return SessionRecoveryStore(persistence: FileSessionRecoveryPersistence(directory: directory))
     } catch {
         return SessionRecoveryStore(persistence: UnavailableSessionRecoveryPersistence())

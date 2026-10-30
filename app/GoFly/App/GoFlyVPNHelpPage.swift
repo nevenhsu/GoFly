@@ -47,32 +47,33 @@ struct GoFlyVPNHelpPage: View {
         HStack {
             Button(action: returnToPreviousPage) {
                 HStack(spacing: 5) {
-                    Image(systemName: GoFlySymbols.back)
-                        .goFlyControlSymbol(size: 16, maximum: 18)
+                    GoFlyIcon(GoFlySymbols.back)
+                        .goFlyIconSize(size: 16, maximum: 18)
                         .accessibilityHidden(true)
                     Text(goFlyString("common.back"))
-                        .font(GoFlyFont.body)
+                        .goFlyFont(GoFlyFont.body)
                 }
                 .foregroundStyle(GoFlyTextColor.accent)
                 .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(width: 88, height: 45, alignment: .leading)
             .accessibilityLabel(goFlyString("common.back"))
             .accessibilityIdentifier("onboarding.vpn.help.back")
-            Spacer(minLength: 0)
+
+            Text(goFlyString("onboarding.vpn.help"))
+                .goFlyFont(GoFlyFont.headline)
+                .foregroundStyle(GoFlyTextColor.primary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .accessibilityAddTraits(.isHeader)
+
+            Color.clear.frame(width: 88, height: 44)
         }
         .padding(.horizontal, 16)
-        .frame(height: 44)
-        .overlay {
-            Text(goFlyString("onboarding.vpn.help"))
-                .font(GoFlyFont.headline)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-                .allowsHitTesting(false)
-                .accessibilityAddTraits(.isHeader)
-        }
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
     private var instructionCard: some View {
@@ -94,11 +95,11 @@ struct GoFlyVPNHelpPage: View {
     private var troubleshootingCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(goFlyString("onboarding.vpn.help.troubleshooting"))
-                .font(GoFlyFont.subheadlineEmphasis)
+                .goFlyFont(GoFlyFont.subheadlineEmphasis)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .accessibilityAddTraits(.isHeader)
             Text(goFlyString("onboarding.vpn.help.reconnect"))
-                .font(GoFlyFont.footnote)
+                .goFlyFont(GoFlyFont.footnote)
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -153,20 +154,20 @@ struct GoFlyVPNInstructionRow: View {
     private var rowContents: some View {
         HStack(spacing: 12) {
             Text("\(number)")
-                .font(GoFlyFont.captionEmphasis)
+                .goFlyFont(GoFlyFont.captionEmphasis)
                 .foregroundStyle(GoFlyTextColor.inverse)
                 .frame(width: 24, height: 24)
                 .background(GoFlyStyle.primary, in: Circle())
                 .accessibilityHidden(true)
             Text(goFlyString(titleKey))
-                .font(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.subheadline)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .accessibilityIdentifier(accessibilityID)
             if showsChevron {
-                Image(systemName: GoFlySymbols.disclosure)
-                    .goFlyControlSymbol(size: 14, maximum: 16)
+                GoFlyIcon(GoFlySymbols.disclosure)
+                    .goFlyIconSize(size: 14, maximum: 16)
                     .foregroundStyle(GoFlyTextColor.secondary)
                     .accessibilityHidden(true)
             }

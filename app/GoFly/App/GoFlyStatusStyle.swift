@@ -4,7 +4,7 @@ import GoFlyCore
 /// Shared severity vocabulary for the status pill, banners and snackbar.
 /// Color is never the only signal: every tone also carries a symbol and a
 /// localized accessibility label.
-enum GoFlyStatusTone: String, CaseIterable, Sendable {
+enum GoFlyStatusTone: String, CaseIterable, Equatable, Sendable {
     case neutral
     case active
     case danger
@@ -32,7 +32,7 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
         }
     }
 
-    var symbol: String {
+    var symbol: GoFlyIconAsset {
         switch self {
         case .neutral: GoFlySymbols.waiting
         case .active: GoFlySymbols.location
@@ -43,22 +43,13 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     }
 
     /// Outline symbols used by Figma's `Toast / 系統訊息` components.
-    var toastSymbol: String {
+    var toastSymbol: GoFlyIconAsset {
         switch self {
         case .neutral: GoFlySymbols.waiting
         case .active: GoFlySymbols.location
-        case .danger, .warning: GoFlySymbols.warning
-        case .success: GoFlySymbols.success
-        }
-    }
-
-    var toastIcon: Color {
-        switch self {
-        case .neutral: GoFlyThemeColor.iconSecondary
-        case .active: GoFlyThemeColor.iconAccent
-        case .danger: GoFlyThemeColor.iconDanger
-        case .warning: GoFlyThemeColor.iconWarning
-        case .success: GoFlyThemeColor.iconSuccess
+        case .danger: .toastDanger
+        case .warning: .toastWarning
+        case .success: .toastSuccess
         }
     }
 
@@ -67,15 +58,18 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
     /// Spoken severity, so VoiceOver does not depend on the color.
     var accessibilityKey: String { "status.tone.\(rawValue)" }
 
-    /// Figma `StatusPill` dot: gray #8E8E93, green, orange #FF9F0A, red (system green/red adapt in dark).
+    /// Figma `StatusPill` dot uses the matching neutral, warning, danger, or success icon token.
     var pillDot: Color {
         switch self {
         case .neutral, .active: GoFlyStyle.pillDotNeutral
         case .warning: GoFlyStyle.pillDotWarning
-        case .danger: GoFlyStyle.danger
+        case .danger: GoFlyThemeColor.iconDanger
         case .success: GoFlyStyle.success
         }
     }
+
+    /// The disconnected status pill is flat in the Figma component board.
+    var pillUsesFloatingShadow: Bool { self != .danger }
 
     var surface: Color { tint.opacity(0.12) }
     var border: Color {
@@ -85,6 +79,23 @@ enum GoFlyStatusTone: String, CaseIterable, Sendable {
         case .danger: GoFlyThemeColor.lineStatusDanger
         case .warning: GoFlyThemeColor.lineStatusWarning
         case .success: GoFlyThemeColor.lineStatusSuccess
+        }
+    }
+
+    /// The compact `Button / Status action` variants use their status outline;
+    /// success is intentionally neutral in Figma's Light and Dark component boards.
+    var actionBorder: Color {
+        switch self {
+        case .neutral, .active, .success: GoFlyThemeColor.iconSecondary
+        case .danger: GoFlyThemeColor.lineStatusDanger
+        case .warning: GoFlyThemeColor.lineStatusWarning
+        }
+    }
+
+    var actionBorderWidth: CGFloat {
+        switch self {
+        case .success: 1
+        case .neutral, .active, .danger, .warning: 0.5
         }
     }
 

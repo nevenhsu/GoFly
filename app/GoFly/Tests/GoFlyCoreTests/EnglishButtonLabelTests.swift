@@ -8,11 +8,12 @@ struct EnglishButtonLabelTests {
         "route.cancelConfirmation.return", "route.start", "route.startShort", "route.cancel", "route.addStop",
         "route.viewList", "route.exchange", "route.clearRoute", "wifi.error.action", "operation.settings", "operation.return",
         "operation.cancel", "onboarding.location.allow", "onboarding.location.openSettings",
-        "onboarding.location.continue", "onboarding.vpn.open", "settings.vpn.check",
+        "onboarding.location.continue", "onboarding.vpn.open", "onboarding.vpn.reconnect", "settings.vpn.check",
         "settings.vpn.openLocalDevVPN", "settings.diagnostics.export", "setup.retry", "service.reset",
-        "imports.import", "imports.load", "imports.deleteAction", "search.clearHistory",
+        "imports.import", "imports.load", "imports.deleteAction", "imports.action.loadRoute",
+        "imports.action.viewAllPoints", "imports.action.exportRoute", "imports.action.deleteRoute", "search.clearHistory",
         "placeDetails.setStart", "placeDetails.setEnd", "joystick.startWander", "joystick.stopWander",
-        "favorites.selectAll", "toast.restore", "operation.retry", "common.retry", "common.undo", "common.confirm", "route.pause", "route.resume"
+        "favorites.selectAll", "toast.restore", "operation.retry", "common.retry", "common.undo", "common.continue", "common.confirm", "route.pause", "route.resume", "issue.action.fix"
     ]
 
     @Test func everyButtonLabelIsASingleEnglishWord() throws {
@@ -34,7 +35,7 @@ struct EnglishButtonLabelTests {
 
     /// Toast and snackbar buttons are at most two Chinese characters.
     private static let toastKeys = ["operation.settings", "operation.retry", "common.retry", "common.undo",
-                                    "imports.undo", "imports.load", "toast.restore", "wifi.error.action"]
+                                    "imports.undo", "imports.load", "toast.restore", "wifi.error.action", "issue.action.fix"]
 
     @Test func toastButtonsAreAtMostTwoChineseCharacters() throws {
         var url = URL(fileURLWithPath: #filePath)

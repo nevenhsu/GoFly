@@ -31,6 +31,7 @@ struct GoFlyRouteNodeList: View {
     var onScroll: (RouteNodeID, UnitPoint) -> Void
     /// Reports when a row drag starts and ends so the container can stop user scrolling.
     var onDraggingChange: (Bool) -> Void = { _ in }
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @GestureState private var gestureIsActive = false
     @State private var draggingID: RouteNodeID?
@@ -66,7 +67,9 @@ struct GoFlyRouteNodeList: View {
                     .id(id)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { rowFrames[id] = $0 }
                     if index < visibleOrder.count - 1 {
-                        Divider().padding(.horizontal, 12)
+                        Rectangle().fill(GoFlyThemeColor.lineSeparator)
+                            .frame(height: 0.5)
+                            .padding(.horizontal, 12)
                     }
                 }
             }
@@ -94,14 +97,31 @@ struct GoFlyRouteNodeList: View {
         .onChange(of: dynamicTypeSize) { _, _ in cancelDrag() }
         .onChange(of: viewport.width) { _, _ in cancelDrag() }
         .onDisappear { cancelDrag() }
+        .task {
+#if DEBUG && targetEnvironment(simulator)
+            guard GoFlyUITestOverrides.frame == "D2.a",
+                  let id = draft.nodes.dropFirst().first?.id else { return }
+            for _ in 0..<30 {
+                if let frame = rowFrames[id] {
+                    originalOrder = order
+                    previewOrder = order
+                    dragHeight = frame.height
+                    pointer = CGPoint(x: frame.midX, y: frame.midY + 16)
+                    draggingID = id
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+#endif
+        }
     }
 
     private func row(_ node: RouteNode) -> some View {
         let role = draft.role(of: node.id) ?? .start
         let isSelected = isEditable && selectedID == node.id
         return HStack(spacing: 0) {
-            Image(systemName: GoFlySymbols.reorder)
-                .goFlyControlSymbol(size: 18, weight: .semibold)
+            GoFlyIcon(GoFlySymbols.reorder)
+                .goFlyIconSize(size: 18)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .gesture(dragGesture(for: node.id))
@@ -116,9 +136,9 @@ struct GoFlyRouteNodeList: View {
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(goFlyRouteRoleTitle(role)).font(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
+                    Text(goFlyRouteRoleTitle(role)).goFlyFont(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(title(node.value, role: role)).font(GoFlyFont.body)
+                    Text(title(node.value, role: role)).goFlyFont(GoFlyFont.body)
                         .foregroundStyle(node.value == .empty ? GoFlyTextColor.secondary : GoFlyTextColor.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
@@ -135,8 +155,8 @@ struct GoFlyRouteNodeList: View {
             .accessibilityIdentifier(editIdentifier(role))
             if isEditable {
                 Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
-                    Image(systemName: GoFlySymbols.close)
-                        .goFlyControlSymbol(size: 15, weight: .medium)
+                    GoFlyIcon(GoFlySymbols.close)
+                        .goFlyIconSize(size: 15)
                         .goFlyIconForeground(enabledColor: GoFlyTextColor.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
@@ -151,7 +171,14 @@ struct GoFlyRouteNodeList: View {
         }
         .frame(minHeight: 60)
         .background {
-            if isSelected { Color.clear.goFlySearchField(isFocused: true) }
+            if isSelected {
+                RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
+                    .fill(colorScheme == .dark ? GoFlyThemeColor.surfaceControlActive : GoFlyStyle.cardSurface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
+                            .strokeBorder(GoFlyStyle.primary, lineWidth: 1.5)
+                    }
+            }
         }
         .foregroundStyle(isEditable ? GoFlyTextColor.primary : GoFlyTextColor.disabled)
         .accessibilityElement(children: .contain)
@@ -283,8 +310,10 @@ struct GoFlyRouteNodeList: View {
 struct GoFlyRouteNodeCard: View {
     @ObservedObject var controller: RouteExecutionController
     let proxy: ScrollViewProxy
+    @Environment(\.colorScheme) private var colorScheme
     /// Scroll height: the rows' height up to the space available, then the list scrolls.
     let height: CGFloat
+    var lightSurface: Color = GoFlyStyle.cardSurface
     var onEditNode: (RouteNodeID) -> Void
     var onContentHeightChange: (CGFloat) -> Void = { _ in }
 
@@ -319,10 +348,13 @@ struct GoFlyRouteNodeCard: View {
         .scrollDisabled(draggingHeight != nil)
         .frame(height: draggingHeight ?? height)
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { visibleScrollFrame = $0 }
-        .background(GoFlyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            colorScheme == .dark ? GoFlyStyle.secondarySurface : lightSurface,
+            in: RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
                 .strokeBorder(GoFlyStyle.border, lineWidth: 0.5)
         }
         .accessibilityElement(children: .contain)
