@@ -126,7 +126,7 @@ struct GoFlySpeedSheet: View {
             .padding(.horizontal, 20)
             // The detent respects the home-indicator safe area. Four points
             // here plus that inset render as the Figma 40 pt bottom margin.
-            .padding(.bottom, 4)
+            .padding(.bottom, 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(296)])

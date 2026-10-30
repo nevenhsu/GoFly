@@ -130,12 +130,13 @@ struct GoFlySearchPanel: View {
                                iconSize: 22, spacing: 8)
                     .lineLimit(1)
             }
-            .buttonStyle(GoFlyButtonStyle(variant: .primary, size: .inline, expandsToFill: false))
+            .buttonStyle(GoFlyButtonStyle(variant: .ghostPrimary, size: .inline, expandsToFill: false))
             .accessibilityLabel(goFlyString("favorites.shortTitle"))
             .accessibilityIdentifier("search.favorites")
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.role")
     }
@@ -251,7 +252,7 @@ struct GoFlySearchPanel: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, key == "search.recent" ? 0 : (key == "search.nearby" ? 16 : 8))
-        .padding(.bottom, key == "search.recent" ? 0 : 4)
+        .padding(.bottom, key == "search.recent" ? 8 : 4)
         .accessibilityIdentifier("search.section.\(key)")
     }
 

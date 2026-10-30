@@ -136,6 +136,7 @@ struct GoFlyFavoriteRoutesView: View {
                 .frame(minHeight: 44)
             }
             .buttonStyle(.plain)
+            .foregroundStyle(GoFlyTextColor.accent)
             .accessibilityIdentifier("favoriteRoutes.dismiss")
         } trailing: {
             if selecting {
@@ -145,6 +146,8 @@ struct GoFlyFavoriteRoutesView: View {
                     else { selected.formUnion(ids) }
                 } label: {
                     Text(goFlyString("favorites.selectAll"))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.accent)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -156,12 +159,13 @@ struct GoFlyFavoriteRoutesView: View {
                     selecting = true
                     selected.removeAll()
                 } label: {
-                    GoFlyIcon(.select, size: 22)
-                        .frame(width: 44, height: 44)
+                    Text(goFlyString("favorites.select"))
+                        .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                        .foregroundStyle(GoFlyTextColor.accent)
+                        .frame(minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(goFlyString("favorites.select"))
                 .disabled(!favorites.canMutate || favorites.records.isEmpty)
                 .accessibilityIdentifier("favoriteRoutes.select")
             }

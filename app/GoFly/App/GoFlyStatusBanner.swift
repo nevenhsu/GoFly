@@ -62,13 +62,14 @@ struct GoFlyStatusBanner: View {
     var isFloating = true
     @State private var isDismissedLocally = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         if !isDismissedLocally {
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 8) {
                             statusIcon
                             textContent
                             if showsDismissButton { dismissButton }
@@ -79,7 +80,7 @@ struct GoFlyStatusBanner: View {
                         }
                     }
                 } else {
-                    HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .center, spacing: 8) {
                         statusIcon
                         textContent
                         if showsActionButton { actionButton }
@@ -115,7 +116,7 @@ struct GoFlyStatusBanner: View {
                 .goFlyFont(GoFlyFont.subheadlineEmphasis)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .frame(minHeight: 21, alignment: .leading)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
                 .accessibilityIdentifier(titleIdentifier
@@ -123,9 +124,9 @@ struct GoFlyStatusBanner: View {
             if let message {
                 Text(message)
                     .goFlyFont(GoFlyFont.footnote)
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .lineSpacing(5)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .foregroundStyle(colorScheme == .dark ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
+                    .lineSpacing(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier(messageIdentifier
                         ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
@@ -172,16 +173,12 @@ struct GoFlyStatusBanner: View {
                 Color.clear.frame(width: 44, height: 44)
                 GoFlyIcon(GoFlySymbols.close)
                     .goFlyIconSize(size: 13, maximum: 16)
-                    .foregroundStyle(tone.toastDismiss)
+                    .foregroundStyle(colorScheme == .dark ? GoFlyTextColor.primary : tone.toastDismiss)
                     .frame(width: 20, height: 20)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // Figma lays out the close glyph in a 20 pt slot. Keep the 44 pt hit
-        // area, but reclaim 15 pt of its leading layout space when an action
-        // pill is present so the message and action match the rendered Toast.
-        .padding(.leading, showsActionButton && !dynamicTypeSize.isAccessibilitySize ? -15 : 0)
         .accessibilityLabel(goFlyString("common.dismiss"))
         .accessibilityIdentifier(identifier.map { "\($0).dismiss" } ?? "statusBanner.dismiss")
     }
@@ -213,6 +210,20 @@ extension View {
         overlay(alignment: .top) {
             GoFlyToastOverlay(topInset: topInset, content: content)
                 .zIndex(50)
+        }
+    }
+
+    func goFlyBottomToastOverlay<Toast: View>(bottomInset: CGFloat = 40,
+                                              @ViewBuilder content: @escaping () -> Toast) -> some View {
+        overlay(alignment: .bottom) {
+            VStack(spacing: 8) {
+                content()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, bottomInset)
+            .frame(maxWidth: .infinity, alignment: .bottom)
+            .accessibilityElement(children: .contain)
+            .zIndex(50)
         }
     }
 }

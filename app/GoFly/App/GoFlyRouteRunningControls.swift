@@ -77,8 +77,8 @@ struct GoFlyRouteRunningControls: View {
     private var playbackButton: some View {
         Button(action: onPlayback) {
             GoFlyIconLabel(
-                title: goFlyString(isInterrupted ? "common.retry" : (isPaused ? "route.resume" : "route.pause")),
-                icon: isInterrupted ? GoFlySymbols.retry : (isPaused ? GoFlySymbols.play : GoFlySymbols.pause))
+                title: goFlyString(isInterrupted ? "common.continue" : (isPaused ? "route.resume" : "route.pause")),
+                icon: isPaused ? GoFlySymbols.play : GoFlySymbols.pause)
                 .lineLimit(1)
         }
         .buttonStyle(GoFlyActionStyle(primary: true))

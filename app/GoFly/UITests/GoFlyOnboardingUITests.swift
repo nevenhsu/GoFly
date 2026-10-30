@@ -147,7 +147,7 @@ final class GoFlyOnboardingUITests: XCTestCase {
         #endif
     }
 
-    func testR08SetupMismatchFitsLargeDynamicTypeAndKeepsRetryReachable() throws {
+    func testR08SetupMismatchShowsMacRecoveryGuidanceWithoutRetry() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Figma frame fixtures run only in the iOS Simulator.")
         #else
@@ -166,12 +166,12 @@ final class GoFlyOnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["figma.fixture.R08"].waitForExistence(timeout: 15))
         let title = app.staticTexts["setup.blocked.title"]
         let message = app.staticTexts["setup.blocked.identity"]
-        let retry = app.buttons["setup.retry"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertTrue(message.exists)
-        XCTAssertTrue(retry.isHittable)
-        XCTAssertGreaterThanOrEqual(retry.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        XCTAssertFalse(app.buttons["setup.retry"].exists)
+        XCTAssertTrue(message.isHittable)
+        XCTAssertGreaterThanOrEqual(message.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(message.frame.height, 44)
         #endif
     }
 

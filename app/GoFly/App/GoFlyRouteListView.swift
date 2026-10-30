@@ -18,7 +18,7 @@ struct GoFlyRouteListView: View {
                     VStack(spacing: 0) {
                         routeCard
                         footer(using: proxy)
-                            .padding(.top, 8)
+                            .padding(.top, 4)
                     }
                     .padding(.top, 16)
                     .padding(.bottom, 16)
@@ -153,7 +153,7 @@ struct GoFlyRouteListView: View {
 
     private var reverseButton: some View {
         Button { _ = controller.reverseNodes() } label: {
-            GoFlyIconLabel(title: goFlyString("route.exchange"), icon: GoFlySymbols.swap)
+            GoFlyIconLabel(title: goFlyString("route.exchange"), icon: GoFlySymbols.swapVertical)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .buttonStyle(GoFlyRouteTextButtonStyle())

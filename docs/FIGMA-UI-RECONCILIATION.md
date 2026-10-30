@@ -575,3 +575,8 @@ Figma 設計更新，App 待實作，未做實機驗證。
 - **App 實作**：R02／R03 隱藏導航列返回鈕；R03 按授權狀態顯示專用標題與 pill 文案；R07 三語說明同步為直接連接 iPhone 與 Mac 配對的短文。R05 最大 Dynamic Type 的返回按鈕命中框增至 45 pt，修正 43.999999 pt 的邊界。
 - **Figma 缺口**：R02／R03 畫面使用填色 `icon/location` 向量，但共用 Icon 板僅有線框 `icon/nav`、沒有對應的 `icon/location`；App 依「只用共用 Icon 資產」規則保留 `icon/nav`，圖形填色仍有可見差異。未自行建立替代資產。R06 仍無 Figma frame；R05 移除本機網路權限列後沒有直接設定入口，待產品決定是否提供替代路徑。
 - **App 驗證**：iOS Simulator Light／Dark UI fixtures、R04 成功後自動進入 B1 並收合 sheet、不顯示 success Toast、R05 最大 Dynamic Type、R08 最大 Dynamic Type 及返回自動重查測試；截圖及逐 frame 比對記錄於 `.scratch/gofly-ios-figma04/issues/06-section-a-onboarding.md` 與 `work/gofly-ios-figma04/screenshots/`。這是 software verification；**未做實機驗證**。
+
+## 2026-10-30 Figma 04 UI 修訂同步
+
+Dark 所有 Toast 的說明小字與 X 均改用 primary 色；E1/E1.a/E2/E2.a/E3 panel 與 grabber 統一 96% opacity，Joystick 保留 compass／knob 分組。Figma 只更新靜態 wireframe，未加 prototype wiring。
+- **App 實作與規格**：已同步 SwiftUI、三語文案、路線 eligibility、D23 spacing 與 Toast／Snackbar 行為；更新 `IOS-UI-DESIGN.md`、`ROUTE-MODE-TASKS.md`。`check.sh` 通過 359 tests／58 suites、Native handoff host tests 與 unsigned simulator build。指定的 UI XCTest 未進入執行：以 `CODE_SIGNING_ALLOWED=NO` 建立的 `GoFly.app` 缺少 `CFBundleIdentifier`，Xcode 回報無法讀取 bundle identifier；依使用者要求，先記錄阻礙，等新項目合併時再一起處理。未做實機驗證、未 commit。

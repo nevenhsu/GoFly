@@ -35,7 +35,7 @@ final class GoFlySetupBootstrap: ObservableObject {
 
     init() {
         #if DEBUG && targetEnvironment(simulator)
-        if let frame = GoFlyUITestOverrides.frame {
+        if GoFlyUITestOverrides.frame != nil {
             if GoFlyUITestOverrides.frameNeedsMapRuntime {
                 runtime = GoFlyRuntimeAssembly()
             }
@@ -499,20 +499,6 @@ struct GoFlySetupLockView: View {
             .padding(.bottom, 24)
         }
         .background(GoFlyStyle.canvas.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: onRetry) {
-                Text(goFlyString("setup.retry"))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(GoFlyActionStyle(primary: true))
-            .accessibilityIdentifier("setup.retry")
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .background(GoFlyStyle.canvas.ignoresSafeArea(edges: .bottom))
-            .overlay(alignment: .top) {
-                GoFlyThemeColor.lineSeparator.frame(height: 0.5)
-            }
-        }
     }
 
     private var fallbackPage: some View {

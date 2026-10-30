@@ -16,19 +16,26 @@ struct ServiceSettingsView: View {
     @State private var resetSuccessToastVisible = GoFlyUITestOverrides.frame == "F1.b"
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                serviceCard
-                settingsGroups
+        VStack(spacing: 0) {
+            GoFlySheetNavBar(title: goFlyString("settings.title")) {
+                GoFlyNavBackButton(title: goFlyString("settings.backToMap"), identifier: "settings.back")
+            } trailing: {
+                EmptyView()
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    serviceCard
+                    settingsGroups
+                }
+                .padding(16)
+            }
         }
         .background(GoFlyStyle.canvas)
-        .goFlyToastOverlay(topInset: 8) { statusToasts }
-        .navigationTitle(goFlyString("settings.title"))
-        .navigationBarTitleDisplayMode(.large)
-        .goFlyNativeBackTitle("settings.title")
-        .toolbar(.visible, for: .navigationBar)
+        .goFlyToastOverlay(topInset: 54) { topStatusToasts }
+        .goFlyBottomToastOverlay(bottomInset: 40) { bottomStatusToasts }
+        .goFlyPushedFullScreen()
         .onAppear {
             systemStatus.refresh()
             recovery.requestForegroundCheck()
@@ -45,7 +52,7 @@ struct ServiceSettingsView: View {
     }
 
     @ViewBuilder
-    private var statusToasts: some View {
+    private var topStatusToasts: some View {
         if network.shouldShowWiFiError {
             GoFlyStatusBanner(
                 tone: .danger,
@@ -61,8 +68,8 @@ struct ServiceSettingsView: View {
         if let failure = bannerFailure, !serviceNoticeDismissed {
             GoFlyStatusBanner(
                 tone: .danger,
-                title: goFlyString(failure.rawValue),
-                message: goFlyString("settings.vpn.failureGuide"),
+                title: goFlyString("service.stopFailed.title"),
+                message: goFlyString("service.stopFailed.message"),
                 actionTitle: goFlyString("operation.retry"),
                 onAction: retryBannerFailure,
                 onDismiss: { serviceNoticeDismissed = true },
@@ -80,6 +87,10 @@ struct ServiceSettingsView: View {
                 isFloating: true
             )
         }
+    }
+
+    @ViewBuilder
+    private var bottomStatusToasts: some View {
         if resetSuccessToastVisible {
             GoFlyStatusBanner(
                 tone: .success,
@@ -115,7 +126,7 @@ struct ServiceSettingsView: View {
 
     private var settingsGroups: some View {
         VStack(alignment: .leading, spacing: 20) {
-            settingsSection("settings.permissionsAndConnection", footerKey: "settings.permissionsFooter") {
+            settingsSection("settings.permissionsAndConnection") {
                 settingsLink(title: "settings.location", value: locationSummary,
                              destination: { GoFlyLocationSettingsPage() })
                 settingsDivider
@@ -129,7 +140,7 @@ struct ServiceSettingsView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settings.wifi")
                 settingsDivider
-                settingsLink(title: "settings.background", value: backgroundSummary,
+                settingsLink(title: "settings.backgroundTitle", value: backgroundSummary, identifier: "settings.background",
                              destination: { GoFlyBackgroundSettingsPage(continuation: continuation) })
             }
             settingsSection("settings.preferences") {
@@ -177,6 +188,7 @@ struct ServiceSettingsView: View {
     private func settingsLink<Destination: View>(
         title titleKey: String,
         value: String?,
+        identifier: String? = nil,
         @ViewBuilder destination: () -> Destination
     ) -> some View {
         NavigationLink {
@@ -185,7 +197,7 @@ struct ServiceSettingsView: View {
             settingsRow(titleKey: titleKey, value: value)
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("settings.\(titleKey.replacingOccurrences(of: "settings.", with: ""))")
+        .accessibilityIdentifier(identifier ?? "settings.\(titleKey.replacingOccurrences(of: "settings.", with: ""))")
     }
 
     private func settingsRow(titleKey: String, value: String?) -> some View {
@@ -230,7 +242,7 @@ struct ServiceSettingsView: View {
     private func settingsIconKind(for key: String) -> GoFlySettingsIconKind {
         switch key {
         case "settings.location": .location
-        case "settings.background": .background
+        case "settings.background", "settings.backgroundTitle": .background
         case "settings.vpn": .vpn
         case "settings.wifi": .wifi
         case "settings.language": .language
@@ -246,46 +258,11 @@ struct ServiceSettingsView: View {
                     Text(goFlyString("service.title")).goFlyFont(GoFlyFont.headline)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                GoFlyStatusPill(text: goFlyString(movement.status.textKey), tone: movement.status.tone,
+                GoFlyStatusPill(text: goFlyString(statusPillTextKey), tone: statusPillTone,
                                 action: nil, identifier: "service.statusPill")
-                    .accessibilityValue(goFlyString(movement.status.textKey))
+                    .accessibilityValue(goFlyString(statusPillTextKey))
             }
-            Button {
-                if offersStop {
-                    _ = service.stop()
-                } else {
-                    _ = service.start()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if service.nativeBusy {
-                        ProgressView()
-                    } else {
-                        GoFlyIcon(offersStop ? .stop : GoFlySymbols.play)
-                            .goFlyIconSize(size: 15)
-                    }
-                    Text(goFlyString(offersStop ? "service.stop" : "service.start"))
-                }
-            }
-            .buttonStyle(GoFlyActionStyle())
-            .disabled(offersStop ? !service.canStop : !service.canStart)
-            .accessibilityIdentifier("service.primary")
-
-            if service.canForceReset {
-                Button {
-                    awaitingResetSuccessToast = service.forceReset()
-                    resetSuccessToastVisible = false
-                } label: {
-                    HStack(spacing: 8) {
-                        GoFlyIcon(GoFlySymbols.reset)
-                            .goFlyIconSize(size: 15)
-                        Text(goFlyString("service.reset"))
-                    }
-                }
-                .buttonStyle(GoFlyActionStyle())
-                .accessibilityHint(goFlyString("service.resetHint"))
-                .accessibilityIdentifier("service.reset")
-            }
+            serviceActionButton
 
             if service.phase == .repairRequired || service.clearConfirmedAt != nil {
                 Divider()
@@ -311,6 +288,66 @@ struct ServiceSettingsView: View {
         .goFlyCard(radius: 14)
     }
 
+    private var statusPillTextKey: String {
+        if shouldReset { return "device.status.interrupted" }
+        if GoFlyUITestOverrides.frame == "F1" { return "status.pill.started" }
+        return movement.status.textKey
+    }
+
+    private var statusPillTone: GoFlyStatusTone {
+        if shouldReset { return .danger }
+        if GoFlyUITestOverrides.frame == "F1" { return .success }
+        return movement.status.tone
+    }
+
+    private var serviceActionButton: some View {
+        let isReset = shouldReset
+        let isStop = offersStop && !isReset
+        return Button {
+            if isReset {
+                awaitingResetSuccessToast = service.forceReset()
+                resetSuccessToastVisible = false
+            } else if isStop {
+                _ = service.stop()
+            } else {
+                _ = service.start()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if service.nativeBusy {
+                    ProgressView()
+                } else if isReset {
+                    GoFlyIcon(GoFlySymbols.reset).goFlyIconSize(size: 15)
+                } else if isStop {
+                    GoFlyIcon(.stop).goFlyIconSize(size: 15)
+                } else {
+                    GoFlyIcon(GoFlySymbols.play).goFlyIconSize(size: 15)
+                }
+                Text(buttonTitle(isReset: isReset, isStop: isStop))
+            }
+        }
+        .buttonStyle(GoFlyActionStyle(primary: !isReset))
+        .disabled(actionDisabled(isReset: isReset, isStop: isStop))
+        .accessibilityHint(isReset ? goFlyString("service.resetHint") : "")
+        .accessibilityIdentifier(isReset ? "service.reset" : "service.primary")
+    }
+
+    private var shouldReset: Bool {
+        service.phase == .repairRequired || service.canForceReset || GoFlyUITestOverrides.frame == "F1.a"
+    }
+
+    private func buttonTitle(isReset: Bool, isStop: Bool) -> String {
+        if isReset { return goFlyString("service.reset") }
+        if isStop { return goFlyString("service.stop") }
+        return goFlyString("service.start")
+    }
+
+    private func actionDisabled(isReset: Bool, isStop: Bool) -> Bool {
+        if isReset { return service.nativeBusy }
+        if isStop { return !service.canStop }
+        return !service.canStart
+    }
+
     private func resolveResetSuccessToast() {
         guard awaitingResetSuccessToast, !service.nativeBusy, service.phase == .stopped else { return }
         awaitingResetSuccessToast = false
@@ -327,5 +364,6 @@ struct ServiceSettingsView: View {
     private var offersStop: Bool {
         movement.status == .simulating || movement.status == .paused
             || service.phase == .preparing || service.phase == .repairRequired || service.isRecoveringConnection
+            || GoFlyUITestOverrides.frame == "F1"
     }
 }

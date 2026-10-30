@@ -10,17 +10,49 @@ private struct GoFlySettingsPageContainer<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                content()
+        VStack(spacing: 0) {
+            GoFlySheetNavBar(title: goFlyString(titleKey)) {
+                GoFlyNavBackButton(title: goFlyString("settings.title"), identifier: "\(rootIdentifier).back")
+            } trailing: {
+                EmptyView()
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    content()
+                }
+                .padding(16)
+            }
+            .accessibilityIdentifier(rootIdentifier)
         }
         .background(GoFlyStyle.canvas.ignoresSafeArea())
-        .goFlyNativeBackTitle()
-        .navigationTitle(goFlyString(titleKey))
-        .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier(rootIdentifier)
+        .goFlyPushedFullScreen()
+    }
+}
+
+private struct GoFlySettingsSectionHeader: View {
+    let titleKey: String
+
+    var body: some View {
+        Text(goFlyString(titleKey))
+            .goFlyFont(GoFlyFont.caption)
+            .foregroundStyle(GoFlyTextColor.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+    }
+}
+
+private struct GoFlySettingsFooterNote: View {
+    let textKey: String
+
+    var body: some View {
+        Text(goFlyString(textKey))
+            .goFlyFont(GoFlyFont.caption)
+            .foregroundStyle(GoFlyTextColor.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
     }
 }
 
@@ -56,66 +88,6 @@ private struct GoFlySettingsRow<Content: View>: View {
     }
 }
 
-private struct GoFlySettingsStatusCard: View {
-    let titleKey: String
-    let status: String
-    let identifier: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 14) {
-                GoFlyIcon(symbol)
-                    .goFlyIconSize(size: 22)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                    .frame(width: 44, height: 44)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(goFlyString(titleKey))
-                        .goFlyFont(GoFlyFont.headline)
-                    Text(status)
-                        .goFlyFont(GoFlyFont.subheadline)
-                        .foregroundStyle(GoFlyTextColor.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .goFlyCard()
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private var symbol: GoFlyIconAsset {
-        switch titleKey {
-        case "settings.location": GoFlySymbols.location
-        case "settings.background": GoFlySymbols.background
-        case "settings.vpn": GoFlySymbols.network
-        default: GoFlySymbols.device
-        }
-    }
-}
-
-private struct GoFlySettingsAction: View {
-    let titleKey: String
-    let action: () -> Void
-    var identifier: String
-    var disabled = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(goFlyString(titleKey))
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(GoFlyActionStyle())
-        .disabled(disabled)
-        .accessibilityIdentifier(identifier)
-    }
-}
-
 struct GoFlyLocationSettingsPage: View {
     @StateObject private var status = GoFlySystemStatus()
 
@@ -127,6 +99,7 @@ struct GoFlyLocationSettingsPage: View {
                         GoFlySettingsValueRow {
                             Text(goFlyString("settings.location"))
                                 .goFlyFont(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.primary)
                         } value: {
                             Text(locationStatus)
                                 .goFlyFont(GoFlyFont.body)
@@ -141,9 +114,8 @@ struct GoFlyLocationSettingsPage: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settings.location.status")
             }
-
         }
-        .goFlyToastOverlay(topInset: 8) {
+        .goFlyToastOverlay(topInset: 54) {
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"),
                                   identifier: "settings.location.externalOpenFailed")
@@ -165,64 +137,58 @@ struct GoFlyBackgroundSettingsPage: View {
     private var preferences: GoFlyPreferences { GoFlyPreferences.shared }
 
     var body: some View {
-        GoFlySettingsPageContainer(titleKey: "settings.background", rootIdentifier: "settings.background.page") {
-            GoFlySettingsGroup {
-                GoFlySettingsRow {
-                    GoFlySettingsValueRow {
-                        Text(goFlyString("settings.background.purposeTitle"))
-                            .goFlyFont(GoFlyFont.body)
-                    } value: {
-                        Text(goFlyString("settings.background.systemTask"))
-                            .goFlyFont(GoFlyFont.body)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                    }
-                }
-                Divider().padding(.leading, 16)
-                Button { showingDuration = true } label: {
-                    GoFlySettingsRow {
-                        GoFlySettingsValueRow {
-                            Text(goFlyString("settings.background.duration"))
-                                .goFlyFont(GoFlyFont.body)
-                        } value: {
-                            Text(GoFlyBackgroundDuration.summary(seconds: preferences.backgroundRunSeconds))
-                                .goFlyFont(GoFlyFont.body)
+        GoFlySettingsPageContainer(titleKey: "settings.backgroundTitle", rootIdentifier: "settings.background.page") {
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsGroup {
+                    Button(action: status.openSystemSettings) {
+                        GoFlySettingsRow {
+                            GoFlySettingsValueRow {
+                                Text(goFlyString("settings.background"))
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                            } value: {
+                                Text(backgroundStatus)
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.secondary)
+                            }
+                            GoFlyIcon(GoFlySymbols.disclosure)
+                                .goFlyIconSize(size: 13, maximum: 16)
                                 .foregroundStyle(GoFlyTextColor.secondary)
+                                .accessibilityHidden(true)
                         }
-                        GoFlyIcon(GoFlySymbols.disclosure)
-                            .goFlyIconSize(size: 13, maximum: 16)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .accessibilityHidden(true)
                     }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.background.duration")
-            }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.background.open")
 
-            GoFlySettingsGroup {
-                Button(action: status.openSystemSettings) {
-                    GoFlySettingsRow {
-                        GoFlySettingsValueRow {
-                            Text(goFlyString("settings.background"))
-                                .goFlyFont(GoFlyFont.body)
-                        } value: {
-                            Text(backgroundStatus)
-                                .goFlyFont(GoFlyFont.body)
+                    Divider().padding(.leading, 16)
+
+                    Button { showingDuration = true } label: {
+                        GoFlySettingsRow {
+                            GoFlySettingsValueRow {
+                                Text(goFlyString("settings.background.duration"))
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                            } value: {
+                                Text(GoFlyBackgroundDuration.summary(seconds: preferences.backgroundRunSeconds))
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.secondary)
+                            }
+                            GoFlyIcon(GoFlySymbols.disclosure)
+                                .goFlyIconSize(size: 13, maximum: 16)
                                 .foregroundStyle(GoFlyTextColor.secondary)
+                                .accessibilityHidden(true)
                         }
-                        GoFlyIcon(GoFlySymbols.disclosure)
-                            .goFlyIconSize(size: 13, maximum: 16)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .accessibilityHidden(true)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.background.duration")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.background.open")
+
+                GoFlySettingsFooterNote(textKey: "settings.background.footerNote")
             }
 
             if continuation.hasRuntime || continuation.noticeKey != nil {
                 GoFlyContinuationStatus(continuation: continuation)
             }
-
         }
         .sheet(isPresented: $showingDuration, onDismiss: continuation.backgroundDurationDidChange) {
             GoFlyBackgroundDurationSheet(
@@ -231,7 +197,7 @@ struct GoFlyBackgroundSettingsPage: View {
                 onDismiss: { showingDuration = false })
         }
         .goFlyTracksSystemPresentation(showingDuration, id: "settings.background.duration")
-        .goFlyToastOverlay(topInset: 8) {
+        .goFlyToastOverlay(topInset: 54) {
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("settings.externalOpenFailed"),
                                   identifier: "settings.background.externalOpenFailed")
@@ -258,64 +224,95 @@ struct GoFlyVPNSettingsPage: View {
 
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.vpn", rootIdentifier: "settings.vpn.page") {
-            GoFlySettingsGroup {
-                GoFlySettingsRow {
-                    GoFlySettingsValueRow {
-                        Text(goFlyString("settings.vpn"))
-                            .goFlyFont(GoFlyFont.body)
-                    } value: {
-                        GoFlyStatusPill(text: goFlyString(recovery.connectionState.settingsStatusKey),
-                                        tone: vpnTone,
-                                        action: nil,
-                                        identifier: "settings.vpn.status")
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsSectionHeader(titleKey: "settings.vpn.statusSection")
+                GoFlySettingsGroup {
+                    GoFlySettingsRow {
+                        GoFlySettingsValueRow {
+                            Text(goFlyString("settings.vpn"))
+                                .goFlyFont(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.primary)
+                        } value: {
+                            GoFlyStatusPill(text: goFlyString(recovery.connectionState.settingsStatusKey),
+                                            tone: vpnTone,
+                                            action: nil,
+                                            identifier: "settings.vpn.status")
+                        }
+                    }
+
+                    Divider().padding(.leading, 16)
+
+                    GoFlySettingsRow {
+                        GoFlySettingsValueRow {
+                            Text(goFlyString("settings.vpn.lastChecked"))
+                                .goFlyFont(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.primary)
+                        } value: {
+                            Text(goFlyString("settings.vpn.justNow"))
+                                .goFlyFont(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                        }
                     }
                 }
             }
 
-            GoFlySettingsGroup {
-                Button(action: recovery.checkConnection) {
-                    GoFlySettingsRow {
-                        Text(goFlyString("settings.vpn.check"))
-                            .goFlyFont(GoFlyFont.body)
-                        Spacer(minLength: 8)
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsSectionHeader(titleKey: "settings.vpn.actionsSection")
+                GoFlySettingsGroup {
+                    Button(action: { GoFlyExternalLinks.openStore { _ in } }) {
+                        GoFlySettingsRow {
+                            GoFlySettingsValueRow {
+                                Text(goFlyString("settings.vpn.downloadLocalDevVPN"))
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                            } value: {
+                                Text(goFlyString("settings.vpn.appStore"))
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.secondary)
+                            }
+                            GoFlyIcon(GoFlySymbols.disclosure)
+                                .goFlyIconSize(size: 13, maximum: 16)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                                .accessibilityHidden(true)
+                        }
                     }
-                }
-                .buttonStyle(.plain)
-                .disabled(!recovery.canCheck)
-                .accessibilityIdentifier("settings.vpn.check")
-                Divider().padding(.leading, 16)
-                Button(action: status.openLocalDevVPN) {
-                    GoFlySettingsRow {
-                        Text(goFlyString("settings.vpn.openLocalDevVPN"))
-                            .goFlyFont(GoFlyFont.body)
-                        Spacer(minLength: 8)
-                        GoFlyIcon(GoFlySymbols.disclosure)
-                            .goFlyIconSize(size: 13, maximum: 16)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .accessibilityHidden(true)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.vpn.download")
+
+                    Divider().padding(.leading, 16)
+
+                    Button(action: status.openLocalDevVPN) {
+                        GoFlySettingsRow {
+                            Text(goFlyString("settings.vpn.openLocalDevVPN"))
+                                .goFlyFont(GoFlyFont.body)
+                                .foregroundStyle(GoFlyTextColor.primary)
+                            Spacer(minLength: 8)
+                            GoFlyIcon(GoFlySymbols.disclosure)
+                                .goFlyIconSize(size: 13, maximum: 16)
+                                .foregroundStyle(GoFlyTextColor.secondary)
+                                .accessibilityHidden(true)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.vpn.open")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.vpn.open")
             }
 
-            GoFlySettingsGroup {
-                NavigationLink {
-                    GoFlyVPNHelpPage()
-                } label: {
-                    GoFlySettingsRow {
-                        Text(goFlyString("onboarding.vpn.help"))
-                            .goFlyFont(GoFlyFont.body)
-                        Spacer(minLength: 8)
-                        GoFlyIcon(GoFlySymbols.disclosure)
-                            .goFlyIconSize(size: 13, maximum: 16)
-                            .foregroundStyle(GoFlyTextColor.secondary)
-                            .accessibilityHidden(true)
-                    }
+            Button {
+                showingHelp = true
+            } label: {
+                HStack(spacing: 6) {
+                    GoFlyIcon(GoFlySymbols.help)
+                        .goFlyIconSize(size: 20)
+                    Text(goFlyString("onboarding.vpn.help"))
+                        .goFlyFont(GoFlyFont.body)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.vpn.help")
+                .foregroundStyle(GoFlyTextColor.accent)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.vpn.help")
 
             if recovery.isChecking {
                 ProgressView()
@@ -324,7 +321,7 @@ struct GoFlyVPNSettingsPage: View {
             }
         }
         .navigationDestination(isPresented: $showingHelp) { GoFlyVPNHelpPage() }
-        .goFlyToastOverlay(topInset: 8) {
+        .goFlyToastOverlay(topInset: 54) {
             if status.externalOpenFailed {
                 GoFlyStatusBanner(tone: .danger, title: goFlyString("onboarding.vpn.externalOpenFailed"),
                                   identifier: "settings.vpn.externalOpenFailed")
@@ -356,7 +353,6 @@ struct GoFlyVPNSettingsPage: View {
         case .unknown: .neutral
         }
     }
-
 }
 
 struct GoFlyDeviceSettingsPage: View {
@@ -369,27 +365,37 @@ struct GoFlyDeviceSettingsPage: View {
     var body: some View {
         GoFlySettingsPageContainer(titleKey: "settings.device", rootIdentifier: "settings.device.page") {
             let snapshot = status.deviceSnapshot(service: service, setupMetadata: setupMetadata)
-            GoFlySettingsGroup {
-                deviceField("settings.device.pairing", value: snapshot.pairingStatus, identifier: "settings.device.pairing")
-                Divider().padding(.leading, 16)
-                deviceField("settings.device.signingExpiry", value: snapshot.signingExpiryStatus, identifier: "settings.device.signingExpiry")
-                Divider().padding(.leading, 16)
-                deviceField("settings.device.teamID", value: snapshot.teamIDStatus, identifier: "settings.device.teamID")
-                Divider().padding(.leading, 16)
-                deviceField("settings.device.service", value: snapshot.serviceStatus, identifier: "settings.device.service")
-                Divider().padding(.leading, 16)
-                deviceField("settings.device.version", value: snapshot.appVersion, identifier: "settings.device.version")
-                Divider().padding(.leading, 16)
-                deviceField("settings.device.system", value: "\(snapshot.deviceName) · \(snapshot.deviceModel) · \(snapshot.systemName) \(snapshot.systemVersion)", identifier: "settings.device.system")
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsGroup {
+                    deviceField("settings.device.pairing", value: snapshot.pairingStatus, identifier: "settings.device.pairing")
+                    Divider().padding(.leading, 16)
+                    deviceField("settings.device.service", value: snapshot.serviceStatusDisplay, identifier: "settings.device.service")
+                    Divider().padding(.leading, 16)
+                    deviceField("settings.device.signingExpiry", value: snapshot.signingExpiryStatus, identifier: "settings.device.signingExpiry")
+                    Divider().padding(.leading, 16)
+                    deviceField("settings.device.daysLeft", value: snapshot.daysLeftStatus, identifier: "settings.device.daysLeft")
+                    if GoFlyUITestOverrides.frame != "F9" {
+                        Divider().padding(.leading, 16)
+                        deviceField("settings.device.teamID", value: snapshot.teamIDStatus, identifier: "settings.device.teamID")
+                        Divider().padding(.leading, 16)
+                        deviceField("settings.device.version", value: snapshot.appVersion, identifier: "settings.device.version")
+                        Divider().padding(.leading, 16)
+                        deviceField("settings.device.system", value: "\(snapshot.deviceName) · \(snapshot.deviceModel) · \(snapshot.systemName) \(snapshot.systemVersion)", identifier: "settings.device.system")
+                    }
+                }
+
+                GoFlySettingsFooterNote(textKey: "settings.device.footerNote")
             }
 
-            diagnosticsSection
+            if GoFlyUITestOverrides.frame != "F9" {
+                diagnosticsSection
+            }
         }
         .sheet(item: $exportItem) { item in
             GoFlyShareSheet(url: item.url)
         }
         .goFlyTracksSystemPresentation(exportItem != nil, id: "settings.diagnostics.share")
-        .goFlyToastOverlay(topInset: 8) {
+        .goFlyToastOverlay(topInset: 54) {
             if exportFailed {
                 GoFlyStatusBanner(tone: .danger,
                                   title: goFlyString("settings.diagnostics.exportFailed"),
@@ -437,15 +443,34 @@ struct GoFlyDeviceSettingsPage: View {
         GoFlySettingsValueRow {
             Text(goFlyString(titleKey))
                 .goFlyFont(GoFlyFont.body)
+                .foregroundStyle(GoFlyTextColor.primary)
         } value: {
             Text(value)
-                .goFlyFont(GoFlyFont.subheadline)
+                .goFlyFont(GoFlyFont.body)
                 .foregroundStyle(GoFlyTextColor.secondary)
         }
         .frame(minHeight: 52)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+private struct GoFlySettingsAction: View {
+    let titleKey: String
+    let action: () -> Void
+    var identifier: String
+    var disabled = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(goFlyString(titleKey))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(GoFlyActionStyle())
+        .disabled(disabled)
         .accessibilityIdentifier(identifier)
     }
 }
@@ -546,7 +571,6 @@ struct GoFlyContinuationStatus: View {
                 .foregroundStyle(GoFlyTextColor.secondary)
                 .accessibilityIdentifier("background.runtimeAvailable")
             }
-
         }
         .padding(16)
         .goFlyCard(floating: true)
@@ -584,27 +608,35 @@ struct GoFlyLanguageSettingsPage: View {
     @Bindable private var preferences = GoFlyPreferences.shared
 
     var body: some View {
-        Form {
-            Section {
-                Picker(goFlyString("settings.language"), selection: Binding(
-                    get: { preferences.language },
-                    set: { preferences.setLanguage($0) }
-                )) {
-                    ForEach(GoFlyLanguage.allCases) { language in
-                        Text(language.title).tag(language)
+        GoFlySettingsPageContainer(titleKey: "settings.language", rootIdentifier: "settings.language.page") {
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsGroup {
+                    ForEach(Array(GoFlyLanguage.allCases.enumerated()), id: \.element.id) { index, language in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        Button {
+                            preferences.setLanguage(language)
+                        } label: {
+                            GoFlySettingsRow {
+                                Text(language.title)
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                                Spacer(minLength: 8)
+                                if preferences.language == language {
+                                    GoFlyIcon(GoFlySymbols.selected)
+                                        .goFlyIconSize(size: 18)
+                                        .foregroundStyle(GoFlyTextColor.accent)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.language.\(language.rawValue)")
                     }
                 }
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("settings.language")
-            } header: {
-                Text(goFlyString("settings.language"))
             }
         }
-        .pickerStyle(.menu)
-        .navigationTitle(goFlyString("settings.language"))
-        .navigationBarTitleDisplayMode(.inline)
-        .goFlyNativeBackTitle()
-        .accessibilityIdentifier("settings.language.page")
     }
 }
 
@@ -612,27 +644,35 @@ struct GoFlyAppearanceSettingsPage: View {
     @Bindable private var preferences = GoFlyPreferences.shared
 
     var body: some View {
-        Form {
-            Section {
-                Picker(goFlyString("settings.appearance"), selection: Binding(
-                    get: { preferences.appearance },
-                    set: { preferences.setAppearance($0) }
-                )) {
-                    ForEach(GoFlyAppearance.allCases) { appearance in
-                        Text(appearance.title).tag(appearance)
+        GoFlySettingsPageContainer(titleKey: "settings.appearance", rootIdentifier: "settings.appearance.page") {
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsGroup {
+                    ForEach(Array(GoFlyAppearance.allCases.enumerated()), id: \.element.id) { index, appearance in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        Button {
+                            preferences.setAppearance(appearance)
+                        } label: {
+                            GoFlySettingsRow {
+                                Text(appearance.title)
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                                Spacer(minLength: 8)
+                                if preferences.appearance == appearance {
+                                    GoFlyIcon(GoFlySymbols.selected)
+                                        .goFlyIconSize(size: 18)
+                                        .foregroundStyle(GoFlyTextColor.accent)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.appearance.\(appearance.rawValue)")
                     }
                 }
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("settings.appearance")
-            } header: {
-                Text(goFlyString("settings.appearance"))
             }
         }
-        .pickerStyle(.menu)
-        .navigationTitle(goFlyString("settings.appearance"))
-        .navigationBarTitleDisplayMode(.inline)
-        .goFlyNativeBackTitle()
-        .accessibilityIdentifier("settings.appearance.page")
     }
 }
 
@@ -640,40 +680,64 @@ struct GoFlyPreferencesSettingsPage: View {
     @Bindable private var preferences = GoFlyPreferences.shared
 
     var body: some View {
-        Form {
-            Section {
-                Picker(goFlyString("settings.language"), selection: Binding(
-                    get: { preferences.language },
-                    set: { preferences.setLanguage($0) }
-                )) {
-                    ForEach(GoFlyLanguage.allCases) { language in
-                        Text(language.title).tag(language)
+        GoFlySettingsPageContainer(titleKey: "settings.languageAndAppearance", rootIdentifier: "settings.preferences.page") {
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsSectionHeader(titleKey: "settings.language")
+                GoFlySettingsGroup {
+                    ForEach(Array(GoFlyLanguage.allCases.enumerated()), id: \.element.id) { index, language in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        Button {
+                            preferences.setLanguage(language)
+                        } label: {
+                            GoFlySettingsRow {
+                                Text(language.title)
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                                Spacer(minLength: 8)
+                                if preferences.language == language {
+                                    GoFlyIcon(GoFlySymbols.selected)
+                                        .goFlyIconSize(size: 18)
+                                        .foregroundStyle(GoFlyTextColor.accent)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.language.\(language.rawValue)")
                     }
                 }
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("settings.language")
-            } header: {
-                Text(goFlyString("settings.language"))
             }
-            Section {
-                Picker(goFlyString("settings.appearance"), selection: Binding(
-                    get: { preferences.appearance },
-                    set: { preferences.setAppearance($0) }
-                )) {
-                    ForEach(GoFlyAppearance.allCases) { appearance in
-                        Text(appearance.title).tag(appearance)
+
+            VStack(alignment: .leading, spacing: 8) {
+                GoFlySettingsSectionHeader(titleKey: "settings.appearance")
+                GoFlySettingsGroup {
+                    ForEach(Array(GoFlyAppearance.allCases.enumerated()), id: \.element.id) { index, appearance in
+                        if index > 0 {
+                            Divider().padding(.leading, 16)
+                        }
+                        Button {
+                            preferences.setAppearance(appearance)
+                        } label: {
+                            GoFlySettingsRow {
+                                Text(appearance.title)
+                                    .goFlyFont(GoFlyFont.body)
+                                    .foregroundStyle(GoFlyTextColor.primary)
+                                Spacer(minLength: 8)
+                                if preferences.appearance == appearance {
+                                    GoFlyIcon(GoFlySymbols.selected)
+                                        .goFlyIconSize(size: 18)
+                                        .foregroundStyle(GoFlyTextColor.accent)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.appearance.\(appearance.rawValue)")
                     }
                 }
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("settings.appearance")
-            } header: {
-                Text(goFlyString("settings.appearance"))
             }
         }
-        .pickerStyle(.menu)
-        .navigationTitle(goFlyString("settings.languageAndAppearance"))
-        .navigationBarTitleDisplayMode(.inline)
-        .goFlyNativeBackTitle()
-        .accessibilityIdentifier("settings.preferences.page")
     }
 }

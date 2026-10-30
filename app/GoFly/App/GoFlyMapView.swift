@@ -1174,6 +1174,7 @@ struct GoFlyMapView: View {
                         contentHeight: bottomContentHeight,
                         fitsContent: sheetFitsContent,
                         preferredHeight: sheetPreferredHeight,
+                        backgroundOpacity: mode == .joystick ? 0.96 : 1,
                         onHeightChange: { updateMeasuredHeight($0, from: sheetHeight) { sheetHeight = $0 } }
                     ) {
                         sheetContent(in: geometry)
@@ -1352,7 +1353,7 @@ struct GoFlyMapView: View {
                             controller: joystick, cameraHeadingDegrees: projection?.cameraHeadingDegrees ?? 0,
                             maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                             isCollapsed: sheetDetent == .collapsed,
-                            bottomPadding: isWanderRunning ? (sheetDetent == .collapsed ? 24 : 32) + geometry.safeAreaInsets.bottom : nil,
+                            bottomPadding: isWanderRunning ? (sheetDetent == .collapsed ? 24 : 40) + geometry.safeAreaInsets.bottom : nil,
                             onRandomDestination: {
                                 wander.replan(to: nil)
                             },

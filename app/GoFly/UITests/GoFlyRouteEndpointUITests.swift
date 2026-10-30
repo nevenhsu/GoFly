@@ -70,6 +70,8 @@ final class GoFlyRouteEndpointUITests: GoFlyRouteModeTestCase {
             let fix = failedApp.buttons["route.error.action"]
             XCTAssertEqual(fix.label, "修正")
             XCTAssertGreaterThanOrEqual(fix.frame.height, 44)
+            XCTAssertTrue(failedApp.buttons["route.start"].isEnabled,
+                          "a non-connection planning error must not disable Start")
             try figmaEvidence(failedApp, ticket: "11", name: "D8-failure-\(appearance)")
 
             let originalStart = element(failedApp, "route.node.start").value as? String

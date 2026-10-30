@@ -25,6 +25,7 @@ struct GoFlyBottomSheet<Content: View>: View {
     var grabberHeight: CGFloat = GoFlyGrabber.rowHeight
     /// Figma default panel height for the mode (teleport 298, joystick 350 …); content-fitted when nil.
     var preferredHeight: CGFloat? = nil
+    var backgroundOpacity: Double = 1
     var onHeightChange: (CGFloat) -> Void = { _ in }
     @ViewBuilder let content: () -> Content
 
@@ -72,7 +73,7 @@ struct GoFlyBottomSheet<Content: View>: View {
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(GoFlyStyle.overlayPanelSurface)
+        .background(GoFlyStyle.overlayPanelSurface.opacity(backgroundOpacity))
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: GoFlyStyle.sheetCornerRadius,
                                           topTrailingRadius: GoFlyStyle.sheetCornerRadius,
                                           style: .continuous))
@@ -99,6 +100,7 @@ struct GoFlyBottomSheet<Content: View>: View {
                     .fill(GoFlyStyle.border)
                     .frame(width: 36, height: GoFlyGrabber.capsuleHeight)
                     .padding(.top, GoFlyGrabber.topInset)
+                    .opacity(backgroundOpacity)
             }
             .contentShape(Rectangle())
             .gesture(

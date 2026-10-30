@@ -8,9 +8,13 @@ final class GoFlySnackbarUITests: GoFlyRouteModeTestCase {
             let preview = element(app, "gallery.snackbar.preview")
             XCTAssertEqual(preview.frame.height, 52, accuracy: 1)
             let action = app.buttons["snackbar.action"].firstMatch
+            let dismiss = app.buttons["snackbar.dismiss"].firstMatch
             XCTAssertTrue(action.exists)
+            XCTAssertTrue(dismiss.exists)
             XCTAssertGreaterThanOrEqual(action.frame.width, 56)
             XCTAssertGreaterThanOrEqual(action.frame.height, 32)
+            XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
             try figmaEvidence(app, ticket: "04", name: "snackbar-\(appearance)")
             app.terminate()
         }
@@ -31,5 +35,16 @@ final class GoFlySnackbarUITests: GoFlyRouteModeTestCase {
         let gone = NSPredicate { _, _ in snackbars.count == before }
         expectation(for: gone, evaluatedWith: nil)
         waitForExpectations(timeout: 5)
+    }
+
+    func testUndoSnackbarCanBeDismissedWithCloseButton() throws {
+        let app = launchGallery()
+        let show = app.buttons["gallery.snackbar.show"]
+        for _ in 0..<6 where !show.isHittable { app.swipeUp() }
+        show.tap()
+        let dismiss = app.buttons["snackbar.dismiss"].firstMatch
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+        dismiss.tap()
+        XCTAssertFalse(dismiss.waitForExistence(timeout: 1))
     }
 }

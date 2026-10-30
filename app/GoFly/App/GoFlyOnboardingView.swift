@@ -50,11 +50,8 @@ struct GoFlyOnboardingView: View {
     private var location: some View {
         ScrollView {
             VStack(spacing: 16) {
-                GoFlyOnboardingStepIndicator(step: 2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 11)
                 GoFlyOnboardingEmblem(symbol: .nav)
-                    .padding(.top, 78)
+                    .padding(.top, 136)
                     .padding(.bottom, 23)
                 VStack(spacing: 15) {
                     Text(goFlyString(controller.locationAuthorization == .authorized
@@ -310,11 +307,6 @@ private struct GoFlyVPNOnboardingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                GoFlyOnboardingStepIndicator(step: 3)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-                    .padding(.bottom, 28)
-
                 Text(goFlyString("onboarding.vpn.title"))
                     .goFlyFont(GoFlyFont.display)
                     .foregroundStyle(GoFlyTextColor.primary)
@@ -366,6 +358,7 @@ private struct GoFlyVPNOnboardingView: View {
             .frame(maxWidth: 520, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(.horizontal, 16)
+            .padding(.top, 76)
             .padding(.bottom, 24)
         }
         .background(GoFlyStyle.canvas)

@@ -59,10 +59,12 @@ struct GoFlyImportedRoutesView: View {
                 .opacity(showingActions ? 0 : 1)
                 .accessibilityHidden(showingActions)
                 .allowsHitTesting(!showingActions)
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 6)
                 .background(GoFlyStyle.canvas)
         }
-        .goFlySnackbar($snackbar, bottomPadding: 80)
+        .goFlySnackbar($snackbar, bottomPadding: 83)
         .background(GoFlyStyle.canvas.ignoresSafeArea())
         .goFlyPushedFullScreen()
         .overlay(alignment: .top) {
@@ -248,8 +250,7 @@ struct GoFlyImportedRoutesView: View {
             do {
                 guard try await GoFlyGPXFileAccess.importFile(url, into: imports), let snapshot = selectedSnapshot else { return }
                 snackbar = GoFlySnackbarMessage(
-                    text: goFlyLocalizedFormat(goFlyString("imports.imported"), snapshot.record.filename),
-                    actionTitle: goFlyString("imports.load"), action: { loadRoute(snapshot.record.id) })
+                    text: goFlyLocalizedFormat(goFlyString("imports.imported"), snapshot.record.filename))
             }
             catch { presentFileError(error) }
         }

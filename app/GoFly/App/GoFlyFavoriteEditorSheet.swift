@@ -33,8 +33,6 @@ struct GoFlyFavoriteEditorSheet: View {
                         GoFlyStatusBanner(tone: .danger, title: goFlyString(failure.rawValue), identifier: "favorites.error")
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(goFlyString("favorites.label"))
-                            .goFlyFont(GoFlyFont.footnote).foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
                             TextField(goFlyString("favorites.label"), text: $draft,
                                       prompt: Text(goFlyString("favorites.label")))

@@ -806,54 +806,8 @@ enum GoFlyGrabber {
     static let rowHeight: CGFloat = topInset + capsuleHeight + contentGap
 }
 
-struct GoFlySheetHeader<Leading: View, Trailing: View>: View {
-    var title: String?
-    @ViewBuilder var leading: () -> Leading
-    @ViewBuilder var trailing: () -> Trailing
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 8) {
-                HStack(spacing: 12) {
-                    leading()
-                    Spacer(minLength: 8)
-                    trailing()
-                }
-                .frame(minHeight: 44)
-
-                if let title {
-                    Text(title)
-                        .goFlyFont(GoFlyFont.headline)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityAddTraits(.isHeader)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-        } else {
-            HStack(spacing: 12) {
-                leading()
-                Spacer(minLength: 0)
-                trailing()
-            }
-            .frame(minHeight: 44)
-            .overlay {
-                if let title {
-                    Text(title)
-                        .goFlyFont(GoFlyFont.headline)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 88)
-                        .accessibilityAddTraits(.isHeader)
-                }
-            }
-        }
-    }
-}
+/// Compatibility alias; unified implementation lives in `GoFlyNavigationBar.swift`.
+typealias GoFlySheetHeader<Leading: View, Trailing: View> = GoFlySheetNavBar<Leading, Trailing>
 
 extension View {
     /// A tap outside a text field ends editing; buttons under the tap still fire.

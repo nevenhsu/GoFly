@@ -38,112 +38,214 @@ struct GoFlyBackgroundDurationSheet: View {
 
     private var total: Int { hours * 3600 + minutes * 60 }
 
+    private var prevHour: Int {
+        hours > 0 ? hours - 1 : 24
+    }
+
+    private var nextHour: Int {
+        hours < 24 ? hours + 1 : 0
+    }
+
+    private var prevMinute: Int {
+        minutes > 0 ? minutes - 1 : 59
+    }
+
+    private var nextMinute: Int {
+        minutes < 59 ? minutes + 1 : 0
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            GoFlySheetHeader(title: nil) {
-                Button(action: cancel) {
-                    Text(goFlyString("common.cancel"))
-                        .goFlyFont(GoFlyFont.body)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
+            GoFlySheetHeader(title: goFlyString("settings.background.duration")) {
+                GoFlyNavActionButton(title: goFlyString("common.cancel"), identifier: "settings.background.duration.cancel") {
+                    cancel()
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.background.duration.cancel")
             } trailing: {
-                Button(action: onDismiss) {
-                    Text(goFlyString("common.done"))
-                        .goFlyFont(GoFlyFont.bodyEmphasis)
-                        .foregroundStyle(GoFlyTextColor.primary)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
+                GoFlyNavActionButton(title: goFlyString("common.done"), isProminent: true, identifier: "settings.background.duration.done") {
+                    onDismiss()
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("settings.background.duration.done")
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
+            .padding(.top, 8)
 
-            wheels
-                .padding(.top, 9)
-                .padding(.horizontal, 20)
+            timePickerWheel
+                .padding(.top, 16)
+                .padding(.horizontal, 16)
 
             Button(action: onDismiss) {
                 Text(goFlyString("common.doneSetting"))
             }
             .buttonStyle(GoFlyActionStyle(primary: true))
+            .frame(height: 56)
             .accessibilityIdentifier("settings.background.duration.confirm")
-            .padding(.top, 40)
-            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.horizontal, 16)
 
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hours) { _, _ in commit() }
         .onChange(of: minutes) { _, _ in commit() }
-        .presentationDetents([.height(336)])
+        .presentationDetents([.height(320)])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
+        .presentationBackgroundInteraction(.enabled)
     }
 
-    /// Figma `TimePicker / Wheel`: hour and minute wheels split by a colon.
-    private var wheels: some View {
-        GeometryReader { geometry in
-            let colonWidth: CGFloat = 20
-            let columnWidth = (geometry.size.width - colonWidth) / 2
+    /// Figma `TimePicker / Wheel` (`238:9472`): 361 × 128 pt card with 3 rows of numbers and center selection band.
+    private var timePickerWheel: some View {
+        ZStack {
+            // Selection band
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(uiColor: .systemFill).opacity(0.5))
+                .frame(height: 40)
+                .padding(.horizontal, 8)
+
             HStack(spacing: 0) {
-                wheel(selection: $hours, range: Array(0...24),
-                      unitKey: "settings.background.duration.hours",
-                      displayUnitKey: "settings.background.duration.wheelUnit.hours",
-                      identifier: "hours", padded: false, columnWidth: columnWidth)
+                // Hour column
+                hourColumn
+                    .frame(maxWidth: .infinity)
+
+                // Colon separator
                 Text(":")
                     .goFlyFont(GoFlyFont.title)
                     .foregroundStyle(GoFlyTextColor.disabled)
-                    .frame(width: colonWidth)
+                    .frame(width: 20)
                     .accessibilityHidden(true)
-                wheel(selection: $minutes, range: Array(0...59),
-                      unitKey: "settings.background.duration.minutes",
-                      displayUnitKey: "settings.background.duration.wheelUnit.minutes",
-                      identifier: "minutes", padded: true, columnWidth: columnWidth)
+
+                // Minute column
+                minuteColumn
+                    .frame(maxWidth: .infinity)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 130)
-        .clipped()
-        .background(GoFlyStyle.durationWheelSurface,
-                    in: RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: GoFlyStyle.controlRadius, style: .continuous)
-            .strokeBorder(GoFlyStyle.durationWheelBorder, lineWidth: 0.5))
+        .frame(height: 128)
+        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(GoFlyStyle.subtleBorder, lineWidth: 0.5)
+        )
     }
 
-    private func wheel(selection: Binding<Int>, range: [Int], unitKey: String,
-                       displayUnitKey: String, identifier: String, padded: Bool,
-                       columnWidth: CGFloat) -> some View {
-        ZStack(alignment: .trailing) {
-            Picker(goFlyString(unitKey), selection: selection) {
-                ForEach(range, id: \.self) { value in
-                    Text(padded ? String(format: "%02d", value) : String(value))
-                        .goFlyFont(GoFlyFont.wheel)
-                        .offset(x: -17)
-                        .tag(value)
-                }
+    private var hourColumn: some View {
+        VStack(spacing: 8) {
+            Button {
+                stepHour(-1)
+            } label: {
+                Text("\(prevHour)")
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.disabled)
+                    .frame(height: 22)
             }
-            .pickerStyle(.wheel)
-            .frame(width: columnWidth)
+            .buttonStyle(.plain)
 
-            Text(goFlyString(displayUnitKey))
-                .goFlyFont(GoFlyFont.title)
-                .foregroundStyle(GoFlyTextColor.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(width: 48, alignment: .leading)
-                .padding(.trailing, 24)
+            HStack(spacing: 4) {
+                Text("\(hours)")
+                    .goFlyFont(GoFlyFont.title)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                Text(goFlyString("settings.background.duration.wheelUnit.hours"))
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.primary)
+            }
+            .frame(height: 36)
+
+            Button {
+                stepHour(1)
+            } label: {
+                Text("\(nextHour)")
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.disabled)
+                    .frame(height: 22)
+            }
+            .buttonStyle(.plain)
         }
-        .frame(width: columnWidth)
-        .accessibilityIdentifier("settings.background.duration.\(identifier)")
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onEnded { value in
+                    if value.translation.height < -15 {
+                        stepHour(1)
+                    } else if value.translation.height > 15 {
+                        stepHour(-1)
+                    }
+                }
+        )
+        .accessibilityElement()
+        .accessibilityLabel(goFlyString("settings.background.duration.hours"))
+        .accessibilityValue("\(hours) \(goFlyString("settings.background.duration.wheelUnit.hours"))")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: stepHour(1)
+            case .decrement: stepHour(-1)
+            @unknown default: break
+            }
+        }
+        .accessibilityIdentifier("settings.background.duration.hours")
+    }
+
+    private var minuteColumn: some View {
+        VStack(spacing: 8) {
+            Button {
+                stepMinute(-1)
+            } label: {
+                Text(String(format: "%02d", prevMinute))
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.disabled)
+                    .frame(height: 22)
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 4) {
+                Text(String(format: "%02d", minutes))
+                    .goFlyFont(GoFlyFont.title)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                Text(goFlyString("settings.background.duration.wheelUnit.minutes"))
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.primary)
+            }
+            .frame(height: 36)
+
+            Button {
+                stepMinute(1)
+            } label: {
+                Text(String(format: "%02d", nextMinute))
+                    .goFlyFont(GoFlyFont.subheadline)
+                    .foregroundStyle(GoFlyTextColor.disabled)
+                    .frame(height: 22)
+            }
+            .buttonStyle(.plain)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 10)
+                .onEnded { value in
+                    if value.translation.height < -15 {
+                        stepMinute(1)
+                    } else if value.translation.height > 15 {
+                        stepMinute(-1)
+                    }
+                }
+        )
+        .accessibilityElement()
+        .accessibilityLabel(goFlyString("settings.background.duration.minutes"))
+        .accessibilityValue("\(minutes) \(goFlyString("settings.background.duration.wheelUnit.minutes"))")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: stepMinute(1)
+            case .decrement: stepMinute(-1)
+            @unknown default: break
+            }
+        }
+        .accessibilityIdentifier("settings.background.duration.minutes")
+    }
+
+    private func stepHour(_ delta: Int) {
+        let newHours = (hours + delta + 25) % 25
+        hours = newHours
+    }
+
+    private func stepMinute(_ delta: Int) {
+        let newMinutes = (minutes + delta + 60) % 60
+        minutes = newMinutes
     }
 
     /// Keeps the total inside 1 minute…24 h 59 min.

@@ -1,10 +1,10 @@
 # 06: A：啟動與首次引導
 
-**What to build:** Figma A 區所有 frame（啟動畫面、首次引導、VPN 通道步驟、連線說明、VPN 失敗與 Mac Setup 異常）在 App 完整對齊，含 Hero icon（非白底）、步驟圓點數字（白字）、StatusPill 與 error toast。
+**What to build:** Figma A 區目前存在的 frame（啟動畫面、首次引導、VPN 通道步驟、連線說明、VPN 失敗與 Mac Setup 異常）在 App 完整對齊；R02/R03/R04/R04.a 不顯示頂端步驟 progress UI，R08 identity mismatch 不提供重試按鈕（需 Mac App 修復）。
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** in progress: 2026-10-30 redesign corrections pending software verification
 
 **Assignee hint:** Luna
 
@@ -41,3 +41,9 @@
 - **驗證**：`testSectionAFramesInBothAppearances`、`testR04TypographyAndPositionMatchFigmaInBothAppearances`、`testR05ConnectionGuideSupportsLargestDynamicTypeInBothAppearances`、`testLocationScreensSupportLargestDynamicTypeInBothAppearances`、`testFirstLaunchVPNSuccessAutomaticallyEntersCollapsedB1WithoutToast`、`testSuccessfulVPNCheckAutomaticallyOpensCollapsedB1MapInBothAppearances`、`testVPNGuideBackAutomaticallyRechecksAndKeepsOnboardingFlow` 均通過。`app/GoFly/scripts/check.sh` 通過（349 tests／58 suites、Native handoff/service tests、unsigned simulator build）；`git diff --check` 通過。
 - **Figma 缺口／產品決策**：R06 無目前 Figma frame；R02／R03 共用 Icon 板缺 `icon/location`；R05 移除「本機網路權限」列後程式中沒有直接開啟系統設定的替代入口，保留產品決策待定，沒有保留 Figma 已移除的舊列。Figma R04 靜態畫面保留檢查按鈕；實際 App 依使用者確認在成功後不顯示 Toast，直接進入 B1 並收合 sheet。未修改 Figma。
 - **範圍聲明**：只做 simulator／fixture software verification，未做實機驗證；未 commit。
+
+### 2026-10-30 使用者追加 UI 修訂（本輪）
+
+- Figma 04 Light／Dark 已移除 R02、R03、R04、R04.a 的步驟 progress UI；R08 identity mismatch frame 移除底部「重試」按鈕。R08 需要 Mac App 重新安裝／修復，App 不提供手機端重試。
+- App `GoFlyOnboardingView` 同步隱藏四張引導頁的進度 UI；`GoFlySetupLockView` 的 identity mismatch 狀態不再顯示 Retry。既有其他可重試 setup failure 狀態維持原行為。
+- `app/GoFly/scripts/check.sh` 通過（359 tests／58 suites、Native handoff host tests、unsigned simulator build）。指定 UI XCTest 未進入執行：`CODE_SIGNING_ALLOWED=NO` 的測試 app 缺少 `CFBundleIdentifier`，Xcode 無法讀取 bundle identifier。依使用者要求，此阻礙留待與新項目合併處理；未做實機驗證、未 commit。

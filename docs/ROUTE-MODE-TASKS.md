@@ -20,7 +20,7 @@
 | # | Figma 元件 | App 現況 | 待辦與驗收 |
 | :-- | :-- | :-- | :-- |
 | C1 | `Toast / 系統訊息 / danger｜warn｜success` | 兩套實作：`App/GoFlyStatusBanner.swift`，與 `App/GoFlyWarningToast.swift`（14／12 pt 字、實心 `#FF9500` 邊、固定 80 pt、寫死「重試」） | 合併為單一 tone 驅動元件：15 pt Semibold／13 pt Regular、圓角 14、內距 12／14、邊框 35% 不透明、白色 56 × 32 膠囊動作、20 pt ✕、高度隨內容。驗收：D8（danger＋重試）、D10（warn＋重試）、D18 渲染對齊；深色對齊 Dark D8／D10；最大字級可換行。<br>**狀態：已實作，待審查**（2026-10-24 補：B10「需要連接 Wi-Fi」改為 danger＋「重試」、說明文字依渲染畫面，行高 21／18 對齊，`GoFlyWiFiToastUITests`；B10 說明文字寫「無動作按鈕」，與渲染畫面的「重試」衝突，依渲染畫面；「重試」＝重新讀取 Wi-Fi 狀態，Figma 未定義其他行為）（`GoFlyWarningToast` 已移除，D10 改用 `GoFlyStatusBanner(tone: .warning)`；`GoFlyToastUITests`）。 |
-| C2 | `Snackbar / 2 秒自動消失`、`Snackbar / 可復原` | `App/GoFlySnackbar.swift`：`.footnote` 字、純文字 action、時長固定 2 秒（modifier 可傳 duration）、陰影 18%／12 | 白字 15 pt Medium、24 pt 綠勾、內距 10／14、Figma 雙層陰影；action 改白色 56 × 32 膠囊；可復原版本 5 秒；可指定位置（D9 為 sheet 上方約 12 pt，D22 為底部按鈕上方 12 pt）。驗收：B6、D9、D17、D22 對齊；地點卡複製 snackbar 與卡上緣 8 pt，瞬移收合面板位置複製 snackbar 與 panel 上緣 8 pt（2026-10-26 使用者最新指示，Figma 待同步）。<br>**狀態：已實作，待審查**（含 action 的 snackbar 預設 5 秒、其餘 2 秒；位置仍由 `bottomPadding` 決定，D9／D22 位置隨 R4 處理；`GoFlySnackbarUITests`）。 |
+| C2 | `Snackbar / 2 秒自動消失`、`Snackbar / 可復原` | `App/GoFlySnackbar.swift`：`.footnote` 字、純文字 action、時長固定 2 秒（modifier 可傳 duration）、陰影 18%／12 | white 15 pt Medium、24 pt 綠勾、內距 10／14、雙層陰影；action 改白色 56 × 32 膠囊，右側共用 X 關閉按鈕（44 × 44 命中區）；Toast 與 action／X 相鄰間距統一 8 pt；Dark 所有 Toast 說明小字與 X 同用 primary 色。可復原版本 5 秒；可指定位置（D22 位於底部搜尋區上方 12 pt）。驗收：B6、D9、D17、D22 對齊；地點卡複製 snackbar 與卡上緣 8 pt，瞬移收合面板位置複製 snackbar 與 panel 上緣 8 pt（2026-10-30 使用者確認，Figma／App 已同步）。<br>**狀態：已實作，待審查**（含 action 的 snackbar 預設 5 秒、其餘 2 秒；位置仍由 `bottomPadding` 決定，D9／D22 位置隨 R4 處理；`GoFlySnackbarUITests`）。 |
 | C3 | `StatusPill / 啟動｜模擬中｜暫停｜停止｜連線中斷` | `App/GoFlyStatusPill.swift` 版型相符（2026-10-25 已改圓點色 `tone.pillDot`＝`#8E8E93`／綠／`#FF9F0A`／紅，深色底 `#3A3A3C`；待審查） | 回歸：點色 `#8E8E93`／`#34C759`／`#FF9F0A`／`#8E8E93`／`#FF3B30`、雙層陰影。D6 顯示「模擬中」、D10「暫停」、D6.a 開啟時「停止」。文案依「三模式 session pill 五態規格」。 |
 | C4 | `SearchBar / 浮動`、`SearchField / focused｜normal`、Slider、Progress | 搜尋列已存在；DESIGN.md 舊規則用 `systemGray5` 輸入底 | SearchField 改 `#F2F2F7` 底、focused 1.5 pt `#007AFF`、normal 0.75 pt `#8E8E93`。路線選中列沿用 focused 樣式。Progress 6 pt、Slider 黑白軌道。驗收：D5、D1 選中列、D6 進度列、D7 slider 對齊。<br>**狀態：已實作，待審查**（`goFlySearchField(isFocused:)`、`GoFlyProgressStyle` 已套用；D1 選中列隨 R3 套用；`GoFlyFieldUITests`）。 |
 | C5 | checkbox（圓形）on／off | `GoFlyCheckboxIcon`（2026-10-25 已改：on 24 pt、off 22 pt 1.5 pt `#C7C7CC` 框、深色 `#2C2C2E` 底＋`#8E8E93` 框；待審查）（`GoFlyFavoritesView.swift:176`、`GoFlyFavoriteRoutesView.swift:156`） | 回歸：on 24 pt 黑圓白勾（深色白圓黑勾），off 22 pt `#C7C7CC` 1.5 pt 邊（深色 `#2C2C2E` 底＋`#8E8E93` 邊），44 pt 命中。驗收：C3、D21 淺深色。 |
@@ -46,10 +46,10 @@
 
 ### R3 選中欄位與再次點擊搜尋（D1、D4、D5）
 - 現況：頂部搜尋列已直接開 D5；點擊清單列只選取欄位。
-- Figma：D1 Route list 外卡 Light 用 `color/canvas`、Dark 用 `color/surface/control`；選中列 Light `surface/card`、Dark `surface/control/active`，加 1.5 pt primary 邊線與選中 trait，圓角與清單外卡一致（14 pt）。新增停靠點文字／加號使用 `color/text/accent`。D5 搜尋欄為空時顯示「使用目前位置」與「最近搜尋」；輸入文字後顯示搜尋結果。D5 Favorite 使用共用 Primary Icon + Text inline button（星號＋`Favorite`），命中區至少 44 pt；Role chip 上下留 16 pt、使用目前位置列下方留 16 pt、搜尋清單列上下留 8 pt。
+- Figma：D1 Route list 外卡 Light 用 `color/canvas`、Dark 用 `color/surface/control`；選中列 Light `surface/card`、Dark `surface/control/active`，加 1.5 pt primary 邊線與選中 trait，圓角與清單外卡一致（14 pt）。新增停靠點文字／加號使用 `color/text/accent`。D5 搜尋欄為空時顯示「使用目前位置」與「最近搜尋」；輸入文字後顯示搜尋結果。D5 Favorite 使用無底色 Ghost Icon + Text inline button（星號＋繁中／簡中「最愛／最爱 Favorite」、英文「Favorite」），命中區至少 44 pt；Role chip 上下留 16 pt、使用目前位置列下方留 16 pt、搜尋清單列上下留 8 pt。
 - 做法：維持選中欄位狀態與 D1 樣式；第一次點欄位選取，第二次點同一欄位透過 `openSelectedPicker()` 開 D5 並聚焦搜尋欄；點其他欄位會選取並重新開始兩次點擊流程。路線頂部搜尋列仍可立即開 D5；D4 Pin 與 LocationCard 的「確認」仍回填選中欄位並返回 D1。
-- 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；`Favorite` 入口使用共用 Primary Icon + Text 樣式、命中區至少 44 pt 且 VoiceOver 名稱為 `Favorite`；點空欄位不顯示 toast。
-- **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。D5 最愛入口使用共用 Primary Icon + Text inline button（22 pt 空心星號、`Favorite`、44 pt 以上命中區），VoiceOver 名稱沿用 `favorites.shortTitle`。Role chip 視覺上下間距 16 pt、使用目前位置列下方間距 16 pt、搜尋清單列上下間距 8 pt；「使用目前位置」列改用與最近搜尋相同的 list row 排版，置於 card 色圓角卡片且不再加圓形 icon tile。D1 focused row 的 1.5 pt primary 邊線使用與清單外卡相同的 14 pt 圓角。Figma D1 維持目前選中列渲染，D5 已同步 focused 搜尋頁與 Primary 星號＋`Favorite` 入口；靜態 Figma 未定義再次點擊互動 variant，本次同步畫面與規格。
+- 驗收：進入路線 tab 不彈出 D5 或鍵盤；第一次點任一欄位不開 sheet，第二次點同一欄位開 D5 且 chip／placeholder 顯示該欄位；第一次改點其他欄位只更新選中狀態；返回不改原值；選取結果只改選中欄位；選中狀態不只靠顏色（`.isSelected` trait）；`Favorite` 入口使用無底色 Ghost Icon + Text、依介面語系顯示「最愛／最爱 Favorite」或 `Favorite`，命中區至少 44 pt 且 VoiceOver 名稱對應目前語系；點空欄位不顯示 toast。
+- **狀態：App 已實作，未實機驗證。** Core 沿用 `RouteExecutionController.selectedNodeID`、`selectNode`、`openSelectedPicker`、`confirmSelectedNode(with:)`。App 以待確認欄位 ID 區分第一／第二次點擊，第二次開 D5 並聚焦；移除空欄位提示 toast 及其字串。D5 最愛入口使用無底色 Ghost Icon + Text inline button（22 pt 空心星號、中文「最愛／最爱 Favorite」、英文 `Favorite`、44 pt 以上命中區），VoiceOver 名稱沿用 `favorites.shortTitle`。Role chip 視覺上下間距 16 pt、使用目前位置列下方間距 16 pt、搜尋清單列上下間距 8 pt；「使用目前位置」列改用與最近搜尋相同的 list row 排版，置於 card 色圓角卡片且不再加圓形 icon tile。D1 focused row 的 1.5 pt primary 邊線使用與清單外卡相同的 14 pt 圓角。Figma D1 維持目前選中列渲染，D5 已同步 focused 搜尋頁與 Primary 星號＋`Favorite` 入口；靜態 Figma 未定義再次點擊互動 variant，本次同步畫面與規格。
 
 ### R4 D9 清除復原
 - 現況：`removeNode` 無復原。
@@ -66,14 +66,14 @@
 
 ### R5.1 D23 全螢幕「全部地點」路線清單
 - 入口：D1「檢視路線」推入左滑全螢幕導覽頁，使用共用返回／置中標題列；返回按鈕與原生向右返回手勢可退出。
-- 版面：canvas 背景；標題「全部地點」；左右 16 pt 單一卡片，列內顯示序號、地點名稱與起點／停靠點 N／終點角色，最小列高 46 pt，末列不加分隔線。無拖曳 grip、無刪除圖示。底部卡片下方為「＋ 新增停靠點」與「⇅ 反轉順序」。
-- 行為：點列沿用 App 的欄位選取／再次點擊開 D5；新增仍在最後建立空終點並捲至新列，反轉仍使用同一份 route draft。這些互動是既有 App 行為，Figma 沒有 prototype 規格。最大 Dynamic Type 時文字換行且列高增長。
+- 版面：canvas 背景；標題「全部地點」；左右 16 pt 單一卡片，列內顯示序號、地點名稱與起點／停靠點 N／終點角色，最小列高 46 pt，末列不加分隔線；無拖曳 grip 或刪除圖示；卡片下方留 12 pt 後放「＋ 新增停靠點」與「⇅ 反轉順序」（垂直反轉圖示 `GoFlyIconAsset.swapVertical`）。
+- 行為：點列沿用 App 的欄位選取／再次點擊開 D5；新增仍在最後建立空終點並捲至新列，反轉仍使用同一份 route draft。這些互動是既有 App 行為，Figma 沒有 prototype 規格。最大 Dynamic Type 時文字換行且列高增長、footer 垂直排列，於 ScrollView 內可捲動不裁切。
 - **狀態：App 已按 D23 渲染重整；Light／Dark fixture 截圖與差異記錄見票 14 執行紀錄。未做實機驗證。**
 
 ### R5.2 GPX 匯入與匯出（D11–D18）
 - D11 已匯入路線是全螢幕導覽頁；點選路線顯示 D12 action card（40% 遮罩、card 底、四列操作與取消），檢視全部點位以 D13 推入唯讀全螢幕頁，不使用 dragger sheet。
 - D13 共用導覽列為左返回、置中標題；檔名與點數資訊列下方右側顯示小字「唯讀」，不放在導覽列。點位列用 16 pt 左右內縮分隔線、card 底、`Theme/subheadline` 座標文字並顯示 5 位小數，序號用 `Theme/footnote`。D15 長路線以起點、第 2 點、中間點數、終點及「查看全部」摘要；編號欄需容納千位數，點位與已匯入清單分隔線左右各內縮 16 pt。
-- D14 與 D16 使用系統分享與檔案選擇器。D17 成功 Snackbar 懸浮於匯入 CTA 上方；D18 失敗 StatusBanner 懸浮於 header 下方並保留重試及關閉，不推動內容。
+- D14 與 D16 使用系統分享與檔案選擇器。D11／D17／D18 底部匯入按鈕下緣距 sheet 底部 40 pt；D17 成功提示改為帶 X 的 Snackbar，不提供「載入」action，與匯入按鈕間距 16 pt；D18 失敗 StatusBanner 懸浮於 header 下方，保留重試及 X 關閉，不推動內容。
 - 匯入資料模型目前只保存檔名、起訖座標與點數，無具名端點或路線距離；Figma 樣例的具名端點／距離不會由 UI 假造。系統分享與檔案選擇器視覺以運行中的 iOS 系統為準，與 Figma 靜態圖可能不同。
 - **狀態：App 實作與 Light／Dark 模擬器截圖驗證見票 13 執行紀錄；未做實機驗證。**
 
@@ -158,7 +158,7 @@ C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 →
 - 編輯中路線規劃結果變更時，地圖自動縮放平移以框住整條路線。
 - 新增最愛路線 sheet：儲存鈕緊接資訊卡下方 24 pt，不再固定於 sheet 底部。
 - D10／D10.a：暫停或中斷皆沿用執行面板；僅系統中斷顯示 warn toast，使用者暫停不顯示。
-- 中斷（interrupted）時主按鈕改為「重試」（enabled，retry 圖示）：走與 toast「重試」相同的連線修復（`retryInterruptedRoute`），成功後自中斷點恢復模擬；使用者暫停仍為「繼續」。
+- D10 系統中斷主按鈕顯示「繼續」（play icon），沿用連線修復後自中斷點恢復；D10.a 使用者暫停同樣顯示「繼續」，不顯示 warn toast。
 - 規劃前自動合併連續重複地點（`mergingConsecutiveDuplicates`，保留第一個、不取代終點）；合併後不足兩點仍為 invalidPath。列表不變，只影響規劃與執行用的路線。
 - 路線模式地圖新增 `FitRoute` 按鈕（`map.fitRoute`，位於 Recenter 上方 12 pt，有規劃路線時顯示）。Figma 尚無此 variant，待設計補上；與「地圖只有一個 Recenter」的舊規範衝突，以此使用者指示為準。
 
@@ -167,3 +167,12 @@ C1–C2（R4、R7、D8 依賴）→ C4、C6、C7 → R1 → R2 → R3＋R6.1 →
 - Figma D8 Light／Dark 的規劃失敗 banner 顯示 danger 樣式與「修正」／`Fix` action。按下後重排所有點位（含原起點）並重新規劃；成功採用新順序及預覽，失敗保留草稿與錯誤 banner。連線錯誤仍使用「重試」／`Retry`。
 - 搜尋最多 27 個點位、64 次新的逐段規劃請求與 4,096 個排序前綴；目前預覽已完成的路徑段會重用。使用者編輯會取消當次搜尋，舊結果不得覆蓋新草稿。搜尋只更新路線草稿與地圖預覽，不發送移動命令。
 - App 與三語文案已同步；核心測試覆蓋 2／3／27 個點位、替代順序成功、全序失敗及中途編輯取消。D8 UI test 與 Light／Dark 截圖路徑記於 `.scratch/gofly-ios-figma04/issues/11-route-fix-order-on-plan-failure.md`。未做實機驗證。
+
+## 2026-10-30 Figma 04 追加 UI 規則（最新）
+
+- D5 Favorite 為無底色 Ghost icon＋文字按鈕；中文介面顯示「最愛 Favorite」／「最爱 Favorite」，英文顯示 `Favorite`。搜尋列至 Role/Favorite 列為 12 pt，該列至「使用目前位置」16 pt，位置列至最近搜尋標題16 pt，最近搜尋標題至首列8 pt。
+- D8 規劃錯誤屬非連線錯誤時，Start 保持可操作並可重新規劃；端點無效、連線／裝置 admission 不可用時仍停用。Start 不以 `plannedRoute != nil` 或殘留錯誤旗標作為唯一可用性條件。
+- D10 中斷面板 action 標示「繼續」並使用 play 圖示；仍執行原有連線修復／同一路線恢復。D10.a 使用者暫停亦為「繼續」，不顯示 warn toast。
+- D19–D22 導覽列選取 action 改為「選取」文字按鈕，顏色依 Primary/C1；D23 路線卡片至 footer 按鈕間距 12 pt。
+- D6、D7、D10、D10.a、D11、D17、D18、D20、E2、E3 的底部主要按鈕至所屬 panel／sheet 底部留 40 pt。D11／D17／D18 的 GPX 匯入 CTA 依此量測；D17 成功 Snackbar 為 16 pt 高於 CTA。
+- App／Figma 變更不改路線規劃或命令、送點、ACK、安全准入語意。Figma 為靜態 wireframe，無 prototype wiring；本輪 `check.sh` 尚待重跑，未做實機驗證。

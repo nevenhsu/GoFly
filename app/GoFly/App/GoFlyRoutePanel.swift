@@ -108,8 +108,6 @@ struct GoFlyRoutePanel: View {
 
     private var isRouteUsable: Bool {
         controller.canStart &&
-        controller.error == nil &&
-        controller.plannedRoute != nil &&
         (currentLocationAvailable != false || !controller.draft.nodes.contains(where: { $0.value == .current }))
     }
 
@@ -260,6 +258,7 @@ struct GoFlyRoutePanel: View {
         .padding(.horizontal, 20)
         // The label row starts 20 pt below the grabber; the safe area supplies the bottom 34 pt.
         .padding(.top, GoFlyGrabber.rowHeight)
+        .padding(.bottom, 40)
         .frame(maxWidth: .infinity)
         .background(GoFlyStyle.cardSurface)
         .overlay(alignment: .top) {

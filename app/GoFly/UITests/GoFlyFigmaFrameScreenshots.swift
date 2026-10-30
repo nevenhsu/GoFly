@@ -259,16 +259,12 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                 if frame == "R08" {
                     let title = app.staticTexts["setup.blocked.title"]
                     let message = app.staticTexts["setup.blocked.identity"]
-                    let retry = app.buttons["setup.retry"]
-                    XCTAssertTrue(title.waitForExistence(timeout: 10))
                     XCTAssertTrue(message.exists)
                     XCTAssertEqual(title.label, "需要完成設定")
                     XCTAssertEqual(message.label,
                         "GoFly App 與套件不相符。請將這支 iPhone 連接 Mac App，以修復設定。")
-                    XCTAssertEqual(retry.label, "重試")
+                    XCTAssertFalse(app.buttons["setup.retry"].exists)
                     XCTAssertEqual(title.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 1)
-                    XCTAssertEqual(retry.frame.width, app.windows.firstMatch.frame.width - 32, accuracy: 2)
-                    XCTAssertEqual(retry.frame.height, 56, accuracy: 1)
                 }
 
                 RunLoop.current.run(until: Date().addingTimeInterval(0.6))
@@ -611,6 +607,7 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                     XCTAssertEqual(favoriteRows.count, 7)
                 case "C2":
                     XCTAssertEqual(app.textFields["favorites.editor.label"].placeholderValue, "標籤")
+                    XCTAssertFalse(app.staticTexts["標籤"].exists, "C2 uses the field placeholder without a separate label")
                     XCTAssertTrue(app.buttons["favorites.editor.clear"].exists)
                     XCTAssertTrue(app.buttons["favorites.editor.save"].exists)
                 case "C3":
@@ -767,7 +764,7 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                     XCTAssertGreaterThanOrEqual(currentLocation.frame.height, 52,
                                                 "D5 current-location shortcut shares the compact list-row height.")
                     XCTAssertTrue(favorites.waitForExistence(timeout: 10))
-                    XCTAssertEqual(favorites.label, "Favorite")
+                    XCTAssertEqual(favorites.label, "最愛 Favorite")
                     XCTAssertGreaterThanOrEqual(favorites.frame.height, 44,
                                                  "D5 primary favorite shortcut keeps a 44 pt hit target.")
                     XCTAssertTrue(app.staticTexts["最近搜尋"].waitForExistence(timeout: 10))
@@ -878,6 +875,12 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                 app.launch()
                 waitForFixture(app, frame: frame.id)
                 prepareInteractiveFixture(app, frame: frame.id)
+                if ["R02", "R03"].contains(frame.id) {
+                    XCTAssertFalse(app.staticTexts["步驟 2／3"].exists)
+                }
+                if ["R04", "R04.a"].contains(frame.id) {
+                    XCTAssertFalse(app.staticTexts["步驟 3／3"].exists)
+                }
 
                 if ["F4", "F5", "F6", "F6.a", "F7", "F8", "F9"].contains(frame.id) {
                     openSettingsFrame(app, frame: frame.id)
@@ -1103,7 +1106,11 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                 case "D13":
                     XCTAssertTrue(app.buttons["imports.point.0"].exists)
                 case "D17":
-                    XCTAssertTrue(app.buttons["snackbar.action"].waitForExistence(timeout: 10))
+                    XCTAssertTrue(app.buttons["snackbar.dismiss"].waitForExistence(timeout: 10))
+                    XCTAssertFalse(app.buttons["snackbar.action"].exists)
+                    let toast = app.descendants(matching: .any)["snackbar"]
+                    let importButton = app.buttons["imports.import"]
+                    XCTAssertEqual(importButton.frame.minY - toast.frame.maxY, 16, accuracy: 3)
                 case "D18":
                     XCTAssertTrue(app.descendants(matching: .any)["imports.error"].waitForExistence(timeout: 10))
                     XCTAssertEqual(app.buttons["imports.error.action"].label, "重試")
@@ -1204,6 +1211,189 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
             app.terminate()
+        }
+        #endif
+    }
+
+    func testCaptureSectionF1FramesInBothAppearances() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Figma frame fixtures run only in the iOS Simulator.")
+        #else
+        continueAfterFailure = false
+        let output = repositoryRoot.appendingPathComponent("work/gofly-ios-figma04/screenshots", isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+        for frame in ["F1", "F1.a", "F1.b"] {
+            for appearance in ["light", "dark"] {
+                let app = XCUIApplication()
+                app.launchArguments = [
+                    "-gofly-ui-frame", frame,
+                    "-gofly-ui-appearance", appearance,
+                    "-gofly-ui-session-store", UUID().uuidString,
+                    "-gofly-ui-favorites-store", UUID().uuidString,
+                    "-gofly-ui-imports-store", UUID().uuidString,
+                    "-gofly-ui-favorite-routes-store", UUID().uuidString,
+                    "-gofly-ui-preferences-store", UUID().uuidString,
+                    "-gofly-ui-preferences-language", "zh-Hant",
+                    "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+                ]
+                if frame == "F1.a" {
+                    app.launchArguments += ["-gofly-ui-device-state", "stop-failure"]
+                }
+                app.launch()
+                waitForFixture(app, frame: frame)
+                prepareInteractiveFixture(app, frame: frame)
+                prepareAdditionalFixture(app, frame: frame)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+
+                let screenshot = app.screenshot()
+                try screenshot.pngRepresentation.write(
+                    to: output.appendingPathComponent("\(frame)-\(appearance).png"), options: .atomic)
+                let attachment = XCTAttachment(screenshot: screenshot)
+                attachment.name = "\(frame)-\(appearance)-section-F1"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                app.terminate()
+            }
+        }
+        #endif
+    }
+
+    func testSectionF1RemainsReachableAtMaximumDynamicTypeWithReduceMotion() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Accessibility checks run on the iOS Simulator.")
+        #else
+        for frame in ["F1", "F1.a", "F1.b"] {
+            for appearance in ["light", "dark"] {
+                let app = XCUIApplication()
+                app.launchArguments = [
+                    "-gofly-ui-frame", frame,
+                    "-gofly-ui-appearance", appearance,
+                    "-gofly-ui-session-store", UUID().uuidString,
+                    "-gofly-ui-favorites-store", UUID().uuidString,
+                    "-gofly-ui-imports-store", UUID().uuidString,
+                    "-gofly-ui-favorite-routes-store", UUID().uuidString,
+                    "-gofly-ui-preferences-store", UUID().uuidString,
+                    "-gofly-ui-preferences-language", "zh-Hant",
+                    "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+                    "-UIAccessibilityReduceMotion", "YES",
+                    "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+                ]
+                if frame == "F1.a" {
+                    app.launchArguments += ["-gofly-ui-device-state", "stop-failure"]
+                }
+                app.launch()
+                waitForFixture(app, frame: frame)
+                prepareInteractiveFixture(app, frame: frame)
+                prepareAdditionalFixture(app, frame: frame)
+
+                let backButton = app.buttons["settings.back"]
+                XCTAssertTrue(backButton.waitForExistence(timeout: 10))
+                XCTAssertTrue(backButton.isHittable)
+
+                let primaryOrReset = frame == "F1.a" ? app.buttons["service.reset"] : app.buttons["service.primary"]
+                XCTAssertTrue(primaryOrReset.waitForExistence(timeout: 10))
+                XCTAssertGreaterThanOrEqual(primaryOrReset.frame.height, 44)
+
+                if frame == "F1.b" {
+                    let toast = app.descendants(matching: .any)["service.resetSucceeded"]
+                    XCTAssertTrue(toast.waitForExistence(timeout: 10))
+                }
+
+                app.terminate()
+            }
+        }
+        #endif
+    }
+
+    func testCaptureSectionF2SubpagesInBothAppearances() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Figma frame fixtures run only in the iOS Simulator.")
+        #else
+        continueAfterFailure = false
+        let output = repositoryRoot.appendingPathComponent("work/gofly-ios-figma04/screenshots", isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+        for frame in ["F4", "F5", "F6", "F6.a", "F7", "F8", "F9"] {
+            for appearance in ["light", "dark"] {
+                let app = XCUIApplication()
+                app.launchArguments = [
+                    "-gofly-ui-frame", frame,
+                    "-gofly-ui-appearance", appearance,
+                    "-gofly-ui-session-store", UUID().uuidString,
+                    "-gofly-ui-favorites-store", UUID().uuidString,
+                    "-gofly-ui-imports-store", UUID().uuidString,
+                    "-gofly-ui-favorite-routes-store", UUID().uuidString,
+                    "-gofly-ui-preferences-store", UUID().uuidString,
+                    "-gofly-ui-preferences-language", "zh-Hant",
+                    "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+                ]
+                app.launch()
+                waitForFixture(app, frame: frame)
+                prepareInteractiveFixture(app, frame: frame)
+                openSettingsFrame(app, frame: frame)
+                prepareAdditionalFixture(app, frame: frame)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+
+                let screenshot = app.screenshot()
+                try screenshot.pngRepresentation.write(
+                    to: output.appendingPathComponent("\(frame)-\(appearance).png"), options: .atomic)
+                let attachment = XCTAttachment(screenshot: screenshot)
+                attachment.name = "\(frame)-\(appearance)-section-F2"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                app.terminate()
+            }
+        }
+        #endif
+    }
+
+    func testSectionF2SubpagesRemainReachableAtMaximumDynamicTypeWithReduceMotion() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Accessibility checks run on the iOS Simulator.")
+        #else
+        for frame in ["F4", "F5", "F6", "F6.a", "F7", "F8", "F9"] {
+            for appearance in ["light", "dark"] {
+                let app = XCUIApplication()
+                app.launchArguments = [
+                    "-gofly-ui-frame", frame,
+                    "-gofly-ui-appearance", appearance,
+                    "-gofly-ui-session-store", UUID().uuidString,
+                    "-gofly-ui-favorites-store", UUID().uuidString,
+                    "-gofly-ui-imports-store", UUID().uuidString,
+                    "-gofly-ui-favorite-routes-store", UUID().uuidString,
+                    "-gofly-ui-preferences-store", UUID().uuidString,
+                    "-gofly-ui-preferences-language", "zh-Hant",
+                    "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+                    "-UIAccessibilityReduceMotion", "YES",
+                    "-AppleLanguages", "(zh-Hant)", "-AppleLocale", "zh_TW"
+                ]
+                app.launch()
+                waitForFixture(app, frame: frame)
+                prepareInteractiveFixture(app, frame: frame)
+                openSettingsFrame(app, frame: frame)
+                prepareAdditionalFixture(app, frame: frame)
+
+                if frame == "F6.a" {
+                    let confirm = app.buttons["settings.background.duration.confirm"]
+                    XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+                    XCTAssertTrue(confirm.isHittable)
+                } else {
+                    let pageBackID: String
+                    switch frame {
+                    case "F4": pageBackID = "settings.location.page.back"
+                    case "F5": pageBackID = "settings.vpn.page.back"
+                    case "F6": pageBackID = "settings.background.page.back"
+                    case "F7": pageBackID = "settings.language.page.back"
+                    case "F8": pageBackID = "settings.appearance.page.back"
+                    default: pageBackID = "settings.device.page.back"
+                    }
+                    let backButton = app.descendants(matching: .any)[pageBackID]
+                    XCTAssertTrue(backButton.waitForExistence(timeout: 10))
+                    XCTAssertTrue(backButton.isHittable)
+                }
+                app.terminate()
+            }
         }
         #endif
     }
@@ -1345,7 +1535,8 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
         case "R07":
             XCTAssertTrue(app.descendants(matching: .any)["setup.mac.status"].waitForExistence(timeout: 10))
         case "R08":
-            XCTAssertTrue(app.buttons["setup.retry"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["setup.blocked.title"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["setup.retry"].exists)
         case "B1", "B2", "B5", "B10", "D1", "D6", "E1":
             XCTAssertTrue(app.otherElements["map.canvas"].waitForExistence(timeout: 10))
             if frame == "B2" {
@@ -1399,6 +1590,9 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["route.list"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.buttons["route.list.addWaypoint"].exists)
             XCTAssertTrue(app.buttons["route.list.reverse"].exists)
+            let list = app.descendants(matching: .any)["route.list.nodes"]
+            let add = app.buttons["route.list.addWaypoint"]
+            XCTAssertEqual(add.frame.minY - list.frame.maxY, 12, accuracy: 3)
         case "E1.a":
             XCTAssertTrue(app.descendants(matching: .any)["joystick.panel"].waitForExistence(timeout: 10))
         case "E2":
@@ -1475,6 +1669,7 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["map.statusPill"].waitForExistence(timeout: 10))
         case "D4":
             XCTAssertTrue(app.descendants(matching: .any)["map.candidate.pin"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.buttons["map.route.confirmCard.primaryAction"].label, "確認")
         case "D7":
             let speed = app.buttons["route.speedChip"]
             XCTAssertTrue(speed.waitForExistence(timeout: 20))
@@ -1484,6 +1679,7 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
         case "D10":
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
+            XCTAssertEqual(app.buttons["route.retry"].label, "繼續")
             XCTAssertTrue(app.descendants(matching: .any)["map.continuationNotice"].waitForExistence(timeout: 10))
         case "D10.a":
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
@@ -1518,7 +1714,8 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
         case "D17":
             openImports(app)
             app.buttons["imports.import"].tap()
-            XCTAssertTrue(app.buttons["snackbar.action"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["snackbar.dismiss"].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.buttons["snackbar.action"].exists)
         case "D18":
             openImports(app)
             app.buttons["imports.import"].tap()

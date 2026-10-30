@@ -18,7 +18,7 @@ struct GoFlySnackbar: View {
     let message: GoFlySnackbarMessage
     var onDismiss: () -> Void = {}
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             GoFlyIcon(.toastSuccess, size: 24)
                 .goFlyIconSize(size: 24)
                 .accessibilityHidden(true)
@@ -37,11 +37,19 @@ struct GoFlySnackbar: View {
                 .buttonStyle(GoFlyStatusActionStyle(tone: .success))
                 .accessibilityIdentifier("snackbar.action")
             }
+            Button(action: onDismiss) {
+                GoFlyIcon(GoFlySymbols.close)
+                    .goFlyIconSize(size: 14, maximum: 16)
+                    .foregroundStyle(GoFlyTextColor.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(goFlyString("common.dismiss"))
+            .accessibilityIdentifier("snackbar.dismiss")
         }
         .padding(.horizontal, 14)
-        // Keep the 44 pt undo hit target inside the 52 pt Figma card. The
-        // visible action pill itself remains 32 pt tall.
-        .padding(.vertical, message.action == nil ? 10 : 4)
+        .padding(.vertical, 4)
         .frame(minHeight: 52)
         .background(GoFlyStyle.snackbarSurface,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -50,7 +58,7 @@ struct GoFlySnackbar: View {
                 .strokeBorder(GoFlyStyle.snackbarBorder, lineWidth: 1)
         }
         .goFlyShadow(.floating)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("snackbar")
         .onAppear {
             UIAccessibility.post(notification: .announcement, argument: message.text)

@@ -56,6 +56,7 @@ enum GoFlyIconAsset: String, CaseIterable, Identifiable {
     case success = "icon/success"
     case swapHorizontal = "icon/swap-horizontal"
     case swapVertical = "icon/swap-vertical"
+    case terminal = "icon/terminal"
     case trash = "icon/trash"
     case wifi = "icon/wifi"
 

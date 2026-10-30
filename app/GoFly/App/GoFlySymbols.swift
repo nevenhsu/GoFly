@@ -35,7 +35,7 @@ enum GoFlySymbols {
     static let device: GoFlyIconAsset = .phone
     static let language: GoFlyIconAsset = .globe
     static let appearance: GoFlyIconAsset = .moon
-    static let background: GoFlyIconAsset = .mac
+    static let background: GoFlyIconAsset = .terminal
     static let route: GoFlyIconAsset = .route
     static let routeList: GoFlyIconAsset = .routeList
     static let manualMovement: GoFlyIconAsset = .joystick
@@ -46,6 +46,7 @@ enum GoFlySymbols {
     static let ellipsis: GoFlyIconAsset = .more
     static let selectItems: GoFlyIconAsset = .select
     static let swap: GoFlyIconAsset = .swapHorizontal
+    static let swapVertical: GoFlyIconAsset = .swapVertical
     static let recent: GoFlyIconAsset = .history
     static let expandSheet: GoFlyIconAsset = .chevronUp
     static let collapseSheet: GoFlyIconAsset = .chevronDown
@@ -145,7 +146,7 @@ enum GoFlySettingsIconKind {
         case .location: .nav
         case .vpn: .shield
         case .wifi: .wifi
-        case .background: .mac
+        case .background: .terminal
         case .language: .globe
         case .appearance: .moon
         case .device: .phone

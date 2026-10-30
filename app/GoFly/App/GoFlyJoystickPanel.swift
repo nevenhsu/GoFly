@@ -48,7 +48,6 @@ struct GoFlyJoystickPanel: View {
                 onDismiss: { showingSpeedSheet = false }
             )
         }
-        .background(GoFlyStyle.cardSurface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("joystick.panel")
     }
@@ -61,7 +60,7 @@ struct GoFlyJoystickPanel: View {
 
     private var wanderRow: some View {
         HStack(spacing: 12) {
-            if controller.wanderEnabled || !isCollapsed {
+            if controller.wanderEnabled {
                 GoFlyIcon(.shuffle)
                     .goFlyIconSize(size: 18)
                     .foregroundStyle(GoFlyTextColor.primary)
@@ -86,7 +85,7 @@ struct GoFlyJoystickPanel: View {
 
     private var rowTitle: String {
         if controller.wanderEnabled { return goFlyString("joystick.wanderActive") }
-        return goFlyString(isCollapsed ? "mode.joystick" : "joystick.wander")
+        return goFlyString("mode.joystick")
     }
 
     @ViewBuilder
@@ -94,15 +93,15 @@ struct GoFlyJoystickPanel: View {
         if controller.wanderEnabled {
             HStack(spacing: 12) {
                 Button(action: onStopWander) { Text(goFlyString("joystick.stopWander")) }
-                    .buttonStyle(GoFlyActionStyle(fixedHeight: 52))
+                    .buttonStyle(GoFlyActionStyle(fixedHeight: 56))
                     .accessibilityIdentifier("joystick.stopWander")
                 Button(action: onRandomDestination) { Text(goFlyString("joystick.changePlace")) }
-                    .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 52))
+                    .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 56))
                     .accessibilityIdentifier("joystick.randomDestination")
             }
         } else {
             Button(action: onStartWander) { Text(goFlyString("joystick.startWander")) }
-                .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 52))
+                .buttonStyle(GoFlyActionStyle(primary: true, fixedHeight: 56))
                 .goFlySteadyDisabled(!(canStartWander ?? controller.canSetWanderEnabled))
                 .accessibilityIdentifier("joystick.wander")
         }
@@ -179,44 +178,14 @@ private struct GoFlyManualJoystickPad: View {
     @State private var endedWhileHeld = false
     @State private var screenVector = CGPoint.zero
     @State private var steadyEnabled = true
-    private let diameter: CGFloat = 152
-    private let thumbDiameter: CGFloat = 44
-    private var radius: CGFloat { (diameter - thumbDiameter) / 2 - 8 }
+    private let diameter: CGFloat = 150
+    private let thumbDiameter: CGFloat = 45
+    private var radius: CGFloat { (diameter - thumbDiameter) / 2 }
 
     var body: some View {
         ZStack {
-            Circle().fill(GoFlyStyle.secondarySurface)
-            Circle().strokeBorder(touching ? GoFlyStyle.primary : GoFlyStyle.subtleBorder, lineWidth: touching ? 2 : 1)
-            Circle().strokeBorder(GoFlyStyle.subtleBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 5]))
-                .padding(20)
-            ForEach(0..<24) { direction in
-                Capsule()
-                    .fill(GoFlyTextColor.secondary.opacity(0.5))
-                    .frame(width: direction % 6 == 0 ? 2 : 1, height: direction % 6 == 0 ? 8 : 4)
-                    .offset(y: -diameter / 2 + 12)
-                    .rotationEffect(.degrees(Double(direction) * 15))
-            }
-            ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
-                let angle = Double(index) * 90 - cameraHeadingDegrees
-                Text(letter)
-                    .goFlyFont(GoFlyFont.micro)
-                    .foregroundStyle(GoFlyTextColor.secondary)
-                    .offset(x: CGFloat(sin(angle * .pi / 180)) * (diameter / 2 - 24),
-                            y: -CGFloat(cos(angle * .pi / 180)) * (diameter / 2 - 24))
-                    .accessibilityHidden(true)
-            }
-            Circle()
-                .fill(steadyEnabled ? GoFlyStyle.surface : GoFlyStyle.disabledSurface)
-                .frame(width: thumbDiameter, height: thumbDiameter)
-                .overlay {
-                    Circle().strokeBorder(steadyEnabled ? GoFlyStyle.subtleBorder : GoFlyStyle.border, lineWidth: 1)
-                    Circle()
-                        .fill(steadyEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
-                        .frame(width: 20, height: 20)
-                }
-                .shadow(color: GoFlyThemeColor.commonBlack.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
-                .offset(thumbOffset)
-                .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
+            compassBase
+            controlKnob
         }
         .frame(width: diameter, height: diameter)
         .shadow(color: GoFlyThemeColor.commonBlack.opacity(0.12), radius: 8, y: 4)
@@ -238,7 +207,6 @@ private struct GoFlyManualJoystickPad: View {
             if phase != .active { endHeldInput() }
         }
         .onDisappear { finishTouch() }
-        // A heartbeat briefly revokes admission; only a lasting change greys the thumb.
         .task(id: isEnabled) {
             if !isEnabled, steadyEnabled {
                 try? await Task.sleep(for: GoFlyStyle.admissionBlipDelay)
@@ -252,6 +220,47 @@ private struct GoFlyManualJoystickPad: View {
         .accessibilityHint(goFlyString(controller.wanderEnabled ? "joystick.wanderPadHint" : "joystick.padHint"))
         .accessibilityDirectTouch()
         .accessibilityIdentifier("joystick.pad")
+    }
+
+    private var compassBase: some View {
+        ZStack {
+            Circle().fill(GoFlyStyle.cardSurface)
+            Circle().strokeBorder(touching ? GoFlyStyle.primary : GoFlyThemeColor.lineBorder, lineWidth: touching ? 2 : 1.25)
+            Circle().strokeBorder(GoFlyThemeColor.lineBorder, lineWidth: 1.5)
+                .frame(width: 108, height: 108)
+            ForEach(0..<24) { direction in
+                Capsule()
+                    .fill(GoFlyTextColor.secondary)
+                    .frame(width: direction % 6 == 0 ? 2.5 : 1.5, height: direction % 6 == 0 ? 10 : 5)
+                    .offset(y: direction % 6 == 0 ? -62.5 : -65)
+                    .rotationEffect(.degrees(Double(direction) * 15))
+            }
+            ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
+                let angle = Double(index) * 90 - cameraHeadingDegrees
+                Text(letter)
+                    .goFlyFont(GoFlyFont.subheadlineEmphasis)
+                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .offset(x: CGFloat(sin(angle * .pi / 180)) * 43.25,
+                            y: -CGFloat(cos(angle * .pi / 180)) * 43.25)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    private var controlKnob: some View {
+        Circle()
+            .fill(steadyEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
+            .frame(width: thumbDiameter, height: thumbDiameter)
+            .overlay {
+                Circle().strokeBorder(steadyEnabled ? GoFlyThemeColor.lineBorder : GoFlyStyle.border, lineWidth: 0.625)
+                Circle()
+                    .fill(steadyEnabled ? GoFlyThemeColor.surfaceControlActive : GoFlyStyle.disabledSurface)
+                    .frame(width: 20, height: 20)
+            }
+            .shadow(color: GoFlyThemeColor.commonBlack.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
+            .offset(thumbOffset)
+            .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
     }
 
     private var isEnabled: Bool { admitted && !endedWhileHeld || controller.canBeginGesture }

@@ -213,7 +213,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         subscription = commands.routeEvents.sink { [weak self] event in self?.receive(event) }
     }
     public var canEdit: Bool { phase == .editing }
-    public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && error == nil && (try? resolvedDraft(draft)) != nil }
+    public var canStart: Bool { canEdit && sceneActive && connectionAvailable && commands.canBeginRoute && (try? resolvedDraft(draft)) != nil }
     public var canAddNode: Bool { canEdit && draft.isManual && draft.nodes.count < RouteDraft.maximumNodeCount }
     public var canClearImportedRoute: Bool { canEdit && draft.gpxSource != nil }
     private func beginPhysicalOperation() -> UUID {

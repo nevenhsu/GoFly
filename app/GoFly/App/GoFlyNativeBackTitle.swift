@@ -68,7 +68,7 @@ extension View {
 }
 
 /// A hidden navigation bar disables `interactivePopGestureRecognizer`; re-enable it for pushed pages.
-private struct GoFlyEdgeSwipeBack: UIViewControllerRepresentable {
+struct GoFlyEdgeSwipeBack: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller { Controller() }
     func updateUIViewController(_ controller: Controller, context: Context) {}
 

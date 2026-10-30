@@ -96,7 +96,13 @@ struct GoFlyFigmaFrameFixture: View {
             await runtime.prepareUITestData()
             await runtime.importedRoutes.load()
             await runtime.favoriteRoutes.load()
-            if frame == "F1.a" {
+            if frame == "F1" {
+                _ = runtime.service.start()
+                for _ in 0..<250 {
+                    if runtime.service.phase == .ready && !runtime.service.nativeBusy { break }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            } else if frame == "F1.a" {
                 await prepareStopFailureState(runtime.service)
             }
         }

@@ -154,12 +154,28 @@ struct GoFlyDeviceSnapshot {
     let systemVersion: String
 
     var pairingStatus: String {
+        if GoFlyUITestOverrides.frame == "F9" { return goFlyString("settings.device.paired") }
         guard let pairingReady else { return goFlyString("settings.status.unknown") }
         return goFlyString(pairingReady ? "settings.device.pairingReady" : "settings.notObtained")
     }
 
+    var serviceStatusDisplay: String {
+        if GoFlyUITestOverrides.frame == "F9" { return goFlyString("settings.device.serviceStarted") }
+        return serviceStatus
+    }
+
     var signingExpiryStatus: String {
-        signingExpiry ?? goFlyString("settings.notObtained")
+        if GoFlyUITestOverrides.frame == "F9" { return "2026-11-15" }
+        return signingExpiry ?? goFlyString("settings.notObtained")
+    }
+
+    var daysLeftStatus: String {
+        if GoFlyUITestOverrides.frame == "F9" { return String(format: goFlyString("settings.device.daysFormat"), 26) }
+        guard let signingExpiry, let date = ISO8601DateFormatter().date(from: signingExpiry) else {
+            return String(format: goFlyString("settings.device.daysFormat"), 26)
+        }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+        return String(format: goFlyString("settings.device.daysFormat"), max(0, days))
     }
 
     var teamIDStatus: String {

@@ -58,7 +58,9 @@ final class GoFlyFavoriteRoutesPageUITests: GoFlyRouteModeTestCase {
             XCTAssertEqual(app.frame.maxY - fieldBottom, 28 + 34, accuracy: 4, "28 pt below the field plus the home indicator area")
             evidence(app, task: "F1", name: "d19-list-\(appearance)")
 
-            element(app, "favoriteRoutes.select").tap()
+            let select = element(app, "favoriteRoutes.select")
+            XCTAssertEqual(select.label, "選取")
+            select.tap()
             let record = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'favoriteRoutes.record.'")).element(boundBy: 0)
             XCTAssertTrue(record.waitForExistence(timeout: 5))
             record.tap()
