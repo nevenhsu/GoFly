@@ -778,3 +778,19 @@
 "figma.fixture.route.daanPark" = "大安森林公园";
 "figma.fixture.route.huashan1914" = "华山 1914 文创园区";
 "figma.fixture.route.songshanAirport" = "松山机场";
+"route.repair.title.running" = "修正中";
+"route.repair.title.succeeded" = "修正完成";
+"route.repair.title.failed" = "部分失败";
+"route.repair.progress.attempted" = "已尝试 %d／%d 段";
+"route.repair.progress.succeeded" = "已成功 %d／%d 段";
+"route.repair.deleteFailed" = "删除失败地点 (%d)";
+"route.repair.fixShort" = "修正";
+"route.list.clear" = "清除";
+
+"route.start.title.planning" = "规划中";
+"route.start.title.succeeded" = "成功";
+"route.start.title.partial" = "部分成功";
+"route.start.title.allFailed" = "全部失败";
+"route.start.inProgress" = "进行中";
+
+"route.autoRoundTrip" = "自动来回 (%@)";

@@ -9,6 +9,8 @@ struct GoFlyRoutePanel: View {
     @Binding var showingAllPoints: Bool
     var maximumHeight: CGFloat
     var onEditNode: (RouteNodeID) -> Void
+    /// The home-indicator inset the host adds below an execution panel.
+    var bottomSafeInset: CGFloat = 0
     var onInspectRoute: () -> Void = { }
     /// Ending asks the owner to cancel the active route and return to planning.
     var onRequestEnd: () -> Void = { }
@@ -26,6 +28,9 @@ struct GoFlyRoutePanel: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var listContentHeight: CGFloat = 120
     @State private var showingDetails = false
+    /// A quick plan finishes before a sheet is worth showing; failures show at once.
+    @State private var startCardVisible = false
+    @State private var startCardDelay: Task<Void, Never>?
     @State private var showingSaveFavorite = false
     @State private var editingFavorite: FavoriteRouteRecord?
     @State private var preparingFavoriteSave = false
@@ -46,8 +51,36 @@ struct GoFlyRoutePanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("route.panel")
         .goFlyTracksSystemPresentation(showingDetails
-            || showingSaveFavorite || editingFavorite != nil,
+            || showingSaveFavorite || editingFavorite != nil || controller.repairState != nil
+            || showsStartCard,
             id: "route.panel.presentation")
+        .sheet(isPresented: Binding(
+            get: { showsStartCard },
+            set: { if !$0 { controller.cancelStartPlanning() } }
+        )) {
+            if let state = controller.startPlanning {
+                GoFlyRouteStartSheet(
+                    state: state,
+                    onCancel: { controller.cancelStartPlanning() },
+                    onDeleteFailed: { _ = controller.deleteFailedStartPlacesAndStart() },
+                    onClear: { _ = controller.clearAfterStartFailure() }
+                )
+            }
+        }
+        .onChange(of: controller.startPlanning) { _, state in updateStartCardVisibility(state) }
+        .sheet(isPresented: Binding(
+            get: { controller.repairState != nil },
+            set: { if !$0 { controller.cancelPlanningRepair() } }
+        )) {
+            if let state = controller.repairState {
+                GoFlyRouteRepairSheet(
+                    state: state,
+                    onCancel: { controller.cancelPlanningRepair() },
+                    onDone: { _ = controller.confirmPlanningRepair() },
+                    onDeleteFailed: { _ = controller.deleteFailedPlanningPlaces() }
+                )
+            }
+        }
         .sheet(isPresented: $showingDetails) {
             GoFlySpeedSheet(
                 speed: controller.draft.speed,
@@ -106,6 +139,30 @@ struct GoFlyRoutePanel: View {
         }
     }
 
+    private var showsStartCard: Bool {
+        guard let state = controller.startPlanning else { return false }
+        switch state {
+        case .partial, .allFailed: return true
+        case .planning, .succeeded: return startCardVisible
+        }
+    }
+
+    private func updateStartCardVisibility(_ state: RouteStartPlanningState?) {
+        switch state {
+        case .none:
+            startCardDelay?.cancel(); startCardVisible = false
+        case .planning:
+            guard !startCardVisible, startCardDelay == nil else { return }
+            startCardDelay = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, case .planning = controller.startPlanning else { startCardDelay = nil; return }
+                startCardVisible = true; startCardDelay = nil
+            }
+        case .some:
+            break
+        }
+    }
+
     private var isRouteUsable: Bool {
         controller.canStart &&
         (currentLocationAvailable != false || !controller.draft.nodes.contains(where: { $0.value == .current }))
@@ -113,17 +170,36 @@ struct GoFlyRoutePanel: View {
 
     private var startControl: some View {
         HStack(spacing: 12) {
-            favoriteStarButton
-            Button { _ = controller.start() } label: {
-                HStack(spacing: 8) {
-                    GoFlyIcon(GoFlySymbols.play)
-                    Text(goFlyString("route.startShort"))
+            if controller.draft.gpxSource != nil {
+                // D15: an imported GPX route has no favorite star; Cancel clears it.
+                Button { _ = controller.clearImportedRoute() } label: {
+                    Text(goFlyString("common.cancel")).frame(minWidth: 72)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(GoFlyActionStyle())
+                .accessibilityIdentifier("route.clearImported")
+            } else {
+                favoriteStarButton
             }
-            .buttonStyle(GoFlyActionStyle(primary: true))
-            .goFlySteadyDisabled(!isRouteUsable)
-            .accessibilityIdentifier("route.start")
+            if controller.error == .planningFailed, controller.canEdit {
+                // D8: a failed plan turns the primary action into 修正.
+                Button { _ = controller.fixPlanningOrder() } label: {
+                    Text(goFlyString("route.repair.fixShort")).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .goFlySteadyDisabled(controller.isFixingPlanningOrder)
+                .accessibilityIdentifier("route.fix")
+            } else {
+                Button { _ = controller.start() } label: {
+                    HStack(spacing: 8) {
+                        GoFlyIcon(GoFlySymbols.play)
+                        Text(goFlyString("route.startShort"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GoFlyActionStyle(primary: true))
+                .goFlySteadyDisabled(!isRouteUsable)
+                .accessibilityIdentifier("route.start")
+            }
         }
     }
 
@@ -231,7 +307,8 @@ struct GoFlyRoutePanel: View {
                 .padding(.bottom, 16)
             } else {
                 GoFlyRouteRunningControls(
-                    title: controller.roundTripEnabled ? goFlyString("route.position")
+                    title: controller.roundTripEnabled ? goFlyLocalizedFormat(goFlyString("route.autoRoundTrip"),
+                        goFlyString(controller.heading == .reverse ? "route.direction.reverse" : "route.direction.forward"))
                         : GoFlyRouteRunningControls.remainingTitle(controller.progress?.estimatedRemaining),
                     fraction: controller.progress?.fraction ?? 0,
                     isRoundTrip: controller.roundTripEnabled,
@@ -258,7 +335,8 @@ struct GoFlyRoutePanel: View {
         .padding(.horizontal, 20)
         // The label row starts 20 pt below the grabber; the safe area supplies the bottom 34 pt.
         .padding(.top, GoFlyGrabber.rowHeight)
-        .padding(.bottom, 40)
+        // D6 / D10.a: 40 pt from the primary button row to the panel bottom, inset included.
+        .padding(.bottom, max(0, GoFlyStyle.sheetButtonBottomSpacing - bottomSafeInset))
         .frame(maxWidth: .infinity)
         .background(GoFlyStyle.cardSurface)
         .overlay(alignment: .top) {
@@ -326,15 +404,6 @@ struct GoFlyRoutePanel: View {
         VStack(alignment: .leading, spacing: 12) {
             GoFlyGPXPointList(points: imported.document.segments.flatMap { $0 }, summarized: true,
                                onFocus: onFocusPoint, onShowAll: { showingAllPoints = true })
-            Button(action: { _ = controller.clearImportedRoute() }) {
-                GoFlyIconLabel(title: goFlyString("route.clearRoute"), icon: .trash)
-                    .goFlyFont(GoFlyFont.subheadlineEmphasis)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("route.clearImported")
         }
     }
 
@@ -378,7 +447,7 @@ struct GoFlyRoutePanel: View {
                     GoFlyIcon(GoFlySymbols.routeList, size: listIconSize, maximumSize: 28)
                 }
             }
-            .buttonStyle(GoFlyRouteTextButtonStyle())
+            .buttonStyle(GoFlyButtonStyle(variant: .ghostSecondary, size: .inline, expandsToFill: false))
             .disabled(!controller.canEdit)
             .accessibilityIdentifier("route.viewList")
         }

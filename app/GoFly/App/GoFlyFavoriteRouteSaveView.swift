@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GoFlySaveFavoriteRouteView: View {
     @EnvironmentObject private var favorites: FavoriteRoutesStore
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject var controller: RouteExecutionController
     var currentLocationAvailable: Bool?
     var currentRouteOrigin: @MainActor () -> GeoCoordinate?
@@ -45,9 +46,6 @@ struct GoFlySaveFavoriteRouteView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(goFlyString("favoriteRoutes.label"))
-                                .goFlyFont(GoFlyFont.footnote)
-                                .foregroundStyle(GoFlyTextColor.secondary)
                             HStack {
                                 TextField(goFlyString("favoriteRoutes.label"), text: $label,
                                           prompt: Text(goFlyString("favoriteRoutes.namePlaceholder")))
@@ -81,7 +79,8 @@ struct GoFlySaveFavoriteRouteView: View {
                         }
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
+                        .background(colorScheme == .dark ? GoFlyStyle.locationCardSurface : GoFlyStyle.canvas,
+                                    in: RoundedRectangle(cornerRadius: 14))
                         .accessibilityIdentifier("favoriteRoutes.save.source")
                     }
 
@@ -103,7 +102,7 @@ struct GoFlySaveFavoriteRouteView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 20)
+                .padding(.top, 24)
                 .padding(.bottom, GoFlyStyle.favoriteEditorSaveBottomSpacing)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }
@@ -203,6 +202,7 @@ struct GoFlySaveFavoriteRouteView: View {
 
 struct GoFlyFavoriteRouteLabelEditor: View {
     @EnvironmentObject private var favorites: FavoriteRoutesStore
+    @Environment(\.colorScheme) private var colorScheme
     let record: FavoriteRouteRecord
     var onDismiss: () -> Void
     var onDelete: (() -> Void)? = nil
@@ -236,9 +236,6 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(goFlyString("favoriteRoutes.label"))
-                            .goFlyFont(GoFlyFont.footnote)
-                            .foregroundStyle(GoFlyTextColor.secondary)
                         HStack {
                             TextField(goFlyString("favoriteRoutes.label"), text: $label,
                                       prompt: Text(goFlyString("favoriteRoutes.namePlaceholder")))
@@ -273,7 +270,9 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.secondarySurface, in: RoundedRectangle(cornerRadius: 14))
+                    .background(colorScheme == .dark ? GoFlyStyle.locationCardSurface : GoFlyStyle.canvas,
+                                    in: RoundedRectangle(cornerRadius: 14))
+                    .accessibilityIdentifier("favoriteRoutes.editor.source")
 
                     Button {
                         guard !saving, favorites.canMutate else { return }
@@ -293,7 +292,7 @@ struct GoFlyFavoriteRouteLabelEditor: View {
                     .accessibilityIdentifier("favoriteRoutes.editor.save")
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 20)
+                .padding(.top, 24)
                 .padding(.bottom, GoFlyStyle.favoriteEditorSaveBottomSpacing)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { contentHeight = $0 }
             }

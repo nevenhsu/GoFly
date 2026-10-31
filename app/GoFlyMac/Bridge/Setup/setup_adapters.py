@@ -1605,24 +1605,31 @@ class PinnedPymobiledeviceAdapter:
                     _run(client.close())
 
     def _retire_completed_controls(self, service: Any, *, device_id: str) -> None:
-        """Archive only a complete active handshake; partial rollover stays unknown.
+        """Archive the previous handshake controls so a fresh request can be published.
 
-        The producer has already durably entered handoff before this call.
-        Never delete activation, support generations, pairing or user data.
+        A complete active handshake is archived under its own setup/nonce. Leftovers of
+        an abandoned or interrupted transaction (a partial set, or a set that is not the
+        active receipt's) are moved, never deleted, into ``retired/abandoned-*`` and the
+        handoff continues with new controls.  Activation, support generations, pairing
+        and user data are never touched; a pending pairing envelope or any staging file
+        still fails closed.
         """
         paths = (READBACK_REQUEST, READBACK_RESPONSE, FORMAL_INPUT)
         present = [self._remote_exists(service, path) for path in paths]
         if not any(present):
-            if self._remote_exists(service, ACTIVATION_RECEIPT):
-                raise SetupBridgeError("transaction-unknown")
+            # The previous controls are already archived (or none exist): the activation
+            # receipt stays as the active record until a new handoff commits.
             return
-        if not all(present) or self._remote_exists(service, V1_INCOMING):
+        if self._remote_exists(service, V1_INCOMING):
             raise SetupBridgeError("transaction-unknown")
         names = _run(service.listdir(APP_SETUP_ROOT))
         if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
             raise SetupBridgeError("handoff-unknown")
         if any(name.endswith(".staging") for name in names):
             raise SetupBridgeError("transaction-unknown")
+        if not all(present):
+            self._archive_abandoned_controls(service, [path for path, here in zip(paths, present) if here])
+            return
         snapshots = {path: self._read_remote_bounded(service, path, max_bytes=MAX_MANIFEST_BYTES) for path in paths}
         request = _parse_object(snapshots[READBACK_REQUEST], limit=64 * 1024)
         if set(request) != {"version", "setupID", "nonce", "expectedDeviceUDID", "app"} or type(request.get("version")) is not int or request["version"] != 1:
@@ -1631,7 +1638,9 @@ class PinnedPymobiledeviceAdapter:
         active_raw = self._read_remote_bounded(service, ACTIVATION_RECEIPT, max_bytes=MAX_MANIFEST_BYTES)
         active = _parse_object(active_raw, limit=MAX_MANIFEST_BYTES)
         if _uuid(active.get("activeSetupID")) != old_id:
-            raise SetupBridgeError("transaction-conflict")
+            # Not the committed active handshake: leftovers of an abandoned transaction.
+            self._archive_abandoned_controls(service, list(paths))
+            return
         receipt = self._decode_activation_receipt(active_raw, device_id=device_id, setup_id=old_id, nonce=old_nonce)
         formal = self._decode_formal_manifest(snapshots[FORMAL_INPUT], device_id=device_id, setup_id=old_id, nonce=old_nonce)
         self._decode_readback(snapshots[READBACK_RESPONSE], device_id=device_id, setup_id=old_id,
@@ -1660,8 +1669,10 @@ class PinnedPymobiledeviceAdapter:
             if not _is_remote_missing(error):
                 raise SetupBridgeError("handoff-unknown") from None
         else:
-            # Any previous attempt, even an empty directory, stays unknown.
-            raise SetupBridgeError("transaction-unknown")
+            # An earlier attempt already owns this archive name: move the controls aside
+            # as abandoned instead of mixing them into it.
+            self._archive_abandoned_controls(service, list(paths))
+            return
         _run(service.makedirs(archive))
         try:
             for path in paths:
@@ -1673,6 +1684,31 @@ class PinnedPymobiledeviceAdapter:
                     raise SetupBridgeError("transaction-unknown")
         except Exception:
             # Do not continue a partial remote multi-file archive on retry.
+            raise SetupBridgeError("transaction-unknown") from None
+
+    def _archive_abandoned_controls(self, service: Any, present_paths: list[str]) -> None:
+        """Move leftover controls of an abandoned transaction aside; nothing is deleted."""
+        parent = f"{APP_SETUP_ROOT}/retired"
+        try:
+            info = _run(service.stat(parent))
+        except Exception as error:
+            if not _is_remote_missing(error):
+                raise SetupBridgeError("handoff-unknown") from None
+            _run(service.makedirs(parent))
+            info = _run(service.stat(parent))
+        if not isinstance(info, Mapping) or info.get("st_ifmt") != "S_IFDIR":
+            raise SetupBridgeError("storage-unavailable")
+        archive = f"{parent}/abandoned-{uuid.uuid4()}"
+        _run(service.makedirs(archive))
+        try:
+            for path in present_paths:
+                snapshot = self._read_remote_bounded(service, path, max_bytes=MAX_MANIFEST_BYTES)
+                destination = f"{archive}/{path.rsplit('/', 1)[1]}"
+                _run(service.rename(path, destination))
+                if (self._read_remote_bounded(service, destination, max_bytes=MAX_MANIFEST_BYTES) != snapshot
+                        or self._remote_exists(service, path)):
+                    raise SetupBridgeError("transaction-unknown")
+        except Exception:
             raise SetupBridgeError("transaction-unknown") from None
 
     def deliver_pairing(self, device_id: str, setup_id: str) -> None:

@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** in progress: D1 border geometry and Ghost Secondary delta pending UI verification
 
 **Assignee hint:** Luna
 

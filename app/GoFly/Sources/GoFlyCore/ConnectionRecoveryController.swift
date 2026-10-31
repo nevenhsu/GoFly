@@ -110,7 +110,7 @@ public final class ConnectionRecoveryController: ObservableObject {
     public var noticeKey: String? {
         if service.coldClearPending { return "recovery.coldClearPending" }
         if isSilentRepairInProgress { return nil }
-        if isChecking && checkNoticeVisible { return "recovery.connectionChecking" }
+        // No "checking connection" toast: a re-check is silent until it fails or recovers.
         if recoveredNotice { return "recovery.connectionRecovered" }
         switch connectionState {
         case .unavailable, .timedOut: return "recovery.connectionLost"

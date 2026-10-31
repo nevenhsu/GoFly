@@ -24,8 +24,15 @@ final class GoFlyFavoriteRoutesPageUITests: GoFlyRouteModeTestCase {
         let label = app.textFields["favoriteRoutes.save.label"]
         XCTAssertTrue(label.waitForExistence(timeout: 5))
         XCTAssertEqual(label.placeholderValue, "路線名稱")
+        XCTAssertFalse(app.staticTexts["路線標籤"].exists)
+        let form = app.scrollViews["favoriteRoutes.save.content"]
+        let source = app.descendants(matching: .any)["favoriteRoutes.save.source"]
+        XCTAssertEqual(label.frame.minY - form.frame.minY, 24, accuracy: 4)
+        XCTAssertEqual(source.frame.minY - label.frame.maxY, 16, accuracy: 4)
         let save = element(app, "favoriteRoutes.save.confirm")
         XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertEqual(save.frame.minY - source.frame.maxY, 40, accuracy: 4)
+        XCTAssertEqual(form.frame.maxY - save.frame.maxY, 40, accuracy: 4)
         XCTAssertTrue(save.isEnabled, "Save is enabled without a typed label")
         save.tap()
         XCTAssertTrue(app.buttons["route.favoriteRoutes"].waitForExistence(timeout: 8))

@@ -41,7 +41,8 @@ struct GoFlyGPXPointList: View {
                 }
             }
         }
-        .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(summarized ? GoFlyStyle.secondarySurface : GoFlyStyle.cardSurface,
+                    in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(GoFlyStyle.border, lineWidth: 0.5) }
         .accessibilityIdentifier("imports.points.list")
     }

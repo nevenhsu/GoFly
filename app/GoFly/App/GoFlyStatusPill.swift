@@ -12,7 +12,7 @@ struct GoFlyStatusPill: View {
     var body: some View {
         if let action {
             Button(action: action) {
-                // Keep the Figma capsule at 30 pt while giving the button
+                // Keep the Figma capsule (26 pt) while giving the button
                 // the required 44 pt accessibility hit target. A flexible
                 // clear layer here expands to the full map height inside a
                 // ZStack, which also corrupts the top inset used by Toasts.
@@ -42,15 +42,16 @@ struct GoFlyStatusPill: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 30)
-        .background(GoFlyStyle.pillSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        // Figma StatusPill: hugs its text; 12 pt left/right and 4 pt top/bottom from the outer edge.
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(GoFlyStyle.pillSurface, in: Capsule())
         .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
+            Capsule()
                 .strokeBorder(GoFlyStyle.pillBorder, lineWidth: 1)
                 .allowsHitTesting(false)
         }
         .goFlyShadow(tone.pillUsesFloatingShadow ? .floating : nil)
-        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .contentShape(Capsule())
     }
 }

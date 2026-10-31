@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** in progress: 2026-10-30 redesign corrections pending software verification
+**Status:** in progress: 2026-10-30 R01 Dark light-logo rendering pending simulator screenshot verification
 
 **Assignee hint:** Luna
 

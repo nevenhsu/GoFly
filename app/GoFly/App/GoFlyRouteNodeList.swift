@@ -31,6 +31,8 @@ struct GoFlyRouteNodeList: View {
     var onScroll: (RouteNodeID, UnitPoint) -> Void
     /// Reports when a row drag starts and ends so the container can stop user scrolling.
     var onDraggingChange: (Bool) -> Void = { _ in }
+    /// The all-locations list (D23) shows only the place name; the planning panel adds the role above it.
+    var showsRoleLabel = true
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @GestureState private var gestureIsActive = false
@@ -55,11 +57,10 @@ struct GoFlyRouteNodeList: View {
                         .frame(height: draggingID == id ? dragHeight : nil)
                         .overlay {
                             if draggingID == id {
-                                RoundedRectangle(cornerRadius: 8)
+                                let shape = rowShape(at: index)
+                                shape
                                     .fill(GoFlyStyle.surface)
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 8).strokeBorder(GoFlyStyle.primary, lineWidth: 2)
-                                    }
+                                    .overlay { shape.strokeBorder(GoFlyStyle.primary, lineWidth: 2) }
                                     .allowsHitTesting(false)
                             }
                         }
@@ -116,9 +117,24 @@ struct GoFlyRouteNodeList: View {
         }
     }
 
+    /// Only the first row's top and the last row's bottom follow the card radius;
+    /// rows in between stay square so a border or highlight joins the card.
+    private func rowShape(at index: Int) -> UnevenRoundedRectangle {
+        let isFirstRow = index == 0
+        let isLastRow = index == visibleOrder.count - 1
+        return UnevenRoundedRectangle(
+            topLeadingRadius: isFirstRow ? GoFlyStyle.routeListCardRadius : 0,
+            bottomLeadingRadius: isLastRow ? GoFlyStyle.routeListCardRadius : 0,
+            bottomTrailingRadius: isLastRow ? GoFlyStyle.routeListCardRadius : 0,
+            topTrailingRadius: isFirstRow ? GoFlyStyle.routeListCardRadius : 0,
+            style: .continuous)
+    }
+
     private func row(_ node: RouteNode) -> some View {
         let role = draft.role(of: node.id) ?? .start
         let isSelected = isEditable && selectedID == node.id
+        let index = visibleOrder.firstIndex(of: node.id) ?? 0
+        let selectionShape = rowShape(at: index)
         return HStack(spacing: 0) {
             GoFlyIcon(GoFlySymbols.reorder)
                 .goFlyIconSize(size: 18)
@@ -136,11 +152,12 @@ struct GoFlyRouteNodeList: View {
                 .accessibilityIdentifier("route.handle.\(node.id.rawValue.uuidString)")
             Button { if isEditable { onEdit(node.id) } } label: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(goFlyRouteRoleTitle(role)).goFlyFont(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Text(title(node.value, role: role)).goFlyFont(GoFlyFont.body)
-                        .foregroundStyle(node.value == .empty ? GoFlyTextColor.secondary : GoFlyTextColor.primary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    if showsRoleLabel {
+                        Text(goFlyRouteRoleTitle(role)).goFlyFont(GoFlyFont.captionEmphasis).foregroundStyle(GoFlyTextColor.secondary)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    }
+                    GoFlyRouteNodeTitleText(value: node.value, role: role,
+                                            lineLimit: dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.vertical, 8)
@@ -154,29 +171,22 @@ struct GoFlyRouteNodeList: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier(editIdentifier(role))
             if isEditable {
-                Button { if canRemove(node, role: role) { onDelete(node.id) } } label: {
-                    GoFlyIcon(GoFlySymbols.close)
-                        .goFlyIconSize(size: 15)
-                        .goFlyIconForeground(enabledColor: GoFlyTextColor.secondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!canRemove(node, role: role) || draggingID != nil)
-                .accessibilityLabel(removeTitle(role))
-                .accessibilityIdentifier("route.delete.\(node.id.rawValue.uuidString)")
+                GoFlyRouteNodeDeleteButton(
+                    label: removeTitle(role),
+                    identifier: "route.delete.\(node.id.rawValue.uuidString)",
+                    enabled: canRemove(node, role: role) && draggingID == nil
+                ) { if canRemove(node, role: role) { onDelete(node.id) } }
             } else {
                 Spacer().frame(width: 16)
             }
         }
-        .frame(minHeight: 60)
+        .frame(minHeight: showsRoleLabel ? 60 : 46)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
+                selectionShape
                     .fill(colorScheme == .dark ? GoFlyThemeColor.surfaceControlActive : GoFlyStyle.cardSurface)
                     .overlay {
-                        RoundedRectangle(cornerRadius: GoFlyStyle.routeListCardRadius, style: .continuous)
-                            .strokeBorder(GoFlyStyle.primary, lineWidth: 1.5)
+                        selectionShape.strokeBorder(GoFlyStyle.primary, lineWidth: 1.5)
                     }
             }
         }
@@ -277,16 +287,7 @@ struct GoFlyRouteNodeList: View {
     }
 
     private func title(_ value: RouteNodeValue, role: RouteNodeRole) -> String {
-        switch value {
-        case .current: goFlyString("route.currentLocation")
-        case .place(let place): place.title
-        case .empty:
-            switch role {
-            case .start: goFlyString("route.chooseOrigin")
-            case .destination: goFlyString("route.chooseDestination")
-            case .waypoint(let number): goFlyLocalizedFormat(goFlyString("route.chooseWaypoint"), number)
-            }
-        }
+        goFlyRouteNodeTitle(value, role: role)
     }
 
     /// Start and destination rows are only cleared (and disabled once empty); a waypoint row is deleted.
@@ -315,6 +316,9 @@ struct GoFlyRouteNodeCard: View {
     let height: CGFloat
     var lightSurface: Color = GoFlyStyle.cardSurface
     var onEditNode: (RouteNodeID) -> Void
+    var showsRoleLabel = true
+    /// Lets a parent ScrollView stop scrolling while a row is dragged.
+    var onDraggingChange: (Bool) -> Void = { _ in }
     var onContentHeightChange: (CGFloat) -> Void = { _ in }
 
     @State private var visibleScrollFrame: CGRect = .zero
@@ -335,7 +339,9 @@ struct GoFlyRouteNodeCard: View {
                 },
                 onDraggingChange: { dragging in
                     draggingHeight = dragging ? height : nil
-                }
+                    onDraggingChange(dragging)
+                },
+                showsRoleLabel: showsRoleLabel
             )
             .frame(maxWidth: .infinity, alignment: .leading)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { onContentHeightChange($0) }

@@ -51,7 +51,7 @@ struct GoFlySearchPanel: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(GoFlyStyle.canvas)
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
         .goFlyToastOverlay(topInset: 72) {
             if let error = search.inputError {
                 GoFlyStatusBanner(tone: .warning, title: goFlyString(error.rawValue),
@@ -109,6 +109,8 @@ struct GoFlySearchPanel: View {
         }
         .padding(.leading, 20)
         .padding(.trailing, 16)
+        // Search bar to the first object below it: 12 pt on B3, B4 and D5.
+        .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -135,7 +137,6 @@ struct GoFlySearchPanel: View {
             .accessibilityIdentifier("search.favorites")
         }
         .padding(.horizontal, 20)
-        .padding(.top, 12)
         .padding(.bottom, 16)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("search.role")
@@ -180,12 +181,9 @@ struct GoFlySearchPanel: View {
     @ViewBuilder
     private var resultsContent: some View {
         if let fixtureCoordinateResult {
-            coordinateRow(fixtureCoordinateResult)
-                .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
+            coordinateCard(fixtureCoordinateResult)
         } else if search.queryKind == .coordinate, let coordinate = search.results.first {
-            coordinateRow(coordinate)
+            coordinateCard(coordinate)
         }
         if !matchingFavorites.isEmpty {
             sectionHeader("favorites.title")
@@ -207,6 +205,8 @@ struct GoFlySearchPanel: View {
             }
             .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .padding(.horizontal, 16)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("search.nearby.card")
         }
         if places.isEmpty, matchingFavorites.isEmpty, search.queryKind != .coordinate,
            !search.isSearching, search.inputError == nil {
@@ -245,6 +245,9 @@ struct GoFlySearchPanel: View {
                         .foregroundStyle(GoFlyTextColor.secondary)
                         .frame(minHeight: 44)
                         .contentShape(Rectangle())
+                        // Keep the 44 pt hit area without growing the header,
+                        // so the label stays 8 pt above the list.
+                        .padding(.vertical, -12)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(actionIdentifier ?? (key == "favorites.title" ? "favorites.open" : "search.sectionAction.\(key)"))
@@ -252,8 +255,16 @@ struct GoFlySearchPanel: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, key == "search.recent" ? 0 : (key == "search.nearby" ? 16 : 8))
-        .padding(.bottom, key == "search.recent" ? 8 : 4)
+        .padding(.bottom, key == "search.recent" || key == "search.nearby" ? 8 : 4)
         .accessibilityIdentifier("search.section.\(key)")
+    }
+
+    private func coordinateCard(_ place: MapPlace) -> some View {
+        coordinateRow(place)
+            .background(GoFlyStyle.cardSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 16)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("search.coordinateCard")
     }
 
     private func coordinateRow(_ place: MapPlace) -> some View {

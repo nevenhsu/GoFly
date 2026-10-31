@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** in progress: 2026-10-30 C2/D20 spacing and surface deltas pending UI verification
 
 **Assignee hint:** Luna
 

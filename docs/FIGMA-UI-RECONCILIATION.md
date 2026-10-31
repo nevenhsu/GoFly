@@ -252,7 +252,7 @@ Mac M2 I09／D14 的「中斷後重新開始」行為已與安裝交易同步：
 - 驗收：04 只有一個 `0 · 共用元件（Icon）`，00 沒有該目錄；目錄僅含 04 圖示，當前 SVG/vector 卡片含 `icon/check`；每個圖示皆可透過 component master 或 instance 重用，`icon/check` 勾形比照 `icon/success`；單色功能 icon 為黑色，語意／速度插圖保留指定色彩；非速度預覽均為 24 × 24 pt 置中區，功能 icon 使用 1.9 pt 圓角描邊，速度儀表保留原樣，四款速度插圖為無描線的實心色塊插圖，D7／E3 淺深色實例為其 instance 且造型一致；paste 主體與封閉夾扣清楚相接、內部留白可辨，線條與圓角比照 copy；母元件、內層框架及所有使用實例皆為雙向 SCALE constraints；容器 44→88 pt 時，20 pt 圖示 20→40 pt 並保持置中；`icon/location`、`mappin.and.ellipse`、DestPin 已刪除，定位與 Pin 分別用空心描線的 `icon/nav`、`icon/pin`，Pin 元件僅留 CandidatePin。MapNode 三種尺寸均 24 pt，目的地使用 4 pt 空心環且無黑點；SimArrow 為 22 pt，外形與 24 pt `icon/nav` 等比例一致、Light／Dark 黑白描邊配色且不使用綠／紅、等待態 50%；RealArrow 為 22 pt，箭頭外形同 SimArrow 並與 `icon/nav` 等比例一致，保留藍色填色、淺灰描邊與微陰影；`icon/reset` 保留間距；F1.a 淺／深色 Reset 仍引用共用 component 並使用相符 icon token；`icon/pin` 可搜尋且 B4 Search Sheet options 保留 pin；卡片版面讀回正確。此為靜態 Figma 設計更新，未變更 App 實作或完成裝置驗證。
 - 2026-10-27 RealArrow 同步：原先因 Figma Console `Transport closed` 未完成；本輪連線恢復後，Light／Dark master 與 B8 畫面實例均已改為 22 × 22 pt、與 SimArrow 同形的箭頭，使用 `#007AFF` 填色、`#E5E5EA` 描邊及微陰影。B8 的箭頭中心位置保留，兩種外觀均已截圖讀回；這不代表 App 實作或裝置驗證完成。
 
-- 另記既有 Figma 色彩差異：Light `SearchField / normal` 與 B3 的 20 pt paste instance 白色描邊在白底不可見；Dark B3 的 20 pt paste 描邊 `#2C2C2E` 在輸入欄上對比偏低。貼上控制的色彩覆寫尚未調整；系統 `UIPasteControl` 的 App 外觀與實機狀態未由此推定。D7／E3 既有的 25 km/h 選中預設在 Light 文字／背景不可見、Dark 數字對比偏低，與此次速度插圖重繪分開記錄。
+- 另記既有 Figma 色彩差異：Light `SearchField / normal` 與 B3 的 20 pt paste instance 白色描邊在白底不可見；Dark B3 的 20 pt paste 描邊 `#2C2C2E` 在輸入欄上對比偏低。貼上控制的色彩覆寫尚未調整；系統 `UIPasteControl` 的 App 外觀與實機狀態未由此推定。本次速度插圖重繪差異另行追蹤。舊版 D7／E3 25 km/h selected 低對比註記已由 2026-10-30 CS token mapping 取代：Default 為 `color/surface/card`／`color/line/border`；Light Selected 為 `color/surface/card`／`color/icon/accent`；Dark Selected 為 `color/surface/control`／`color/icon/accent`，Selected 數字使用 accent 文字。Figma 04 未在本輪修改，App 實作及截圖驗證另記於票 12。
 
 
 - 2026-10-27 初版視覺一致性（已由後續實心色調整取代）：`speed/walk`、`speed/scooter`、`speed/car` 主體曾改為無填色 coral 描線；人物肢體線寬亦曾對齊 `speed/bicycle`。16 個 D7／E3 Light／Dark 速度實例仍為 22 × 22 pt，8 個 Dark 實例新描線綁定 Dark `color/speed/*`。`icon/nav` 移除填色並保留 1.9 pt 黑色描線。`icon/paste` 的 24／20 pt masters、內層框架與 48 個使用實例均設雙向 SCALE constraints；截圖讀回 D7 Light／Dark 與 Icon 目錄，並以 44 × 44 pt 容器放大至 88 × 88 pt 驗證 20 pt paste 同步放大至 40 × 40 pt、維持置中。此為 Figma 靜態更新，未修改 App SVG 資產或進行裝置驗證。
@@ -580,3 +580,9 @@ Figma 設計更新，App 待實作，未做實機驗證。
 
 Dark 所有 Toast 的說明小字與 X 均改用 primary 色；E1/E1.a/E2/E2.a/E3 panel 與 grabber 統一 96% opacity，Joystick 保留 compass／knob 分組。Figma 只更新靜態 wireframe，未加 prototype wiring。
 - **App 實作與規格**：已同步 SwiftUI、三語文案、路線 eligibility、D23 spacing 與 Toast／Snackbar 行為；更新 `IOS-UI-DESIGN.md`、`ROUTE-MODE-TASKS.md`。`check.sh` 通過 359 tests／58 suites、Native handoff host tests 與 unsigned simulator build。指定的 UI XCTest 未進入執行：以 `CODE_SIGNING_ALLOWED=NO` 建立的 `GoFly.app` 缺少 `CFBundleIdentifier`，Xcode 回報無法讀取 bundle identifier；依使用者要求，先記錄阻礙，等新項目合併時再一起處理。未做實機驗證、未 commit。
+
+## 2026-10-31 iOS UI 回饋（R01、Toast、搜尋、Sheet 間距、搖桿）
+
+- **Figma 設計依據**：04 · iOS Redesign（Light／Dark `Joystick / 重新設計` 的 `compass`、`knob` group）；Figma 未修改。
+- **App 實作**：啟動畫面與 `GoFlyStartupView` 改用 `GoFlyLogo` 的 Light（黑）／Dark（白）資產；Toast 動作鈕與 X 圖示間距 8 pt，標題與說明小字不截斷；狀態 pill 與搜尋列／執行標題間距 8 pt（toast 與 pill 相對位置不變）；B3／B4／D5 canvas 滿版、搜尋列與下方物件 12 pt、「附近地點／最近搜尋」與列表 8 pt；D2.a 拖曳排序 primary 邊框僅首列上圓角、末列下圓角；D15 GPX 無最愛星號，改「取消」並移除「清空路線」；D20 info 底色 Light 用 canvas（同 C2）；D4 location card 與 B5／B7／E4 同為距螢幕底 safe inset；C2／D7／D20／E3／D6／D10.a 主按鈕距 sheet 底 40 pt；E1 搖桿改用 Figma compass／knob 資產（N/E/S/W 仍由 App 依地圖朝向繪製）；E5 恢復列無底色；F5 連線說明與 R04 同按鈕樣式；F6.a 選取列數字置中對齊上下列。
+- **驗證**：iOS Simulator 重新截圖核對 E1、D6（修正前量得 73 pt）、D7、D20；D6／D10.a、C2 修正後未再截圖核對；未做實機驗證。

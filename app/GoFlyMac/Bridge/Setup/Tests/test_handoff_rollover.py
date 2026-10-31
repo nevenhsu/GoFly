@@ -91,44 +91,58 @@ class HandoffRolloverTests(unittest.TestCase):
                 self.assertEqual(self.service.files[archived], expected[path])
             self.assertEqual(self.service.files[ACTIVATION_RECEIPT], activation)
         self.assertEqual(self.service.files['Documents/favorites.json'], b'user data')
-    def test_partial_roots_fail_before_any_write(self):
+    def abandoned(self):
+        return {p: v for p, v in self.service.files.items() if "/retired/abandoned-" in p}
+
+    def test_partial_roots_are_archived_not_deleted(self):
         for absent in PATHS:
             with self.subTest(absent=absent):
                 self.service = MemoryAFC(); completed_fixture(self.service)
+                activation = self.service.files[ACTIVATION_RECEIPT]
+                kept = {path: self.service.files[path] for path in PATHS if path != absent}
                 del self.service.files[absent]
-                with self.assertRaises(SetupBridgeError): self.retire()
-                self.assertEqual(self.service.renames, 0)
+                self.retire()
+                for path in PATHS: self.assertNotIn(path, self.service.files)
+                self.assertEqual(sorted(self.abandoned().values()), sorted(kept.values()))
+                self.assertEqual(self.service.files[ACTIVATION_RECEIPT], activation)
 
-    def test_each_interrupted_rename_refuses_retry(self):
+    def test_interrupted_rename_is_finished_by_the_next_attempt_without_loss(self):
         for fail_after in range(3):
             with self.subTest(fail_after=fail_after):
                 self.service = MemoryAFC(); completed_fixture(self.service)
+                originals = sorted(self.service.files[p] for p in PATHS)
                 self.service.fail_after = fail_after
                 with self.assertRaises(SetupBridgeError): self.retire()
-                previous = self.service.renames
                 self.service.fail_after = None
-                with self.assertRaises(SetupBridgeError): self.retire()
-                self.assertEqual(self.service.renames, previous)
+                self.retire()
+                for path in PATHS: self.assertNotIn(path, self.service.files)
+                archived = sorted(v for p, v in self.service.files.items() if "/retired/" in p)
+                self.assertEqual(archived, originals)
 
-    def test_finished_archive_without_new_publish_stays_unknown(self):
+    def test_finished_archive_without_new_publish_is_a_noop_retry(self):
         completed_fixture(self.service)
         self.retire()
-        with self.assertRaises(SetupBridgeError): self.retire()
+        self.retire()
         self.assertEqual(self.service.renames, 3)
 
-    def test_existing_archive_even_empty_refuses_rollover(self):
+    def test_existing_archive_even_empty_moves_controls_aside_as_abandoned(self):
         setup, nonce = completed_fixture(self.service)
+        originals = sorted(self.service.files[p] for p in PATHS)
         self.service.dirs.add(f"{APP_SETUP_ROOT}/retired/{setup}-{nonce}")
-        with self.assertRaises(SetupBridgeError): self.retire()
-        self.assertEqual(self.service.renames, 0)
+        self.retire()
+        for path in PATHS: self.assertNotIn(path, self.service.files)
+        self.assertEqual(sorted(self.abandoned().values()), originals)
 
-    def test_inactive_historical_receipt_cannot_retire_controls(self):
+    def test_inactive_receipt_controls_are_archived_as_abandoned(self):
         completed_fixture(self.service)
+        originals = sorted(self.service.files[p] for p in PATHS)
         active = json.loads(self.service.files[ACTIVATION_RECEIPT])
         active['activeSetupID'] = str(uuid.uuid4())
         self.service.files[ACTIVATION_RECEIPT] = encoded(active)
-        with self.assertRaises(SetupBridgeError): self.retire()
-        self.assertEqual(self.service.renames, 0)
+        self.retire()
+        for path in PATHS: self.assertNotIn(path, self.service.files)
+        self.assertEqual(sorted(self.abandoned().values()), originals)
+        self.assertEqual(json.loads(self.service.files[ACTIVATION_RECEIPT]), active)
 
     def test_pending_staging_foreign_or_mismatched_controls_fail(self):
         for variant in ('pending', 'staging', 'foreign', 'tamper', 'response', 'symlink'):

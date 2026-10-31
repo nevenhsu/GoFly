@@ -186,9 +186,6 @@ struct GoFlyBackgroundSettingsPage: View {
                 GoFlySettingsFooterNote(textKey: "settings.background.footerNote")
             }
 
-            if continuation.hasRuntime || continuation.noticeKey != nil {
-                GoFlyContinuationStatus(continuation: continuation)
-            }
         }
         .sheet(isPresented: $showingDuration, onDismiss: continuation.backgroundDurationDidChange) {
             GoFlyBackgroundDurationSheet(
@@ -301,14 +298,15 @@ struct GoFlyVPNSettingsPage: View {
             Button {
                 showingHelp = true
             } label: {
+                // Same button as R04 (onboarding.vpn.helpLink).
                 HStack(spacing: 6) {
                     GoFlyIcon(GoFlySymbols.help)
-                        .goFlyIconSize(size: 20)
-                    Text(goFlyString("onboarding.vpn.help"))
-                        .goFlyFont(GoFlyFont.body)
+                        .goFlyIconSize(size: 20, maximum: 20)
+                    Text(goFlyString("onboarding.vpn.helpLink"))
+                        .goFlyFont(GoFlyFont.buttonSmall)
                 }
                 .foregroundStyle(GoFlyTextColor.accent)
-                .frame(minHeight: 44)
+                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -384,7 +382,6 @@ struct GoFlyDeviceSettingsPage: View {
                     }
                 }
 
-                GoFlySettingsFooterNote(textKey: "settings.device.footerNote")
             }
 
             if GoFlyUITestOverrides.frame != "F9" {
@@ -529,78 +526,6 @@ private extension View {
         padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .goFlyCard()
-    }
-}
-
-struct GoFlyContinuationStatus: View {
-    @ObservedObject var continuation: MovementContinuationController
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    title
-                    Spacer(minLength: 12)
-                    status
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    title
-                    status
-                }
-            }
-
-            Text(goFlyString("background.description"))
-                .goFlyFont(GoFlyFont.subheadline)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("background.description")
-
-            Text(goFlyString("background.systemDecidesRuntime"))
-                .goFlyFont(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("background.systemDecides")
-
-            if continuation.hasRuntime {
-                Label {
-                    Text(goFlyString("background.runtimeAvailable"))
-                } icon: {
-                    GoFlyIcon(GoFlySymbols.success)
-                }
-                .goFlyFont(GoFlyFont.footnote)
-                .foregroundStyle(GoFlyTextColor.secondary)
-                .accessibilityIdentifier("background.runtimeAvailable")
-            }
-        }
-        .padding(16)
-        .goFlyCard(floating: true)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("background.card")
-    }
-
-    private var title: some View {
-        Text(goFlyString("background.title"))
-            .goFlyFont(GoFlyFont.headline)
-            .accessibilityIdentifier("background.title")
-    }
-
-    private var status: some View {
-        Text(goFlyString(stateKey))
-            .goFlyFont(GoFlyFont.subheadline)
-            .foregroundStyle(GoFlyTextColor.secondary)
-            .accessibilityIdentifier("background.status")
-    }
-
-    private var stateKey: String {
-        switch continuation.state {
-        case .idle: return "background.state.idle"
-        case .submitting: return "background.state.submitting"
-        case .accepted: return "background.state.accepted"
-        case .running: return "background.state.running"
-        case .rejected: return "background.state.rejected"
-        case .expired: return "background.state.expired"
-        case .finished: return "background.state.finished"
-        }
     }
 }
 

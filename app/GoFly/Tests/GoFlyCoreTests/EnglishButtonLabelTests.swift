@@ -2,14 +2,15 @@ import Foundation
 import Testing
 
 /// Button labels stay one English word so they never wrap or overflow their capsule.
+/// Exception (2026-10-31, user request): the two "Open LocalDevVPN" buttons name the app they open.
 struct EnglishButtonLabelTests {
     private static let buttonKeys = [
         "route.resumeShort", "teleport.resumeShort", "wander.resumeShort", "route.cancelConfirmation.confirm",
         "route.cancelConfirmation.return", "route.start", "route.startShort", "route.cancel", "route.addStop",
         "route.viewList", "route.exchange", "route.clearRoute", "wifi.error.action", "operation.settings", "operation.return",
         "operation.cancel", "onboarding.location.allow", "onboarding.location.openSettings",
-        "onboarding.location.continue", "onboarding.vpn.open", "onboarding.vpn.reconnect", "settings.vpn.check",
-        "settings.vpn.openLocalDevVPN", "settings.diagnostics.export", "setup.retry", "service.reset",
+        "onboarding.location.continue", "onboarding.vpn.reconnect", "settings.vpn.check",
+        "settings.diagnostics.export", "setup.retry", "service.reset",
         "imports.import", "imports.load", "imports.deleteAction", "imports.action.loadRoute",
         "imports.action.viewAllPoints", "imports.action.exportRoute", "imports.action.deleteRoute", "search.clearHistory",
         "placeDetails.setStart", "placeDetails.setEnd", "joystick.startWander", "joystick.stopWander",

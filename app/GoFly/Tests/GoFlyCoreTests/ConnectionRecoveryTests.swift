@@ -142,7 +142,6 @@ struct ConnectionRecoveryControllerTests {
         let service = ServiceController(service: device)
         #expect(service.start())
         await wait { service.phase == .ready && !service.nativeBusy }
-        // Only re-checking a known failure shows the checking notice.
         service.setMovementConnectionAvailable(false)
         let probe = RecoveryControllerProbe(hold: true)
         let route = RouteExecutionController(planner: RecoveryControllerPlanner(), commands: service,
@@ -154,7 +153,7 @@ struct ConnectionRecoveryControllerTests {
         await wait { await probe.count == 1 && recovery.isChecking }
         recovery.sceneDidBecomeActive()
         #expect(await probe.count == 1)
-        #expect(recovery.noticeKey == "recovery.connectionChecking")
+        #expect(recovery.noticeKey != "recovery.connectionChecking")
         await probe.release()
         await wait { recovery.connectionState == .reachable && !recovery.isChecking }
         recovery.releaseForInactiveScene()

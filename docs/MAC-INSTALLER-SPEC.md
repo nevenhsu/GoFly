@@ -115,6 +115,7 @@ App 以**裝置為中心**。側欄列出看得到的 iPhone（USB／Wi‑Fi 標
 - 安裝或延長簽名中斷、失敗（USB 拔掉、Wi‑Fi 斷線、Mac 睡眠、App 被關閉）時顯示 D14。唯一的動作是「**重新開始**」，會從頭重新安裝或重新簽名，**不做接續**。
 - 重新開始前，先重新觀察手機狀態。手機上已經有 GoFly 就用覆蓋安裝（保留資料）；USB 時重新產生配對，並先作廢舊的、還沒用掉的配對，不套用舊交易的配對。
 - Setup producer 以一筆全域現行 journal 序列化交易。`apply` 遇到任何裝置留下的未完成 journal 時，會先在原交易資料夾中耐久封存為 `journal.abandoned.json`，再移除現行指標並建立新交易；不刪除 App、配對檔或原交易資料夾。只有已證明完成的交易可封存為 `journal.completed.json`；同一 setupID 重送仍衝突。iOS 消費者在讀取前原子 rename `incoming.plist` 為 `incoming.plist.consuming`；Mac 作廢舊交接時原子 rename 到以舊交易 ID 標記的隔離路徑，再驗證並只刪除該隔離檔。若 iOS 已認領、出現替換檔或狀態不明，producer fail closed，不封存舊交易或刪除使用者資料。
+- 手機上遺留的握手控制檔（`readback-request.json`、`readback-response.json`、`incoming.json`）：「重新開始」時自動處理，不需使用者操作。完整且屬於現行啟用收據的一組依原規則封存到 `retired/<setupID>-<nonce>`；不完整（中斷）、不屬於現行收據、或封存名稱已被先前嘗試佔用的，**移入 `retired/abandoned-<uuid>` 後以全新握手檔繼續**，只搬移、不刪除，啟用收據、配對檔、支援映像與使用者資料不動；沒有控制檔時直接繼續。待消費的配對信封（`incoming.plist`）或任何 `.staging` 檔仍照原規則 fail closed。2026-10-31 依使用者要求由原先的 fail closed 改為自動修正，Python 測試通過，尚未用實機驗證。
 - 重新開 Mac App 時，如果上次有未完成的操作，同樣顯示 D14，不提供「繼續」。
 
 ## 6. 畫面清單（Figma V1）

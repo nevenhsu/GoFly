@@ -38,29 +38,13 @@ struct GoFlyBackgroundDurationSheet: View {
 
     private var total: Int { hours * 3600 + minutes * 60 }
 
-    private var prevHour: Int {
-        hours > 0 ? hours - 1 : 24
-    }
-
-    private var nextHour: Int {
-        hours < 24 ? hours + 1 : 0
-    }
-
-    private var prevMinute: Int {
-        minutes > 0 ? minutes - 1 : 59
-    }
-
-    private var nextMinute: Int {
-        minutes < 59 ? minutes + 1 : 0
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            GoFlySheetHeader(title: goFlyString("settings.background.duration")) {
+            HStack {
                 GoFlyNavActionButton(title: goFlyString("common.cancel"), identifier: "settings.background.duration.cancel") {
                     cancel()
                 }
-            } trailing: {
+                Spacer()
                 GoFlyNavActionButton(title: goFlyString("common.done"), isProminent: true, identifier: "settings.background.duration.done") {
                     onDismiss()
                 }
@@ -95,27 +79,20 @@ struct GoFlyBackgroundDurationSheet: View {
     /// Figma `TimePicker / Wheel` (`238:9472`): 361 × 128 pt card with 3 rows of numbers and center selection band.
     private var timePickerWheel: some View {
         ZStack {
-            // Selection band
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(uiColor: .systemFill).opacity(0.5))
-                .frame(height: 40)
-                .padding(.horizontal, 8)
-
             HStack(spacing: 0) {
-                // Hour column
-                hourColumn
-                    .frame(maxWidth: .infinity)
-
-                // Colon separator
+                wheel(selection: $hours, range: 0...24, format: { "\($0)" },
+                      unit: goFlyString("settings.background.duration.wheelUnit.hours"),
+                      label: "settings.background.duration.hours",
+                      identifier: "settings.background.duration.hours")
                 Text(":")
                     .goFlyFont(GoFlyFont.title)
                     .foregroundStyle(GoFlyTextColor.disabled)
                     .frame(width: 20)
                     .accessibilityHidden(true)
-
-                // Minute column
-                minuteColumn
-                    .frame(maxWidth: .infinity)
+                wheel(selection: $minutes, range: 0...59, format: { String(format: "%02d", $0) },
+                      unit: goFlyString("settings.background.duration.wheelUnit.minutes"),
+                      label: "settings.background.duration.minutes",
+                      identifier: "settings.background.duration.minutes")
             }
         }
         .frame(height: 128)
@@ -126,126 +103,27 @@ struct GoFlyBackgroundDurationSheet: View {
         )
     }
 
-    private var hourColumn: some View {
-        VStack(spacing: 8) {
-            Button {
-                stepHour(-1)
-            } label: {
-                Text("\(prevHour)")
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.disabled)
-                    .frame(height: 22)
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 4) {
-                Text("\(hours)")
-                    .goFlyFont(GoFlyFont.title)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                Text(goFlyString("settings.background.duration.wheelUnit.hours"))
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.primary)
-            }
-            .frame(height: 36)
-
-            Button {
-                stepHour(1)
-            } label: {
-                Text("\(nextHour)")
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.disabled)
-                    .frame(height: 22)
-            }
-            .buttonStyle(.plain)
-        }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 10)
-                .onEnded { value in
-                    if value.translation.height < -15 {
-                        stepHour(1)
-                    } else if value.translation.height > 15 {
-                        stepHour(-1)
-                    }
+    /// A real wheel: dragging scrolls continuously through the values and the
+    /// selection settles on the row under the band.
+    private func wheel(selection: Binding<Int>, range: ClosedRange<Int>, format: @escaping (Int) -> String,
+                       unit: String, label: String, identifier: String) -> some View {
+        HStack(spacing: 4) {
+            Picker(goFlyString(label), selection: selection) {
+                ForEach(Array(range), id: \.self) { value in
+                    Text(format(value))
+                        .goFlyFont(GoFlyFont.title)
+                        .tag(value)
                 }
-        )
-        .accessibilityElement()
-        .accessibilityLabel(goFlyString("settings.background.duration.hours"))
-        .accessibilityValue("\(hours) \(goFlyString("settings.background.duration.wheelUnit.hours"))")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: stepHour(1)
-            case .decrement: stepHour(-1)
-            @unknown default: break
             }
+            .pickerStyle(.wheel)
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier(identifier)
+            Text(unit)
+                .goFlyFont(GoFlyFont.subheadline)
+                .foregroundStyle(GoFlyTextColor.primary)
+                .padding(.trailing, 8)
         }
-        .accessibilityIdentifier("settings.background.duration.hours")
-    }
-
-    private var minuteColumn: some View {
-        VStack(spacing: 8) {
-            Button {
-                stepMinute(-1)
-            } label: {
-                Text(String(format: "%02d", prevMinute))
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.disabled)
-                    .frame(height: 22)
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 4) {
-                Text(String(format: "%02d", minutes))
-                    .goFlyFont(GoFlyFont.title)
-                    .foregroundStyle(GoFlyTextColor.primary)
-                Text(goFlyString("settings.background.duration.wheelUnit.minutes"))
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.primary)
-            }
-            .frame(height: 36)
-
-            Button {
-                stepMinute(1)
-            } label: {
-                Text(String(format: "%02d", nextMinute))
-                    .goFlyFont(GoFlyFont.subheadline)
-                    .foregroundStyle(GoFlyTextColor.disabled)
-                    .frame(height: 22)
-            }
-            .buttonStyle(.plain)
-        }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 10)
-                .onEnded { value in
-                    if value.translation.height < -15 {
-                        stepMinute(1)
-                    } else if value.translation.height > 15 {
-                        stepMinute(-1)
-                    }
-                }
-        )
-        .accessibilityElement()
-        .accessibilityLabel(goFlyString("settings.background.duration.minutes"))
-        .accessibilityValue("\(minutes) \(goFlyString("settings.background.duration.wheelUnit.minutes"))")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: stepMinute(1)
-            case .decrement: stepMinute(-1)
-            @unknown default: break
-            }
-        }
-        .accessibilityIdentifier("settings.background.duration.minutes")
-    }
-
-    private func stepHour(_ delta: Int) {
-        let newHours = (hours + delta + 25) % 25
-        hours = newHours
-    }
-
-    private func stepMinute(_ delta: Int) {
-        let newMinutes = (minutes + delta + 60) % 60
-        minutes = newMinutes
     }
 
     /// Keeps the total inside 1 minute…24 h 59 min.

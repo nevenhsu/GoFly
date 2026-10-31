@@ -13,6 +13,8 @@ struct ServiceSettingsView: View {
     @ObservedObject private var network = GoFlyNetworkMonitor.shared
     @State private var serviceNoticeDismissed = false
     @State private var awaitingResetSuccessToast = false
+    /// The ✕ hides the continuation notice until a different notice appears.
+    @State private var dismissedContinuationNotice: String?
     @State private var resetSuccessToastVisible = GoFlyUITestOverrides.frame == "F1.b"
 
     var body: some View {
@@ -78,11 +80,12 @@ struct ServiceSettingsView: View {
                 isFloating: true
             )
         }
-        if let key = continuation.noticeKey {
+        if let key = continuation.noticeKey, dismissedContinuationNotice != key {
             GoFlyStatusBanner(
                 tone: .warning,
                 title: goFlyString(key),
                 message: goFlyString("background.systemDecidesRuntime"),
+                onDismiss: { dismissedContinuationNotice = key },
                 identifier: "background.notice.compact",
                 isFloating: true
             )

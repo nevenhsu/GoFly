@@ -18,12 +18,13 @@ struct RouteEndpointTests {
         #expect(route.removeNode(id: ids[1]))
         #expect(route.draft.nodes.map(\.id) == [ids[0], ids[2]], "waypoint row is deleted")
 
+        // Two or more places: the start ✕ deletes the place instead of clearing it.
         #expect(route.removeNode(id: ids[0]))
-        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[2]], "start row stays")
-        #expect(route.draft.start?.value == .empty)
+        #expect(route.draft.nodes.map(\.id) == [ids[2]], "start place is deleted")
+        // The last remaining place is only cleared.
         #expect(route.removeNode(id: ids[2]))
-        #expect(route.draft.nodes.map(\.value) == [.empty, .empty])
-        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[2]])
+        #expect(route.draft.nodes.map(\.value) == [.empty])
+        #expect(route.draft.nodes.map(\.id) == [ids[2]])
     }
 
     @Test func movedRowBecomesTheSelectedField() throws {
@@ -145,6 +146,8 @@ struct RouteEndpointTests {
 
         #expect(route.fixPlanningOrder())
         await settle { !route.isFixingPlanningOrder }
+        #expect(route.repairState == .succeeded(total: draft.nodes.count - 1))
+        #expect(route.confirmPlanningRepair())
 
         #expect(route.error == nil)
         #expect(route.draft.nodes.map(\.id) == Array(originalIDs.reversed()))
@@ -163,6 +166,8 @@ struct RouteEndpointTests {
 
         #expect(route.fixPlanningOrder())
         await settle { !route.isFixingPlanningOrder }
+        #expect(route.repairState == .succeeded(total: draft.nodes.count - 1))
+        #expect(route.confirmPlanningRepair())
 
         #expect(route.error == nil)
         #expect(route.draft.nodes.map(\.id) == [originalIDs[0], originalIDs[2], originalIDs[1]])
@@ -187,6 +192,72 @@ struct RouteEndpointTests {
         #expect(route.draft == draft)
         #expect(route.error == .planningFailed)
         #expect(route.plannedRoute == nil)
+    }
+
+    @Test func failedRepairCountsPlannedLegsAndDeletesTheUnreachablePlace() async throws {
+        let draft = try #require(RouteDraft(values: (1...4).map { .place(place($0)) }))
+        let ids = draft.nodes.map(\.id)
+        let planner = SelectiveRepairPlanner(unreachable: [place(3).coordinate])
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await settle { !route.isFixingPlanningOrder && route.repairState != nil }
+
+        #expect(route.repairState == .failed(succeeded: 2, total: 3, failedPlaces: 1, canDelete: true))
+        #expect(route.draft == draft)
+        #expect(route.deleteFailedPlanningPlaces())
+        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[1], ids[3]])
+        #expect(route.repairState == nil)
+    }
+
+    @Test func startWithAnUnreachablePlaceShowsPartialCardThenDeletesItAndStarts() async throws {
+        let draft = try #require(RouteDraft(values: (1...4).map { .place(place($0)) }))
+        let ids = draft.nodes.map(\.id)
+        let planner = SelectiveRepairPlanner(unreachable: [place(3).coordinate])
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.plannedRoute == nil && route.error == .planningFailed || route.plannedRoute != nil }
+
+        #expect(route.start())
+        await settle { if case .partial = route.startPlanning { true } else { false } }
+        #expect(route.startPlanning == .partial(succeeded: 2, total: 3, failedPlaces: 1, canDelete: true))
+        #expect(route.phase == .editing)
+        #expect(route.draft == draft)
+
+        #expect(route.deleteFailedStartPlacesAndStart())
+        #expect(route.draft.nodes.map(\.id) == [ids[0], ids[1], ids[3]])
+        #expect(route.startPlanning == nil || route.phase != .editing)
+    }
+
+    @Test func startWhereEveryLegFailsOffersToClearThePlaces() async throws {
+        let draft = try #require(RouteDraft(values: (1...3).map { .place(place($0)) }))
+        let route = fixture(draft: draft, planner: SelectiveRepairPlanner(failingAllEdges: true))
+        await settle { route.error == .planningFailed }
+
+        #expect(route.start())
+        await settle { if case .allFailed = route.startPlanning { true } else { false } }
+        #expect(route.startPlanning == .allFailed(total: 2))
+        #expect(route.clearAfterStartFailure())
+        #expect(route.startPlanning == nil)
+        #expect(route.draft.nodes.allSatisfy { $0.value == .empty || $0.value == .current })
+    }
+
+    @Test func cancellingARunningRepairKeepsTheDraftAndFailure() async throws {
+        let draft = try #require(RouteDraft(values: [.place(place(1)), .place(place(2)), .place(place(3))]))
+        let planner = HeldRepairPlanner()
+        let route = fixture(draft: draft, planner: planner)
+        await settle { route.error == .planningFailed }
+
+        #expect(route.fixPlanningOrder())
+        await planner.waitUntilRepairIsHeld()
+        if case .running = route.repairState {} else { Issue.record("expected a running repair") }
+        route.cancelPlanningRepair()
+        await planner.releaseHeldRepair()
+
+        #expect(route.repairState == nil)
+        #expect(!route.isFixingPlanningOrder)
+        #expect(route.draft == draft)
+        #expect(route.error == .planningFailed)
     }
 
     @Test func planningFixIsBoundedAtTheTwentySevenNodeLimit() async throws {
@@ -299,9 +370,10 @@ struct RouteEndpointTests {
         #expect(!route.canUndoRemoval, "an undo is consumed")
 
         #expect(route.removeNode(id: ids[0]))
-        #expect(route.draft.start?.value == .empty)
+        #expect(route.draft.nodes.map(\.id) == [ids[1], ids[2]], "a start with two or more places is deleted")
         #expect(route.undoRemoval())
-        #expect(route.draft.start?.value == .place(place(1)), "a cleared start gets its value back")
+        #expect(route.draft.nodes.map(\.id) == ids)
+        #expect(route.draft.start?.value == .place(place(1)), "a deleted start gets its place back")
     }
 
     @Test func onlyTheLatestRemovalCanBeUndone() throws {
@@ -359,16 +431,20 @@ private struct EndpointPlannerEdge: Hashable, Sendable {
 private actor SelectiveRepairPlanner: RoutePlanning {
     private let failingEdges: Set<EndpointPlannerEdge>
     private let failingAllEdges: Bool
+    private let unreachable: Set<GeoCoordinate>
     private(set) var callCount = 0
 
-    init(failingEdges: Set<EndpointPlannerEdge> = [], failingAllEdges: Bool = false) {
+    init(failingEdges: Set<EndpointPlannerEdge> = [], failingAllEdges: Bool = false,
+         unreachable: Set<GeoCoordinate> = []) {
         self.failingEdges = failingEdges
         self.failingAllEdges = failingAllEdges
+        self.unreachable = unreachable
     }
 
     func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
         callCount += 1
-        if failingAllEdges || failingEdges.contains(EndpointPlannerEdge(from: from, to: to)) {
+        if failingAllEdges || failingEdges.contains(EndpointPlannerEdge(from: from, to: to))
+            || unreachable.contains(from) || unreachable.contains(to) {
             throw RouteExecutionFailure.planningFailed
         }
         return [from, to]

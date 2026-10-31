@@ -18,6 +18,15 @@ public struct FallbackRoutePlanner: RoutePlanning, Sendable {
         self.provider = provider
     }
 
+    /// Walking only: repair tries each edge once instead of walking the whole fallback chain.
+    public func planWalking(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
+        try Task.checkCancellation()
+        let points = try await provider.path(from: from, to: to, transport: .walking)
+        try Task.checkCancellation()
+        _ = try PlannedRoute(points: points)
+        return points
+    }
+
     public func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
         for transport in RouteTransport.allCases {
             try Task.checkCancellation()

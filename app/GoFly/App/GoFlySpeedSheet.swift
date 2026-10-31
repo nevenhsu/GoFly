@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GoFlySpeedSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     let speed: RouteSpeed
     var canEdit: Bool = true
@@ -65,13 +66,19 @@ struct GoFlySpeedSheet: View {
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
-                        .background(isSelected ? GoFlyStyle.primary : GoFlyStyle.surface, in: Capsule())
+                        .background(
+                            colorScheme == .dark && isSelected
+                                ? GoFlyThemeColor.surfaceControl
+                                : GoFlyThemeColor.surfaceCard,
+                            in: Capsule()
+                        )
                         .overlay {
-                            if !isSelected {
-                                Capsule().strokeBorder(GoFlyStyle.border, lineWidth: 1)
-                            }
+                            Capsule().strokeBorder(
+                                isSelected ? GoFlyThemeColor.iconAccent : GoFlyThemeColor.lineBorder,
+                                lineWidth: 1
+                            )
                         }
-                        .foregroundStyle(isSelected ? GoFlyStyle.primaryActionText : GoFlyTextColor.primary)
+                        .foregroundStyle(isSelected ? GoFlyTextColor.accent : GoFlyTextColor.primary)
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -107,7 +114,7 @@ struct GoFlySpeedSheet: View {
                         .foregroundStyle(GoFlyTextColor.secondary)
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, 8) // 16 stack spacing + 8 = 24 under the preset chips
 
             }
             .padding(.horizontal, 20)
@@ -124,12 +131,11 @@ struct GoFlySpeedSheet: View {
             .accessibilityIdentifier("route.speed.confirm")
             .padding(.top, 20)
             .padding(.horizontal, 20)
-            // The detent respects the home-indicator safe area. Four points
-            // here plus that inset render as the Figma 40 pt bottom margin.
-            .padding(.bottom, 6)
+            // The sheet adds about 31 pt below its content; 9 pt more gives the 40 pt bottom margin.
+            .padding(.bottom, 15)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(296)])
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(300)])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
     }

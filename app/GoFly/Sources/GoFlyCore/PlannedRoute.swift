@@ -2,6 +2,14 @@ import Foundation
 
 public protocol RoutePlanning: Sendable {
     func plan(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate]
+    /// One-attempt planning used by order repair, which probes many edges.
+    func planWalking(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate]
+}
+
+public extension RoutePlanning {
+    func planWalking(from: GeoCoordinate, to: GeoCoordinate) async throws -> [GeoCoordinate] {
+        try await plan(from: from, to: to)
+    }
 }
 
 public enum ImportedRouteExecutionFailure: String, Error, Equatable, Sendable {

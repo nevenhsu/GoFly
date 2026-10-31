@@ -88,9 +88,6 @@ struct GoFlyFavoriteRoutesView: View {
                 GoFlyFavoritesBottomBar(
                     placeholder: goFlyString("favoriteRoutes.searchSaved"), query: $query,
                     searchIdentifier: "favoriteRoutes.search",
-                    showsPasteControl: true,
-                    pasteIdentifier: "favoriteRoutes.searchPaste",
-                    onPaste: { query = $0.trimmingCharacters(in: .whitespacesAndNewlines) },
                     deleteTitle: selecting ? goFlyLocalizedFormat(goFlyString("favorites.deleteCount"), selected.count) : nil,
                     deleteEnabled: !selected.isEmpty && favorites.canMutate,
                     deleteIdentifier: "favoriteRoutes.deleteSelected",

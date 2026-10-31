@@ -7,6 +7,7 @@ import SwiftUI
 /// Star entry points may enable Delete for an existing favorite; tapping a star only opens this sheet.
 struct GoFlyFavoriteEditorSheet: View {
     @EnvironmentObject private var favorites: FavoritePlacesStore
+    @Environment(\.colorScheme) private var colorScheme
     let place: MapPlace
     var onDismiss: () -> Void
     var onDelete: (() -> Void)? = nil
@@ -59,7 +60,9 @@ struct GoFlyFavoriteEditorSheet: View {
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(GoFlyStyle.canvas, in: RoundedRectangle(cornerRadius: 14))
+                    .background(colorScheme == .dark ? GoFlyStyle.locationCardSurface : GoFlyStyle.canvas,
+                                in: RoundedRectangle(cornerRadius: 14))
+                    .accessibilityIdentifier("favorites.editor.info")
 
                     // Keep 40 pt above the button from the preceding VStack gap + top inset, and 40 pt below per the latest C2 spacing update.
                     Button {
@@ -77,12 +80,13 @@ struct GoFlyFavoriteEditorSheet: View {
                     .accessibilityIdentifier("favorites.editor.save")
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
+                .padding(.top, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("favorites.editor.form")
         }
-        .presentationDetents([.height(367), .large])
+        // 347 pt with the 11 pt button inset leaves 40 pt below Save (measured: 367 pt with 40 pt left 89 pt).
+        .presentationDetents([.height(347), .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(GoFlyStyle.surface)
         .onAppear {

@@ -479,6 +479,12 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                     XCTAssertTrue(app.staticTexts["京站時尚廣場"].exists)
                     XCTAssertTrue(app.staticTexts["國立台灣博物館"].exists)
                     XCTAssertTrue(app.textFields.firstMatch.value as? String == "台北")
+                    let coordinateCard = app.descendants(matching: .any)["search.coordinateCard"]
+                    let nearbyTitle = app.staticTexts["附近地點"]
+                    let nearbyCard = app.descendants(matching: .any)["search.nearby.card"]
+                    XCTAssertEqual(coordinateCard.frame.minY - app.textFields.firstMatch.frame.maxY, 12, accuracy: 3)
+                    XCTAssertEqual(nearbyTitle.frame.minY - coordinateCard.frame.maxY, 16, accuracy: 4)
+                    XCTAssertEqual(nearbyCard.frame.minY - nearbyTitle.frame.maxY, 8, accuracy: 3)
                 case "B5":
                     XCTAssertTrue(app.staticTexts["松山機場"].exists)
                     XCTAssertTrue(app.staticTexts["台北市松山區敦化北路 340-9 號"].exists)
@@ -609,7 +615,14 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
                     XCTAssertEqual(app.textFields["favorites.editor.label"].placeholderValue, "標籤")
                     XCTAssertFalse(app.staticTexts["標籤"].exists, "C2 uses the field placeholder without a separate label")
                     XCTAssertTrue(app.buttons["favorites.editor.clear"].exists)
-                    XCTAssertTrue(app.buttons["favorites.editor.save"].exists)
+                    let form = app.scrollViews["favorites.editor.form"]
+                    let field = app.textFields["favorites.editor.label"]
+                    let info = app.descendants(matching: .any)["favorites.editor.info"]
+                    let save = app.buttons["favorites.editor.save"]
+                    XCTAssertEqual(field.frame.minY - form.frame.minY, 24, accuracy: 4)
+                    XCTAssertEqual(info.frame.minY - field.frame.maxY, 16, accuracy: 4)
+                    XCTAssertEqual(save.frame.minY - info.frame.maxY, 40, accuracy: 4)
+                    XCTAssertTrue(save.exists)
                 case "C3":
                     XCTAssertTrue(app.staticTexts["已選取 2 項"].exists)
                     XCTAssertTrue(app.buttons["favorites.deleteSelected"].label.contains("2"))
@@ -1679,7 +1692,7 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
         case "D10":
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
-            XCTAssertEqual(app.buttons["route.retry"].label, "繼續")
+            XCTAssertEqual(app.buttons["map.continuationNotice.action"].label, "繼續")
             XCTAssertTrue(app.descendants(matching: .any)["map.continuationNotice"].waitForExistence(timeout: 10))
         case "D10.a":
             XCTAssertTrue(app.buttons["route.cancel"].waitForExistence(timeout: 20))
@@ -1729,9 +1742,15 @@ final class GoFlyFigmaFrameScreenshots: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["favoriteRoutes.editor.content"].waitForExistence(timeout: 10))
             let label = app.textFields["favoriteRoutes.editor.label"]
             XCTAssertTrue(label.waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts["路線標籤"].exists)
+            let info = app.staticTexts.matching(identifier: "favoriteRoutes.editor.source").firstMatch
+            let save = app.buttons["favoriteRoutes.editor.save"]
+            XCTAssertTrue(info.exists)
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            XCTAssertTrue(save.isHittable)
             let clearLabel = app.buttons["favoriteRoutes.editor.clearLabel"]
             XCTAssertTrue(clearLabel.waitForExistence(timeout: 5))
-            clearLabel.tap()
+            XCTAssertTrue(clearLabel.isHittable)
             XCTAssertEqual(label.placeholderValue, "路線名稱")
             XCTAssertFalse(app.keyboards.firstMatch.exists, "D20 opens without automatically presenting the keyboard")
         case "D21":

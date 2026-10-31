@@ -632,11 +632,6 @@ private extension SetupFailure {
 /// Matches LaunchScreen while the setup check runs off the main actor.
 struct GoFlyStartupView: View {
     @State private var showsProgress = false
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var logoTileSurface: Color {
-        GoFlyStyle.onboardingHeroSurface(for: colorScheme)
-    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -644,14 +639,11 @@ struct GoFlyStartupView: View {
             let midY = geometry.size.height / 2
             ZStack {
                 GoFlyStyle.canvas.ignoresSafeArea()
+                // The asset carries the Light (black tile) and Dark (white tile) logo.
                 Image("GoFlyLogo")
                     .resizable()
                     .frame(width: 112, height: 112)
-                    .luminanceToAlpha()
-                    .foregroundStyle(GoFlyTextColor.primary)
                     .clipShape(RoundedRectangle(cornerRadius: 24.5, style: .continuous))
-                    .background(logoTileSurface,
-                                in: RoundedRectangle(cornerRadius: 24.5, style: .continuous))
                     .position(x: midX, y: midY - 48)
 
                 Text("GoFly")

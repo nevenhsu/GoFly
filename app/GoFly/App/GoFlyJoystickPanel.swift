@@ -188,7 +188,6 @@ private struct GoFlyManualJoystickPad: View {
             controlKnob
         }
         .frame(width: diameter, height: diameter)
-        .shadow(color: GoFlyThemeColor.commonBlack.opacity(0.12), radius: 8, y: 4)
         .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .updating($touching) { _, touching, _ in touching = true }
@@ -222,18 +221,16 @@ private struct GoFlyManualJoystickPad: View {
         .accessibilityIdentifier("joystick.pad")
     }
 
+    /// Figma E1 compass (Light / Dark asset). The N/E/S/W letters are drawn here
+    /// because they turn with the map heading.
     private var compassBase: some View {
         ZStack {
-            Circle().fill(GoFlyStyle.cardSurface)
-            Circle().strokeBorder(touching ? GoFlyStyle.primary : GoFlyThemeColor.lineBorder, lineWidth: touching ? 2 : 1.25)
-            Circle().strokeBorder(GoFlyThemeColor.lineBorder, lineWidth: 1.5)
-                .frame(width: 108, height: 108)
-            ForEach(0..<24) { direction in
-                Capsule()
-                    .fill(GoFlyTextColor.secondary)
-                    .frame(width: direction % 6 == 0 ? 2.5 : 1.5, height: direction % 6 == 0 ? 10 : 5)
-                    .offset(y: direction % 6 == 0 ? -62.5 : -65)
-                    .rotationEffect(.degrees(Double(direction) * 15))
+            Image("JoystickCompass")
+                .resizable()
+                .frame(width: diameter + 5, height: diameter + 5)
+            if touching {
+                Circle().strokeBorder(GoFlyStyle.primary, lineWidth: 2)
+                    .frame(width: diameter, height: diameter)
             }
             ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { index, letter in
                 let angle = Double(index) * 90 - cameraHeadingDegrees
@@ -248,17 +245,13 @@ private struct GoFlyManualJoystickPad: View {
         .frame(width: diameter, height: diameter)
     }
 
+    /// Figma E1 knob (Light / Dark asset); its 17.5 pt shadow margin is part of the image.
     private var controlKnob: some View {
-        Circle()
-            .fill(steadyEnabled ? GoFlyStyle.secondarySurface : GoFlyStyle.disabledSurface)
+        Image("JoystickKnob")
+            .resizable()
+            .frame(width: thumbDiameter + 35, height: thumbDiameter + 35)
+            .opacity(steadyEnabled ? 1 : 0.5)
             .frame(width: thumbDiameter, height: thumbDiameter)
-            .overlay {
-                Circle().strokeBorder(steadyEnabled ? GoFlyThemeColor.lineBorder : GoFlyStyle.border, lineWidth: 0.625)
-                Circle()
-                    .fill(steadyEnabled ? GoFlyThemeColor.surfaceControlActive : GoFlyStyle.disabledSurface)
-                    .frame(width: 20, height: 20)
-            }
-            .shadow(color: GoFlyThemeColor.commonBlack.opacity(steadyEnabled ? 0.18 : 0), radius: 5, y: 3)
             .offset(thumbOffset)
             .animation(reduceMotion || touching ? nil : .spring(response: 0.3, dampingFraction: 0.6), value: thumbOffset)
     }

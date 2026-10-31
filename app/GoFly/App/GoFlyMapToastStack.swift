@@ -95,6 +95,7 @@ struct GoFlyMapToastStack: View {
                 GoFlyStatusBanner(
                     tone: .warning,
                     title: goFlyString(searchPasteWarning.localizationKey),
+                    onDismiss: { self.searchPasteWarning = nil },
                     identifier: "map.searchPasteWarning",
                     isFloating: true
                 )

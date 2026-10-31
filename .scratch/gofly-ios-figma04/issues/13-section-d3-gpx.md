@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** in progress: D15 surface token delta pending UI verification
 
 **Assignee hint:** Luna
 

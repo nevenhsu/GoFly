@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** done: software-verified (2026-10-31 speed-chip CS alignment; Figma wireframe unchanged)
 
 **Assignee hint:** Luna
 
@@ -30,3 +30,10 @@
 - **Light／Dark 截圖與對照**：D6 `work/gofly-ios-figma04/screenshots/D6-light.png`／`D6-dark.png`；D7 `D7-light.png`／`D7-dark.png`；D10 `D10-light.png`／`D10-dark.png`；D10.a `D10.a-light.png`／`D10.a-dark.png`（均與 `work/gofly-ios-figma04/figma/` 同名圖並排）。D7 速度 sheet 的額外大字級截圖：`work/gofly-ios-figma04/screenshots/ticket12-feedback/D7-speed-sheet-accessibility-large-text.png`。D7 幾何及 D10 暫停／banner 的判斷測試皆通過。D6／D10／D10.a 的 Top icon 無底色；D10 warning action 文字色符合主題；D10.a 無 Toast。
 - **保留的視覺差異**：執行 fixture 目前的路線目的地、距離／時間／速度與進度值，和 Figma 靜態 D6／D10／D10.a 不同；MapKit 道路、地名、POI 也不能逐像素重現 Figma 靜態 `Map / Base`。這些不影響本票元件層級驗收，截圖比對已記錄為 fixture／原生地圖差異。Figma D10 輔助說明寫「重試」，但渲染 Toast action 為「繼續」；依渲染。D10.a 靜態畫面與說明文字對播放／暫停按鈕不一致；使用者確認此暫停狀態應為 play＋「繼續」，App 依此呈現。Figma 未修改。
 - **測試**：`testD7SpeedSheetUsesTwentyPointTopAndFortyPointBottomInsets`（Light／Dark＋大字級）通過；`testExecutionHeadersUseSemanticTextColorsInBothAppearances` 通過，涵蓋 D6／D7／D10／D10.a 與 E2／E2.a／E4 的 Light／Dark。E5 fixture 在先前探索執行未進入中斷漫步狀態，留待票 15 的 E5 驗收，不列入本票測試範圍。`bash app/GoFly/scripts/check.sh` 通過：359 tests／58 suites、LocalGoSetupHandoff tests、unsigned simulator build。Reduce Motion 未切換 simulator 系統設定；本票速度 sheet 沒有自訂動畫，僅依賴系統 sheet 行為。**未做實機驗證**。
+
+### 2026-10-31 Speed chip CS alignment
+
+- **Figma／設計規格**：04 `Chip / Preset` Light Selected instance 讀回為 `color/surface/card` 填色、`color/icon/accent` 描邊與 accent 文字；使用者確認 Dark Selected 為 `color/surface/control` 填色及 `color/icon/accent` 描邊。Default 兩主題均為 `color/surface/card` 填色與 `color/line/border` 描邊。Figma 04 保持唯讀；D7／E3 靜態 frame 未更新，D7 畫面仍呈現先前的藍色實心選取態，與本次確認的 CS mapping 有可見差異。
+- **App 實作**：`GoFlySpeedSheet` 按以上 token 更新 Default／Selected 的底色、描邊與選取文字；快選值、點選／slider 行為及速度偏好不變。
+- **驗證**：`bash app/GoFly/scripts/check.sh` 最初失敗於 `GoFlySetupBootstrap.swift:651`：`.luminanceToAlpha()` 回傳的 `some View` 不支援 `.renderingMode`。將 `.renderingMode(.template)` 移至 `Image` modifier 階段後，check 通過：59 setup tests、359 tests／58 suites、LocalGoSetupHandoff host tests 與 unsigned simulator build。UI test 首次呼叫因未傳入專案 bundle ID 覆寫而未進入測試；補上 `GOFLY_BUNDLE_ID`／`PRODUCT_BUNDLE_IDENTIFIER` 後，`testD7SpeedSheetUsesTwentyPointTopAndFortyPointBottomInsets`（Light／Dark／Accessibility XXXL）及 `GoFlySpeedUITests` 兩項均通過。
+- **新截圖**：`work/gofly-ios-figma04/screenshots/ticket12-feedback/D7-speed-sheet-spacing-light.png`、`D7-speed-sheet-spacing-dark.png`、`D7-speed-sheet-accessibility-large-text.png`。`work/gofly-ios-figma04/screenshots/index.html` 的 D7 App columns 已連結新 Light／Dark 圖，並加入 Accessibility XXXL 圖片；Figma D7 references 未修改。**未做實機驗證**。

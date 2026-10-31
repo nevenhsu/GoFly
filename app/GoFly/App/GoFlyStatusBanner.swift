@@ -116,7 +116,6 @@ struct GoFlyStatusBanner: View {
                 .goFlyFont(GoFlyFont.subheadlineEmphasis)
                 .foregroundStyle(GoFlyTextColor.primary)
                 .frame(minHeight: 21, alignment: .leading)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("\(goFlyString(tone.accessibilityKey)), \(title)")
                 .accessibilityIdentifier(titleIdentifier
@@ -126,7 +125,6 @@ struct GoFlyStatusBanner: View {
                     .goFlyFont(GoFlyFont.footnote)
                     .foregroundStyle(colorScheme == .dark ? GoFlyTextColor.primary : GoFlyTextColor.secondary)
                     .lineSpacing(2)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier(messageIdentifier
                         ?? identifier.map { "\($0).message" } ?? "statusBanner.message")
@@ -169,14 +167,15 @@ struct GoFlyStatusBanner: View {
                 isDismissedLocally = true
             }
         }) {
-            ZStack(alignment: .trailing) {
-                Color.clear.frame(width: 44, height: 44)
-                GoFlyIcon(GoFlySymbols.close)
-                    .goFlyIconSize(size: 13, maximum: 16)
-                    .foregroundStyle(colorScheme == .dark ? GoFlyTextColor.primary : tone.toastDismiss)
-                    .frame(width: 20, height: 20)
-            }
-            .contentShape(Rectangle())
+            // The 20 pt icon sits 8 pt from the action button (HStack spacing);
+            // the 44 pt hit area extends past the icon only toward the trailing edge.
+            GoFlyIcon(GoFlySymbols.close)
+                .goFlyIconSize(size: 13, maximum: 16)
+                .foregroundStyle(colorScheme == .dark ? GoFlyTextColor.primary : tone.toastDismiss)
+                .frame(width: 20, height: 20)
+                .frame(width: 28, height: 44, alignment: .leading)
+                .padding(.trailing, -8)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(goFlyString("common.dismiss"))

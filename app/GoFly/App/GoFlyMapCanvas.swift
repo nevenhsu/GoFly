@@ -9,7 +9,7 @@ struct GoFlyCameraIntent: Equatable {
     var routeCoordinates: [GeoCoordinate]? = nil
     var ensureVisibleOnly = false
     var headingDegrees: Double? = nil
-    /// Return to the default distance (about 1 km across the visible map).
+    /// Return to the default distance (about 500 m across the visible map).
     /// Otherwise a point intent only pans and keeps the person's zoom.
     var resetsZoom = false
     /// Pan only, placing the coordinate at this fraction of the map height
@@ -527,7 +527,7 @@ struct GoFlyMapCanvas: UIViewRepresentable {
                 // Only the display's Mercator zoom scale is bounded near the poles;
                 // the selected coordinate and device command remain unchanged.
                 let scaleLatitude = min(85, max(-85, intent.coordinate.latitude))
-                let scale = MKMapPointsPerMeterAtLatitude(scaleLatitude) * 1_000 / visible.width
+                let scale = MKMapPointsPerMeterAtLatitude(scaleLatitude) * 500 / visible.width
                 let width = max(1, visible.width * scale)
                 let height = max(1, visible.height * scale)
                 let rect = MKMapRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
@@ -778,8 +778,9 @@ private final class RouteNodeAnnotation: NSObject, MKAnnotation {
         /// Dark mode inverts them like the `Dark · MapNode /` components.
         func image(dark: Bool) -> UIImage {
             let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
-            let ink = UIColor(GoFlyThemeColor.mapMarkerOutline).resolvedColor(with: traits)
-            let paper = UIColor(GoFlyThemeColor.mapMarker).resolvedColor(with: traits)
+            // Figma (2026-10-31): primary ring on a white disc in both themes.
+            let ink = UIColor(GoFlyStyle.primary).resolvedColor(with: traits)
+            let paper = UIColor.white
             switch self {
             case .start:
                 return Self.render(CGSize(width: 22, height: 22)) { rect in
@@ -800,8 +801,10 @@ private final class RouteNodeAnnotation: NSObject, MKAnnotation {
                 }
             case .destination:
                 return Self.render(CGSize(width: 22, height: 22)) { rect in
-                    ink.setFill(); UIBezierPath(ovalIn: rect).fill()
-                    paper.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 8, dy: 8)).fill()
+                    paper.setFill(); UIBezierPath(ovalIn: rect).fill()
+                    let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 1.25, dy: 1.25))
+                    ring.lineWidth = 2.5; ink.setStroke(); ring.stroke()
+                    ink.setFill(); UIBezierPath(ovalIn: rect.insetBy(dx: 7, dy: 7)).fill()
                 }
             }
         }

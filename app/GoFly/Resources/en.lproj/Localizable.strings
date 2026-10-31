@@ -59,7 +59,7 @@
 "onboarding.vpn.title" = "Connect VPN tunnel";
 "onboarding.vpn.stepsTitle" = "Connection steps";
 "onboarding.vpn.steps" = "Connect to Wi‑Fi → Open LocalDevVPN → Connect → Return to GoFly\nCellular data alone does not work.";
-"onboarding.vpn.open" = "Open";
+"onboarding.vpn.open" = "Open LocalDevVPN";
 "onboarding.vpn.appStore" = "Go to App Store";
 "onboarding.vpn.help" = "Connection Guide";
 "onboarding.vpn.help.step1.title" = "Download LocalDevVPN";
@@ -448,7 +448,7 @@
 "settings.vpn.actionsSection" = "Actions";
 "settings.vpn.downloadLocalDevVPN" = "Download LocalDevVPN";
 "settings.vpn.appStore" = "App Store";
-"settings.vpn.openLocalDevVPN" = "Open";
+"settings.vpn.openLocalDevVPN" = "Open LocalDevVPN";
 "settings.vpn.externalOpenFailed" = "LocalDevVPN could not be opened. Open it manually, connect the tunnel, then return to GoFly.";
 "settings.vpn.check" = "Check";
 "settings.vpn.failureGuide" = "Make sure iPhone is on Wi‑Fi, reconnect in LocalDevVPN, then return and check the tunnel again.";
@@ -778,3 +778,19 @@
 "figma.fixture.route.daanPark" = "Daan Forest Park";
 "figma.fixture.route.huashan1914" = "Huashan 1914 Creative Park";
 "figma.fixture.route.songshanAirport" = "Songshan Airport";
+"route.repair.title.running" = "Fixing";
+"route.repair.title.succeeded" = "Fixed";
+"route.repair.title.failed" = "Partly failed";
+"route.repair.progress.attempted" = "Tried %d of %d legs";
+"route.repair.progress.succeeded" = "%d of %d legs succeeded";
+"route.repair.deleteFailed" = "Delete failed places (%d)";
+"route.repair.fixShort" = "Fix";
+"route.list.clear" = "Clear";
+
+"route.start.title.planning" = "Planning";
+"route.start.title.succeeded" = "Success";
+"route.start.title.partial" = "Partly succeeded";
+"route.start.title.allFailed" = "All failed";
+"route.start.inProgress" = "In progress";
+
+"route.autoRoundTrip" = "Auto round trip (%@)";

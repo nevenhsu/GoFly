@@ -926,7 +926,7 @@ struct GoFlyMapView: View {
                     onSelect: selectSearchPlace)
             }
         }
-        .background(GoFlyStyle.surface)
+        .background(GoFlyStyle.canvas.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(isPresented: $searchFavorites) {
             GoFlyFavoritesView(candidate: activeSearch.candidate?.place,
@@ -1031,8 +1031,9 @@ struct GoFlyMapView: View {
 
     private func snackbarBottomOffset(in geometry: GeometryProxy) -> CGFloat {
         if activeCandidate != nil, mode == .teleport || mode == .joystick {
-            // Location card: fixed 188 pt tall; keep the copy snackbar 8 pt above its top edge.
-            return geometry.safeAreaInsets.bottom + 12 + 188 + 8
+            // The card's bottom edge is the safe-area bottom, where this overlay ends, so the
+            // copy toast sits 8 pt above the card's measured top edge.
+            return (teleportCardFrame.height > 0 ? teleportCardFrame.height : 180) + 8
         }
         if mode == .teleport {
             // The collapsed teleport panel's copy snackbar sits 8 pt above its top edge.
@@ -1045,9 +1046,9 @@ struct GoFlyMapView: View {
             return max(0, startCenter - 28)
         }
         if activeCandidate != nil || wanderCardPlace != nil {
-            let cardBottom = geometry.safeAreaInsets.bottom + 12
-            let cardTop = cardBottom + 188
-            return cardTop + 8
+            // This card's measured frame includes its safe-area bottom padding.
+            let cardHeight = bottomCardFrame.height > 0 ? bottomCardFrame.height - geometry.safeAreaInsets.bottom : 180
+            return cardHeight + 8
         } else {
             let panelTop = (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + max(currentCollapsedHeight, sheetHeight)
             // The snackbar overlay ends at the safe-area bottom, which the bar and panel already include.
@@ -1195,8 +1196,8 @@ struct GoFlyMapView: View {
             if isWanderMap, let place = wanderCardPlace {
                 wanderLocationCard(for: place)
                     .padding(.horizontal, 16)
-                    // E4: the card ends 28 pt above the screen bottom when there is no tab bar.
-                    .padding(.bottom, showsBottomBar ? bottomBarHeight + 12 : 28)
+                    // E4: the same bottom distance as the B5 / B7 / D4 location cards.
+                    .padding(.bottom, geometry.safeAreaInsets.bottom)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
                         updateMeasuredFrame($0, from: bottomCardFrame) { bottomCardFrame = $0 }
                     }
@@ -1224,7 +1225,8 @@ struct GoFlyMapView: View {
                     identifier: "map.route.confirmCard"
                 )
                 .padding(.horizontal, 16)
-                .padding(.bottom, (showsBottomBar ? bottomBarHeight : geometry.safeAreaInsets.bottom) + 16)
+                // Same bottom distance as the B5 / B7 / E4 location cards.
+                .padding(.bottom, geometry.safeAreaInsets.bottom)
                 .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("mapRoot")) }) {
                     updateMeasuredFrame($0, from: bottomCardFrame) { bottomCardFrame = $0 }
                 }
@@ -1377,6 +1379,7 @@ struct GoFlyMapView: View {
                     showingImportedRoutes: $showingImportedRoutes, showingAllPoints: $showingAllImportedPoints,
                     maximumHeight: isExecutionMode ? max(180, geometry.size.height - topFrame.maxY - 120) : contentMaximumHeight(in: geometry),
                     onEditNode: selectRouteNode,
+                    bottomSafeInset: geometry.safeAreaInsets.bottom,
                     onInspectRoute: {
                         pendingRouteNodeTapID = nil
                         showingRouteList = true
@@ -1612,13 +1615,12 @@ struct GoFlyMapView: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let actionTitle, let action {
+                // Figma: Ghost Secondary button.
                 Button(goFlyString(actionTitle), action: action)
-                    .goFlyFont(GoFlyFont.buttonSmall)
-                    .foregroundStyle(GoFlyTextColor.secondary)
+                    .buttonStyle(GoFlyButtonStyle(variant: .ghostSecondary, size: .inline, expandsToFill: false))
                     .frame(minHeight: 44)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("favorites.open")
-                    .buttonStyle(.plain)
             }
         }
     }
@@ -1754,7 +1756,7 @@ struct GoFlyMapView: View {
     /// Floating search bar and status pill (plan 3). Paste, clear, and gear
     /// controls are independent siblings inside the rounded search field.
     private var topBar: some View {
-        VStack(spacing: GoFlyStyle.statusPillTopSpacing) {
+        VStack(spacing: GoFlyStyle.statusPillTopSpacing - GoFlyStyle.statusPillHitInset) {
             GoFlyMapSearchBar(
                 text: searchBarText,
                 hasContent: hasSearchBarContent,
@@ -2020,12 +2022,8 @@ struct GoFlyMapView: View {
         if mode == .teleport, unconfirmedFailure != nil {
             return goFlyString("status.pill.disconnected")
         }
-        let status = goFlyString(displayedPillStatus.textKey)
-        if mode == .teleport, positionHold.phase == .running, snackbar != nil,
-           let place = currentPositionPlace {
-            return status + " · " + GoFlyLocationTitle.resolve(for: place)
-        }
-        return status
+        // The pill shows only the status, never a place name.
+        return goFlyString(displayedPillStatus.textKey)
     }
 
     private var pillTone: GoFlyStatusTone { displayedPillStatus.tone }

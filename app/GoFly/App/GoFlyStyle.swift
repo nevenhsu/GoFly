@@ -28,9 +28,17 @@ enum GoFlyStyle {
     static let primaryButtonHeight: CGFloat = 56
     static let secondaryButtonHeight: CGFloat = 48
     static let smallButtonHeight: CGFloat = 40
-    static let statusPillTopSpacing: CGFloat = 12
+    /// Visible gap between the search bar / execution header and the status pill.
+    static let statusPillTopSpacing: CGFloat = 8
+    /// The tappable pill sits in a 44 pt frame around its 30 pt capsule.
+    static let statusPillHitInset: CGFloat = 7
     static let favoriteListTopSpacing: CGFloat = 16
-    static let favoriteEditorSaveBottomSpacing: CGFloat = 40
+    /// Primary button to the bottom edge of its sheet or panel (C2, D6, D7, D10.a, D20, E3).
+    static let sheetButtonBottomSpacing: CGFloat = 40
+    /// Measured gap a floating sheet adds below its content (home-indicator area),
+    /// so a button padded by `favoriteEditorSaveBottomSpacing` sits 40 pt from the sheet bottom.
+    static let sheetBottomAllowance: CGFloat = 29
+    static let favoriteEditorSaveBottomSpacing: CGFloat = sheetButtonBottomSpacing - sheetBottomAllowance
 
     static let danger = GoFlyThemeColor.actionDangerSurface
     static let warning = GoFlyThemeColor.iconWarning

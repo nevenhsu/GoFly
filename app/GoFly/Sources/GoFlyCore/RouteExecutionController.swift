@@ -17,6 +17,21 @@ private enum RoutePlanningEdgeResult {
     case failed
 }
 
+/// The repair sheet's state. `total` counts legs of the draft (places - 1).
+public enum RoutePlanningRepairState: Equatable, Sendable {
+    case running(attempted: Int, total: Int)
+    case succeeded(total: Int)
+    case failed(succeeded: Int, total: Int, failedPlaces: Int, canDelete: Bool)
+}
+
+/// The card shown after pressing Start while the route is planned leg by leg (Figma D24).
+public enum RouteStartPlanningState: Equatable, Sendable {
+    case planning(done: Int, total: Int)
+    case succeeded(total: Int)
+    case partial(succeeded: Int, total: Int, failedPlaces: Int, canDelete: Bool)
+    case allFailed(total: Int)
+}
+
 private struct RouteOrderRepairResult {
     let draft: RouteDraft
     let route: PlannedRoute
@@ -37,7 +52,11 @@ private final class RouteOrderRepairSearch {
     private let speed: RouteSpeed
     private var edgeResults: [RoutePlanningEdge: RoutePlanningEdgeResult]
     private var plannerRequests = 0
+    private var requestLimit = RouteOrderRepairSearch.maximumPlannerRequests
     private var expandedPrefixes = 0
+    private var deepestLegs = 0
+    /// Reports the most route legs chained so far in one candidate order.
+    var onProgress: ((Int) -> Void)?
 
     init(planner: any RoutePlanning, nodes: [RouteNode], coordinates: [GeoCoordinate],
          speed: RouteSpeed, cachedEdges: [RoutePlanningEdge: RoutePlanningEdgeResult]) {
@@ -56,6 +75,7 @@ private final class RouteOrderRepairSearch {
 
     private func search(order: [Int], used: [Bool], legs: [PlannedRoute]) async -> RouteOrderRepairResult? {
         guard !Task.isCancelled else { return nil }
+        if legs.count > deepestLegs { deepestLegs = legs.count; onProgress?(deepestLegs) }
 
         if order.count == nodes.count {
             guard let route = try? PlannedRoute(legs: legs) else { return nil }
@@ -65,12 +85,12 @@ private final class RouteOrderRepairSearch {
                                           coordinates: order.map { coordinates[$0] })
         }
         guard expandedPrefixes < Self.maximumExpandedPrefixes,
-              plannerRequests < Self.maximumPlannerRequests else { return nil }
+              plannerRequests < requestLimit else { return nil }
         expandedPrefixes += 1
 
         for next in nodes.indices where !used[next] {
             if Task.isCancelled || expandedPrefixes >= Self.maximumExpandedPrefixes
-                || plannerRequests >= Self.maximumPlannerRequests { return nil }
+                || plannerRequests >= requestLimit { return nil }
 
             var nextLegs = legs
             if let previous = order.last {
@@ -93,13 +113,34 @@ private final class RouteOrderRepairSearch {
         return nil
     }
 
+    /// Walks the original order once and reports which legs plan. A place whose leg
+    /// fails is skipped, and the next place is tried from the last kept one.
+    /// It may spend at most one extra request per place beyond the repair budget.
+    func analyzeOriginalOrder() async -> (succeeded: Int, failedIndices: [Int])? {
+        guard nodes.count >= 2 else { return nil }
+        requestLimit = plannerRequests + nodes.count
+        var kept = 0, succeeded = 0
+        var failed: [Int] = []
+        for index in 1..<nodes.count {
+            guard !Task.isCancelled else { return nil }
+            let from = coordinates[kept], to = coordinates[index]
+            if from == to { succeeded += 1; kept = index; continue }
+            switch await planEdge(from: from, to: to) {
+            case .planned: succeeded += 1; kept = index
+            case .failed: failed.append(index)
+            case nil: return nil
+            }
+        }
+        return (succeeded, failed)
+    }
+
     private func planEdge(from: GeoCoordinate, to: GeoCoordinate) async -> RoutePlanningEdgeResult? {
         let edge = RoutePlanningEdge(from: from, to: to)
         if let cached = edgeResults[edge] { return cached }
-        guard plannerRequests < Self.maximumPlannerRequests, !Task.isCancelled else { return nil }
+        guard plannerRequests < requestLimit, !Task.isCancelled else { return nil }
         plannerRequests += 1
         do {
-            let points = try await planner.plan(from: from, to: to)
+            let points = try await planner.planWalking(from: from, to: to)
             try Task.checkCancellation()
             let planned = try PlannedRoute(points: points)
             let result = RoutePlanningEdgeResult.planned(planned)
@@ -137,6 +178,11 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     @Published public private(set) var intent: RouteExecutionIntent?
     @Published public private(set) var plannedRoute: PlannedRoute?
     @Published public private(set) var isFixingPlanningOrder = false
+    @Published public private(set) var repairState: RoutePlanningRepairState?
+    @Published public private(set) var startPlanning: RouteStartPlanningState?
+    private var failedStartNodeIDs: [RouteNodeID] = []
+    private var pendingRepair: (snapshot: RouteDraft, result: RouteOrderRepairResult)?
+    private var failedRepairNodeIDs: [RouteNodeID] = []
     @Published public private(set) var progress: RouteProgress?
     @Published public private(set) var error: RouteExecutionFailure?
     @Published public private(set) var completion: RouteCompletion?
@@ -384,7 +430,13 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
     @discardableResult public func removeNode(id: RouteNodeID) -> Bool {
         guard canEdit else { return false }
         let changed: RouteDraft?
+        let filled = draft.nodes.filter { $0.value != .empty }.count
+        let filledNode = draft.nodes.first(where: { $0.id == id }).map { $0.value != .empty } ?? false
         if case .waypoint? = draft.role(of: id) { changed = draft.removing(nodeID: id) }
+        else if filledNode, filled >= 2 {
+            // With two or more places the start and destination ✕ delete the place instead of clearing it.
+            changed = draft.removing(nodeID: id)
+        }
         else { changed = draft.clearing(nodeID: id) ?? draft.removing(nodeID: id) }
         guard let changed else { return false }
         let before = draft, previousSelection = selection
@@ -506,30 +558,87 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
         plannedRoute = nil
         previewInputs = nil
         isFixingPlanningOrder = true
+        pendingRepair = nil
+        failedRepairNodeIDs = []
+        repairState = .running(attempted: 0, total: snapshot.nodes.count - 1)
         let search = RouteOrderRepairSearch(planner: planner, nodes: snapshot.nodes,
                                             coordinates: coordinates, speed: snapshot.speed,
                                             cachedEdges: previewEdgeResults)
+        search.onProgress = { [weak self] attempted in
+            guard let self, self.revision == token, self.isFixingPlanningOrder else { return }
+            self.repairState = .running(attempted: attempted, total: snapshot.nodes.count - 1)
+        }
         planningOrderFixTask = Task { @MainActor [weak self] in
             let result = await search.findOrder()
+            let analysis = result == nil ? await search.analyzeOriginalOrder() : nil
             guard let self, self.revision == token, self.draft == snapshot,
                   self.canEdit, !Task.isCancelled else { return }
             self.planningOrderFixTask = nil
             self.isFixingPlanningOrder = false
-            guard let result else {
-                // Leave the original draft and failure toast intact.
-                self.error = .planningFailed
+            if let result {
+                // Applied only when the person confirms the sheet.
+                self.pendingRepair = (snapshot, result)
+                self.repairState = .succeeded(total: snapshot.nodes.count - 1)
                 return
             }
-            self.draft = result.draft
-            self.plannedRoute = result.route
-            self.previewInputs = result.coordinates
-            self.previewEdgeResults = [:]
-            self.error = nil
+            // Leave the original draft and failure toast intact.
+            self.error = .planningFailed
+            let total = snapshot.nodes.count - 1
+            let failedIndices = analysis?.failedIndices ?? []
+            self.failedRepairNodeIDs = failedIndices.map { snapshot.nodes[$0].id }
+            self.repairState = .failed(succeeded: analysis?.succeeded ?? 0, total: total,
+                                       failedPlaces: failedIndices.count,
+                                       canDelete: !failedIndices.isEmpty && snapshot.nodes.count - failedIndices.count >= 2)
         }
         return true
     }
 
+    /// 完成: adopts the order the repair found.
+    @discardableResult public func confirmPlanningRepair() -> Bool {
+        guard canEdit, case .succeeded = repairState, let pending = pendingRepair,
+              draft == pending.snapshot else { return false }
+        pendingRepair = nil
+        repairState = nil
+        draft = pending.result.draft
+        plannedRoute = pending.result.route
+        previewInputs = pending.result.coordinates
+        previewEdgeResults = [:]
+        error = nil
+        return true
+    }
+
+    /// 取消: stops a running repair or dismisses its result, keeping the original order.
+    public func cancelPlanningRepair() {
+        guard repairState != nil else { return }
+        let wasRunning = isFixingPlanningOrder
+        planningOrderFixTask?.cancel()
+        planningOrderFixTask = nil
+        isFixingPlanningOrder = false
+        pendingRepair = nil
+        failedRepairNodeIDs = []
+        repairState = nil
+        if wasRunning { revision &+= 1; error = .planningFailed }
+    }
+
+    /// 刪除失敗地點: removes the places whose legs could not be planned.
+    @discardableResult public func deleteFailedPlanningPlaces() -> Bool {
+        guard canEdit, case .failed(_, _, _, let canDelete) = repairState, canDelete else { return false }
+        var changed = draft
+        for id in failedRepairNodeIDs {
+            guard let next = changed.removing(nodeID: id) else { return false }
+            changed = next
+        }
+        failedRepairNodeIDs = []
+        applyDraft(changed)
+        return true
+    }
+
     private func resetPreview() {
+        startPlanning = nil
+        failedStartNodeIDs = []
+        pendingRepair = nil
+        failedRepairNodeIDs = []
+        repairState = nil
         revision &+= 1
         previewTask?.cancel()
         previewTask = nil
@@ -648,20 +757,50 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 }
                 else {
                     var legs: [PlannedRoute] = []
+                    var kept = coordinates[0]
+                    var failedIndices: [Int] = []
+                    let total = coordinates.count - 1
+                    let canReportPerPlace = snapshot.nodes.count == coordinates.count
+                    await MainActor.run { [weak self] in
+                        guard let self, self.revision == token else { return }
+                        self.startPlanning = .planning(done: 0, total: total)
+                    }
                     for index in 1..<coordinates.count {
-                        let from = legs.last?.end ?? coordinates[0], to = coordinates[index]
-                        let points = try await planner.plan(from: from, to: to)
+                        let from = legs.last?.end ?? kept, to = coordinates[index]
+                        do {
+                            let points = try await planner.plan(from: from, to: to)
+                            guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
+                            guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
+                            legs.append(try PlannedRoute(points: points))
+                            kept = to
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
+                            failedIndices.append(index)
+                        }
                         guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
-                        guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
-                        legs.append(try PlannedRoute(points: points))
+                        self.startPlanning = .planning(done: index, total: total)
+                    }
+                    if !failedIndices.isEmpty {
+                        guard let self, self.revision == token, self.phase == .planning else { return }
+                        self.finishStartPlanningWithFailures(snapshot: snapshot, failedIndices: failedIndices,
+                                                             succeeded: legs.count, total: total,
+                                                             canReportPerPlace: canReportPerPlace)
+                        return
                     }
                     route = try PlannedRoute(legs: legs)
+                    await MainActor.run { [weak self] in
+                        guard let self, self.revision == token else { return }
+                        self.startPlanning = .succeeded(total: total)
+                    }
                 }
                 guard let self, self.revision == token, self.phase == .planning, !Task.isCancelled else { return }
                 guard self.commands.routeAdmissionRevision == admission else { self.returnToEditing(); return }
                 let intent = RouteExecutionIntent(draft: snapshot, route: route)
                 let continuationIdentity = MovementContinuationIdentity(movementID: intent.id, lease: intent.lease)
                 self.plannedRoute = route; self.intent = intent; self.phase = .preparing
+                self.startPlanning = nil
                 self.requestContinuationIfEligible(for: intent)
                 let outcome = await self.commands.beginRoute(intent, expectedAdmissionRevision: admission)
                 guard self.revision == token, self.phase == .preparing else {
@@ -691,6 +830,7 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 guard let self, self.revision == token, self.phase == .planning else { return }
                 self.withdrawContinuation(.ended)
                 self.phase = .editing
+                self.startPlanning = nil
                 self.error = (error as? ImportedRouteExecutionFailure).map(RouteExecutionFailure.imported) ?? (error as? RouteExecutionFailure ?? .planningFailed)
             }
         }
@@ -957,6 +1097,46 @@ private func diagnose(_ name: String, category: DiagnosticsCategory, level: Diag
                 estimatedRemaining: progress.estimatedRemaining)
         }
     }
+    private func finishStartPlanningWithFailures(snapshot: RouteDraft, failedIndices: [Int], succeeded: Int,
+                                                 total: Int, canReportPerPlace: Bool) {
+        returnToEditing()
+        error = nil
+        failedStartNodeIDs = canReportPerPlace ? failedIndices.map { snapshot.nodes[$0].id } : []
+        if succeeded == 0 {
+            startPlanning = .allFailed(total: total)
+        } else {
+            let remaining = draft.nodes.count - failedStartNodeIDs.filter { id in draft.nodes.contains { $0.id == id } }.count
+            startPlanning = .partial(succeeded: succeeded, total: total, failedPlaces: failedIndices.count,
+                                     canDelete: !failedStartNodeIDs.isEmpty && remaining >= 2)
+        }
+    }
+
+    /// 取消: stops a running plan or dismisses its result; the draft stays unchanged.
+    public func cancelStartPlanning() {
+        guard startPlanning != nil else { return }
+        if phase == .planning { _ = cancel() }
+        failedStartNodeIDs = []
+        startPlanning = nil
+    }
+
+    /// 刪除失敗地點: removes the places whose legs could not be planned and starts again.
+    @discardableResult public func deleteFailedStartPlacesAndStart() -> Bool {
+        guard canEdit, case .partial(_, _, _, let canDelete) = startPlanning, canDelete else { return false }
+        var changed = draft
+        for id in failedStartNodeIDs {
+            guard let next = changed.removing(nodeID: id) else { return false }
+            changed = next
+        }
+        applyDraft(changed)
+        return start()
+    }
+
+    /// 清空地點: every leg failed, so the places are cleared.
+    @discardableResult public func clearAfterStartFailure() -> Bool {
+        guard canEdit, case .allFailed = startPlanning else { return false }
+        return clearRoute()
+    }
+
     private func returnToEditing() {
         freezeElapsed(); phase = .editing
         if let id = intent?.id { nextSequence.removeValue(forKey: id) }

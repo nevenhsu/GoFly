@@ -11,7 +11,7 @@ public enum LocationCardPrimaryAction: Equatable, Sendable {
     public var titleKey: String {
         switch self {
         case .confirm: return "common.confirm" // "確認"
-        case .teleport: return "route.startShort" // “Start” / “開始”
+        case .teleport: return "map.go" // “Go”
         case .localizedTitleKey(let str): return str
         }
     }
@@ -78,7 +78,9 @@ struct GoFlyLocationCard: View {
                                 .goFlyFont(.buttonSmall)
                                 .lineLimit(1)
                         }
-                        .frame(width: 77, height: 40)
+                        // Figma: hugs its content with 12 pt left/right padding.
+                        .padding(.horizontal, 12)
+                        .frame(height: 40)
                     }
                     .buttonStyle(GoFlyCardPrimaryStyle())
                     .goFlySteadyDisabled(!primaryEnabled)
@@ -100,7 +102,7 @@ struct GoFlyLocationCard: View {
                     .accessibilityIdentifier("\(identifier).route")
                 }
 
-                GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", isCardAction: true)
+                GoFlyFavoriteStar(place: place, identifier: "\(identifier).favorite", isCardAction: true, allowsDelete: true)
                 GoFlyCopyIconButton(coordinate: place.coordinate, identifier: "\(identifier).copy", onCopy: onCopy)
             }
         }
@@ -139,7 +141,7 @@ struct GoFlyLocationCard: View {
         if let primaryActionTitle { return primaryActionTitle }
         switch primaryActionType {
         case .confirm: return goFlyString("common.confirm")
-        case .teleport: return goFlyString("route.startShort")
+        case .teleport: return goFlyString("map.go")
         case .localizedTitleKey(let str): return str
         }
     }

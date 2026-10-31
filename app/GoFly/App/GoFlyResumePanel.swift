@@ -50,8 +50,8 @@ struct GoFlyResumePanel: View {
         }
         .padding(.horizontal, 20)
         .frame(height: 44)
+        // The hosting panel already supplies the panel background.
         .frame(height: contentHeight, alignment: .top)
-        .background(GoFlyStyle.cardSurface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }

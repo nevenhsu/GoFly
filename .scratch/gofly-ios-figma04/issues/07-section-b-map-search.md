@@ -4,7 +4,7 @@
 
 **Blocked by:** 05.
 
-**Status:** done: software-verified
+**Status:** in progress: 2026-10-30 B4 spacing delta pending UI verification
 
 **Assignee hint:** Luna
 
