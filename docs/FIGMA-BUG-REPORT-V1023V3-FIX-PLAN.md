@@ -81,7 +81,7 @@
 - **實機安裝交付紀錄**：
   - **安裝時間**：2026-10-23 20:47 (UTC+8)
   - **交付交易**：`setupID: 2e8080ab-afa0-4c0b-9303-057baa1f2102`
-  - **裝置與模式**：USB iPhone（`00008130-0010248c04a1401c`），模式 `--mode renew`，Team `48XD59469V`
+  - **裝置與模式**：USB iPhone（`<IPHONE_UDID>`），模式 `--mode renew`，Team `48XD59469V`
   - **驗收結果**：
     - `stage: complete`, `outcome: confirmed`, `complete: true`
     - `proof: { installationConfirmed: true, pairingImported: true, supportObserved: true }`

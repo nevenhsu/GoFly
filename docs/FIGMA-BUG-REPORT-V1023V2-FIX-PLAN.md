@@ -72,7 +72,7 @@
 
 - **最新安裝時間**：2026-10-23 19:47 (UTC+8)
 - **交付交易**：`setupID: 5a919f9d-1875-4646-90ee-140c712465d9`
-- **裝置與模式**：USB iPhone（`00008130-0010248c04a1401c`），模式 `--mode renew`（覆蓋更新，保留偏好、最愛與路線紀錄），沿用簽署 Team `48XD59469V`。
+- **裝置與模式**：USB iPhone（`<IPHONE_UDID>`），模式 `--mode renew`（覆蓋更新，保留偏好、最愛與路線紀錄），沿用簽署 Team `48XD59469V`。
 - **正式結果**：
   - `stage: complete`, `outcome: confirmed`, `complete: true`
   - `installationConfirmed: true`
