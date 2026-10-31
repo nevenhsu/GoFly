@@ -396,6 +396,44 @@ import GoFlyMacCore
         #expect(await waitUntilIdle(setup))
     }
 
+    @Test func confirmedRenewRecordedAsCompletedJournalIsNotAnIntegrityFailure() async throws {
+        let runner = HeldSetupRunner()
+        let receipt = String(repeating: "c", count: 64)
+        let completed = MacSetupSnapshot(
+            mode: .renew, stage: .complete, outcome: .confirmed, appBuild: "32", teamID: "ABCDE12345",
+            expiresAt: "2027-10-17T09:06:10Z", receiptSHA256: receipt, installationConfirmed: true,
+            pairingImported: true, supportObserved: true, errorCode: nil)
+        let setup = MacSetupModel(runner: runner, journal: CompletedJournal(completed))
+        let app = MacAppModel(live: RenewChecker(), setup: setup)
+        await app.restoreSetup()
+        app.checkEnvironment()
+        #expect(await waitForAppCheck(app))
+        app.openDevices(firstInstall: false)
+        #expect(await waitForAppCheck(app))
+        app.select(device)
+        app.inspectSelected()
+        #expect(await waitForAppCheck(app))
+        app.startRenew()
+        guard await waitForRequests(1, runner) else { Issue.record("Renew preflight did not start"); return }
+        let preflight = try #require(await runner.requests.last)
+        await runner.returnData(try response(preflight, stage: "preflight", outcome: "ready"), action: .preflight)
+        guard await waitForRequests(2, runner) else { Issue.record("Renew apply did not start"); return }
+        let apply = try #require(await runner.requests.last)
+        var done = try #require(JSONSerialization.jsonObject(with: response(apply, stage: "complete", outcome: "confirmed")) as? [String: Any])
+        var payload = try #require(done["payload"] as? [String: Any])
+        payload["proof"] = ["installationConfirmed": true, "pairingImported": true, "supportObserved": true]
+        payload["expiresAt"] = "2027-10-17T09:06:10Z"
+        payload["receiptSHA256"] = receipt
+        payload["app"] = ["bundleID": "com.neven.gofly.abcde12345", "build": "32",
+                          "executableSHA256": String(repeating: "a", count: 64),
+                          "profileSHA256": String(repeating: "b", count: 64)]
+        done["payload"] = payload
+        await runner.returnData(try JSONSerialization.data(withJSONObject: done), action: .apply)
+        #expect(await waitUntilIdle(setup))
+        #expect(setup.failure == nil)
+        #expect(setup.snapshot?.isComplete == true)
+    }
+
     @Test func manualRenewStartsOneOperationAndDoesNotOverlap() async throws {
         let runner = HeldSetupRunner()
         let setup = MacSetupModel(runner: runner, journal: ModelJournal(nil))
@@ -600,6 +638,15 @@ private actor ModelJournal: MacSetupJournalReading {
     func readPendingTransaction() async throws -> MacSetupTransactionIdentity? {
         if corrupt { throw MacSetupFailure.invalidResponse }
         return value
+    }
+}
+
+private actor CompletedJournal: MacSetupJournalReading {
+    let completed: MacSetupSnapshot
+    init(_ completed: MacSetupSnapshot) { self.completed = completed }
+    func readPendingTransaction() async throws -> MacSetupTransactionIdentity? { nil }
+    func readState() async throws -> MacSetupJournalState {
+        MacSetupJournalState(pendingTransaction: nil, completed: completed)
     }
 }
 

@@ -10,8 +10,6 @@ enum MacColorSystem {
     static let controlSurface = adaptive(light: 0xE9E9EB, dark: 0x3A3A3C)
     static let disabledSurface = adaptive(light: 0xF2F2F7, dark: 0x2C2C2E)
     static let progressPendingIndicator = adaptive(light: 0xE8E8ED, dark: 0x3A3A3C)
-    static let progressActiveIndicator = adaptive(light: 0x000000, dark: 0x171717)
-    static let progressActiveGlyph = adaptive(light: 0xFFFFFF, dark: 0xFFFFFF)
     static let inputSurface = adaptive(light: 0xF5F5F7, dark: 0x1C1C1E)
 
     static let primaryText = adaptive(light: 0x000000, dark: 0xFFFFFF)

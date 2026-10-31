@@ -382,7 +382,7 @@ struct MacInstallScreen: View {
                 if setup.failure == nil {
                     InstallActionButton(title: "device.install", primary: true, enabled: setup.canApply) { setup.apply() }
                 } else {
-                    InstallActionButton(title: "setup.preflight.retry", primary: true) { retryPreflight() }
+                    InstallActionButton(title: "setup.preflight.retry", primary: true) { Task { await retryPreflight() } }
                 }
             case .installing:
                 InstallActionButton(title: "setup.cancel", enabled: !setup.cancellationRequested) { setup.cancel() }
@@ -529,7 +529,8 @@ struct MacInstallScreen: View {
                                                                      lineWidth: highlighted ? 2 : 0.75))
     }
 
-    private func retryPreflight() {
+    private func retryPreflight() async {
+        await setup.retryBlockedJournal()
         guard let device = selectedDevice,
               let teamID = model.selectedTeam?.teamID,
               let options = try? MacSetupOptions(teamID: teamID) else { return }
@@ -619,11 +620,8 @@ private struct ProgressStageRow: View {
                 switch status {
                 case .complete:
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 20)).foregroundStyle(GoFlyStyle.success)
-                case .current:
-                    Image(systemName: "exclamationmark.circle.fill").font(.system(size: 20)).foregroundStyle(MacColorSystem.warning)
-                case .inProgress:
-                    Circle().fill(MacColorSystem.progressActiveIndicator).frame(width: 20, height: 20)
-                        .overlay { Text("…").font(GoFlyStyle.font(13, bold: true)).foregroundStyle(MacColorSystem.progressActiveGlyph) }
+                case .current, .inProgress:
+                    ProgressView().controlSize(.small).frame(width: 20, height: 20)
                 case .pending:
                     Circle().fill(GoFlyStyle.disabledSurface).frame(width: 20, height: 20)
                 }
@@ -633,8 +631,6 @@ private struct ProgressStageRow: View {
             if let detail {
                 Text(installText(detail)).font(GoFlyStyle.font(11)).foregroundStyle(status == .current ? MacColorSystem.warning : GoFlyStyle.muted)
                     .lineLimit(1)
-            } else if status == .current {
-                ProgressView().controlSize(.small)
             }
         }
         .padding(.horizontal, 20).frame(minHeight: 50)

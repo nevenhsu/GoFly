@@ -57,6 +57,7 @@ mkdir -p "$STAGING_BUNDLE/Contents/MacOS" "$RESOURCES/Bridge/Device" \
   "$RESOURCES/Bridge/Setup" "$RESOURCES/Python" "$RESOURCES/native" \
   "$RESOURCES/iOSProject"
 cp "$PRODUCTS/GoFlyMac" "$STAGING_BUNDLE/Contents/MacOS/GoFlyMac"
+cp "$APP_SOURCE/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 cp -R "$PRODUCTS/GoFlyMac_GoFlyMac.bundle" "$RESOURCES/"
 cp "$APP_SOURCE/Bridge/bridge.py" "$APP_SOURCE/Bridge/wire.py" \
   "$RESOURCES/Bridge/"
@@ -127,6 +128,7 @@ info = {
     "CFBundleName": "GoFly for Mac",
     "CFBundleDisplayName": "GoFly for Mac",
     "CFBundleExecutable": "GoFlyMac",
+    "CFBundleIconFile": "AppIcon",
     "CFBundlePackageType": "APPL",
     "CFBundleShortVersionString": "1.0.0",
     "CFBundleVersion": "1",
@@ -143,6 +145,7 @@ test -f "$RESOURCES/Bridge/bridge.py"
 test -f "$RESOURCES/Bridge/Device/gofly_device.py"
 test -f "$RESOURCES/iOSProject/GoFly.xcodeproj/project.pbxproj"
 test -f "$RESOURCES/native/libidevice_ffi.a"
+test -f "$RESOURCES/AppIcon.icns"
 
 # Replace only this script's generated development artifact, after staging is complete.
 if [ -e "$APP_BUNDLE" ]; then

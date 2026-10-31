@@ -116,6 +116,17 @@ public final class MacSetupModel {
         isRestored = true
         isBusy = false
     }
+    /// A failed journal read blocks every action.  Re-read it so a transient
+    /// failure (for example a slow first Bridge launch) does not strand the
+    /// user until the app is restarted.
+    public func retryBlockedJournal() async {
+        guard journalBlocked, !isBusy else { return }
+        isBusy = true
+        failure = nil
+        await readJournal()
+        isRestored = true
+        isBusy = false
+    }
     public func configure(deviceID: String, options: MacSetupOptions, mode: MacSetupMode = .install,
                           transport: ConnectedDevice.Transport = .usb) throws {
         guard isRestored, !isBusy, !journalBlocked else { throw MacSetupFailure.invalidResponse }
@@ -273,15 +284,21 @@ public final class MacSetupModel {
                         }
                     } else {
                         if let observed, action != .preflight, actual == nil {
-                            // The producer can reject apply before creating its
-                            // transaction. Only that bounded error is retryable;
-                            // success or evidence of a later stage without the
-                            // durable journal remains an integrity failure.
-                            guard action == .apply, observed.failure != nil,
-                                  observed.stage == .preflight,
-                                  !observed.installationConfirmed,
-                                  !observed.pairingImported,
-                                  !observed.supportObserved else {
+                            // Two outcomes legitimately leave nothing pending: the producer
+                            // rejected apply before creating its transaction (retryable), or
+                            // a confirmed apply left a completed journal, which reads as
+                            // "nothing pending" and must hold the receipt just reported.
+                            // Anything else is an integrity failure.
+                            var recorded = false
+                            if action == .apply, observed.canReplaceCompletedTransaction {
+                                let durable = try await journal.readState().completed
+                                recorded = durable?.receiptSHA256 == observed.receiptSHA256
+                                    && durable?.appBuild == observed.appBuild
+                            }
+                            let rejectedBeforeJournal = action == .apply && observed.failure != nil
+                                && observed.stage == .preflight && !observed.installationConfirmed
+                                && !observed.pairingImported && !observed.supportObserved
+                            guard recorded || rejectedBeforeJournal else {
                                 throw MacSetupFailure.invalidResponse
                             }
                         }
