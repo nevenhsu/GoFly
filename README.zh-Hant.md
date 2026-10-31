@@ -1,119 +1,122 @@
-# GoFly for Mac — DMG 安裝
+# GoFly
 
 [English](README.md) · **繁體中文** · [简体中文](README.zh-Hans.md)
 
-用於研究 iOS 模擬定位、裝置連線與原生 App 操作流程的 Mac／iPhone 專案。預定使用方式：取得 Mac App、開啟 GoFly、以 USB 連接 iPhone，再由 Mac 安裝手機 App。
+GoFly 是一個在你自己的 iPhone 上選擇並移動模擬位置的 App。**GoFly for Mac** 是配套的 Mac App，唯一的工作是用你自己在 Xcode 登入的 Apple 帳號，透過 USB **把 iPhone App 安裝到手機**，並持續維持簽名。
 
-**發行狀態：** 尚未公開 DMG。已完成本機 DMG 建置器與安裝腳本；手機驗收及乾淨 Mac 下載測試仍待完成。預覽資料不代表裝置實際發生過操作。
+[**下載最新版 GoFly for Mac（DMG）**](https://github.com/nevenhsu/GoFly/releases/latest)
 
-## 目錄
+## iPhone App 的功能
 
-- [設備與環境](#設備與環境)
-- [安裝](#安裝)
-- [開發版建置](#開發版建置)
-- [研究操作](#研究操作)
-- [交給 AI 協助安裝](#交給-ai-協助安裝)
-- [常見問題](#常見問題)
-- [文件與原始碼](#文件與原始碼)
-- [授權](#授權)
+- **地圖與搜尋**：搜尋地點並跳轉過去，介面參考 Google Maps 的版面。
+- **瞬移**：把模擬位置移到指定的點，並維持在那裡。
+- **路線**：在多個點之間規劃路線（含道路路線）、儲存、匯入 GPX，並以步行、自行車、機車或汽車的速度執行。
+- **搖桿**：用畫面上的搖桿手動操控移動。
+- **漫步**：沿著道路自動行走，可隨時手動接管。
+- **最愛與已存路線**：保存在手機上，重新簽名時資料會保留。
+- **狀態與復原**：狀態膠囊顯示連線狀態；App 會自動重新連線，也可手動重試、停止或**還原真實 GPS**。
+- **語言**：英文、繁體中文、簡體中文。
 
-## 設備與環境
+裝置通道使用 [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044)，需另外從 App Store 安裝。
+
+## Mac App 的功能
+
+GoFly for Mac 不是定位工具。它用**你的** Xcode 簽名 Team 建置 iPhone App、安裝到你連接的 iPhone、交付 iPhone App 需要的配對與裝置支援，並且要等 iPhone 回報後才顯示完成。之後可以經由 USB 或 Wi‑Fi **延長簽名**；Mac App 開著時，簽名快到期會自動延長。延長簽名時 App 內的資料會保留。
+
+## 需求
 
 | 項目 | 需求 |
 | --- | --- |
-| 電腦 | 需要 macOS 15 以上的 Mac。從原始碼建置時，macOS 也須符合所用 Xcode 的需求。目前不支援 Windows／Linux。 |
-| 手機 | 需要 iOS 26 以上的 iPhone。這不代表所有機型及系統版本均已驗證。 |
-| 連接線 | 首次安裝需要可傳輸資料的 USB 線。裝置完成核對後，後續重新簽署也可走 Wi-Fi。 |
-| 開發工具 | Xcode、所需 iOS SDK 與 Swift 工具鏈；Mac 套件需要 Swift 6.2 以上。 |
-| Apple 帳號 | 開發簽署使用自己的 Apple 帳號，在 Xcode 登入。支援免費 Personal Team。 |
-| 手機設定 | 解鎖 iPhone、信任 Mac，並啟用開發安裝所需的[開發者模式](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)。 |
-| 連線 App | 裝置通道需要另行在 iPhone 安裝 [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044)。 |
-| 網路 | Apple 簽署、依賴下載、地圖／搜尋及必要裝置準備下載均需要網路。 |
+| Mac | Apple Silicon，macOS 15 以上（需符合你 Xcode 的要求）。 |
+| Xcode | 從 App Store 安裝完整 Xcode 並下載 iOS 平台。全新 Mac 上 GoFly 會逐步引導。 |
+| Apple 帳號 | 你自己的帳號，在 Xcode → Settings → Apple Accounts 登入。免費 Personal Team 即可。GoFly 不會取得你的密碼。 |
+| iPhone | iOS 26 以上、已解鎖；首次安裝需 USB 資料線、開啟**開發者模式**，並信任這部 Mac。 |
+| iPhone App | 已安裝 [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044) 並允許新增 VPN。 |
+| 網路 | Apple 簽名與地圖搜尋需要。 |
 
-GoFly 以免費使用為目標，Apple 簽署限制仍適用：免費 Personal Team 描述檔通常七天到期，之後需要重新簽署。請以本次可驗證的實際有效期為準，詳見 [Apple 帳號說明](https://developer.apple.com/help/account/basics/about-your-developer-account)。
+免費 Personal Team 的簽名通常約七天到期；讓 Mac App 保持開啟會自動延長，也可按 **Renew Signing**。Mac App 顯示的到期日在你於自己的裝置驗證前，僅供參考。
 
-## 安裝
+## 安裝（DMG）
 
-安裝前，請使用符合 Xcode 需求的 Mac，安裝完整 Xcode 與 iOS 平台，並在 Xcode → Settings → Apple Accounts 登入自己的 Apple 帳號。支援免費 Personal Team。iPhone 需要 iOS 26 以上、開啟開發者模式，並信任這部 Mac。GoFly 不會要求或處理 Apple 帳號憑證。
-
-1. 從正式發行頁下載 DMG 及對應的 `.sha256` 檔案。
-2. 開啟 DMG 前，在「終端機」核對下載檔名：
+1. 到[最新版 Release](https://github.com/nevenhsu/GoFly/releases/latest)，把 `GoFly-<版本>-arm64.dmg` 與 `GoFly-<版本>-arm64.dmg.sha256` 下載到同一個資料夾。
+2. 核對下載檔案，結果必須是 `OK`：
 
    ```sh
    shasum -a 256 -c GoFly-1.0.0-arm64.dmg.sha256
    ```
+3. 開啟 DMG，然後**在「終端機」執行安裝腳本**（macOS 會擋下雙擊 `install.sh`）：
 
-   結果必須顯示 `OK`。校驗碼不符時不要執行安裝腳本。
-3. 開啟 DMG，在「終端機」執行 `bash /Volumes/GoFly/install.sh`（若掛載名稱不同，請使用 `/Volumes` 中顯示的名稱）。
-4. 如果 `/Applications/GoFly.app` 已存在，請先閱讀提示再確認覆蓋。安裝器只會替換該 App bundle、移除它的隔離屬性並開啟 App；GoFly 狀態及手機資料分開儲存，不會被移除。
-5. 開啟 GoFly，完成 Mac 環境步驟，以 USB 連接 iPhone 並開始首次安裝。必須等到 App 部署、配對匯入及必要裝置準備都驗證完成，才算安裝成功。
-6. 在 iPhone 從 App Store 安裝 LocalDevVPN、啟用 VPN 通道，再開啟 GoFly。
+   ```sh
+   bash /Volumes/GoFly/install.sh
+   ```
 
-目前尚未公開 DMG。正式發行及校驗碼公布前，可用下方指令建立本機產物；本機 DMG 不代表正式發行版。
+   它只會安裝 `/Applications/GoFly.app`，已有舊版時會先詢問，並移除該 App 的下載隔離屬性後開啟。不使用 `sudo`、不更動 Gatekeeper、不動 GoFly 的資料。出現提示時輸入 `y` 並按 **Enter**。
+4. 在 GoFly for Mac 依畫面步驟準備 Xcode，然後用 USB 連接 iPhone、信任這部 Mac、開啟開發者模式，按**安裝 GoFly**。
+5. 在 iPhone 上信任開發者（設定 › 一般 › VPN 與裝置管理）、安裝並允許 LocalDevVPN，再開啟 GoFly。Mac App 讀回 iPhone 的確認後才算完成。
 
-## 建置本機 DMG
+這個 App 使用 ad-hoc 簽署、**未經公證**，所以不能直接雙擊開啟，請用上面的安裝腳本。若你自己拖曳 App，請執行 `xattr -dr com.apple.quarantine /Applications/GoFly.app`。
 
-在已安裝完整 Xcode 的 Apple Silicon Mac，從儲存庫根目錄執行，並傳入產生 GoFly iOS Bundle ID 所用的 Team ID：
+## 讓 AI 幫你安裝
 
-```sh
-bash app/GoFlyMac/make-dmg.sh <你的 Xcode Team ID>
-```
-
-腳本會建置自給自足的 App、使用 ad-hoc 深度簽署、驗證簽名，並在 `work/dist/` 產生 `GoFly-<版本>-arm64.dmg` 與旁邊的 `.sha256` 校驗碼。DMG 是本機建置產物，不提交到版本控制。此版沒有 Developer ID 簽章或 notarization；安裝器只移除已安裝 GoFly App 的隔離屬性。
-
-只做 Swift 開發時，執行 `bash app/GoFlyMac/build-app.sh <你的 Xcode Team ID>`，再開啟 `work/gofly-mac/GoFly.app`。
-
-## 研究操作
-
-GoFly 設計涵蓋地點選取、路線／GPX、搖桿移動、裝置服務準備及恢復 GPS。功能要求見[GoFly App 說明](app/GoFly/README.md)及 [iOS UI 設計規格](docs/IOS-UI-DESIGN.md)。
-
-實驗時記錄 App 版本、iPhone 機型、iOS 版本、連線方式及實際結果。先在 Apple 地圖與另一個 App 核對模擬位置，再停止任務、恢復 GPS，並另外核對真實位置。安裝或配對成功不能代替 GPS 恢復驗證；背景執行、斷線重連、系統更新及重啟均需分別驗證。
-
-研究是本專案的主要用途，不是 0BSD 的非商用限制。專案不接入 AnyGo／iToolab 服務，也不散布其程式碼、素材、憑證或金鑰。
-
-## 交給 AI 協助安裝
-
-已有 GoFly、要在實機測試時保留資料覆蓋更新，可直接使用 [iPhone 覆蓋安裝 prompt](docs/AI-INSTALL.md#ios-device-test-prompt)；共用流程會一併完成配對交接。
-
-先提供 [AI 安裝操作說明](docs/AI-INSTALL.md#繁體中文)，再貼上：
+把 GitHub 網址連同下面的 prompt 貼給能執行 shell 指令（最好也能操作你的 Mac）的 AI 助理：
 
 ```text
-請先閱讀 README.zh-Hant.md 與 docs/AI-INSTALL.md，協助我在 Mac 和自己的
-iPhone 設定 GoFly。先確認實際發行版本、目前能力與目標裝置，再依我的授權
-執行可用的設定流程。如果只有預覽版，請明確說明限制。Apple 登入、雙重認證、信任、開發者
-模式與 VPN 確認由我操作。保留既有 App 資料，逐步核對實際結果，最後回報
-已完成項目、待我操作的步驟及阻礙。
+請幫我從 https://github.com/nevenhsu/GoFly 安裝 GoFly。
+
+1. 先讀該專案的 README.md 與 docs/AI-INSTALL.md。
+2. 不要從原始碼建置。把最新 Release 的 GoFly-<版本>-arm64.dmg 與 .sha256
+   下載到一個全新的空資料夾（例如用 `gh release download`），執行
+   `shasum -a 256 -c`，結果不是 OK 就停止。
+3. 掛載 DMG，在終端機執行 `bash /Volumes/GoFly/install.sh`。不要雙擊、不要用
+   sudo、不要關閉 Gatekeeper。出現取代提示時，必須我確認才回答 y。
+4. 開啟 GoFly for Mac，帶著我逐步操作。Apple 登入、雙重認證、鑰匙圈密碼提示、
+   iPhone 信任、開發者模式、VPN 權限與安裝 LocalDevVPN 由我自己處理。不要要求我把
+   密碼、配對檔或 token 貼到聊天裡。
+5. 不要卸載任何東西、不要刪除 App 資料。中斷時使用 App 內的「重新開始」，不要自行
+   想辦法接續。
+6. 回報已完成的項目、我還要在 iPhone 上做的事，以及阻礙。安裝成功不代表模擬定位
+   一定可用，請另外說明。
 ```
 
-## 常見問題
+給 AI 助理的完整操作說明在 [docs/AI-INSTALL.md](docs/AI-INSTALL.md)。
 
-| 情況 | 處理方式 |
+## 疑難排解
+
+| 症狀 | 處理方式 |
 | --- | --- |
-| 找不到正式 DMG | 尚未公開發行。維護者可依上方指令建置本機 DMG；不要使用第三方安裝包替代。 |
-| 校驗碼驗證失敗 | 刪除不完整下載，從同一正式發行頁重新下載 DMG 與配對的 `.sha256` 檔案。 |
-| 找不到 iPhone | 檢查 USB 資料線、解鎖／信任狀態、Xcode 裝置支援及選取的手機。 |
-| 安裝／重新簽名按鈕停用 | 核對環境、所選裝置與待續交易；預覽不會寫入裝置。 |
-| 手機 App 無法開啟 | 核對實際簽署到期時間，從 Mac 重新簽署；開發者模式不會延長簽名。 |
-| LocalDevVPN 已連線，GoFly 仍無法繼續 | 核對實際 VPN 通道。設計提供連線檢查；無法停止時可在設定使用「重置」。 |
-| 寫入途中中斷 | 先核對同一裝置與本次交易，再決定是否重試；結果不明須如實回報並保留資料。 |
+| 「Apple 無法驗證 install.sh…」 | 不要雙擊。在終端機執行 `bash /Volumes/GoFly/install.sh`。 |
+| `/Volumes/GoFly/install.sh: No such file` | DMG 沒有掛載，或掛著舊的。在 Finder 退出 GoFly，再開啟新的 DMG。 |
+| `install.sh` 停在提示不動 | 輸入 `y` **後要按 Enter**。 |
+| 找不到 iPhone | 使用資料線、解鎖手機、點「信任」、開啟開發者模式（需重新開機）。 |
+| 「無法完成安裝前檢查」 | 按**再檢查一次**。若手機上已有 GoFly，點側欄的裝置，使用 **Renew Signing**。 |
+| iPhone 上的 App 打不開 | 簽名已過期。從 Mac App 延長簽名，資料會保留。 |
+| LocalDevVPN 已開但 GoFly 無法繼續 | 確認 VPN 實際已連線且已允許，再回 GoFly 重試。 |
 
-## 文件與原始碼
+## 從原始碼建置
+
+只有開發時需要。在安裝了完整 Xcode 的 Apple Silicon Mac 上：
+
+```sh
+bash app/GoFlyMac/make-dmg.sh <你的_XCODE_TEAM_ID>
+```
+
+會產生 `work/dist/GoFly-<版本>-arm64.dmg` 與 `.sha256`（不納入版本控制）。詳見 [app/GoFlyMac/README.md](app/GoFlyMac/README.md)、[app/GoFly/README.md](app/GoFly/README.md) 與 [docs/MAC-INSTALLER-SPEC.md](docs/MAC-INSTALLER-SPEC.md)。
+
+## 現況與限制
+
+- 第一版只支援 Apple Silicon Mac；不含 Intel Mac、公證、備份／還原。
+- 乾淨 Mac 驗收與長時間實機測試尚未完成；安裝成功不代表每台裝置的背景運行、重新連線或 GPS 還原都正常。請在自己的 iPhone 上測試，並確認事後真實位置已還原。
+- 只在你自己擁有的裝置上使用 GoFly，並遵守當地法律與你測試的 App 的服務條款。
+
+## 文件
 
 | 路徑 | 用途 |
 | --- | --- |
-| [app/GoFly/README.md](app/GoFly/README.md) | 原生 iOS App，含英文、繁中、簡中資源。 |
-| [app/GoFlyMac/README.md](app/GoFlyMac/README.md) | Mac 能力及開發檢查。 |
-| [app/GoFlyMac/DEVELOPMENT.md](app/GoFlyMac/DEVELOPMENT.md) | 已確認的 Mac 安裝及裝置管理要求。 |
-| [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | 三語 AI 代理安裝操作說明。 |
-| [docs/LICENSING.md](docs/LICENSING.md) | 0BSD 範圍、既有上游授權與發行條件。 |
-| `work/` | 不納入版本控制的本機研究證據、建置產物及裝置實驗，不是公開發行內容。 |
-
-README 提供英文、繁體中文、簡體中文。App 本地化同樣以三語及英文 fallback 為要求；文件翻譯不代表 UI 本地化或實機驗證已全部完成。
+| [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | 給 AI 助理的安裝操作說明。 |
+| [docs/MAC-INSTALLER-SPEC.md](docs/MAC-INSTALLER-SPEC.md) | Mac App 流程與行為。 |
+| [docs/IOS-UI-DESIGN.md](docs/IOS-UI-DESIGN.md) | iOS UI 設計與驗收。 |
+| [docs/LICENSING.md](docs/LICENSING.md) | 授權與來源。 |
 
 ## 授權
 
-新撰寫、獨立持有權利的內容選用 **0BSD**，允許免費使用、修改、再散布，無須署名。[LICENSE](LICENSE) 涵蓋三份根目錄 README 及 `docs/` 的指南，不改授既有 App 程式碼或依賴授權。可查閱 [0BSD 官方條文](https://opensource.org/license/0bsd)。
-
-LocalGo／StikDebug、重用的 Mac 裝置邊界及新版 GoFly 的[衍生／原生元件](app/GoFly/Legal/SOURCES.txt)保留 AGPL-3.0 註記。Mac App 使用 GPL-3.0 的 `pymobiledevice3`。整合發行的 App 不能宣稱全部免署名，詳見[授權說明](docs/LICENSING.md)及[上游來源](app/GoFly/Legal/UPSTREAM-LOCALGO.md)。
-
-文件結構參考 [Best-README-Template](https://github.com/othneildrew/Best-README-Template) 的專案介紹、必要條件、安裝、使用與授權章節，依研究專案重新撰寫。
+新撰寫、獨立擁有的內容（根目錄 README 與 `docs/` 下的指南）採用 **0BSD**，見 [LICENSE](LICENSE)。這不會重新授權既有的 App 程式碼或相依套件。源自 LocalGo/StikDebug 的部分保留 AGPL-3.0 聲明，Mac App 內附 GPL-3.0 的 `pymobiledevice3`，因此合併發行不能說成完全免署名。詳見 [docs/LICENSING.md](docs/LICENSING.md) 與 [app/GoFly/Legal/SOURCES.txt](app/GoFly/Legal/SOURCES.txt)。GoFly 不使用也不散布 AnyGo／iToolab 的程式碼、素材或服務。

@@ -1,120 +1,126 @@
-# GoFly for Mac — DMG installation
+# GoFly
 
 **English** · [繁體中文](README.zh-Hant.md) · [简体中文](README.zh-Hans.md)
 
-A Mac and iPhone project for researching iOS location simulation, device connections, and native app workflows. The intended setup is: get the Mac app, open GoFly, connect your iPhone by USB, and install the iPhone app from the Mac.
+GoFly is an iPhone app for choosing and moving a simulated location on your own device. **GoFly for Mac** is the companion app whose only job is to **install the iPhone app** (and keep it signed) over USB, using your own Apple Account in Xcode.
 
-**Release status:** no public DMG has been published. The local DMG builder and installer are implemented; device acceptance and clean-Mac download testing remain pending. Preview data never proves that a device operation happened.
+[**Download the latest GoFly for Mac (DMG)**](https://github.com/nevenhsu/GoFly/releases/latest)
 
-## Contents
+## What the iPhone app does
 
-- [Requirements](#requirements)
-- [Install](#install)
-- [Development build](#development-build)
-- [Research workflow](#research-workflow)
-- [AI-assisted installation](#ai-assisted-installation)
-- [Troubleshooting](#troubleshooting)
-- [Documentation and source layout](#documentation-and-source-layout)
-- [License](#license)
+- **Map and search** — find a place and jump to it; the map follows a Google Maps–style layout.
+- **Teleport** — move the simulated location to a chosen point and hold it there.
+- **Routes** — plan a route between points (including road routing), save it, import GPX files, and run it at walking, bicycle, scooter or car speed.
+- **Joystick** — steer manually with an on-screen joystick.
+- **Wander** — walk along roads automatically, with manual takeover.
+- **Favorites and saved routes** — kept on the phone and preserved when the app is re-signed.
+- **Session status and recovery** — a status pill shows connection state; the app reconnects automatically and lets you retry, stop, or **restore your real GPS**.
+- **Languages** — English, Traditional Chinese and Simplified Chinese.
+
+The device channel uses [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044), installed separately from the App Store.
+
+## What the Mac app does
+
+GoFly for Mac is not a location tool. It builds the iPhone app with **your** Xcode signing Team, installs it on the iPhone you connect, hands over the pairing and device support the iPhone app needs, and confirms completion only after the iPhone reports back. Afterwards it can **renew signing** over USB or Wi-Fi, automatically when the signature is close to expiry while the Mac app is open. Existing app data is kept on renewal.
 
 ## Requirements
 
 | Item | Requirement |
 | --- | --- |
-| Computer | A Mac running macOS 15 or later. Use a macOS version compatible with your Xcode when building locally. Windows and Linux are outside the current setup. |
-| Phone | An iPhone with iOS 26 or later as the current deployment target. This is not a compatibility guarantee for every model or OS version. |
-| Cable | A USB data cable for the first installation. Later re-signing also works over Wi-Fi after the device has been verified. |
-| Development tools | Xcode with the required iOS SDK and Swift toolchain; the Mac package requires Swift 6.2 or later. |
-| Apple account | Your own Apple Account, signed in through Xcode for development signing. A free Personal Team is supported. |
-| iPhone settings | Unlock the phone, trust the Mac, and enable [Developer Mode](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device) for development installation. |
-| Connection app | The device channel requires [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044), installed separately on the iPhone. |
-| Network | Needed for Apple signing, dependency downloads, maps/search, and any required device preparation downloads. |
+| Mac | Apple Silicon, macOS 15 or later (new enough for your Xcode). |
+| Xcode | Full Xcode from the App Store with the iOS platform installed. GoFly guides you through this on a fresh Mac. |
+| Apple Account | Your own, signed in under Xcode → Settings → Apple Accounts. A free Personal Team works. GoFly never sees your password. |
+| iPhone | iOS 26 or later, unlocked, USB data cable for the first install, **Developer Mode** on, and this Mac trusted. |
+| iPhone app | [LocalDevVPN](https://apps.apple.com/us/app/localdevvpn/id6755608044) installed and allowed to add a VPN. |
+| Network | Needed for Apple signing and map search. |
 
-GoFly is intended to be free to use. Apple's signing restrictions still apply: free Personal Team provisioning profiles normally expire after seven days and require re-signing. Use the actual verified expiry for your installation. See [Apple's account overview](https://developer.apple.com/help/account/basics/about-your-developer-account).
+Free Personal Team signing normally expires after about seven days; keep the Mac app open and it renews automatically, or press **Renew Signing**. Treat the expiry date shown in the Mac app as informational until you have verified it on your own device.
 
-## Install
+## Install (DMG)
 
-Before installing, use a Mac compatible with Xcode, install the full Xcode app with the iOS platform, and sign in to your own Apple Account in Xcode → Settings → Apple Accounts. A free Personal Team is supported. The iPhone needs iOS 26 or later, Developer Mode, and a trust relationship with this Mac. GoFly does not ask for or handle Apple Account credentials.
-
-1. Download the DMG and its published `.sha256` file from the official release.
-2. In Terminal, verify the exact downloaded filename before opening it:
+1. Download `GoFly-<version>-arm64.dmg` and `GoFly-<version>-arm64.dmg.sha256` from the [latest release](https://github.com/nevenhsu/GoFly/releases/latest) into the same folder.
+2. Verify the download. The result must be `OK`:
 
    ```sh
    shasum -a 256 -c GoFly-1.0.0-arm64.dmg.sha256
    ```
+3. Open the DMG, then **run the installer from Terminal** (double-clicking `install.sh` is blocked by macOS):
 
-   The result must say `OK`. Do not run the installer if the checksum differs.
-3. Open the DMG. In Terminal, run `bash /Volumes/GoFly/install.sh` (use the mounted volume name shown under `/Volumes` if it differs).
-4. If `/Applications/GoFly.app` already exists, review the prompt before replacing it. The installer only replaces that app bundle, removes its quarantine attribute, and opens it; GoFly state and phone data are stored separately and are not removed.
-5. Open GoFly, finish the Mac environment steps, connect the iPhone by USB, and start the first installation. Wait for verified app deployment, pairing import, and required device preparation before treating installation as complete.
-6. Install LocalDevVPN from the App Store on the iPhone, enable its VPN channel, and open GoFly.
+   ```sh
+   bash /Volumes/GoFly/install.sh
+   ```
 
-No public DMG is published yet. Until an official release and checksum are available, build the local artifact using the command below; do not treat a locally generated DMG as an official release.
+   It installs only `/Applications/GoFly.app`, asks before replacing an existing copy, removes the download quarantine from that app, and opens it. It does not use `sudo`, change Gatekeeper, or touch GoFly data. Type `y` and press **Enter** when asked.
+4. In GoFly for Mac, follow the on-screen steps to prepare Xcode, then connect the iPhone by USB, trust the Mac, enable Developer Mode, and press **Install GoFly**.
+5. On the iPhone, trust the developer (Settings → General → VPN & Device Management), install and allow LocalDevVPN, then open GoFly. The Mac app finishes when it reads back the iPhone's confirmation.
 
-## Build a local DMG
+The app is ad-hoc signed, **not notarized**, so macOS will not open it by double-click; use the installer above. If you copy the app yourself, run `xattr -dr com.apple.quarantine /Applications/GoFly.app`.
 
-On an Apple Silicon Mac with full Xcode installed, run from the repository root. Pass the Team ID used for the generated GoFly iOS Bundle ID:
+## Let an AI install it for you
+
+Paste a GitHub link and this prompt into an AI assistant that can run shell commands (and, ideally, operate your Mac):
+
+```text
+Install GoFly for me from https://github.com/nevenhsu/GoFly.
+
+1. Read README.md and docs/AI-INSTALL.md in that repository first.
+2. Do not build from source. Download the newest release's
+   GoFly-<version>-arm64.dmg and its .sha256 file into a new empty folder
+   (for example with `gh release download`), run `shasum -a 256 -c` and stop
+   if the result is not OK.
+3. Mount the DMG and run `bash /Volumes/GoFly/install.sh` in Terminal. Do not
+   double-click it, use sudo, or disable Gatekeeper. Answer the replace prompt
+   only if I confirm.
+4. Open GoFly for Mac and walk me through its steps. I will do Apple sign-in,
+   2FA, the Keychain password prompt, iPhone trust, Developer Mode, the VPN
+   permission and the LocalDevVPN install. Never ask me to paste passwords,
+   pairing files or tokens into the chat.
+5. Do not uninstall anything or delete app data. If something is interrupted,
+   use the app's "Start over" instead of improvising.
+6. Report what is done, what I still need to do on the iPhone, and any
+   blocker. Installation success does not prove location simulation works;
+   say that separately.
+```
+
+The full runbook for AI assistants is in [docs/AI-INSTALL.md](docs/AI-INSTALL.md).
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| "Apple could not verify install.sh…" | Do not double-click. Run `bash /Volumes/GoFly/install.sh` in Terminal. |
+| `/Volumes/GoFly/install.sh: No such file` | The DMG is not mounted, or an old one is. Eject GoFly in Finder and open the new DMG again. |
+| `install.sh` seems stuck at the prompt | Type `y` **and press Enter**. |
+| No iPhone appears | Use a data cable, unlock the phone, tap Trust, enable Developer Mode (needs a restart). |
+| "The installation check failed" | Press **Check again**. If GoFly is already on the phone, open the device in the sidebar and use **Renew Signing**. |
+| The iPhone app no longer opens | Signing expired. Renew from the Mac app; data is kept. |
+| LocalDevVPN is on but GoFly cannot continue | Check the VPN is actually connected and allowed, then retry in GoFly. |
+
+## Build from source
+
+Only needed for development. On an Apple Silicon Mac with full Xcode:
 
 ```sh
 bash app/GoFlyMac/make-dmg.sh <YOUR_XCODE_TEAM_ID>
 ```
 
-The script builds the self-contained app, applies an ad-hoc deep signature, verifies it, and creates `work/dist/GoFly-<version>-arm64.dmg` with an adjacent `.sha256` checksum. The DMG is a local build artifact and is not committed. This release has no Developer ID signature or notarization; the DMG installer removes quarantine only from the installed GoFly app.
+This produces `work/dist/GoFly-<version>-arm64.dmg` and a `.sha256` file (not committed). See [app/GoFlyMac/README.md](app/GoFlyMac/README.md), [app/GoFly/README.md](app/GoFly/README.md) and [docs/MAC-INSTALLER-SPEC.md](docs/MAC-INSTALLER-SPEC.md).
 
-For Swift-only development, run `bash app/GoFlyMac/build-app.sh <YOUR_XCODE_TEAM_ID>` and open `work/gofly-mac/GoFly.app`.
+## Status and limits
 
-## Research workflow
+- Version 1 targets Apple Silicon Macs. Intel Macs, notarization and backup/restore are not included.
+- Verification on a clean Mac and a long-running device soak are still pending; a successful install does not prove background behavior, reconnection or GPS restoration on every device. Test on your own iPhone and confirm your real location is restored afterwards.
+- Use GoFly only on devices you own, and follow the laws and the terms of the apps you test with.
 
-The GoFly design covers selecting locations, routes/GPX, joystick movement, device service preparation, and restoring GPS. Consult the [GoFly app notes](app/GoFly/README.md) and [iOS UI design spec](docs/IOS-UI-DESIGN.md) for requirements.
-
-For a device experiment, record the app version, iPhone model, iOS version, connection method, and observed result. Verify location behavior in Apple Maps and another app, then stop the task, restore GPS, and verify the real location separately. Do not infer successful restoration from an installation or pairing result. Background operation, reconnects, OS updates, and device restarts need their own verification.
-
-Research is the project's primary purpose, not a restriction to noncommercial use under 0BSD. The project does not connect to AnyGo/iToolab services or distribute their code, assets, credentials, or keys.
-
-## AI-assisted installation
-
-For an existing iPhone test installation, use the [copy-ready update prompt (Traditional Chinese)](docs/AI-INSTALL.md#ios-device-test-prompt) to preserve app data and include verified pairing.
-
-Give an AI assistant the [installation runbook](docs/AI-INSTALL.md#english), then use this prompt:
-
-```text
-Read README.md and docs/AI-INSTALL.md first. Help me set up GoFly on my Mac
-and my iPhone. Check the actual release and current capabilities, identify
-the target device, and perform the available setup within my authorization.
-If only the preview is available, report that limit. I will handle Apple sign-in,
-2FA, trust, Developer Mode, and VPN confirmations. Preserve existing app data.
-Verify each result and report completed steps, pending manual steps, and blockers.
-```
-
-## Troubleshooting
-
-| Symptom | Next step |
-| --- | --- |
-| No official DMG download | No public release is available yet. A maintainer can build a local DMG using the command above; do not substitute a third-party installer. |
-| Checksum verification fails | Delete the incomplete download and download the DMG and matching `.sha256` file from the same official release. |
-| No iPhone detected | Check the USB data cable, unlock/trust state, Xcode device support, and selected device. |
-| Install/re-sign button is disabled | Check the environment, selected device, and pending transaction. A preview never performs writes. |
-| The iPhone app no longer opens | Check the actual signing expiry and re-sign from the Mac. Developer Mode does not extend signing. |
-| LocalDevVPN shows connected but GoFly cannot continue | Verify the actual VPN channel. The design provides connection checks and a channel reset after location sending has stopped. |
-| A write operation is interrupted | Inspect the same device and transaction before retrying. Report uncertain results and preserve existing data. |
-
-## Documentation and source layout
+## Documentation
 
 | Path | Purpose |
 | --- | --- |
-| [app/GoFly/README.md](app/GoFly/README.md) | Native iOS app; English, Traditional Chinese, and Simplified Chinese resources. |
-| [app/GoFlyMac/README.md](app/GoFlyMac/README.md) | Mac app capabilities and development checks. |
-| [app/GoFlyMac/DEVELOPMENT.md](app/GoFlyMac/DEVELOPMENT.md) | Mac installation and device-management requirements. |
-| [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | Installation instructions for AI assistants, in all three languages. |
-| [docs/LICENSING.md](docs/LICENSING.md) | 0BSD scope, existing upstream licenses, and release conditions. |
-| `work/` | Ignored local research evidence, build outputs, and device experiments; not public release content. |
-
-The README is available in English, Traditional Chinese, and Simplified Chinese. App localization targets the same languages, with English fallback; documentation translations do not establish complete UI localization or device verification.
+| [docs/AI-INSTALL.md](docs/AI-INSTALL.md) | Install runbook for AI assistants. |
+| [docs/MAC-INSTALLER-SPEC.md](docs/MAC-INSTALLER-SPEC.md) | Mac app flow and behavior. |
+| [docs/IOS-UI-DESIGN.md](docs/IOS-UI-DESIGN.md) | iOS UI design and acceptance. |
+| [docs/LICENSING.md](docs/LICENSING.md) | Licenses and provenance. |
 
 ## License
 
-The selected license for newly authored, independently owned material is **0BSD**, permitting free use, modification, and redistribution without attribution. [LICENSE](LICENSE) covers the three root READMEs and the guides under `docs/`. It does not relicense existing app code or dependencies. See the [official 0BSD text](https://opensource.org/license/0bsd).
-
-LocalGo/StikDebug, the reused Mac device boundary, and the new GoFly app's [adapted/native components](app/GoFly/Legal/SOURCES.txt) retain AGPL-3.0 notices. The Mac app uses GPL-3.0 `pymobiledevice3`. A combined app release cannot be described as wholly attribution-free. See [licensing details](docs/LICENSING.md) and [upstream provenance](app/GoFly/Legal/UPSTREAM-LOCALGO.md).
-
-The structure follows the project overview, prerequisites, installation, usage, and license sections of [Best-README-Template](https://github.com/othneildrew/Best-README-Template), adapted for this research project.
+Newly authored, independently owned material (the root READMEs and the guides under `docs/`) is **0BSD** — see [LICENSE](LICENSE). This does not relicense existing app code or dependencies. LocalGo/StikDebug-derived parts retain AGPL-3.0 notices, and the Mac app bundles GPL-3.0 `pymobiledevice3`, so a combined release is not wholly attribution-free. See [docs/LICENSING.md](docs/LICENSING.md) and [app/GoFly/Legal/SOURCES.txt](app/GoFly/Legal/SOURCES.txt). GoFly does not use or distribute AnyGo/iToolab code, assets or services.

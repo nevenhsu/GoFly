@@ -2,12 +2,18 @@
 
 [English](#english) · [繁體中文](#繁體中文) · [简体中文](#简体中文)
 
-The Mac V1 local DMG builder and installer are implemented, but no public
-release or clean-Mac download acceptance is recorded. For a local build, use
-the DMG-first root README, verify its generated `.sha256` file, and run
-`bash /Volumes/GoFly/install.sh` from Terminal. Do not describe a local build
-as an official release; the installer only targets `/Applications/GoFly.app`
-and does not remove GoFly state or phone data.
+## Install from a GitHub link (end users) / 從 GitHub 連結安裝
+
+When the user gives only the repository URL (`https://github.com/nevenhsu/GoFly`), install from the **latest GitHub Release**; do not build from source and do not use the maintainer-only scripts below.
+
+1. Download the newest release's `GoFly-<version>-arm64.dmg` and `.sha256` into a new empty folder (`gh release download --repo nevenhsu/GoFly --pattern 'GoFly-*'`, or the release page). Run `shasum -a 256 -c GoFly-<version>-arm64.dmg.sha256`; stop unless it prints `OK`.
+2. Mount the DMG (`hdiutil attach <dmg>`; if `/Volumes/GoFly` already exists, eject the old volume first) and run `bash /Volumes/GoFly/install.sh` in Terminal. Never double-click `install.sh`, use `sudo`, or disable Gatekeeper. The script asks before replacing `/Applications/GoFly.app`; the user must type `y` **and press Enter**.
+3. Open GoFly for Mac and guide the user through its screens. The user performs Apple sign-in, 2FA, Keychain password prompts, iPhone trust, Developer Mode, the VPN permission and the LocalDevVPN install. Never ask for passwords, pairing files or tokens in chat.
+4. Do not uninstall, delete data, or improvise after an interruption; use the app's "Start over". Report completed steps, remaining phone actions and blockers. A completed install is separate from verified location simulation.
+
+使用者只貼 GitHub 網址時，從**最新 GitHub Release** 安裝：下載 DMG 與 `.sha256`、核對 `OK`、在終端機執行 `bash /Volumes/GoFly/install.sh`（不雙擊、不用 sudo、不關 Gatekeeper；取代提示要輸入 `y` 並按 Enter），再帶使用者操作 GoFly for Mac。Apple 登入、雙重認證、鑰匙圈密碼、iPhone 信任、開發者模式、VPN 與 LocalDevVPN 由使用者處理。不要從原始碼建置，也不要使用下方僅限維護者的腳本。
+
+使用者只贴 GitHub 网址时，从**最新 GitHub Release** 安装：下载 DMG 与 `.sha256`、核对 `OK`、在终端运行 `bash /Volumes/GoFly/install.sh`（不双击、不用 sudo、不关 Gatekeeper；替换提示要输入 `y` 并按 Enter），再带用户操作 GoFly for Mac。Apple 登录、双重认证、钥匙串密码、iPhone 信任、开发者模式、VPN 与 LocalDevVPN 由用户处理。不要从源码构建，也不要使用下方仅限维护者的脚本。
 
 ## Device-test install/update / 實機測試安裝更新（2026-10-26）
 
@@ -65,13 +71,13 @@ The maintainer-only device-test script derives its Bundle ID from `--team`. The 
 ### Establish the task
 
 1. Read the selected root README, this guide, [Mac capabilities](../app/GoFlyMac/README.md), and applicable workspace rules. Identify whether the user wants a GoFly release or a Mac development-preview run. Continue within existing authorization without asking for the same permission repeatedly.
-2. **Current state, 2026-10-27:** no public DMG release or clean-Mac download acceptance is recorded. The local DMG builder and `install.sh` are implemented; physical iPhone acceptance is still separate. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
+2. **Current state:** the DMG is published as a GitHub Release (ad-hoc signed, not notarized). Clean-Mac download acceptance and physical iPhone acceptance are still separate and not recorded. Do not invent download URLs, bypass disabled writes, or report preview data as a real install. Do not substitute the retired LocalGo prototype.
 3. Check Mac/Xcode, iPhone/iOS, USB, and signing team. Use only the intended phone. Resolve ambiguous device/team selection before writing.
 4. The user handles Apple sign-in, passwords, 2FA, terms, Keychain prompts, iPhone trust/Developer Mode, and VPN permission. Do not request credentials or pairing private keys in chat. Report pending physical phone actions.
 
 ### Choose the available route
 
-- **GoFly public release — not yet published:** when a release exists, verify its official source, version, architecture, minimum OS, and published checksum. For a local build, follow the root README, verify the generated `.sha256` file, then run `bash /Volumes/GoFly/install.sh` in Terminal. The script installs only `/Applications/GoFly.app`, removes quarantine from that app, and opens it. Clean-Mac or other-user download testing remains a user-run task. Do not disable Gatekeeper globally. Then use USB, verify the phone, and use the supported install flow. Verify signing, deployment, pairing import, and required device preparation separately. After verified completion, hand off to LocalDevVPN and GoFly on the phone. A verified VPN channel is distinct from a running location task; service startup must not move the location.
+- **GoFly GitHub Release:** verify its official source, version, architecture, minimum OS, and published checksum. For a local build, follow the root README, verify the generated `.sha256` file, then run `bash /Volumes/GoFly/install.sh` in Terminal. The script installs only `/Applications/GoFly.app`, removes quarantine from that app, and opens it. Clean-Mac or other-user download testing remains a user-run task. Do not disable Gatekeeper globally. Then use USB, verify the phone, and use the supported install flow. Verify signing, deployment, pairing import, and required device preparation separately. After verified completion, hand off to LocalDevVPN and GoFly on the phone. A verified VPN channel is distinct from a running location task; service startup must not move the location.
 - **Current Mac development app:** use the root README's build/open commands and existing Python environment; the GUI does not install missing dependencies. USB first installation uses formal GoFly, a verified device/team and explicit start. In Codex, run preflight and apply with `sandbox_permissions: "require_escalated"`: the pinned USB adapter needs `/var/run/usbmuxd`, and restricted access is misreported as `device-disconnected`. Apple provisioning updates require the per-operation option and authorization. After an interruption, start over instead of resuming; stop on `transaction-conflict` until the restart path is implemented. Keep preview results separate and honor any user instruction to defer phone operations.
 - **LocalGo prototype — retired:** the prototype app and its `localgo_setup.py` install CLI were removed (2026-10-19 and 2026-10-20). GoFly is the only install path; do not attempt the old `com.neven.localgo` flow.
 
@@ -86,13 +92,13 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 確認任務
 
 1. 先讀選用語言的根目錄 README、本文、[Mac 現況](../app/GoFlyMac/README.md)及適用的工作目錄規則。確認使用者要 GoFly 發行版還是 Mac 開發預覽。沿用已有授權，不重複詢問同一權限。
-2. **2026-10-27 現況：**尚未公開 DMG，也沒有乾淨 Mac 下載驗收紀錄。本機 DMG 建置器與 `install.sh` 已實作；iPhone 實機驗收另行記錄。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
+2. **現況：**DMG 已發布於 GitHub Release（ad-hoc 簽署、未公證）；乾淨 Mac 下載驗收與 iPhone 實機驗收另行記錄，尚未完成。不得捏造下載網址、繞過停用功能、把預覽回報為真實安裝，或改裝已退役的 LocalGo prototype。
 3. 檢查 Mac／Xcode、iPhone／iOS、USB 及簽署 Team，只操作指定手機。多裝置／Team 且意圖不明時，寫入前先釐清。
 4. Apple 登入、密碼、雙重認證、條款、鑰匙圈提示、手機信任／開發者模式及 VPN 權限由使用者處理。不在聊天索取憑證或配對私鑰；需要實體手機操作時回報待辦。
 
 ### 選擇可用路徑
 
-- **GoFly 公開發行版 — 尚未公開：**正式發行後核對來源、版本、架構、最低系統與公布校驗碼。若使用本機建置版，依根目錄 README 核對產生的 `.sha256`，再於「終端機」執行 `bash /Volumes/GoFly/install.sh`。腳本只安裝到 `/Applications/GoFly.app`、移除該 App 隔離屬性並開啟它。乾淨 Mac 或另一個帳號下載測試仍由使用者執行。不全域關閉 Gatekeeper。之後以 USB 核對手機並使用正式流程，分別驗證簽署、部署、配對匯入與必要裝置準備。完成驗證後再交接 iPhone LocalDevVPN 與 GoFly；VPN 通道可用不代表定位任務執行中，啟動服務不應移動位置。
+- **GoFly GitHub Release：**核對來源、版本、架構、最低系統與公布校驗碼。若使用本機建置版，依根目錄 README 核對產生的 `.sha256`，再於「終端機」執行 `bash /Volumes/GoFly/install.sh`。腳本只安裝到 `/Applications/GoFly.app`、移除該 App 隔離屬性並開啟它。乾淨 Mac 或另一個帳號下載測試仍由使用者執行。不全域關閉 Gatekeeper。之後以 USB 核對手機並使用正式流程，分別驗證簽署、部署、配對匯入與必要裝置準備。完成驗證後再交接 iPhone LocalDevVPN 與 GoFly；VPN 通道可用不代表定位任務執行中，啟動服務不應移動位置。
 - **目前 Mac 開發版：**本機 DMG 已可用 `bash app/GoFlyMac/make-dmg.sh <TEAM_ID>` 建置，來源預覽則用 `bash app/GoFlyMac/build-app.sh <TEAM_ID>`。USB 安裝或 renew 使用正式 GoFly，核對裝置／Team 後明確開始。Codex 的 `preflight` 與 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要讀取 `/var/run/usbmuxd`，受限存取會被誤報為 `device-disconnected`。Apple 佈建更新須本次選項與授權。中斷後用新 setupID 重新 preflight/apply；同 setupID 衝突時先停止查明。預覽另外標示，並遵守使用者延後手機操作的要求。
 - **LocalGo prototype — 已退役：**prototype App 與其 `localgo_setup.py` 安裝 CLI 已分別於 2026-10-19、2026-10-20 移除。GoFly 是唯一安裝路徑，不要再走舊的 `com.neven.localgo` 流程。
 
@@ -107,13 +113,13 @@ Report version/route, redacted device label, preflight, actual writes, installat
 ### 确认任务
 
 1. 先读所选语言的根目录 README、本文、[Mac 现状](../app/GoFlyMac/README.md)及适用的工作目录规则。确认用户要 GoFly 发布版还是 Mac 开发预览。沿用已有授权，不重复询问同一权限。
-2. **2026-10-27 现状：**尚未公开 DMG，也没有干净 Mac 下载验收记录。本地 DMG 构建器与 `install.sh` 已实现；iPhone 真机验收另行记录。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
+2. **现状：**DMG 已发布于 GitHub Release（ad-hoc 签名、未公证）；干净 Mac 下载验收与 iPhone 真机验收另行记录，尚未完成。不得编造下载网址、绕过禁用功能、把预览报告为真实安装，或改装已退役的 LocalGo prototype。
 3. 检查 Mac／Xcode、iPhone／iOS、USB 及签名 Team，只操作指定手机。多设备／Team 且意图不明时，写入前先明确。
 4. Apple 登录、密码、双重认证、条款、钥匙串提示、手机信任／开发者模式及 VPN 权限由用户处理。不在聊天索取凭证或配对私钥；需要实体手机操作时报告待办。
 
 ### 选择可用路径
 
-- **GoFly 公开发布版 — 尚未发布：**正式发布后核对来源、版本、架构、最低系统与公布校验码。本地构建版依根目录 README 核对生成的 `.sha256`，再在“终端”运行 `bash /Volumes/GoFly/install.sh`。脚本只安装到 `/Applications/GoFly.app`、移除该 App 的隔离属性并打开它。干净 Mac 或其他账号下载测试仍由用户执行。不全局关闭 Gatekeeper。之后通过 USB 核对手机并使用正式流程，分别验证签名、部署、配对导入与必要设备准备。完成验证后再交接 iPhone LocalDevVPN 与 GoFly；VPN 通道可用不代表定位任务运行中，启动服务不应移动位置。
+- **GoFly GitHub Release：**核对来源、版本、架构、最低系统与公布校验码。本地构建版依根目录 README 核对生成的 `.sha256`，再在“终端”运行 `bash /Volumes/GoFly/install.sh`。脚本只安装到 `/Applications/GoFly.app`、移除该 App 的隔离属性并打开它。干净 Mac 或其他账号下载测试仍由用户执行。不全局关闭 Gatekeeper。之后通过 USB 核对手机并使用正式流程，分别验证签名、部署、配对导入与必要设备准备。完成验证后再交接 iPhone LocalDevVPN 与 GoFly；VPN 通道可用不代表定位任务运行中，启动服务不应移动位置。
 - **当前 Mac 开发版：**本地 DMG 可用 `bash app/GoFlyMac/make-dmg.sh <TEAM_ID>` 构建；源码预览使用 `bash app/GoFlyMac/build-app.sh <TEAM_ID>`。USB 首次安装使用正式 GoFly，核对设备／Team 后明确开始。Codex 的 `preflight` 与 `apply` 都使用 `sandbox_permissions: "require_escalated"`；固定 USB adapter 需要读取 `/var/run/usbmuxd`，受限访问会被误报为 `device-disconnected`。Apple 配置更新须本次选项与授权。中断后从头重来、不接续；遇到 `transaction-conflict` 时停止报告。预览另行标注，并遵守用户延后手机操作的要求。
 - **LocalGo prototype — 已退役：**prototype App 及其 `localgo_setup.py` 安装 CLI 已分别于 2026-10-19、2026-10-20 移除。GoFly 是唯一安装路径，不要再走旧的 `com.neven.localgo` 流程。
 

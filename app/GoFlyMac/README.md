@@ -4,13 +4,13 @@ GoFly for Mac prepares a user's Xcode Team-scoped GoFly iOS build and manages th
 
 ## Obtain and install
 
-No public DMG release is published yet. A local Apple Silicon build can be made from the repository root on a Mac with full Xcode:
+The DMG is published on the [GitHub Releases page](https://github.com/nevenhsu/GoFly/releases/latest) (ad-hoc signed, not notarized). A local Apple Silicon build can also be made from the repository root on a Mac with full Xcode:
 
 ```sh
 bash app/GoFlyMac/make-dmg.sh <YOUR_XCODE_TEAM_ID>
 ```
 
-This creates `work/dist/GoFly-<version>-arm64.dmg` and a matching `.sha256` file. Verify the checksum before opening the disk image, then run `bash /Volumes/GoFly/install.sh` in Terminal. The installer asks before replacing an existing `/Applications/GoFly.app`, removes quarantine from the installed app, and opens it. This ad-hoc signed local build is not Developer ID signed or notarized and is not an official release.
+This creates `work/dist/GoFly-<version>-arm64.dmg` and a matching `.sha256` file. Verify the checksum before opening the disk image, then run `bash /Volumes/GoFly/install.sh` in Terminal. The installer asks before replacing an existing `/Applications/GoFly.app`, removes quarantine from the installed app, and opens it. The app is ad-hoc signed, not Developer ID signed or notarized, so run the installer from Terminal rather than double-clicking it.
 
 The Mac needs a macOS version supported by the installed full Xcode and the iOS platform. Sign in to the user's own Apple Account in Xcode; GoFly does not receive Apple passwords. The first iPhone install requires USB, trust, and Developer Mode.
 
